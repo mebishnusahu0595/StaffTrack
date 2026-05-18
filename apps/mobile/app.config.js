@@ -72,7 +72,7 @@ export default ({ config }) => ({
   extra: {
     apiBaseUrl: process.env.API_BASE_URL,
     eas: {
-      projectId: "228d03d0-6cec-4677-b8a5-f70d3623e394"
+      projectId: "f5e56a43-124c-4fc6-a216-6de1b5c63d4d"
     }
   }
 });
