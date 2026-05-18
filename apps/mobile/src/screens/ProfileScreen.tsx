@@ -12,7 +12,7 @@ export function ProfileScreen() {
         {user?.avatarUrl ? (
           <Avatar.Image source={{ uri: user.avatarUrl }} size={80} />
         ) : (
-          <Avatar.Icon icon="account" size={80} style={{ backgroundColor: "#E8F0FE" }} color="#146C5C" />
+          <Avatar.Icon icon="account" size={80} style={{ backgroundColor: "#E8F0FE" }} color="#1A202C" />
         )}
         <Text style={styles.userName} variant="headlineSmall">
           {user?.name ?? "User"}

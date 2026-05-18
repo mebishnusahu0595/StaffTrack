@@ -558,7 +558,7 @@ export function HomeScreen() {
 
       {isBusy && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator color="#146C5C" size="large" />
+          <ActivityIndicator color="#1A202C" size="large" />
           <Text style={styles.loadingText}>{loadingStep || "Processing..."}</Text>
         </View>
       )}
@@ -906,7 +906,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    color: "#146C5C",
+    color: "#1A202C",
     fontWeight: "600"
   },
   liveTrackingContainer: {

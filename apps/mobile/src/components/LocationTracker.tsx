@@ -154,7 +154,7 @@ export async function startBackgroundLocationTracking(): Promise<boolean> {
       foregroundService: {
         notificationTitle: "StaffTrack is tracking your location",
         notificationBody: "Live location tracking is active.",
-        notificationColor: "#146C5C"
+        notificationColor: "#1A202C"
       },
       pausesUpdatesAutomatically: true,
       showsBackgroundLocationIndicator: true,

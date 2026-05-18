@@ -50,7 +50,7 @@ export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
             <Icon 
               source={task.isRepeating ? "repeat-variant" : "calendar-month-outline"} 
               size={12} 
-              color={task.isRepeating ? "#146C5C" : "#5F6368"} 
+              color={task.isRepeating ? "#1A202C" : "#5F6368"} 
             />
             <Text style={[styles.repeatText, !task.isRepeating && { color: "#5F6368" }]}>
               {task.isRepeating 
@@ -95,7 +95,7 @@ export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
           <View style={styles.completionEvidence}>
             <View style={styles.evidenceHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Icon source="check-decagram-outline" size={14} color="#146C5C" />
+                <Icon source="check-decagram-outline" size={14} color="#1A202C" />
                 <Text style={styles.evidenceLabel}>COMPLETION PROOF</Text>
               </View>
               {!disabled && (
@@ -128,14 +128,14 @@ export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
               </View>
               <View style={styles.remarksContainer}>
                 <View style={{ opacity: 0.5 }}>
-                  <Icon source="format-quote-open" size={12} color="#146C5C" />
+                  <Icon source="format-quote-open" size={12} color="#1A202C" />
                 </View>
                 <Text style={styles.completionRemarks}>
                   {task.completionRemarks || "No remarks provided."}
                 </Text>
                 <View style={{ alignSelf: 'flex-end' }}>
                   <View style={{ opacity: 0.5 }}>
-                    <Icon source="format-quote-close" size={12} color="#146C5C" />
+                    <Icon source="format-quote-close" size={12} color="#1A202C" />
                   </View>
                 </View>
               </View>
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
   repeatText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#146C5C',
+    color: '#1A202C',
     textTransform: 'uppercase'
   },
   badgeRow: {
@@ -286,13 +286,13 @@ const styles = StyleSheet.create({
   evidenceLabel: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#146C5C',
+    color: '#1A202C',
     letterSpacing: 0.5
   },
   editButtonLabel: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#146C5C',
+    color: '#1A202C',
     marginVertical: 0
   },
   evidenceContent: {

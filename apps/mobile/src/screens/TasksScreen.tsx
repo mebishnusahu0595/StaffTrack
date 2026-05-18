@@ -137,7 +137,7 @@ export function TasksScreen() {
                 icon="filter-variant" 
                 mode="contained-tonal"
                 containerColor="#E7F3EF"
-                iconColor="#146C5C"
+                iconColor="#1A202C"
                 onPress={() => setMenuVisible(true)} 
               />
             }
@@ -175,7 +175,7 @@ export function TasksScreen() {
           <View style={styles.statsDivider} />
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>Filter</Text>
-            <Text style={[styles.statNumber, { fontSize: 14, color: '#146C5C' }]}>{activeTab}</Text>
+            <Text style={[styles.statNumber, { fontSize: 14, color: '#1A202C' }]}>{activeTab}</Text>
           </View>
         </View>
 

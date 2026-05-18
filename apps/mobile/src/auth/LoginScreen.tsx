@@ -36,7 +36,7 @@ export function LoginScreen() {
     >
       <Surface elevation={1} style={styles.panel}>
         <View style={styles.logoContainer}>
-          <Image source={require("../../assets/logo.png")} style={styles.logo} />
+          <Image source={Platform.OS === "android" ? { uri: "logo" } : require("../../assets/logo.png")} style={styles.logo} />
           <Text variant="headlineMedium" style={styles.title}>
             StaffTrack
           </Text>
@@ -54,7 +54,7 @@ export function LoginScreen() {
             value={email}
             onChangeText={setEmail}
             style={styles.input}
-            activeOutlineColor="#146C5C"
+            activeOutlineColor="#1A202C"
             outlineColor="#E0E0E0"
             theme={{ roundness: 12 }}
             contentStyle={{ paddingHorizontal: 16 }}
@@ -69,7 +69,7 @@ export function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             style={styles.input}
-            activeOutlineColor="#146C5C"
+            activeOutlineColor="#1A202C"
             outlineColor="#E0E0E0"
             theme={{ roundness: 12 }}
             contentStyle={{ paddingHorizontal: 16 }}
@@ -140,13 +140,13 @@ const styles = StyleSheet.create({
     borderRadius: 10
   },
   title: {
-    color: "#146C5C",
+    color: "#1A202C",
     fontWeight: "800",
     fontSize: 28
   },
   company: {
     marginBottom: 20,
-    color: "#146C5C",
+    color: "#1A202C",
     fontWeight: "600",
     fontSize: 16,
     opacity: 0.8
@@ -171,6 +171,6 @@ const styles = StyleSheet.create({
   button: {
     marginTop: 12,
     borderRadius: 12,
-    backgroundColor: "#146C5C"
+    backgroundColor: "#1A202C"
   }
 });

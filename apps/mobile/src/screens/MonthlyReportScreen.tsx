@@ -26,7 +26,7 @@ export function MonthlyReportScreen() {
   if (reportQuery.isLoading) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator color="#146C5C" size="large" />
+        <ActivityIndicator color="#1A202C" size="large" />
       </View>
     );
   }

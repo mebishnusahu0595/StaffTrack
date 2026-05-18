@@ -5,7 +5,7 @@ import {
   DrawerContentScrollView, 
   DrawerItemList 
 } from "@react-navigation/drawer";
-import { ActivityIndicator, Image, View, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
+import { ActivityIndicator, Image, View, StyleSheet, TouchableOpacity, ScrollView, Platform } from "react-native";
 import { Icon, Text, Divider, IconButton } from "react-native-paper";
 
 import { useAuth } from "../auth/AuthContext";
@@ -48,7 +48,7 @@ export function AppNavigator() {
   if (isBootstrapping) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator color="#146C5C" size="large" />
+        <ActivityIndicator color="#1A202C" size="large" />
         <Text style={{ marginTop: 12 }}>Loading StaffTrack</Text>
       </View>
     );
@@ -75,12 +75,13 @@ function CustomDrawerContent(props: any) {
       <View style={styles.drawerHeader}>
         <View style={styles.headerTop}>
           <Image 
-            source={require("../../assets/logo.png")} 
+            source={Platform.OS === "android" ? { uri: "logo" } : require("../../assets/logo.png")} 
             style={styles.drawerLogo} 
           />
           <IconButton 
             icon="close" 
             size={24} 
+            iconColor="#1A202C"
             onPress={() => props.navigation.closeDrawer()} 
           />
         </View>
@@ -115,9 +116,9 @@ function MainDrawer() {
       drawerContent={(props) => <CustomDrawerContent {...props} />}
       screenOptions={{
         headerStyle: { backgroundColor: "#FFFFFF", elevation: 2, shadowOpacity: 0.1 },
-        headerTitleStyle: { color: "#24312D", fontWeight: "700" },
-        drawerActiveTintColor: "#146C5C",
-        drawerInactiveTintColor: "#66736F",
+        headerTitleStyle: { color: "#1A202C", fontWeight: "700" },
+        drawerActiveTintColor: "#1A202C",
+        drawerInactiveTintColor: "#64748B",
         drawerLabelStyle: { fontWeight: "600", marginLeft: -16 },
         drawerItemStyle: { borderRadius: 8, marginHorizontal: 8, marginVertical: 2 },
       }}
@@ -219,7 +220,7 @@ const styles = StyleSheet.create({
   drawerTitle: {
     fontSize: 20,
     fontWeight: '900',
-    color: '#146C5C',
+    color: '#1A202C',
   },
   drawerUser: {
     fontSize: 12,

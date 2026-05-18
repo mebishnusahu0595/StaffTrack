@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
     margin: 16,
     right: 0,
     bottom: 0,
-    backgroundColor: "#146C5C"
+    backgroundColor: "#1A202C"
   },
   dialog: {
     backgroundColor: "white",
@@ -286,6 +286,6 @@ const styles = StyleSheet.create({
   },
   createButton: {
     borderRadius: 8,
-    backgroundColor: "#146C5C"
+    backgroundColor: "#1A202C"
   }
 });

@@ -39,7 +39,7 @@ export function DayTrackMapView({ height = 220, markers = [], path = [] }: DayTr
       {path.length > 1 ? (
         <Polyline
           coordinates={path.map((point) => ({ latitude: point.lat, longitude: point.lng }))}
-          strokeColor="#146C5C"
+          strokeColor="#1A202C"
           strokeWidth={4}
         />
       ) : null}

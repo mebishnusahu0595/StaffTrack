@@ -13,10 +13,10 @@ const theme = {
   ...MD3LightTheme,
   colors: {
     ...MD3LightTheme.colors,
-    primary: "#146C5C",
-    secondary: "#2D6CDF",
-    tertiary: "#B65C00",
-    background: "#F7F9F8",
+    primary: "#1A202C",
+    secondary: "#4A5568",
+    tertiary: "#718096",
+    background: "#F7FAFC",
     surface: "#FFFFFF"
   }
 };

@@ -91,13 +91,13 @@ const styles = StyleSheet.create({
     width: 12
   },
   routePointFirst: {
-    backgroundColor: "#146C5C"
+    backgroundColor: "#1A202C"
   },
   routePointLast: {
     backgroundColor: "#A4262C"
   },
   hint: {
-    color: "#146C5C",
+    color: "#1A202C",
     fontWeight: "700",
     marginTop: 18
   }

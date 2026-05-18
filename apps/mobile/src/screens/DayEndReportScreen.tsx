@@ -114,15 +114,15 @@ export function DayEndReportScreen() {
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
             <style>
               body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; }
-              .header { border-bottom: 2px solid #146C5C; padding-bottom: 20px; margin-bottom: 30px; text-align: center; }
-              .header h1 { color: #146C5C; margin: 0; font-size: 28px; }
+              .header { border-bottom: 2px solid #1A202C; padding-bottom: 20px; margin-bottom: 30px; text-align: center; }
+              .header h1 { color: #1A202C; margin: 0; font-size: 28px; }
               .header p { color: #666; margin: 5px 0 0; font-weight: bold; }
               .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
               .stat-card { background: #f9f9f9; padding: 20px; border-radius: 12px; border: 1px solid #eee; }
               .stat-label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; margin-bottom: 5px; }
               .stat-value { font-size: 20px; color: #222; font-weight: 900; }
               .section { margin-bottom: 30px; }
-              .section-title { font-size: 14px; font-weight: bold; color: #146C5C; text-transform: uppercase; border-left: 4px solid #146C5C; padding-left: 10px; margin-bottom: 15px; }
+              .section-title { font-size: 14px; font-weight: bold; color: #1A202C; text-transform: uppercase; border-left: 4px solid #1A202C; padding-left: 10px; margin-bottom: 15px; }
               .content-box { background: #fff; border: 1px solid #eee; padding: 15px; border-radius: 8px; font-size: 14px; line-height: 1.6; }
               .footer { text-align: center; font-size: 10px; color: #aaa; margin-top: 50px; border-top: 1px solid #eee; padding-top: 20px; }
             </style>
