@@ -1,0 +1,533 @@
+"use client";
+ 
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { AttendanceStatusBadge } from "@/components/admin/status-badge";
+import { fetchAllAttendance, fetchUsers, markAttendanceStatus } from "@/lib/api";
+import { formatTime } from "@/lib/format";
+import { calculateDurations, formatDurationLabel } from "@/lib/timeTracking";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import type { AttendanceRecord, AttendanceStatus, User } from "@/lib/types";
+
+function PhotoViewer({ url, title, children }: { url: string; title: string; children: React.ReactNode }) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        {children}
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[600px] p-0 overflow-hidden border-none bg-transparent shadow-none">
+        <div className="relative group animate-in zoom-in-95 duration-200">
+          <div className="absolute top-4 left-4 z-10">
+            <Badge className="bg-black/60 text-white border-none backdrop-blur-md px-3 py-1 font-black uppercase tracking-widest text-[10px]">
+              {title}
+            </Badge>
+          </div>
+          <img 
+            src={url} 
+            className="w-full h-auto rounded-3xl shadow-2xl ring-1 ring-white/20" 
+            alt={title} 
+          />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+ 
+export default function AttendancePage() {
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [employeeFilter, setEmployeeFilter] = useState("all");
+  const [viewingRecord, setViewingRecord] = useState<(AttendanceRecord & { user: User }) | null>(null);
+  const [isMarkDialogOpen, setIsMarkDialogOpen] = useState(false);
+  const [manualUserId, setManualUserId] = useState("");
+  const [manualDate, setManualDate] = useState(selectedDate);
+  const [manualStatus, setManualStatus] = useState<Extract<AttendanceStatus, "ON_LEAVE" | "HALF_DAY">>("ON_LEAVE");
+  const queryClient = useQueryClient();
+  
+  const attendanceQuery = useQuery({ 
+    queryKey: ["attendance", selectedDate], 
+    queryFn: () => fetchAllAttendance(selectedDate) 
+  });
+ 
+  const usersQuery = useQuery({ 
+    queryKey: ["users", "attendance"], 
+    queryFn: () => fetchUsers({ page: 1, pageSize: 100 }) 
+  });
+ 
+  const employees = usersQuery.data?.items ?? [];
+  const attendanceData = useMemo(() => attendanceQuery.data ?? [], [attendanceQuery.data]);
+  const markMutation = useMutation({
+    mutationFn: markAttendanceStatus,
+    onSuccess: () => {
+      setIsMarkDialogOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["attendance"] });
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message ?? "Failed to update attendance status.");
+    }
+  });
+ 
+  const filteredData = useMemo(() => {
+    if (employeeFilter === "all") return attendanceData;
+    return attendanceData.filter(record => record.userId === employeeFilter);
+  }, [attendanceData, employeeFilter]);
+
+  const changeDate = (days: number) => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + days);
+    setSelectedDate(d.toISOString().split("T")[0]);
+  };
+
+  const downloadCSV = () => {
+    if (filteredData.length === 0) return;
+    const headers = ["Employee Name", "Email", "Work Mode", "Check In Time", "Check In Lat/Lng", "Check Out Time", "Check Out Lat/Lng", "Type", "Status"];
+    const rows = filteredData.map(r => [
+      r.user.name,
+      r.user.email,
+      r.user.workMode,
+      r.checkInTime ? formatTime(r.checkInTime) : "--",
+      formatCoords(r.checkInLat, r.checkInLng, 6),
+      r.checkOutTime ? formatTime(r.checkOutTime) : "--",
+      formatCoords(r.checkOutLat, r.checkOutLng, 6),
+      r.punchType || "MANUAL",
+      r.status
+    ]);
+    
+    const csvString = [headers.join(","), ...rows.map(row => row.map(val => `"${val.toString().replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Attendance_Report_${selectedDate}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+ 
+  return (
+    <div className="space-y-8 pb-10">
+      <div className="flex items-center justify-between">
+        <div>
+           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Attendance Log</h1>
+           <p className="mt-1 text-slate-500 text-sm">Review and verify employee punch records with photo and GPS validation.</p>
+        </div>
+        <div className="flex items-center gap-3">
+        <Dialog open={isMarkDialogOpen} onOpenChange={setIsMarkDialogOpen}>
+          <DialogTrigger asChild>
+            <Button
+              className="h-11 rounded-xl bg-blue-600 px-4 font-bold shadow-lg shadow-blue-100 hover:bg-blue-700"
+              onClick={() => setManualDate(selectedDate)}
+            >
+              <CalendarPlus className="mr-2 h-4 w-4" />
+              Mark Leave
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-md rounded-2xl border-none shadow-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-bold text-slate-900">Mark Manual Attendance</DialogTitle>
+              <DialogDescription className="text-sm text-slate-500">
+                Use this for approved leave or admin-marked half-day records.
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              className="space-y-5 pt-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!manualUserId) {
+                  alert("Select an employee first.");
+                  return;
+                }
+                markMutation.mutate({ userId: manualUserId, date: manualDate, status: manualStatus });
+              }}
+            >
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Employee</Label>
+                <Select value={manualUserId} onValueChange={setManualUserId}>
+                  <SelectTrigger className="h-11 rounded-xl border-slate-200">
+                    <SelectValue placeholder="Select employee" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees.map((employee) => (
+                      <SelectItem key={employee.id} value={employee.id}>{employee.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Date</Label>
+                  <Input type="date" value={manualDate} onChange={(event) => setManualDate(event.target.value)} className="h-11 rounded-xl border-slate-200" required />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Status</Label>
+                  <Select value={manualStatus} onValueChange={(value) => setManualStatus(value as typeof manualStatus)}>
+                    <SelectTrigger className="h-11 rounded-xl border-slate-200">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ON_LEAVE">Leave</SelectItem>
+                      <SelectItem value="HALF_DAY">Half Day</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="ghost" onClick={() => setIsMarkDialogOpen(false)} className="rounded-xl font-bold text-slate-500">
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={markMutation.isPending} className="rounded-xl bg-blue-600 font-bold hover:bg-blue-700">
+                  {markMutation.isPending ? "Saving..." : "Save Status"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+        <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm ring-1 ring-slate-200/60">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+            onClick={() => changeDate(-1)}
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+          <div className="flex items-center gap-2 px-3 border-x border-slate-100">
+             <Calendar className="h-4 w-4 text-blue-600" />
+             <span className="font-bold text-slate-700 text-sm">
+                {new Date(selectedDate).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+             </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+            onClick={() => changeDate(1)}
+          >
+            <ChevronRight className="h-5 w-5" />
+          </Button>
+        </div>
+        </div>
+      </div>
+
+      <Card className="border-none shadow-sm shadow-slate-200/60 ring-1 ring-slate-200/50 overflow-hidden">
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/30">
+           <div className="flex items-center gap-4">
+              <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+                <SelectTrigger className="w-[180px] h-9 rounded-lg border-slate-200 bg-white text-xs font-semibold shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <Filter className="h-3.5 w-3.5 text-slate-400" />
+                    <SelectValue placeholder="All Employees" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Employees</SelectItem>
+                  {employees.map(e => (
+                    <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-9 rounded-lg border-slate-200 bg-white font-bold text-slate-600 gap-2 shadow-sm text-xs"
+                onClick={downloadCSV}
+                disabled={filteredData.length === 0}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export CSV
+              </Button>
+           </div>
+           <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Showing {filteredData.length} entries
+           </div>
+        </div>
+
+        <Table>
+          <TableHeader className="bg-slate-50/50">
+            <TableRow className="hover:bg-transparent border-slate-100">
+              <TableHead className="py-4 px-8 text-[11px] font-black uppercase tracking-wider text-slate-400">Employee</TableHead>
+              <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Check In</TableHead>
+              <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Check Out</TableHead>
+              <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400 text-center">Type</TableHead>
+              <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400 text-center">Duration</TableHead>
+              <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400 text-center">Verification</TableHead>
+              <TableHead className="py-4 px-8 text-[11px] font-black uppercase tracking-wider text-slate-400 text-right">Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {attendanceQuery.isLoading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="h-40 text-center">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="h-6 w-6 border-2 border-blue-600 border-t-transparent animate-spin rounded-full" />
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Fetching records...</span>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : filteredData.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="h-40 text-center">
+                  <div className="flex flex-col items-center gap-2 text-slate-300">
+                    <UserIcon className="h-10 w-10 opacity-20" />
+                    <span className="text-xs font-bold uppercase tracking-widest">No records found for this date.</span>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredData.map((record) => (
+                <TableRow 
+                  key={record.id} 
+                  className="group hover:bg-blue-50/30 border-slate-50 transition-colors cursor-pointer"
+                  onClick={() => setViewingRecord(record)}
+                >
+                  <TableCell className="py-5 px-8">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-9 w-9 border border-slate-100 shadow-sm ring-2 ring-white">
+                        <AvatarFallback className="bg-slate-50 text-slate-400 font-bold text-xs">{record.user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col">
+                        <span className="font-bold text-slate-900 text-sm leading-tight group-hover:text-blue-600 transition-colors">{record.user.name}</span>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{record.user.email} / {record.user.workMode}</span>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-5 px-6">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-slate-600">{record.checkInTime ? formatTime(record.checkInTime) : "--"}</span>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{formatCoords(record.checkInLat, record.checkInLng)}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-5 px-6">
+                    {record.checkOutTime ? (
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-slate-600">{formatTime(record.checkOutTime)}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{formatCoords(record.checkOutLat, record.checkOutLng)}</span>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest italic">In Progress</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="py-5 px-6 text-center">
+                    <div className={cn(
+                      "inline-flex items-center justify-center px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-wider",
+                      record.punchType === "FIELD" ? "bg-amber-50 text-amber-600 border-amber-100" : "bg-blue-50 text-blue-600 border-blue-100"
+                    )}>
+                      {record.punchType || "MANUAL"}
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-5 px-6 text-center">
+                    <span className="text-xs font-bold text-slate-600">
+                      {formatDurationLabel(calculateDurations([record]).officeTimeMs + calculateDurations([record]).fieldTimeMs)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="py-5 px-6">
+                     <div className="flex items-center justify-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        {record.checkInPhotoUrl ? (
+                          <PhotoViewer url={record.checkInPhotoUrl} title="Check In">
+                             <div className="relative h-8 w-10 rounded border border-slate-200 overflow-hidden cursor-zoom-in hover:border-blue-400 transition-all">
+                               <img src={record.checkInPhotoUrl} className="h-full w-full object-cover" alt={`${record.user.name} check-in thumbnail`} />
+                             </div>
+                          </PhotoViewer>
+                        ) : null}
+                        {record.checkOutPhotoUrl ? (
+                          <PhotoViewer url={record.checkOutPhotoUrl} title="Check Out">
+                             <div className="relative h-8 w-10 rounded border border-slate-200 overflow-hidden cursor-zoom-in hover:border-blue-400 transition-all">
+                               <img src={record.checkOutPhotoUrl} className="h-full w-full object-cover" alt={`${record.user.name} check-out thumbnail`} />
+                             </div>
+                          </PhotoViewer>
+                        ) : null}
+                     </div>
+                  </TableCell>
+                  <TableCell className="py-5 px-8 text-right">
+                    <AttendanceStatusBadge
+                      status={record.status}
+                      hasCheckOut={Boolean(record.checkOutTime)}
+                      checkInTime={record.checkInTime ?? undefined}
+                      checkOutTime={record.checkOutTime}
+                      shiftStart={record.user.shiftStart}
+                      shiftEnd={record.user.shiftEnd}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </Card>
+
+      <AttendanceDetailDialog 
+        record={viewingRecord} 
+        userRecords={filteredData.filter(r => r.userId === viewingRecord?.userId)}
+        onOpenChange={(open) => !open && setViewingRecord(null)} 
+      />
+    </div>
+  );
+}
+
+function AttendanceDetailDialog({ 
+  record, 
+  userRecords,
+  onOpenChange 
+}: { 
+  record: (AttendanceRecord & { user: User }) | null; 
+  userRecords: AttendanceRecord[];
+  onOpenChange: (open: boolean) => void 
+}) {
+  if (!record) return null;
+
+  const totals = calculateDurations(userRecords);
+
+  return (
+    <Dialog open={!!record} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl p-0 overflow-hidden border-none shadow-2xl bg-white">
+        <div className="bg-slate-900 p-8 text-white">
+           <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                 <Avatar className="h-12 w-12 border-2 border-slate-800 shadow-xl">
+                    <AvatarFallback className="bg-slate-800 text-slate-400 font-bold">{record.user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                 </Avatar>
+                 <div>
+                    <h2 className="text-xl font-bold">{record.user.name}</h2>
+                    <p className="text-xs font-medium text-slate-400">{record.user.email} / {new Date(record.date).toLocaleDateString()}</p>
+                 </div>
+              </div>
+              <AttendanceStatusBadge 
+                status={record.status} 
+                hasCheckOut={!!record.checkOutTime} 
+                checkInTime={record.checkInTime ?? undefined} 
+                checkOutTime={record.checkOutTime}
+                shiftStart={record.user.shiftStart}
+                shiftEnd={record.user.shiftEnd}
+              />
+           </div>
+           
+           {/* Durations Row */}
+           <div className="mt-6 pt-6 border-t border-slate-800 grid grid-cols-3 gap-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Total Office Time</p>
+                <p className="text-lg font-bold text-blue-400">{formatDurationLabel(totals.officeTimeMs)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Total Field Time</p>
+                <p className="text-lg font-bold text-amber-400">{formatDurationLabel(totals.fieldTimeMs)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Total Break Time</p>
+                <p className="text-lg font-bold text-emerald-400">{formatDurationLabel(totals.breakTimeMs)}</p>
+              </div>
+           </div>
+        </div>
+
+        <div className="p-8 grid grid-cols-2 gap-8">
+           {/* Punch In */}
+           <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                 <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-lg bg-emerald-50 flex items-center justify-center border border-emerald-100">
+                       <Clock className="h-4 w-4 text-emerald-600" />
+                    </div>
+                   <div>
+                       <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 leading-none mb-1">Check In</p>
+                       <p className="text-sm font-bold text-slate-900">{record.checkInTime ? formatTime(record.checkInTime) : "--"}</p>
+                    </div>
+                 </div>
+                 {record.checkInLat != null && record.checkInLng != null ? (
+                   <a 
+                     href={`https://www.google.com/maps/search/?api=1&query=${record.checkInLat},${record.checkInLng}`} 
+                     target="_blank" 
+                     rel="noopener noreferrer"
+                     className="h-8 px-3 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-2 hover:bg-blue-50 hover:border-blue-100 transition-all"
+                   >
+                      <MapPin className="h-3.5 w-3.5 text-blue-600" />
+                      <span className="text-[10px] font-bold text-slate-600 uppercase">View Map</span>
+                   </a>
+                 ) : null}
+              </div>
+              <div className="aspect-[4/3] rounded-2xl border border-slate-100 bg-slate-50 overflow-hidden shadow-inner group relative">
+                 {record.checkInPhotoUrl ? (
+                    <img src={record.checkInPhotoUrl} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt={`${record.user.name} check-in verification`} />
+                 ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
+                       <UserIcon className="h-10 w-10 opacity-20" />
+                       <p className="text-[10px] font-bold uppercase mt-2">No photo available</p>
+                    </div>
+                 )}
+                 <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-2 py-1 rounded text-[9px] font-black text-slate-700 uppercase tracking-widest border border-white shadow-sm ring-1 ring-black/5">
+                    Live Photo Check-in
+                 </div>
+              </div>
+              <p className="text-[10px] font-bold text-slate-400 text-center uppercase tracking-tighter">Coordinates: {formatCoords(record.checkInLat, record.checkInLng, 6)}</p>
+           </div>
+
+           {/* Punch Out */}
+           <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                 <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-lg bg-rose-50 flex items-center justify-center border border-rose-100">
+                       <Clock className="h-4 w-4 text-rose-600" />
+                    </div>
+                    <div>
+                       <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 leading-none mb-1">Check Out</p>
+                       <p className="text-sm font-bold text-slate-900">{record.checkOutTime ? formatTime(record.checkOutTime) : "Active"}</p>
+                    </div>
+                 </div>
+                 {record.checkOutTime && record.checkOutLat != null && record.checkOutLng != null && (
+                   <a 
+                     href={`https://www.google.com/maps/search/?api=1&query=${record.checkOutLat},${record.checkOutLng}`} 
+                     target="_blank" 
+                     rel="noopener noreferrer"
+                     className="h-8 px-3 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-2 hover:bg-blue-50 hover:border-blue-100 transition-all"
+                   >
+                      <MapPin className="h-3.5 w-3.5 text-blue-600" />
+                      <span className="text-[10px] font-bold text-slate-600 uppercase">View Map</span>
+                   </a>
+                 )}
+              </div>
+              <div className="aspect-[4/3] rounded-2xl border border-slate-100 bg-slate-50 overflow-hidden shadow-inner group relative">
+                 {record.checkOutPhotoUrl ? (
+                    <img src={record.checkOutPhotoUrl} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt={`${record.user.name} check-out verification`} />
+                 ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
+                       <UserIcon className="h-10 w-10 opacity-20" />
+                       <p className="text-[10px] font-bold uppercase mt-2">{record.checkOutTime ? "No photo available" : "Employee still on site"}</p>
+                    </div>
+                 )}
+                 {record.checkOutTime && (
+                   <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-2 py-1 rounded text-[9px] font-black text-slate-700 uppercase tracking-widest border border-white shadow-sm ring-1 ring-black/5">
+                      Live Photo Check-out
+                   </div>
+                 )}
+              </div>
+              <p className="text-[10px] font-bold text-slate-400 text-center uppercase tracking-tighter">
+                {record.checkOutTime ? `Coordinates: ${formatCoords(record.checkOutLat, record.checkOutLng, 6)}` : "Ongoing activity..."}
+              </p>
+           </div>
+        </div>
+
+        <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
+           <Button variant="outline" onClick={() => onOpenChange(false)} className="h-10 rounded-xl font-bold text-slate-500 hover:text-slate-700 border-slate-200">
+              Close Verification
+           </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function formatCoords(lat?: number | null, lng?: number | null, digits = 4) {
+  if (lat == null || lng == null) {
+    return "--";
+  }
+
+  return `${lat.toFixed(digits)}, ${lng.toFixed(digits)}`;
+}

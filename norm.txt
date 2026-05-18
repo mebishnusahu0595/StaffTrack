@@ -1,0 +1,41 @@
+for app
+
+repeated task 
+notification for particular task with assign date 
+after completion of task photo send with description 
+salary cut hoga chutti ke according
+office and feild also in same person
+audometer reading with writing 
+month end report
+petrol task with time ki kab tak complete hoga 
+
+
+
+
+for admin
+
+pending and go for next day
+edit option on forms 
+how many fills the form
+detailed response on form person by person
+form link 
+details 
+issue with solved person , repeatation
+team name or self
+on report day end report shared on WhatsApp so employee can show their performance
+muster report
+leave report kon kisko kyun department wise 
+salary SLIP ( ATTENDENCE CALCULATE WITH [PRESENT ABSENT AND LEAVE )
+
+
+. Admin Panel
+Email: admin@demo.com
+Password: Admin@123
+Access: http://localhost:3000 (Default Next.js port)
+2. Staff App (Mobile Web)
+Email: employee1@demo.com (Field Employee) or employee3@demo.com (Office Employee)
+Password: Admin@123
+Access: http://localhost:8081 (Default Expo Web port)
+3. Super Admin
+Email: superadmin@gmail.com
+Password: superadmin@123

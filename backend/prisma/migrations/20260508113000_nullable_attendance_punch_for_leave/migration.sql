@@ -1,0 +1,3 @@
+ALTER TABLE "Attendance" ALTER COLUMN "checkInTime" DROP NOT NULL;
+ALTER TABLE "Attendance" ALTER COLUMN "checkInLat" DROP NOT NULL;
+ALTER TABLE "Attendance" ALTER COLUMN "checkInLng" DROP NOT NULL;
