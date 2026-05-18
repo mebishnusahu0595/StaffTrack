@@ -32,8 +32,12 @@
 
   html,
   body {
-    @apply h-full overflow-hidden bg-background text-foreground antialiased selection:bg-blue-100 selection:text-blue-900;
+    @apply min-h-full bg-background text-foreground antialiased selection:bg-blue-100 selection:text-blue-900;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  body {
+    @apply overflow-x-hidden overflow-y-auto;
   }
 
   /* Custom Sidebar Styles */

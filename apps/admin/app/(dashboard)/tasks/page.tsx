@@ -174,7 +174,7 @@ export default function TasksPage() {
         <div className="flex items-center gap-6">
            <div className="flex items-center gap-3 bg-white px-4 py-1.5 rounded-full border border-slate-100 shadow-sm">
               <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-900">TAMRAKAR GROUPS ( AGROTECH )</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-900">StaffTrack Workspace</span>
               <ChevronDown className="h-3 w-3 text-slate-400" />
            </div>
            <div className="flex items-center gap-3">
@@ -326,7 +326,7 @@ export default function TasksPage() {
                     </div>
                   </td>
                   <td className="py-4 px-4">
-                    <span className="text-xs font-bold text-slate-500">{task.assignedTo?.managerId ? "Agrotech" : "Agrotech"}</span>
+                    <span className="text-xs font-bold text-slate-500">{task.assignedTo?.workMode || "Unassigned"}</span>
                   </td>
                   <td className="py-4 px-4">
                     <div className="flex justify-center">

@@ -168,7 +168,7 @@ export default function TemplatesPage() {
                           <td className="py-6">
                              <div className="flex items-center gap-2">
                                 <div className="h-6 w-6 rounded-full bg-emerald-600 flex items-center justify-center text-[8px] font-black text-white">S</div>
-                                <span className="text-xs font-bold text-slate-600">{template.createdBy?.name || 'sumeet tamrakar'}</span>
+                                <span className="text-xs font-bold text-slate-600">{template.createdBy?.name || "System"}</span>
                              </div>
                           </td>
                           <td className="py-6 text-xs font-bold text-slate-500">{dayjs(template.createdAt).format("DD-MM-YYYY")}</td>

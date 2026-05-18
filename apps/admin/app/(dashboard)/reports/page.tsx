@@ -198,7 +198,7 @@ export default function ReportsPage() {
             </div>
             <div className="mt-4 flex items-center gap-2">
                <Navigation className="h-3 w-3 text-blue-500" />
-               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{filteredRows.length} report sample</span>
+               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{filteredRows.length} reports</span>
             </div>
           </CardContent>
         </Card>

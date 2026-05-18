@@ -201,14 +201,14 @@ export default function FormsPage() {
                           <td className="py-6">
                              <div className="flex items-center gap-3">
                                 <div className="h-7 w-7 rounded-full bg-emerald-600 flex items-center justify-center text-[8px] font-black text-white">P</div>
-                                <span className="text-xs font-bold text-slate-600">{form.assignedTo?.name || 'PAYAL NIRMALKAR'}</span>
+                                <span className="text-xs font-bold text-slate-600">{form.assignedTo?.name || "Unassigned"}</span>
                              </div>
                           </td>
-                          <td className="py-6 text-xs font-bold text-slate-400">Agrotech</td>
+                          <td className="py-6 text-xs font-bold text-slate-400">{form.team?.name || form.group?.name || "General"}</td>
                           <td className="py-6">
                              <div className="flex items-center gap-2">
                                 <div className="h-6 w-6 rounded-full bg-emerald-100 flex items-center justify-center text-[8px] font-black text-emerald-600">S</div>
-                                <span className="text-xs font-bold text-slate-600">{form.createdBy?.name || 'sumeet tamrakar'}</span>
+                                <span className="text-xs font-bold text-slate-600">{form.createdBy?.name || "System"}</span>
                              </div>
                           </td>
                           <td className="py-6 text-xs font-bold text-slate-500">{dayjs(form.createdAt).format("DD-MM-YYYY")}</td>
@@ -501,4 +501,3 @@ function ViewResponsesDialog({ form }: any) {
     </Dialog>
   );
 }
-

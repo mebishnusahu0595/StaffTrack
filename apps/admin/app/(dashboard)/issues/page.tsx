@@ -118,7 +118,7 @@ export default function IssuesPage() {
     }
   });
 
-  const issues = issuesQuery.data ?? [];
+  const issues = useMemo(() => issuesQuery.data ?? [], [issuesQuery.data]);
 
   const stats = useMemo(() => {
     return {
@@ -232,7 +232,7 @@ export default function IssuesPage() {
                                 <span className="text-xs font-bold text-slate-600">{issue.assignee?.name || 'Unassigned'}</span>
                              </div>
                           </td>
-                          <td className="py-6 text-xs font-bold text-slate-400">{issue.assignee?.group?.name || 'Agrotech'}</td>
+                          <td className="py-6 text-xs font-bold text-slate-400">{issue.assignee?.group?.name || "General"}</td>
                           <td className="py-6 text-center">
                              <Badge className={cn(
                                 "text-[9px] font-black uppercase px-2 py-0.5 rounded-md border",
@@ -398,8 +398,8 @@ function IssueUpdateSheet({ issueId, onClose, onResolve }: { issueId: string | n
                 <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-100 font-bold text-[8px] uppercase">Issue ID: {issueId?.slice(-6)}</Badge>
                 <Badge variant="outline" className="bg-emerald-50 text-emerald-600 border-emerald-100 font-bold text-[8px] uppercase">{issue?.status}</Badge>
              </div>
-             <SheetTitle className="text-2xl font-black text-slate-900 tracking-tight">{issue?.title || 'Finish with an update'}</SheetTitle>
-             <SheetDescription className="text-xs font-bold text-slate-400 uppercase tracking-widest">{issue?.assignee?.group?.name || 'Agrotech'}</SheetDescription>
+             <SheetTitle className="text-2xl font-black text-slate-900 tracking-tight">{issue?.title || "Issue details"}</SheetTitle>
+             <SheetDescription className="text-xs font-bold text-slate-400 uppercase tracking-widest">{issue?.assignee?.group?.name || "General"}</SheetDescription>
           </div>
         </SheetHeader>
 

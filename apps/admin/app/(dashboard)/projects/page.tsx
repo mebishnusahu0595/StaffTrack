@@ -97,7 +97,7 @@ const StatsCard = ({ label, value, subValue, icon: Icon, color }: any) => {
 const ProjectCard = ({ project }: { project: any }) => {
   return (
     <Card className="rounded-3xl border-none shadow-sm ring-1 ring-slate-200/60 bg-white overflow-hidden group hover:ring-blue-400 hover:shadow-xl hover:shadow-blue-900/5 transition-all duration-300">
-      <div className="p-8 space-y-6">
+      <div className="p-6 sm:p-8 space-y-6">
         <div className="flex items-start justify-between">
            <div className="space-y-1">
               <div className="flex items-center gap-2">
@@ -120,7 +120,7 @@ const ProjectCard = ({ project }: { project: any }) => {
         </div>
 
         <p className="text-xs font-medium text-slate-500 line-clamp-2 leading-relaxed h-8">
-          {project.description || "No description available for this project initiative."}
+          {project.description || "No description provided."}
         </p>
 
         <div className="pt-2 flex items-center justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest border-t border-slate-50 pt-4">
@@ -280,7 +280,7 @@ export default function ProjectsPage() {
     queryFn: () => fetchProjects({ search })
   });
 
-  const projects = projectsQuery.data ?? [];
+  const projects = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data]);
 
   const stats = useMemo(() => {
     const total = projects.length;
@@ -310,7 +310,7 @@ export default function ProjectsPage() {
         <div className="flex items-center gap-3">
           <div className="hidden lg:flex items-center gap-2 px-4 h-12 rounded-2xl bg-white border border-slate-200/60 shadow-sm text-xs font-bold text-slate-600">
              <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-             {"STAFFTRACK GROUPS"}
+             {user?.companyId ? "Company Workspace" : "StaffTrack Workspace"}
           </div>
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
@@ -550,7 +550,7 @@ export default function ProjectsPage() {
                              <TableCell className="py-5 text-center font-black text-slate-900">{project._count?.tasks || 0}</TableCell>
                              <TableCell className="py-5">
                                 <Badge variant="outline" className="rounded-lg border-slate-200 bg-slate-50/50 text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                                   {project.department || "Agrotech"}
+                                   {project.department || "General"}
                                 </Badge>
                              </TableCell>
                              <TableCell className="py-5">

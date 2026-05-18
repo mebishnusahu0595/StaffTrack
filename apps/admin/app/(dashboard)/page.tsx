@@ -28,41 +28,56 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { fetchTasks, fetchUsers, fetchAllReports } from "@/lib/api";
+import { useAuth } from "@/components/auth-provider";
+import { fetchTasks, fetchUsers, fetchAllReports, fetchProjects, fetchIssues, fetchForms } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export default function OverviewPage() {
+  const { user } = useAuth();
   const usersQuery = useQuery({ queryKey: ["users"], queryFn: () => fetchUsers({ page: 1, pageSize: 100 }) });
   const tasksQuery = useQuery({ queryKey: ["tasks"], queryFn: fetchTasks });
   const reportsQuery = useQuery({ queryKey: ["reports"], queryFn: () => fetchAllReports() });
+  const projectsQuery = useQuery({ queryKey: ["projects"], queryFn: () => fetchProjects() });
+  const issuesQuery = useQuery({ queryKey: ["issues"], queryFn: () => fetchIssues() });
+  const formsQuery = useQuery({ queryKey: ["forms"], queryFn: () => fetchForms() });
 
-  const employees = usersQuery.data?.items ?? [];
-  const tasks = tasksQuery.data ?? [];
+  const employees = useMemo(() => usersQuery.data?.items ?? [], [usersQuery.data?.items]);
+  const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
+  const reports = useMemo(() => reportsQuery.data ?? [], [reportsQuery.data]);
+  const projects = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data]);
+  const issues = useMemo(() => issuesQuery.data ?? [], [issuesQuery.data]);
+  const forms = useMemo(() => formsQuery.data ?? [], [formsQuery.data]);
   
   const stats = useMemo(() => ({
-    projects: 4,
-    aiReviews: 5,
+    projects: projects.length,
+    reports: reports.length,
     totalTasks: tasks.length,
-    issues: 0,
-    forms: 29,
+    issues: issues.length,
+    forms: forms.length,
     ongoingTasks: tasks.filter(t => t.status === "IN_PROGRESS").length,
     overdueTasks: tasks.filter(t => t.status !== "COMPLETED" && new Date(t.dueDate) < new Date()).length,
     completedTasks: tasks.filter(t => t.status === "COMPLETED").length,
     scheduledTasks: tasks.filter(t => t.status === "PENDING").length
-  }), [tasks]);
+  }), [forms.length, issues.length, projects.length, reports.length, tasks]);
 
-  const teamData = [
-    { name: "AGROTECH D...", tasks: 15, issues: 5 },
-    { name: "Vaniki Cro...", tasks: 8, issues: 2 },
-    { name: "Agrotech", tasks: 45, issues: 15 },
-    { name: "Indraprast...", tasks: 48, issues: 18 }
-  ];
+  const teamData = useMemo(() => {
+    const byWorkMode = employees.reduce<Record<string, { name: string; tasks: number; issues: number }>>((acc, employee) => {
+      const key = employee.workMode || "UNASSIGNED";
+      acc[key] ??= { name: key.replace("_", " "), tasks: 0, issues: 0 };
+      acc[key].tasks += tasks.filter((task) => task.assignedToId === employee.id).length;
+      return acc;
+    }, {});
+
+    return Object.values(byWorkMode).length > 0
+      ? Object.values(byWorkMode)
+      : [{ name: "No team data", tasks: 0, issues: 0 }];
+  }, [employees, tasks]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-black text-slate-900">Good Afternoon ! Deepika Tandulkar</h1>
+          <h1 className="text-2xl font-black text-slate-900">Good Afternoon{user?.name ? `, ${user.name}` : ""}</h1>
           <p className="text-sm text-slate-500 font-medium mt-1">Here is what&apos;s happening with your projects today.</p>
         </div>
         <Button variant="outline" className="rounded-xl border-slate-200 bg-white font-bold text-slate-600 gap-2 h-10 shadow-sm">
@@ -84,7 +99,7 @@ export default function OverviewPage() {
             </div>
             <h2 className="text-lg font-black mt-1">Smart Operational Insights</h2>
             <p className="text-xs text-blue-100 max-w-xl font-medium leading-relaxed mt-1">
-              Deepika, based on today&apos;s logs: <strong className="text-white">{employees.find(e => e.role === "EMPLOYEE")?.name ?? "Aarav Mehta"}</strong> is highly active with <strong className="text-white">15.5 km</strong> logged. Team attendance is steady at <strong className="text-white">92%</strong> today. There are <strong className="text-white">{stats.overdueTasks} critical overdue tasks</strong> that require your immediate attention.
+              Based on live backend data: <strong className="text-white">{employees.length}</strong> users, <strong className="text-white">{stats.totalTasks}</strong> tasks, <strong className="text-white">{stats.issues}</strong> issues, and <strong className="text-white">{stats.overdueTasks}</strong> overdue tasks need attention.
             </p>
           </div>
         </div>
@@ -115,9 +130,9 @@ export default function OverviewPage() {
         />
         <StatCard 
           icon={BrainCircuit} 
-          title={`${stats.aiReviews} AI Reviews`} 
+          title={`${stats.reports} Reports`}
           color="amber" 
-          details={[{ label: "In Review", value: 0 }, { label: "Completed", value: 0 }, { label: "Need Review", value: 5 }]} 
+          details={[{ label: "Submitted", value: stats.reports }, { label: "Pending", value: 0 }, { label: "Flagged", value: 0 }]}
         />
         <StatCard 
           icon={ClipboardList} 
@@ -135,7 +150,7 @@ export default function OverviewPage() {
           icon={FileSpreadsheet} 
           title={`${stats.forms} Forms`} 
           color="indigo" 
-          details={[{ label: "Ongoing Tasks", value: 6 }, { label: "Open Responses", value: 296 }, { label: "Submitted Responses", value: 768 }]} 
+          details={[{ label: "Total", value: stats.forms }, { label: "Open Responses", value: 0 }, { label: "Submitted Responses", value: 0 }]}
         />
       </div>
 
@@ -155,9 +170,9 @@ export default function OverviewPage() {
             </CardHeader>
             <CardContent>
               <div className="flex gap-8 border-b border-slate-100 pb-3 mb-6">
-                <TabItem label="Tasks" count={21} active />
-                <TabItem label="Issues" count={0} />
-                <TabItem label="Forms" count={29} />
+                <TabItem label="Tasks" count={stats.totalTasks} active />
+                <TabItem label="Issues" count={stats.issues} />
+                <TabItem label="Forms" count={stats.forms} />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -219,11 +234,11 @@ export default function OverviewPage() {
                       <tr key={emp.id} className="group hover:bg-slate-50/50 transition-colors">
                         <td className="py-4 text-xs font-black text-slate-900">{emp.name}</td>
                         <td className="py-4">
-                           <span className="text-[10px] font-bold text-slate-500 leading-tight block max-w-[120px]">Indraprastha Petroleum</span>
+                           <span className="text-[10px] font-bold text-slate-500 leading-tight block max-w-[120px]">{emp.workMode || "Unassigned"}</span>
                         </td>
-                        <td className="py-4 text-center text-xs font-bold text-slate-600">7</td>
-                        <td className="py-4 text-center text-xs font-bold text-slate-600">1</td>
-                        <td className="py-4 text-center text-xs font-bold text-slate-600">0</td>
+                        <td className="py-4 text-center text-xs font-bold text-slate-600">{tasks.filter((task) => task.assignedToId === emp.id).length}</td>
+                        <td className="py-4 text-center text-xs font-bold text-slate-600">{tasks.filter((task) => task.assignedToId === emp.id && task.status === "IN_PROGRESS").length}</td>
+                        <td className="py-4 text-center text-xs font-bold text-slate-600">{tasks.filter((task) => task.assignedToId === emp.id && task.status === "COMPLETED").length}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -3,8 +3,12 @@ import { io, Socket } from "socket.io-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { getAccessToken } from "@/lib/auth";
 
-// In production, this should come from an environment variable
-const SOCKET_URL = "http://localhost:4000";
+const SOCKET_URL = normalizeSocketUrl(
+  process.env.NEXT_PUBLIC_SOCKET_URL ??
+    process.env.NEXT_PUBLIC_API_TARGET ??
+    process.env.API_BASE_URL ??
+    "https://stafftrack.cloud"
+);
 
 export function useSocket(companyId?: string) {
   const socketRef = useRef<Socket | null>(null);
@@ -61,4 +65,8 @@ export function useSocket(companyId?: string) {
   }, [companyId, queryClient]);
 
   return socketRef.current;
+}
+
+function normalizeSocketUrl(url: string) {
+  return url.trim().replace(/\/+$/, "").replace(/\/api$/, "");
 }
