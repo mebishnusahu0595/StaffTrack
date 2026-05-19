@@ -370,7 +370,7 @@ function PayrollDetailModal({ report, month }: { report: any, month: any }) {
   };
 
   return (
-    <DialogContent className="max-w-2xl p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[40px]">
+    <DialogContent className="max-w-2xl p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[40px] hide-close">
        <DialogHeader className="p-10 bg-slate-900 text-white relative">
           <DialogClose className="absolute right-8 top-8 z-50 rounded-2xl bg-white/10 p-2 text-white/50 hover:bg-white/20 hover:text-white transition-all outline-none">
              <X className="h-5 w-5" />

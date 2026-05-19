@@ -291,7 +291,7 @@ function ReportIssueDialog({ users, onSubmit, isSubmitting }: any) {
   const [data, setData] = useState({ title: "", description: "", priority: "Medium", assigneeId: "" });
 
   return (
-    <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px]">
+    <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] hide-close">
       <DialogHeader className="p-8 bg-blue-600 text-white relative">
         <DialogClose className="absolute right-6 top-6 rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
            <X className="h-4 w-4" />
@@ -384,15 +384,7 @@ function IssueUpdateSheet({ issueId, onClose, onResolve }: { issueId: string | n
   return (
     <Sheet open={!!issueId} onOpenChange={open => !open && onClose()}>
       <SheetContent className="sm:max-w-md p-0 border-none shadow-2xl flex flex-col h-full bg-white">
-        <SheetHeader className="p-8 bg-slate-50 border-b border-slate-100 relative">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="absolute right-6 top-6 rounded-xl hover:bg-slate-200 transition-all"
-            onClick={onClose}
-          >
-             <X className="h-5 w-5 text-slate-400" />
-          </Button>
+        <SheetHeader className="p-8 bg-slate-50 border-b border-slate-100">
           <div className="space-y-1">
              <div className="flex items-center gap-2">
                 <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-100 font-bold text-[8px] uppercase">Issue ID: {issueId?.slice(-6)}</Badge>

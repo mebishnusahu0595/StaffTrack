@@ -534,7 +534,7 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting }: any) {
   const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
   return (
-    <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px]">
+    <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] hide-close">
       <DialogHeader className="p-8 bg-blue-600 text-white relative">
         <DialogClose className="absolute right-6 top-6 rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
            <X className="h-4 w-4" />
@@ -704,7 +704,7 @@ function ViewTaskDetailsDialog({ task }: any) {
   if (!task) return null;
 
   return (
-    <DialogContent className="max-w-2xl p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px]">
+    <DialogContent className="max-w-2xl p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] hide-close">
       <DialogHeader className="p-8 bg-slate-900 text-white relative">
         <DialogClose className="absolute right-6 top-6 rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
            <X className="h-4 w-4" />
