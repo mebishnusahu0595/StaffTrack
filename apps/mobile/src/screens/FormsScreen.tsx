@@ -25,6 +25,7 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import { useForms } from "../hooks/useForms";
 import { fetchFormDetails, uploadPhoto, Form, FormField } from "../api";
+import { API_ORIGIN_URL } from "../config/env";
 import dayjs from "dayjs";
 
 export function FormsScreen() {
@@ -149,7 +150,14 @@ export function FormsScreen() {
             <Text style={styles.fieldLabel}>{field.label}{field.required && " *"}</Text>
             {formData[field.label] ? (
               <View style={styles.imagePreviewContainer}>
-                <Image source={{ uri: formData[field.label] }} style={styles.imagePreview} />
+                <Image 
+                  source={{ 
+                    uri: formData[field.label]?.startsWith("http") 
+                      ? formData[field.label] 
+                      : `${API_ORIGIN_URL}${formData[field.label]}` 
+                  }} 
+                  style={styles.imagePreview} 
+                />
                 <IconButton 
                   icon="close-circle" 
                   size={24} 

@@ -34,11 +34,16 @@ export function useTasks() {
   );
 
   const todaysTasks = useMemo(() => {
-    const today = new Date();
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayStr = todayStart.toDateString();
 
     return activeTasks.filter((task) => {
       const dueDate = new Date(task.dueDate);
-      return dueDate.toDateString() === today.toDateString();
+      const matchesToday = dueDate.toDateString() === todayStr;
+      const isOverdue = dueDate < todayStart;
+
+      return matchesToday || isOverdue;
     });
   }, [activeTasks]);
 
