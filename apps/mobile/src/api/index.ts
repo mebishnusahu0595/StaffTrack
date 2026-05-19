@@ -207,7 +207,13 @@ export async function uploadPhoto(asset: ImagePickerAsset): Promise<string> {
   const response = await api.post<ApiEnvelope<{ url: string }>>(
     "/api/upload",
     formData,
-    { timeout: 60000 } // Give it 1 minute for large photos
+    { 
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+      transformRequest: (data) => data,
+      timeout: 60000 
+    }
   );
 
   console.log("[API] Upload response received:", response.data);
@@ -261,7 +267,13 @@ export async function uploadExpenseReceipt(asset: ImagePickerAsset): Promise<str
 
   const response = await api.post<ApiEnvelope<{ receiptUrl?: string; url?: string }>>(
     "/api/upload",
-    formData
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+      transformRequest: (data) => data
+    }
   );
 
   if (!response.data.success) {
@@ -292,8 +304,12 @@ async function appendImageAsset(
     return;
   }
 
+  const uri = Platform.OS === "android" && !asset.uri.startsWith("file://") && !asset.uri.startsWith("content://")
+    ? `file://${asset.uri}`
+    : asset.uri;
+
   formData.append("file", {
-    uri: asset.uri,
+    uri,
     name: fileName,
     type: mimeType
   } as unknown as Blob);
