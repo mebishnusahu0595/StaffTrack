@@ -36,7 +36,7 @@ export function LoginScreen() {
     >
       <Surface elevation={1} style={styles.panel}>
         <View style={styles.logoContainer}>
-          <Image source={Platform.OS === "android" ? { uri: "logo" } : require("../../assets/logo.png")} style={styles.logo} />
+          <Image source={require("../../assets/logo.png")} style={styles.logo} />
           <Text variant="headlineMedium" style={styles.title}>
             StaffTrack
           </Text>

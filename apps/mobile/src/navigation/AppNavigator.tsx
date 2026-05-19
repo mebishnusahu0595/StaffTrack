@@ -1,11 +1,11 @@
 import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
-import { 
+import {
   createDrawerNavigator, 
   DrawerContentScrollView, 
   DrawerItemList 
 } from "@react-navigation/drawer";
-import { ActivityIndicator, Image, View, StyleSheet, TouchableOpacity, ScrollView, Platform } from "react-native";
+import { ActivityIndicator, Image, View, StyleSheet, TouchableOpacity } from "react-native";
 import { Icon, Text, Divider, IconButton } from "react-native-paper";
 
 import { useAuth } from "../auth/AuthContext";
@@ -74,10 +74,7 @@ function CustomDrawerContent(props: any) {
     <DrawerContentScrollView {...props} contentContainerStyle={{ paddingTop: 0 }}>
       <View style={styles.drawerHeader}>
         <View style={styles.headerTop}>
-          <Image 
-            source={Platform.OS === "android" ? { uri: "logo" } : require("../../assets/logo.png")} 
-            style={styles.drawerLogo} 
-          />
+          <Image source={require("../../assets/logo.png")} style={styles.drawerLogo} />
           <IconButton 
             icon="close" 
             size={24} 
@@ -114,14 +111,23 @@ function MainDrawer() {
     <Drawer.Navigator
       useLegacyImplementation={false}
       drawerContent={(props) => <CustomDrawerContent {...props} />}
-      screenOptions={{
+      screenOptions={({ navigation }) => ({
         headerStyle: { backgroundColor: "#FFFFFF", elevation: 2, shadowOpacity: 0.1 },
         headerTitleStyle: { color: "#1A202C", fontWeight: "700" },
+        headerLeft: () => (
+          <IconButton
+            icon="menu"
+            size={24}
+            iconColor="#1A202C"
+            onPress={() => navigation.toggleDrawer()}
+            style={{ marginLeft: 8 }}
+          />
+        ),
         drawerActiveTintColor: "#1A202C",
         drawerInactiveTintColor: "#64748B",
         drawerLabelStyle: { fontWeight: "600", marginLeft: -16 },
         drawerItemStyle: { borderRadius: 8, marginHorizontal: 8, marginVertical: 2 },
-      }}
+      })}
     >
       <Drawer.Screen 
         component={HomeScreen} 

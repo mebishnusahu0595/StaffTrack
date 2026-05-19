@@ -35,5 +35,9 @@
       </intent-filter>
     </activity>
     <activity android:name="com.facebook.react.devsupport.DevSettingsActivity" android:exported="false"/>
+    <service
+      android:name="expo.modules.location.services.LocationTaskService"
+      android:exported="false"
+      android:foregroundServiceType="location" />
   </application>
 </manifest>

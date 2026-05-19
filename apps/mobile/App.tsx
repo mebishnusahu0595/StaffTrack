@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import { Component, type ReactNode, useState } from "react";
 import { View } from "react-native";
@@ -76,7 +77,12 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <PaperProvider theme={theme}>
+        <PaperProvider
+          settings={{
+            icon: (props) => <MaterialCommunityIcons {...props} />
+          }}
+          theme={theme}
+        >
           <QueryClientProvider client={queryClient}>
             <AuthProvider>
               <AppErrorBoundary>

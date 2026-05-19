@@ -1,3 +1,5 @@
+require("react-native-gesture-handler");
+
 const defaultErrorHandler = global.ErrorUtils?.getGlobalHandler?.();
 
 global.ErrorUtils?.setGlobalHandler?.((error, isFatal) => {
@@ -5,8 +7,6 @@ global.ErrorUtils?.setGlobalHandler?.((error, isFatal) => {
 
   defaultErrorHandler?.(error, false);
 });
-
-require("react-native-gesture-handler");
 
 const { registerRootComponent } = require("expo");
 const App = require("./App").default;
