@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { useState } from "react";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
-import { Button, Card, Chip, Dialog, FAB, List, Portal, Text, TextInput, SegmentedButtons } from "react-native-paper";
+import { Button, Card, Dialog, FAB, List, Portal, Text, TextInput, SegmentedButtons } from "react-native-paper";
 
 import { createIssue, fetchMyIssues, type Issue, type IssuePriority } from "../api";
 import { useAuth } from "../auth/AuthContext";
+import { appIconSource } from "../components/AppIcon";
 
 export function IssuesScreen() {
   const { user } = useAuth();
@@ -78,13 +79,11 @@ export function IssuesScreen() {
               <Card.Content>
                 <View style={styles.cardHeader}>
                   <Text style={styles.issueTitle}>{issue.title}</Text>
-                  <Chip 
-                    selectedColor={issue.status === "Open" ? "#A4262C" : "#17633A"}
-                    style={[styles.statusChip, { backgroundColor: issue.status === "Open" ? "#FADBD8" : "#D4EFDF" }]}
-                    textStyle={styles.chipText}
-                  >
-                    {issue.status}
-                  </Chip>
+                  <View style={[styles.statusChip, { backgroundColor: issue.status === "Open" ? "#FADBD8" : "#D4EFDF" }]}>
+                    <Text style={[styles.chipText, { color: issue.status === "Open" ? "#A4262C" : "#17633A" }]}>
+                      {issue.status.toUpperCase()}
+                    </Text>
+                  </View>
                 </View>
                 <Text style={styles.description}>{issue.description}</Text>
                 <View style={styles.footer}>
@@ -92,9 +91,9 @@ export function IssuesScreen() {
                     <List.Icon icon="clock-outline" color="#66736F" style={styles.smallIcon} />
                     <Text style={styles.metaText}>{dayjs(issue.createdAt).fromNow()}</Text>
                   </View>
-                  <Chip style={styles.priorityChip} textStyle={styles.priorityText}>
-                    {issue.priority}
-                  </Chip>
+                  <View style={styles.priorityChip}>
+                    <Text style={styles.priorityText}>{issue.priority}</Text>
+                  </View>
                 </View>
               </Card.Content>
             </Card>
@@ -151,7 +150,7 @@ export function IssuesScreen() {
       </Portal>
 
       <FAB
-        icon="plus"
+        icon={appIconSource("plus")}
         style={styles.fab}
         onPress={() => setIsDialogVisible(true)}
         label="Raise Issue"
@@ -198,12 +197,19 @@ const styles = StyleSheet.create({
     marginRight: 8
   },
   statusChip: {
-    height: 24,
-    borderRadius: 6
+    alignItems: "center",
+    borderRadius: 6,
+    justifyContent: "center",
+    minHeight: 30,
+    minWidth: 86,
+    paddingHorizontal: 10,
+    paddingVertical: 6
   },
   chipText: {
     fontSize: 10,
     fontWeight: "900",
+    lineHeight: 13,
+    textAlign: "center",
     textTransform: "uppercase"
   },
   description: {
@@ -236,12 +242,19 @@ const styles = StyleSheet.create({
     fontWeight: "600"
   },
   priorityChip: {
-    height: 22,
-    backgroundColor: "#F0F4F8"
+    alignItems: "center",
+    backgroundColor: "#F0F4F8",
+    borderRadius: 999,
+    justifyContent: "center",
+    minHeight: 28,
+    minWidth: 58,
+    paddingHorizontal: 10,
+    paddingVertical: 5
   },
   priorityText: {
     fontSize: 10,
-    fontWeight: "700"
+    fontWeight: "700",
+    lineHeight: 13
   },
   emptyContainer: {
     alignItems: "center",

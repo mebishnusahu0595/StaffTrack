@@ -200,7 +200,6 @@ model Attendance {
   user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   breaks           Break[]
 
-  @@unique([userId, date])
   @@index([userId, date])
 }
 
@@ -477,4 +476,3 @@ model HolidayTemplateItem {
 
   @@index([templateId])
 }
-

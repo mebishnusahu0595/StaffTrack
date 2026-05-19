@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { useState } from "react";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
-import { Button, Card, Chip, Dialog, FAB, List, Portal, Text, TextInput } from "react-native-paper";
+import { Button, Card, Dialog, FAB, Portal, Text, TextInput } from "react-native-paper";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
-import { submitLeaveRequest, fetchMyLeaves, type LeaveRequest } from "../api";
+import { submitLeaveRequest, fetchMyLeaves } from "../api";
+import { appIconSource } from "../components/AppIcon";
 
 export function LeaveRequestScreen() {
   const queryClient = useQueryClient();
@@ -42,8 +43,8 @@ export function LeaveRequestScreen() {
       return;
     }
     mutation.mutate({
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
+      startDate: dayjs(startDate).format("YYYY-MM-DD"),
+      endDate: dayjs(endDate).format("YYYY-MM-DD"),
       reason
     });
   }
@@ -65,15 +66,14 @@ export function LeaveRequestScreen() {
                   <Text style={styles.dateRange}>
                     {dayjs(leave.startDate).format("DD MMM")} - {dayjs(leave.endDate).format("DD MMM YYYY")}
                   </Text>
-                  <Chip 
+                  <View
                     style={[
-                      styles.statusChip, 
+                      styles.statusChip,
                       { backgroundColor: leave.status === "PENDING" ? "#FEEBC8" : leave.status === "APPROVED" ? "#C6F6D5" : "#FED7D7" }
                     ]}
-                    textStyle={{ fontSize: 10, fontWeight: "bold" }}
                   >
-                    {leave.status}
-                  </Chip>
+                    <Text style={styles.statusText}>{leave.status}</Text>
+                  </View>
                 </View>
                 <Text style={styles.reason}>{leave.reason}</Text>
                 <Text style={styles.meta}>Applied on {dayjs(leave.createdAt).format("DD MMM, YYYY")}</Text>
@@ -129,10 +129,11 @@ export function LeaveRequestScreen() {
       </Portal>
 
       <FAB
-        icon="plus"
+        icon={appIconSource("plus")}
         label="Apply Leave"
         style={styles.fab}
         onPress={() => setIsDialogVisible(true)}
+        color="#FFFFFF"
       />
     </View>
   );
@@ -170,7 +171,20 @@ const styles = StyleSheet.create({
     color: "#4A6583"
   },
   statusChip: {
-    height: 24
+    alignItems: "center",
+    borderRadius: 8,
+    justifyContent: "center",
+    minHeight: 30,
+    minWidth: 76,
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  statusText: {
+    color: "#24312D",
+    fontSize: 10,
+    fontWeight: "800",
+    lineHeight: 13,
+    textTransform: "uppercase"
   },
   reason: {
     fontSize: 14,

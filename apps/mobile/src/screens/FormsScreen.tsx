@@ -24,7 +24,7 @@ import {
 } from "react-native-paper";
 import * as ImagePicker from "expo-image-picker";
 import { useForms } from "../hooks/useForms";
-import { uploadPhoto, Form, FormField } from "../api";
+import { fetchFormDetails, uploadPhoto, Form, FormField } from "../api";
 import dayjs from "dayjs";
 
 export function FormsScreen() {
@@ -32,10 +32,21 @@ export function FormsScreen() {
   const [selectedForm, setSelectedForm] = useState<Form | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoadingForm, setIsLoadingForm] = useState(false);
 
-  const handleOpenForm = (form: Form) => {
-    setSelectedForm(form);
+  const handleOpenForm = async (form: Form) => {
+    setSelectedForm({ ...form, fields: form.fields ?? [] });
     setFormData({});
+    setIsLoadingForm(true);
+
+    try {
+      const details = await fetchFormDetails(form.id);
+      setSelectedForm(details);
+    } catch (error) {
+      Alert.alert("Form load failed", error instanceof Error ? error.message : "Could not load form fields.");
+    } finally {
+      setIsLoadingForm(false);
+    }
   };
 
   const handleCloseForm = () => {
@@ -97,9 +108,10 @@ export function FormsScreen() {
   };
 
   const renderField = (field: FormField) => {
-    const options = field.options ? JSON.parse(field.options) : [];
+    const options = parseOptions(field.options);
+    const fieldType = field.type.toLowerCase();
 
-    switch (field.type) {
+    switch (fieldType) {
       case "number":
         return (
           <View key={field.id} style={styles.fieldContainer}>
@@ -188,7 +200,7 @@ export function FormsScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+        <FlatList
         data={forms}
         keyExtractor={item => item.id}
         refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refetch} />}
@@ -200,7 +212,7 @@ export function FormsScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <Card style={styles.card} onPress={() => handleOpenForm(item)}>
+          <Card style={styles.card} onPress={() => void handleOpenForm(item)}>
             <Card.Content style={styles.cardContent}>
               <View style={styles.cardLeft}>
                 <View style={[styles.iconContainer, { backgroundColor: item.category === 'Operations' ? '#E3F2FD' : '#F1F8E9' }]}>
@@ -237,8 +249,17 @@ export function FormsScreen() {
             <IconButton icon="close" onPress={handleCloseForm} />
           </View>
           <Divider />
-          <ScrollView style={styles.modalBody}>
-            {selectedForm?.fields?.map(renderField)}
+          <ScrollView contentContainerStyle={styles.modalBodyContent} style={styles.modalBody}>
+            {isLoadingForm ? (
+              <View style={styles.loadingFields}>
+                <ActivityIndicator color="#1A202C" />
+                <Text style={styles.loadingText}>Loading form fields...</Text>
+              </View>
+            ) : selectedForm?.fields?.length ? (
+              selectedForm.fields.map(renderField)
+            ) : (
+              <Text style={styles.emptyText}>No fields configured for this form.</Text>
+            )}
             <View style={{ height: 40 }} />
           </ScrollView>
           <Divider />
@@ -248,7 +269,7 @@ export function FormsScreen() {
               style={styles.submitBtn} 
               onPress={handleSubmit}
               loading={isSubmitting}
-              disabled={isSubmitting || isUploading}
+              disabled={isSubmitting || isUploading || isLoadingForm || !selectedForm?.fields?.length}
             >
               Submit Response
             </Button>
@@ -257,6 +278,26 @@ export function FormsScreen() {
       </Portal>
     </View>
   );
+}
+
+function parseOptions(options?: string | string[] | null): string[] {
+  if (!options) {
+    return [];
+  }
+
+  if (Array.isArray(options)) {
+    return options;
+  }
+
+  try {
+    const parsed = JSON.parse(options);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return options
+      .split(",")
+      .map((option) => option.trim())
+      .filter(Boolean);
+  }
 }
 
 const styles = StyleSheet.create({
@@ -355,6 +396,9 @@ const styles = StyleSheet.create({
     textTransform: "uppercase"
   },
   modalBody: {
+    flex: 1
+  },
+  modalBodyContent: {
     padding: 20
   },
   modalFooter: {
@@ -403,5 +447,15 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     height: 54,
     justifyContent: "center"
+  },
+  loadingFields: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 80
+  },
+  loadingText: {
+    color: "#66736F",
+    fontWeight: "700",
+    marginTop: 12
   }
 });

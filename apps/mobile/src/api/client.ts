@@ -64,8 +64,8 @@ api.interceptors.response.use(
       status !== 401 ||
       !originalRequest ||
       originalRequest._retry ||
-      originalRequest.url?.includes("/api/auth/login") ||
-      originalRequest.url?.includes("/api/auth/refresh")
+      originalRequest.url?.includes("/auth/login") ||
+      originalRequest.url?.includes("/auth/refresh")
     ) {
       return Promise.reject(error);
     }
@@ -105,7 +105,7 @@ async function performRefresh(): Promise<string | null> {
 
   try {
     const response = await axios.post<ApiEnvelope<RefreshResponse>>(
-      `${API_BASE_URL}/api/auth/refresh`,
+      `${API_BASE_URL}/auth/refresh`,
       { refreshToken },
       { timeout: 20000 }
     );

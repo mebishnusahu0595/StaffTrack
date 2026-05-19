@@ -60,6 +60,44 @@ function renderIcon(name: string, size: number, color: string, stroke: number) {
     );
   }
 
+  if (name === "chevron-left" || name === "chevron-right") {
+    const rotate = name === "chevron-left" ? "-45deg" : "135deg";
+
+    return (
+      <View style={styles.center}>
+        <View
+          style={{
+            width: size * 0.42,
+            height: size * 0.42,
+            borderLeftWidth: stroke,
+            borderBottomWidth: stroke,
+            borderColor: color,
+            transform: [{ rotate }]
+          }}
+        />
+      </View>
+    );
+  }
+
+  if (name === "filter-variant" || name === "filter") {
+    return (
+      <View style={styles.center}>
+        <View style={[styles.filterLine, { width: size * 0.74, height: stroke, backgroundColor: color }]} />
+        <View style={[styles.filterLine, { width: size * 0.5, height: stroke, backgroundColor: color, marginTop: size * 0.18 }]} />
+        <View style={[styles.filterLine, { width: size * 0.28, height: stroke, backgroundColor: color, marginTop: size * 0.18 }]} />
+      </View>
+    );
+  }
+
+  if (name === "plus") {
+    return (
+      <View style={styles.center}>
+        <View style={{ width: size * 0.7, height: stroke, borderRadius: stroke, backgroundColor: color }} />
+        <View style={{ position: "absolute", width: stroke, height: size * 0.7, borderRadius: stroke, backgroundColor: color }} />
+      </View>
+    );
+  }
+
   if (name === "eye" || name === "eye-off") {
     return (
       <View style={styles.center}>
@@ -215,6 +253,9 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   menuLine: {},
+  filterLine: {
+    borderRadius: 4
+  },
   crossLine: {
     position: "absolute",
     borderRadius: 4

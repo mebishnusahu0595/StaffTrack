@@ -1,4 +1,4 @@
-import { AttendanceStatus, PunchType, UserRole, WorkMode } from "@prisma/client";
+import { AttendanceStatus, Prisma, PunchType, UserRole, WorkMode } from "@prisma/client";
 import type { AuthUser } from "../types/auth";
 import { conflict, notFound } from "../lib/errors";
 import { monthRange, startOfDay } from "../lib/date";
@@ -40,21 +40,62 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
     conflict("Already checked in. Please check out first.");
   }
 
-  return prisma.$transaction(async (tx) => {
-    // Create the attendance record
-    return tx.attendance.create({
-      data: {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      return tx.attendance.create({
+        data: {
+          userId: actor.id,
+          date,
+          checkInTime: now,
+          checkInLat: input.lat,
+          checkInLng: input.lng,
+          punchType: input.punchType,
+          checkInPhotoUrl: input.photoUrl,
+          status: AttendanceStatus.PRESENT
+        }
+      });
+    });
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) {
+      throw error;
+    }
+
+    const existing = await prisma.attendance.findFirst({
+      where: {
         userId: actor.id,
-        date,
+        date
+      },
+      orderBy: { checkInTime: "desc" }
+    });
+
+    if (!existing) {
+      throw error;
+    }
+
+    if (existing.checkInTime && !existing.checkOutTime) {
+      conflict("Already checked in. Please check out first.");
+    }
+
+    return prisma.attendance.update({
+      where: { id: existing.id },
+      data: {
         checkInTime: now,
         checkInLat: input.lat,
         checkInLng: input.lng,
         punchType: input.punchType,
         checkInPhotoUrl: input.photoUrl,
+        checkOutTime: null,
+        checkOutLat: null,
+        checkOutLng: null,
+        checkOutPhotoUrl: null,
         status: AttendanceStatus.PRESENT
       }
     });
-  });
+  }
+}
+
+function isUniqueConstraintError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
 export async function checkOut(actor: AuthUser, input: CheckOutInput) {
@@ -144,21 +185,12 @@ export async function clearAttendance(actor: AuthUser, userId: string, dateStr: 
   await ensureCanAccessUser(actor, userId);
 
   const date = startOfDay(new Date(dateStr));
-  const existing = await prisma.attendance.findFirst({
+  await prisma.attendance.deleteMany({
     where: {
       userId,
       date
     }
   });
-
-  // Allow admin to clear records even if checkInTime exists
-
-
-  if (existing) {
-    await prisma.attendance.delete({
-      where: { id: existing.id }
-    });
-  }
 
   return { success: true };
 }
@@ -786,4 +818,3 @@ export async function rejectAttendanceRequest(actor: AuthUser, requestId: string
 
   return { success: true };
 }
-

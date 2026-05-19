@@ -1,9 +1,9 @@
 import dayjs from "dayjs";
 import { StyleSheet, View, Image } from "react-native";
-import { Button, Card, Chip, Text, Icon, Divider } from "react-native-paper";
+import { Button, Card, Text, Icon } from "react-native-paper";
 
 import type { Task, TaskStatus } from "../api";
-import { API_BASE_URL } from "../config/env";
+import { API_ORIGIN_URL } from "../config/env";
 
 type TaskCardProps = {
   task: Task;
@@ -11,11 +11,11 @@ type TaskCardProps = {
   onPress?: (task: Task) => void;
 };
 
-const statusMeta: Record<TaskStatus, { label: string; color: string; textColor: string; icon: string }> = {
-  PENDING: { label: "Pending", color: "#E8F0FE", textColor: "#174EA6", icon: "clock-outline" },
-  IN_PROGRESS: { label: "In progress", color: "#FFF4CE", textColor: "#7A4D00", icon: "play-circle-outline" },
-  COMPLETED: { label: "Completed", color: "#DFF3E6", textColor: "#17633A", icon: "check-circle-outline" },
-  CANCELLED: { label: "Cancelled", color: "#FDE7E9", textColor: "#A4262C", icon: "close-circle-outline" }
+const statusMeta: Record<TaskStatus, { label: string; color: string; textColor: string }> = {
+  PENDING: { label: "Pending", color: "#E8F0FE", textColor: "#174EA6" },
+  IN_PROGRESS: { label: "In progress", color: "#FFF4CE", textColor: "#7A4D00" },
+  COMPLETED: { label: "Completed", color: "#DFF3E6", textColor: "#17633A" },
+  CANCELLED: { label: "Cancelled", color: "#FDE7E9", textColor: "#A4262C" }
 };
 
 export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
@@ -30,14 +30,11 @@ export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
           <Text numberOfLines={2} style={styles.title} variant="titleMedium">
             {task.title}
           </Text>
-          <Chip
-            compact
-            icon={meta.icon}
-            style={[styles.badge, { backgroundColor: meta.color }]}
-            textStyle={{ color: meta.textColor, fontSize: 10, fontWeight: "700" }}
-          >
-            {meta.label.toUpperCase()}
-          </Chip>
+          <View style={[styles.statusBadge, { backgroundColor: meta.color }]}>
+            <Text style={[styles.statusBadgeText, { color: meta.textColor }]}>
+              {meta.label.toUpperCase()}
+            </Text>
+          </View>
         </View>
         
         <View style={styles.metaRow}>
@@ -115,7 +112,7 @@ export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
                 {task.completionPhotoUrl ? (
                   <View style={styles.thumbnailContainer}>
                     <Image 
-                      source={{ uri: task.completionPhotoUrl.startsWith('/') ? `${API_BASE_URL}${task.completionPhotoUrl}` : task.completionPhotoUrl }} 
+                      source={{ uri: task.completionPhotoUrl.startsWith('/') ? `${API_ORIGIN_URL}${task.completionPhotoUrl}` : task.completionPhotoUrl }}
                       style={styles.thumbnailSmall} 
                       resizeMode="cover"
                     />
@@ -192,9 +189,20 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 22
   },
-  badge: {
+  statusBadge: {
+    alignItems: "center",
     borderRadius: 8,
-    height: 28
+    justifyContent: "center",
+    minHeight: 30,
+    minWidth: 82,
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  statusBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    lineHeight: 13,
+    textAlign: "center"
   },
   metaRow: {
     flexDirection: "row",

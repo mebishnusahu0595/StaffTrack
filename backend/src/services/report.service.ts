@@ -1,5 +1,5 @@
 import type { AuthUser } from "../types/auth";
-import { startOfDay } from "../lib/date";
+import { monthRange, startOfDay } from "../lib/date";
 import { prisma } from "../lib/prisma";
 import { ensureCanAccessUser } from "./access.service";
 
@@ -74,19 +74,20 @@ export async function listDayEndReports(actor: AuthUser, userId?: string) {
 export async function getMonthlyPerformanceReport(actor: AuthUser, userId: string, month: number, year: number) {
   await ensureCanAccessUser(actor, userId);
 
-  const startDate = new Date(year, month - 1, 1);
-  const endDate = new Date(year, month, 0, 23, 59, 59);
-  const daysInMonth = endDate.getDate();
+  const { start: startDate, end: endDate } = monthRange(year, month);
+  const daysInMonth = new Date(year, month, 0).getDate();
 
   const [attendances, reports, expenses, user, holidays] = await Promise.all([
     prisma.attendance.findMany({
-      where: { userId, date: { gte: startDate, lte: endDate } }
+      where: { userId, date: { gte: startDate, lt: endDate } },
+      include: { breaks: true },
+      orderBy: [{ date: "asc" }, { checkInTime: "asc" }]
     }),
     prisma.dayEndReport.findMany({
-      where: { userId, date: { gte: startDate, lte: endDate } }
+      where: { userId, date: { gte: startDate, lt: endDate } }
     }),
     prisma.expense.findMany({
-      where: { userId, date: { gte: startDate, lte: endDate }, approved: true }
+      where: { userId, date: { gte: startDate, lt: endDate }, approved: true }
     }),
     prisma.user.findUnique({
       where: { id: userId },
@@ -95,7 +96,7 @@ export async function getMonthlyPerformanceReport(actor: AuthUser, userId: strin
     prisma.holiday.findMany({
       where: {
         companyId: actor.companyId,
-        date: { gte: startDate, lte: endDate },
+        date: { gte: startDate, lt: endDate },
         OR: [
           { userId },
           { groupId: { not: null } }, // We'll filter this in code or better refine query
@@ -114,45 +115,53 @@ export async function getMonthlyPerformanceReport(actor: AuthUser, userId: strin
     (!h.groupId && !h.userId)
   );
 
-  const holidayDates = new Set(applicableHolidays.map(h => h.date.toISOString().split('T')[0]));
-  const attendanceDates = new Map(attendances.map(a => [a.date.toISOString().split('T')[0], a]));
+  const holidayDates = new Set(
+    applicableHolidays
+      .filter((holiday) => holiday.type === "HOLIDAY")
+      .map((holiday) => toDateKey(holiday.date))
+  );
+  const attendanceByDate = new Map<string, typeof attendances>();
+
+  for (const attendance of attendances) {
+    const key = toDateKey(attendance.date);
+    const rows = attendanceByDate.get(key) ?? [];
+    rows.push(attendance);
+    attendanceByDate.set(key, rows);
+  }
 
   let presentDays = 0;
   let halfDays = 0;
   let onLeave = 0;
   let absentDays = 0;
-  let paidHolidays = 0;
+  const paidHolidays = holidayDates.size;
+  const dailyLogs = [...attendanceByDate.entries()].map(([date, rows]) => {
+    const status = resolveDayStatus(rows);
 
-  const joiningDate = new Date(user.joiningDate);
-  const today = new Date();
+    if (status === "PRESENT") presentDays++;
+    else if (status === "HALF_DAY") halfDays++;
+    else if (status === "ON_LEAVE") onLeave++;
+    else if (status === "ABSENT" && !holidayDates.has(date)) absentDays++;
 
-  // Iterate through every day of the month
-  for (let d = 1; d <= daysInMonth; d++) {
-    const currentDate = new Date(year, month - 1, d);
-    const dateStr = currentDate.toISOString().split('T')[0];
-    
-    // Skip days before joining date
-    if (currentDate < startOfDay(joiningDate)) continue;
-    // Skip future days
-    if (currentDate > startOfDay(today)) continue;
+    return {
+      date,
+      status,
+      sessionCount: rows.filter((row) => row.checkInTime).length,
+      punchTypes: Array.from(new Set(rows.map((row) => row.punchType).filter(Boolean))),
+      checkInTime: rows.find((row) => row.checkInTime)?.checkInTime,
+      checkOutTime: rows.slice().reverse().find((row) => row.checkOutTime)?.checkOutTime
+    };
+  });
 
-    const attendance = attendanceDates.get(dateStr);
-    const isHoliday = holidayDates.has(dateStr);
-
-    if (attendance) {
-      if (attendance.status === "PRESENT") presentDays++;
-      else if (attendance.status === "HALF_DAY") halfDays++;
-      else if (attendance.status === "ON_LEAVE") onLeave++;
-      else if (attendance.status === "ABSENT" && !isHoliday) absentDays++;
-      else if (isHoliday) paidHolidays++;
-    } else {
-      // No attendance record
-      if (isHoliday) {
-        paidHolidays++;
-      } else {
-        // Not a holiday and no attendance = ABSENT
-        absentDays++;
-      }
+  for (const holidayDate of holidayDates) {
+    if (!attendanceByDate.has(holidayDate)) {
+      dailyLogs.push({
+        date: holidayDate,
+        status: "HOLIDAY",
+        sessionCount: 0,
+        punchTypes: [],
+        checkInTime: null,
+        checkOutTime: null
+      });
     }
   }
 
@@ -188,6 +197,19 @@ export async function getMonthlyPerformanceReport(actor: AuthUser, userId: strin
       deductions,
       finalSalary,
       dailyRate
-    }
+    },
+    dailyLogs: dailyLogs.sort((a, b) => a.date.localeCompare(b.date))
   };
+}
+
+function toDateKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function resolveDayStatus(rows: Array<{ status: string }>) {
+  if (rows.some((row) => row.status === "PRESENT")) return "PRESENT";
+  if (rows.some((row) => row.status === "HALF_DAY")) return "HALF_DAY";
+  if (rows.some((row) => row.status === "ON_LEAVE")) return "ON_LEAVE";
+  if (rows.some((row) => row.status === "ABSENT")) return "ABSENT";
+  return rows[0]?.status ?? "ABSENT";
 }

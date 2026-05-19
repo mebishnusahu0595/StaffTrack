@@ -1,11 +1,12 @@
 import dayjs from "dayjs";
 import { useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
-import { Card, IconButton, Text, Icon } from "react-native-paper";
+import { Card, IconButton, Text } from "react-native-paper";
 
 import type { Attendance, AttendanceStatus, Holiday } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useAttendance } from "../hooks/useAttendance";
+import { AppIcon, appIconSource } from "../components/AppIcon";
 
 const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -36,24 +37,34 @@ export function AttendanceScreen() {
   );
 
   const stats = useMemo(() => {
+    const byDate = new Map<string, Attendance[]>();
+    let holidayCount = holidays.filter((holiday) => holiday.type === "HOLIDAY").length;
+
+    attendance.forEach(record => {
+      const dateKey = toDateKey(record.date);
+      const rows = byDate.get(dateKey) ?? [];
+      rows.push(record);
+      byDate.set(dateKey, rows);
+    });
+
     let present = 0;
     let absent = 0;
     let halfDay = 0;
     let onLeave = 0;
-    let holidayCount = holidays.length;
 
-    attendance.forEach(record => {
-      if (record.status === "PRESENT") present++;
-      if (record.status === "ABSENT") absent++;
-      if (record.status === "HALF_DAY") halfDay++;
-      if (record.status === "ON_LEAVE") onLeave++;
+    byDate.forEach((records) => {
+      const status = resolveDayStatus(records);
+      if (status === "PRESENT") present++;
+      if (status === "ABSENT") absent++;
+      if (status === "HALF_DAY") halfDay++;
+      if (status === "ON_LEAVE") onLeave++;
     });
 
     return { present, absent, halfDay, onLeave, holidayCount };
-  }, [attendance, holidays, visibleMonth]);
+  }, [attendance, holidays]);
 
   const attendanceRows = useMemo(
-    () => attendance.slice().sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf()),
+    () => attendance.slice().sort((a, b) => toDateKey(b.date).localeCompare(toDateKey(a.date))),
     [attendance]
   );
 
@@ -65,7 +76,7 @@ export function AttendanceScreen() {
     >
       <View style={styles.header}>
         <IconButton
-          icon="chevron-left"
+          icon={appIconSource("chevron-left")}
           onPress={() => setVisibleMonth((current) => current.subtract(1, "month"))}
           size={28}
         />
@@ -76,7 +87,7 @@ export function AttendanceScreen() {
           <Text style={{ fontSize: 12, color: "#66736F" }}>Monthly Overview</Text>
         </View>
         <IconButton
-          icon="chevron-right"
+          icon={appIconSource("chevron-right")}
           onPress={() => setVisibleMonth((current) => current.add(1, "month"))}
           size={28}
         />
@@ -85,28 +96,28 @@ export function AttendanceScreen() {
       <View style={styles.summaryGrid}>
         <Card mode="contained" style={[styles.summaryCard, { backgroundColor: "#DFF3E6" }]}>
           <Card.Content style={styles.summaryCardContent}>
-            <Icon source="account-check" size={24} color="#17633A" />
+            <AppIcon name="check-circle-outline" size={24} color="#17633A" />
             <Text style={[styles.summaryValue, { color: "#17633A" }]}>{stats.present}</Text>
             <Text style={[styles.summaryLabel, { color: "#17633A" }]}>PRESENT</Text>
           </Card.Content>
         </Card>
         <Card mode="contained" style={[styles.summaryCard, { backgroundColor: "#FDE7E9" }]}>
           <Card.Content style={styles.summaryCardContent}>
-            <Icon source="account-cancel" size={24} color="#A4262C" />
+            <AppIcon name="close" size={24} color="#A4262C" />
             <Text style={[styles.summaryValue, { color: "#A4262C" }]}>{stats.absent}</Text>
             <Text style={[styles.summaryLabel, { color: "#A4262C" }]}>ABSENT</Text>
           </Card.Content>
         </Card>
         <Card mode="contained" style={[styles.summaryCard, { backgroundColor: "#FFF4CE" }]}>
           <Card.Content style={styles.summaryCardContent}>
-            <Icon source="account-clock" size={24} color="#7A4D00" />
+            <AppIcon name="clock-outline" size={24} color="#7A4D00" />
             <Text style={[styles.summaryValue, { color: "#7A4D00" }]}>{stats.halfDay}</Text>
             <Text style={[styles.summaryLabel, { color: "#7A4D00" }]}>HALF DAY</Text>
           </Card.Content>
         </Card>
         <Card mode="contained" style={[styles.summaryCard, { backgroundColor: "#E8F0FE" }]}>
           <Card.Content style={styles.summaryCardContent}>
-            <Icon source="calendar-star" size={24} color="#174EA6" />
+            <AppIcon name="calendar-star" size={24} color="#174EA6" />
             <Text style={[styles.summaryValue, { color: "#174EA6" }]}>{stats.holidayCount}</Text>
             <Text style={[styles.summaryLabel, { color: "#174EA6" }]}>HOLIDAYS</Text>
           </Card.Content>
@@ -122,37 +133,39 @@ export function AttendanceScreen() {
               </Text>
             ))}
           </View>
-          <View style={styles.grid}>
-            {cells.map((cell) => {
-              const meta = cell.record 
-                ? statusMeta[cell.record.status] 
-                : cell.isHoliday 
-                  ? { label: "Holiday", color: "#FEF3C7", textColor: "#92400E" }
-                  : undefined;
+          {chunkCalendarRows(cells).map((row, rowIndex) => (
+            <View key={`week-${rowIndex}`} style={styles.weekGridRow}>
+              {row.map((cell) => {
+                const meta = cell.record
+                  ? statusMeta[cell.record.status]
+                  : cell.isHoliday
+                    ? { label: "Holiday", color: "#FEF3C7", textColor: "#92400E" }
+                    : undefined;
 
-              return (
-                <View
-                  key={cell.key}
-                  style={[
-                    styles.dayCell,
-                    cell.day ? styles.dayCellActive : undefined,
-                    meta ? { backgroundColor: meta.color, borderColor: meta.textColor, borderWidth: 1 } : undefined
-                  ]}
-                >
-                  {cell.day ? (
-                    <>
-                      <Text style={[styles.dayNumber, meta ? { color: meta.textColor } : undefined]}>
-                        {cell.day}
-                      </Text>
-                      {meta ? (
-                        <View style={[styles.statusDot, { backgroundColor: meta.textColor }]} />
-                      ) : null}
-                    </>
-                  ) : null}
-                </View>
-              );
-            })}
-          </View>
+                return (
+                  <View
+                    key={cell.key}
+                    style={[
+                      styles.dayCell,
+                      cell.day ? styles.dayCellActive : undefined,
+                      meta ? { backgroundColor: meta.color, borderColor: meta.textColor, borderWidth: 1 } : undefined
+                    ]}
+                  >
+                    {cell.day ? (
+                      <>
+                        <Text style={[styles.dayNumber, meta ? { color: meta.textColor } : undefined]}>
+                          {cell.day}
+                        </Text>
+                        {meta ? (
+                          <View style={[styles.statusDot, { backgroundColor: meta.textColor }]} />
+                        ) : null}
+                      </>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          ))}
         </Card.Content>
       </Card>
 
@@ -180,7 +193,7 @@ export function AttendanceScreen() {
               <Card key={record.id} mode="contained" style={styles.recordCard}>
                 <Card.Content style={styles.recordContent}>
                   <View>
-                    <Text style={styles.recordDate}>{dayjs(record.date).format("DD MMM, dddd")}</Text>
+                    <Text style={styles.recordDate}>{dayjs(toDateKey(record.date)).format("DD MMM, dddd")}</Text>
                     <Text style={styles.recordTimes}>
                       In: {formatMaybeTime(record.checkInTime)} | Out: {formatMaybeTime(record.checkOutTime)}
                     </Text>
@@ -199,8 +212,14 @@ export function AttendanceScreen() {
 }
 
 function buildCalendarCells(month: dayjs.Dayjs, records: Attendance[], holidays: Holiday[]): (CalendarCell & { isHoliday?: boolean })[] {
-  const byDate = new Map(records.map((record) => [dayjs(record.date).format("YYYY-MM-DD"), record]));
-  const holidayDates = new Set(holidays.map(h => dayjs(h.date).format("YYYY-MM-DD")));
+  const byDate = new Map<string, Attendance[]>();
+  records.forEach((record) => {
+    const dateKey = toDateKey(record.date);
+    const rows = byDate.get(dateKey) ?? [];
+    rows.push(record);
+    byDate.set(dateKey, rows);
+  });
+  const holidayDates = new Set(holidays.filter((holiday) => holiday.type === "HOLIDAY").map((holiday) => toDateKey(holiday.date)));
   
   const cells: (CalendarCell & { isHoliday?: boolean })[] = [];
   const firstDayOffset = month.startOf("month").day();
@@ -215,7 +234,7 @@ function buildCalendarCells(month: dayjs.Dayjs, records: Attendance[], holidays:
     cells.push({
       key: dateStr,
       day,
-      record: byDate.get(dateStr),
+      record: resolveDayRecord(byDate.get(dateStr)),
       isHoliday: holidayDates.has(dateStr)
     });
   }
@@ -227,8 +246,38 @@ function buildCalendarCells(month: dayjs.Dayjs, records: Attendance[], holidays:
   return cells;
 }
 
+function chunkCalendarRows(cells: (CalendarCell & { isHoliday?: boolean })[]) {
+  const rows: (CalendarCell & { isHoliday?: boolean })[][] = [];
+  for (let index = 0; index < cells.length; index += 7) {
+    rows.push(cells.slice(index, index + 7));
+  }
+  return rows;
+}
+
+function resolveDayRecord(records?: Attendance[]) {
+  if (!records?.length) {
+    return undefined;
+  }
+
+  const status = resolveDayStatus(records);
+  return records.find((record) => record.status === status) ?? records[0];
+}
+
+function resolveDayStatus(records: Attendance[]) {
+  if (records.some((record) => record.status === "PRESENT")) return "PRESENT";
+  if (records.some((record) => record.status === "HALF_DAY")) return "HALF_DAY";
+  if (records.some((record) => record.status === "ON_LEAVE")) return "ON_LEAVE";
+  if (records.some((record) => record.status === "ABSENT")) return "ABSENT";
+  return records[0]?.status ?? "ABSENT";
+}
+
 function formatMaybeTime(value?: string | null) {
   return value ? dayjs(value).format("hh:mm A") : "--";
+}
+
+function toDateKey(value: string) {
+  const match = value.match(/^\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : dayjs(value).format("YYYY-MM-DD");
 }
 
 function getAttendanceDisplay(record: Attendance, shiftStart = "09:00", shiftEnd = "18:00") {
@@ -290,9 +339,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center"
   },
-  grid: {
+  weekGridRow: {
     flexDirection: "row",
-    flexWrap: "wrap"
+    marginBottom: 6
   },
   dayCell: {
     alignItems: "center",
@@ -301,8 +350,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     justifyContent: "center",
-    marginBottom: 6,
-    width: `${100 / 7}%`
+    flex: 1,
+    marginHorizontal: 2
   },
   dayCellActive: {
     backgroundColor: "transparent"

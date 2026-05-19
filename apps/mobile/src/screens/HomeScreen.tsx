@@ -11,8 +11,8 @@ import relativeTime from "dayjs/plugin/relativeTime";
 
 dayjs.extend(relativeTime);
 
-import { API_BASE_URL } from "../config/env";
-import { fetchDayEndReports, fetchTodayLocationLogs, uploadPhoto, fetchNotifications, markNotificationAsRead, type AppNotification, type LocationPing, type PunchType } from "../api";
+import { API_ORIGIN_URL } from "../config/env";
+import { fetchDayEndReports, fetchExpenses, fetchTodayLocationLogs, uploadPhoto, fetchNotifications, markNotificationAsRead, type LocationPing, type PunchType } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useAttendance } from "../hooks/useAttendance";
 import { useLocation } from "../hooks/useLocation";
@@ -47,9 +47,20 @@ export function HomeScreen() {
     refetchInterval: 30_000
   });
 
+  const expensesQuery = useQuery({
+    enabled: Boolean(user?.id),
+    queryKey: ["expenses", user?.id, "home"],
+    queryFn: () => fetchExpenses(user!.id)
+  });
+
   const [showNotifications, setShowNotifications] = useState(false);
   const notifications = notificationsQuery.data ?? [];
   const unreadCount = notifications.filter(n => !n.isRead).length;
+  const expenses = expensesQuery.data ?? [];
+  const pendingExpenseCount = expenses.filter((expense) => !expense.approved).length;
+  const approvedExpenseTotal = expenses
+    .filter((expense) => expense.approved)
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
 
   const isCheckedIn = Boolean(activeAttendance);
   const isCheckedOut = !isCheckedIn && todaySessions.length > 0;
@@ -327,7 +338,7 @@ export function HomeScreen() {
                 <View style={styles.photoContainer}>
                   <Image
                     resizeMode="cover"
-                    source={{ uri: activeAttendance.checkInPhotoUrl.startsWith("http") ? activeAttendance.checkInPhotoUrl : `${API_BASE_URL}${activeAttendance.checkInPhotoUrl}` }}
+                    source={{ uri: activeAttendance.checkInPhotoUrl.startsWith("http") ? activeAttendance.checkInPhotoUrl : `${API_ORIGIN_URL}${activeAttendance.checkInPhotoUrl}` }}
                     style={styles.verificationPhoto}
                   />
                   <Text style={styles.photoLabel}>Check-in Verification Photo</Text>
@@ -442,6 +453,21 @@ export function HomeScreen() {
               <Text style={styles.mutedSummaryLabel}>REPORTS</Text>
             </View>
             <Text style={[styles.summaryValue, { fontSize: 14 }]}>View</Text>
+          </Card.Content>
+        </Card>
+      </View>
+
+      <View style={styles.summaryRow}>
+        <Card mode="contained" style={styles.summaryCardWide} onPress={() => navigation.navigate("Expenses")}>
+          <Card.Content style={styles.summaryContent}>
+            <View style={styles.summaryIconRow}>
+              <AppIcon color="#24312D" name="file-document-outline" size={20} />
+              <Text style={styles.mutedSummaryLabel}>EXPENSES</Text>
+            </View>
+            <Text style={[styles.summaryValue, { fontSize: 16 }]}>
+              INR {approvedExpenseTotal.toFixed(0)}
+            </Text>
+            <Text style={styles.summarySubValue}>{pendingExpenseCount} pending approval</Text>
           </Card.Content>
         </Card>
       </View>
@@ -875,6 +901,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#EEEEEE",
     flex: 1
   },
+  summaryCardWide: {
+    borderRadius: 8,
+    backgroundColor: "#EEEEEE",
+    flex: 1
+  },
   summaryContent: {
     padding: 12,
     paddingHorizontal: 8
@@ -893,6 +924,12 @@ const styles = StyleSheet.create({
     color: "#24312D",
     fontSize: 20,
     fontWeight: "700"
+  },
+  summarySubValue: {
+    color: "#66736F",
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: 4
   },
   derButton: {
     borderRadius: 8,

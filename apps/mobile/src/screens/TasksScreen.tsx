@@ -8,7 +8,8 @@ import type { Task, TaskStatus } from "../api";
 import { TaskCard } from "../components/TaskCard";
 import { useTasks } from "../hooks/useTasks";
 import { uploadPhoto } from "../api";
-import { API_BASE_URL } from "../config/env";
+import { API_ORIGIN_URL } from "../config/env";
+import { appIconSource } from "../components/AppIcon";
 
 type TabValue = "ALL" | "PENDING" | "COMPLETED";
 
@@ -134,7 +135,7 @@ export function TasksScreen() {
             onDismiss={() => setMenuVisible(false)}
             anchor={
               <IconButton 
-                icon="filter-variant" 
+                icon={appIconSource("filter-variant")}
                 mode="contained-tonal"
                 containerColor="#E7F3EF"
                 iconColor="#1A202C"
@@ -181,7 +182,7 @@ export function TasksScreen() {
 
         <View style={styles.dateNavigator}>
           <IconButton 
-            icon="chevron-left" 
+            icon={appIconSource("chevron-left")}
             size={24} 
             onPress={() => setSelectedDate(curr => curr.subtract(1, 'day'))} 
           />
@@ -195,7 +196,7 @@ export function TasksScreen() {
             </View>
           </TouchableRipple>
           <IconButton 
-            icon="chevron-right" 
+            icon={appIconSource("chevron-right")}
             size={24} 
             onPress={() => setSelectedDate(curr => curr.add(1, 'day'))} 
           />
@@ -229,7 +230,7 @@ export function TasksScreen() {
             {(completionPhoto || selectedTask?.completionPhotoUrl) && (
               <View style={styles.photoPreview}>
                 <Image 
-                  source={{ uri: completionPhoto ? completionPhoto.uri : (selectedTask?.completionPhotoUrl?.startsWith('http') ? selectedTask.completionPhotoUrl : `${API_BASE_URL}${selectedTask?.completionPhotoUrl}`) }} 
+                  source={{ uri: completionPhoto ? completionPhoto.uri : (selectedTask?.completionPhotoUrl?.startsWith('http') ? selectedTask.completionPhotoUrl : `${API_ORIGIN_URL}${selectedTask?.completionPhotoUrl}`) }}
                   style={styles.thumbnail} 
                 />
                 <View>

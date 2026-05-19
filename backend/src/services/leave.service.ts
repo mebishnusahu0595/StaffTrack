@@ -58,23 +58,34 @@ export async function updateLeaveStatus(id: string, adminId: string, status: "AP
     }
 
     for (const date of dates) {
-      // Upsert attendance
       const dateStr = date.toISOString().split('T')[0];
       const startOfDay = new Date(dateStr);
-      
-      await prisma.attendance.upsert({
+
+      const existing = await prisma.attendance.findFirst({
         where: {
-          userId_date: {
+          userId: leave.userId,
+          date: startOfDay
+        },
+        select: { id: true }
+      });
+
+      if (existing) {
+        await prisma.attendance.updateMany({
+          where: {
             userId: leave.userId,
             date: startOfDay
+          },
+          data: {
+            status: "ON_LEAVE"
           }
-        },
-        create: {
+        });
+        continue;
+      }
+
+      await prisma.attendance.create({
+        data: {
           userId: leave.userId,
           date: startOfDay,
-          status: "ON_LEAVE"
-        },
-        update: {
           status: "ON_LEAVE"
         }
       });

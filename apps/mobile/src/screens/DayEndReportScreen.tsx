@@ -48,11 +48,12 @@ export function DayEndReportScreen() {
   const submitMutation = useMutation({
     mutationFn: () =>
       createDayEndReport({
-        date: dayjs().toISOString(),
+        date: dayjs().format("YYYY-MM-DD"),
         visitsSummary: form.visitsMeetings.trim(),
         ordersTaken: toNumber(form.ordersTaken),
         ordersCancelled: toNumber(form.ordersCancelled || "0"),
         kmTravelled: toNumber(form.endOdometer) - toNumber(form.startOdometer),
+        totalKmTravelled: toNumber(form.endOdometer) - toNumber(form.startOdometer),
         startOdometer: toNumber(form.startOdometer),
         endOdometer: toNumber(form.endOdometer),
         startOdometerPhotoUrl: form.startOdometerPhotoUrl || undefined,

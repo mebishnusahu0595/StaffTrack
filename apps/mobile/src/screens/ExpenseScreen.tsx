@@ -3,7 +3,7 @@ import dayjs from "dayjs";
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import { Alert, Image, ScrollView, StyleSheet, View } from "react-native";
-import { Button, Card, Chip, Menu, Text, TextInput, Divider } from "react-native-paper";
+import { Button, Card, Menu, Text, TextInput } from "react-native-paper";
 
 import {
   createExpense,
@@ -57,7 +57,7 @@ export function ExpenseScreen() {
         amount: toNumber(form.amount),
         description: finalDescription,
         receiptUrl,
-        date: dayjs().toISOString()
+        date: dayjs().format("YYYY-MM-DD")
       });
     },
     onSuccess: async () => {
@@ -198,9 +198,11 @@ export function ExpenseScreen() {
                   <Text style={styles.date}>{dayjs(item.date).format("DD MMM YYYY")}</Text>
                   <Text style={styles.amount}>INR {Number(item.amount).toFixed(2)}</Text>
                 </View>
-                <Chip compact style={item.approved ? styles.approvedChip : styles.pendingChip}>
-                  {item.approved ? "Approved" : "Pending"}
-                </Chip>
+                <View style={item.approved ? styles.approvedChip : styles.pendingChip}>
+                  <Text style={item.approved ? styles.approvedChipText : styles.pendingChipText}>
+                    {item.approved ? "Approved" : "Pending"}
+                  </Text>
+                </View>
               </View>
               <Text style={styles.description}>
                 {formatCategory(item.category)} - {item.description}
@@ -299,10 +301,36 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   approvedChip: {
-    backgroundColor: "#DFF3E6"
+    alignItems: "center",
+    backgroundColor: "#DFF3E6",
+    borderRadius: 8,
+    justifyContent: "center",
+    minHeight: 30,
+    minWidth: 76,
+    paddingHorizontal: 10,
+    paddingVertical: 6
   },
   pendingChip: {
-    backgroundColor: "#FFF4CE"
+    alignItems: "center",
+    backgroundColor: "#FFF4CE",
+    borderRadius: 8,
+    justifyContent: "center",
+    minHeight: 30,
+    minWidth: 76,
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  approvedChipText: {
+    color: "#17633A",
+    fontSize: 10,
+    fontWeight: "800",
+    lineHeight: 13
+  },
+  pendingChipText: {
+    color: "#7A4D00",
+    fontSize: 10,
+    fontWeight: "800",
+    lineHeight: 13
   },
   description: {
     color: "#3D4945",

@@ -2,7 +2,7 @@ import type { ImagePickerAsset } from "expo-image-picker";
 import { Platform } from "react-native";
 
 import { api } from "./client";
-import { getAccessToken } from "../auth/tokenStorage";
+import { API_ORIGIN_URL } from "../config/env";
 
 export type UserRole = "ADMIN" | "MANAGER" | "EMPLOYEE";
 export type TaskStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
@@ -134,6 +134,7 @@ type CreateDayEndReportPayload = {
   ordersTaken: number;
   ordersCancelled: number;
   kmTravelled: number;
+  totalKmTravelled?: number;
   kmPhotoUrl?: string;
   remarks: string;
 };
@@ -149,10 +150,14 @@ type CreateExpensePayload = {
 export type CheckInPayload = LatLng & {
   punchType: PunchType;
   photoUrl?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 export type CheckOutPayload = LatLng & {
   photoUrl?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 function unwrap<T>(response: { data: ApiEnvelope<T> }): T {
@@ -164,15 +169,15 @@ function unwrap<T>(response: { data: ApiEnvelope<T> }): T {
 }
 
 export async function login(payload: { email: string; password: string }): Promise<AuthResponse> {
-  return unwrap(await api.post<ApiEnvelope<AuthResponse>>("/api/auth/login", payload));
+  return unwrap(await api.post<ApiEnvelope<AuthResponse>>("/auth/login", payload));
 }
 
 export async function logout(refreshToken?: string): Promise<void> {
-  await api.post("/api/auth/logout", { refreshToken: refreshToken ?? "mobile" });
+  await api.post("/auth/logout", { refreshToken: refreshToken ?? "mobile" });
 }
 
 export async function fetchTasks(): Promise<Task[]> {
-  return unwrap(await api.get<ApiEnvelope<Task[]>>("/api/tasks"));
+  return unwrap(await api.get<ApiEnvelope<Task[]>>("/tasks"));
 }
 
 export async function updateTaskStatus(
@@ -180,23 +185,23 @@ export async function updateTaskStatus(
   status: TaskStatus, 
   completionData?: { photoUrl?: string; remarks?: string }
 ): Promise<Task> {
-  return unwrap(await api.patch<ApiEnvelope<Task>>(`/api/tasks/${taskId}/status`, { status, completionData }));
+  return unwrap(await api.patch<ApiEnvelope<Task>>(`/tasks/${taskId}/status`, { status, completionData }));
 }
 
 export async function checkIn(payload: CheckInPayload): Promise<Attendance> {
-  return unwrap(await api.post<ApiEnvelope<Attendance>>("/api/attendance/checkin", payload));
+  return unwrap(await api.post<ApiEnvelope<Attendance>>("/attendance/checkin", withCoordinateAliases(payload)));
 }
 
 export async function checkOut(payload: CheckOutPayload): Promise<Attendance> {
-  return unwrap(await api.post<ApiEnvelope<Attendance>>("/api/attendance/checkout", payload));
+  return unwrap(await api.post<ApiEnvelope<Attendance>>("/attendance/checkout", withCoordinateAliases(payload)));
 }
 
 export async function startBreak(): Promise<Break> {
-  return unwrap(await api.post<ApiEnvelope<Break>>("/api/attendance/break/start"));
+  return unwrap(await api.post<ApiEnvelope<Break>>("/attendance/break/start"));
 }
 
 export async function endBreak(): Promise<Break> {
-  return unwrap(await api.post<ApiEnvelope<Break>>("/api/attendance/break/end"));
+  return unwrap(await api.post<ApiEnvelope<Break>>("/attendance/break/end"));
 }
 
 export async function uploadPhoto(asset: ImagePickerAsset): Promise<string> {
@@ -205,7 +210,7 @@ export async function uploadPhoto(asset: ImagePickerAsset): Promise<string> {
   await appendImageAsset(formData, asset, `photo-${Date.now()}.jpg`);
 
   const response = await api.post<ApiEnvelope<{ url: string }>>(
-    "/api/upload",
+    "/upload",
     formData,
     { 
       headers: {
@@ -221,8 +226,14 @@ export async function uploadPhoto(asset: ImagePickerAsset): Promise<string> {
     throw new Error(response.data.message || "Photo upload failed");
   }
   
-  // The upload route returns the URL directly on the envelope, not inside data.data
-  return (response.data as any).url;
+  const responseData = response.data as any;
+  const url = responseData.data?.url ?? responseData.url;
+
+  if (!url) {
+    throw new Error("Photo upload did not return a URL");
+  }
+
+  return url;
 }
 
 export async function fetchMonthlyAttendance(
@@ -231,7 +242,7 @@ export async function fetchMonthlyAttendance(
   year: number
 ): Promise<Attendance[]> {
   return unwrap(
-    await api.get<ApiEnvelope<Attendance[]>>(`/api/attendance/${userId}`, {
+    await api.get<ApiEnvelope<Attendance[]>>(`/attendance/${userId}`, {
       params: { month, year }
     })
   );
@@ -242,11 +253,11 @@ export async function createDayEndReport(payload: CreateDayEndReportPayload & {
   endOdometer?: number;
   startOdometerPhotoUrl?: string;
 }): Promise<DayEndReport> {
-  return unwrap(await api.post<ApiEnvelope<DayEndReport>>("/api/reports/der", payload));
+  return unwrap(await api.post<ApiEnvelope<DayEndReport>>("/reports/der", payload));
 }
 
 export async function fetchDayEndReports(userId: string): Promise<DayEndReport[]> {
-  return unwrap(await api.get<ApiEnvelope<DayEndReport[]>>(`/api/reports/der/${userId}`));
+  return unwrap(await api.get<ApiEnvelope<DayEndReport[]>>(`/reports/der/${userId}`));
 }
 
 export async function fetchMonthlyPerformanceReport(
@@ -255,7 +266,7 @@ export async function fetchMonthlyPerformanceReport(
   year: number
 ): Promise<any> {
   return unwrap(
-    await api.get<ApiEnvelope<any>>(`/api/reports/monthly/${userId}`, {
+    await api.get<ApiEnvelope<any>>(`/reports/monthly/${userId}`, {
       params: { month, year }
     })
   );
@@ -266,7 +277,7 @@ export async function uploadExpenseReceipt(asset: ImagePickerAsset): Promise<str
   await appendImageAsset(formData, asset, `receipt-${Date.now()}.jpg`);
 
   const response = await api.post<ApiEnvelope<{ receiptUrl?: string; url?: string }>>(
-    "/api/upload",
+    "/upload",
     formData,
     {
       headers: {
@@ -281,13 +292,13 @@ export async function uploadExpenseReceipt(asset: ImagePickerAsset): Promise<str
   }
 
   const responseData = response.data as any;
-  const receiptUrl = responseData.receiptUrl ?? responseData.url;
+  const receiptUrl = responseData.data?.receiptUrl ?? responseData.data?.url ?? responseData.receiptUrl ?? responseData.url;
 
   if (!receiptUrl) {
     throw new Error("Receipt upload did not return a URL");
   }
 
-  return receiptUrl;
+  return toAbsoluteUploadUrl(receiptUrl);
 }
 
 async function appendImageAsset(
@@ -316,12 +327,15 @@ async function appendImageAsset(
 }
 
 export async function createExpense(payload: CreateExpensePayload): Promise<Expense> {
-  return unwrap(await api.post<ApiEnvelope<Expense>>("/api/expenses", payload));
+  return unwrap(await api.post<ApiEnvelope<Expense>>("/expenses", {
+    ...payload,
+    receiptUrl: toAbsoluteUploadUrl(payload.receiptUrl)
+  }));
 }
 
 export async function fetchExpenses(userId?: string): Promise<Expense[]> {
   return unwrap(
-    await api.get<ApiEnvelope<Expense[]>>("/api/expenses", {
+    await api.get<ApiEnvelope<Expense[]>>("/expenses", {
       params: userId ? { userId } : undefined
     })
   );
@@ -341,15 +355,15 @@ export type Holiday = {
 };
 
 export async function fetchHolidays(month: number, year: number): Promise<Holiday[]> {
-  return unwrap(await api.get<ApiEnvelope<Holiday[]>>("/api/holidays", { params: { month, year } }));
+  return unwrap(await api.get<ApiEnvelope<Holiday[]>>("/holidays", { params: { month, year } }));
 }
 
 export async function sendLocationLogs(logs: LocationPing[]): Promise<{ count: number }> {
-  return unwrap(await api.post<ApiEnvelope<{ count: number }>>("/api/location", { logs }));
+  return unwrap(await api.post<ApiEnvelope<{ count: number }>>("/location", { logs }));
 }
 
 export async function fetchTodayLocationLogs(userId: string): Promise<LocationPing[]> {
-  return unwrap(await api.get<ApiEnvelope<LocationPing[]>>(`/api/location/${userId}/today`));
+  return unwrap(await api.get<ApiEnvelope<LocationPing[]>>(`/location/${userId}/today`));
 }
 
 export type AppNotification = {
@@ -363,11 +377,11 @@ export type AppNotification = {
 };
 
 export async function fetchNotifications(): Promise<AppNotification[]> {
-  return unwrap(await api.get<ApiEnvelope<AppNotification[]>>("/api/notifications"));
+  return unwrap(await api.get<ApiEnvelope<AppNotification[]>>("/notifications"));
 }
 
 export async function markNotificationAsRead(id: string): Promise<void> {
-  await api.patch(`/api/notifications/${id}/read`);
+  await api.patch(`/notifications/${id}/read`);
 }
 
 // Forms
@@ -376,7 +390,7 @@ export type FormField = {
   label: string;
   type: string; // text, number, select, photo, etc.
   required: boolean;
-  options?: string | null;
+  options?: string | string[] | null;
 };
 
 export type Form = {
@@ -392,15 +406,33 @@ export type Form = {
 };
 
 export async function fetchForms(): Promise<Form[]> {
-  return unwrap(await api.get<ApiEnvelope<Form[]>>("/api/forms"));
+  return unwrap(await api.get<ApiEnvelope<Form[]>>("/forms"));
 }
 
 export async function fetchFormDetails(formId: string): Promise<Form> {
-  return unwrap(await api.get<ApiEnvelope<Form>>(`/api/forms/${formId}`));
+  return unwrap(await api.get<ApiEnvelope<Form>>(`/forms/${formId}`));
 }
 
 export async function submitFormResponse(formId: string, data: any): Promise<void> {
-  await api.post(`/api/forms/${formId}/submit`, data);
+  await api.post(`/forms/${formId}/submit`, data);
+}
+
+function withCoordinateAliases<T extends Partial<LatLng> & { latitude?: number; longitude?: number }>(
+  payload: T
+): T & { latitude?: number; longitude?: number } {
+  return {
+    ...payload,
+    latitude: payload.latitude ?? payload.lat,
+    longitude: payload.longitude ?? payload.lng
+  };
+}
+
+function toAbsoluteUploadUrl(url: string) {
+  if (/^https?:\/\//i.test(url)) {
+    return url;
+  }
+
+  return `${API_ORIGIN_URL}${url.startsWith("/") ? url : `/${url}`}`;
 }
 
 // Issues
@@ -420,11 +452,11 @@ export type Issue = {
 };
 
 export async function fetchMyIssues(userId: string): Promise<Issue[]> {
-  return unwrap(await api.get<ApiEnvelope<Issue[]>>("/api/issues", { params: { reportedById: userId } }));
+  return unwrap(await api.get<ApiEnvelope<Issue[]>>("/issues", { params: { reportedById: userId } }));
 }
 
 export async function createIssue(payload: { title: string; description: string; priority: string }): Promise<Issue> {
-  return unwrap(await api.post<ApiEnvelope<Issue>>("/api/issues", payload));
+  return unwrap(await api.post<ApiEnvelope<Issue>>("/issues", payload));
 }
 
 // Leaves
@@ -441,13 +473,13 @@ export type LeaveRequest = {
 };
 
 export async function submitLeaveRequest(payload: { startDate: string; endDate: string; reason: string }): Promise<LeaveRequest> {
-  return unwrap(await api.post<ApiEnvelope<LeaveRequest>>("/api/leaves", payload));
+  return unwrap(await api.post<ApiEnvelope<LeaveRequest>>("/leaves", payload));
 }
 
 export async function fetchMyLeaves(): Promise<LeaveRequest[]> {
-  return unwrap(await api.get<ApiEnvelope<LeaveRequest[]>>("/api/leaves"));
+  return unwrap(await api.get<ApiEnvelope<LeaveRequest[]>>("/leaves"));
 }
 
 export async function fetchMusterReport(month: number, year: number): Promise<any> {
-  return unwrap(await api.get<ApiEnvelope<any>>("/api/payroll/muster", { params: { month, year } }));
+  return unwrap(await api.get<ApiEnvelope<any>>("/payroll/muster", { params: { month, year } }));
 }

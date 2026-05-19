@@ -11,7 +11,7 @@ type ExtraConfig = {
 };
 
 const extra = (Constants.expoConfig?.extra ?? Constants.manifest2?.extra ?? {}) as ExtraConfig;
-const DEFAULT_API_BASE_URL = "https://stafftrack.cloud";
+const DEFAULT_API_BASE_URL = "https://stafftrack.cloud/api";
 
 const getApiBaseUrl = () => {
   const configuredUrl =
@@ -25,7 +25,9 @@ function getEnv(name: string) {
 }
 
 function normalizeApiOrigin(url: string) {
-  return url.trim().replace(/\/+$/, "").replace(/\/api$/, "");
+  const normalized = url.trim().replace(/\/+$/, "");
+  return normalized.endsWith("/api") ? normalized : `${normalized}/api`;
 }
 
 export const API_BASE_URL = getApiBaseUrl();
+export const API_ORIGIN_URL = API_BASE_URL.replace(/\/api$/, "");
