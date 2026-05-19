@@ -19,6 +19,7 @@ import { useLocation } from "../hooks/useLocation";
 import { useTasks } from "../hooks/useTasks";
 import { useTimeTracker } from "../hooks/useTimeTracker";
 import type { MainDrawerParamList } from "../navigation/AppNavigator";
+import { appIconSource, AppIcon } from "../components/AppIcon";
 
 type HomeNavigation = DrawerNavigationProp<MainDrawerParamList, "Home">;
 
@@ -247,7 +248,7 @@ export function HomeScreen() {
         </View>
         <View style={styles.notificationWrapper}>
           <IconButton 
-            icon={unreadCount > 0 ? "bell-badge" : "bell-outline"} 
+            icon={appIconSource(unreadCount > 0 ? "bell-badge" : "bell-outline")} 
             iconColor={unreadCount > 0 ? "#A4262C" : "#4A6583"}
             size={28}
             onPress={() => setShowNotifications(true)}
@@ -305,7 +306,7 @@ export function HomeScreen() {
                   style={[styles.punchButton, { backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E0E0E0" }]}
                 >
                   <View style={styles.punchButtonContent}>
-                    <Icon color="#4A6583" size={32} source="office-building" />
+                    <AppIcon color="#4A6583" name="office-building" size={32} />
                     <Text style={styles.punchButtonLabel}>OFFICE</Text>
                   </View>
                 </TouchableRipple>
@@ -315,7 +316,7 @@ export function HomeScreen() {
                   style={[styles.punchButton, { backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E0E0E0" }]}
                 >
                   <View style={styles.punchButtonContent}>
-                    <Icon color="#4A6583" size={32} source="map-marker-outline" />
+                    <AppIcon color="#4A6583" name="map-marker-outline" size={32} />
                     <Text style={styles.punchButtonLabel}>FIELD</Text>
                   </View>
                 </TouchableRipple>
@@ -385,7 +386,7 @@ export function HomeScreen() {
         <Card mode="contained" style={styles.summaryCard}>
           <Card.Content style={styles.summaryContent}>
             <View style={styles.summaryIconRow}>
-              <Icon color="#4A6583" size={20} source="office-building" />
+              <AppIcon color="#4A6583" name="office-building" size={20} />
               <Text style={styles.mutedSummaryLabel}>OFFICE TIME</Text>
             </View>
             <Text style={[styles.summaryValue, { fontSize: 16 }]}>{officeTime}</Text>
@@ -395,7 +396,7 @@ export function HomeScreen() {
         <Card mode="contained" style={styles.summaryCard}>
           <Card.Content style={styles.summaryContent}>
             <View style={styles.summaryIconRow}>
-              <Icon color="#4A6583" size={20} source="map-marker-outline" />
+              <AppIcon color="#4A6583" name="map-marker-outline" size={20} />
               <Text style={styles.mutedSummaryLabel}>FIELD TIME</Text>
             </View>
             <Text style={[styles.summaryValue, { fontSize: 16 }]}>{fieldTime}</Text>
@@ -405,7 +406,7 @@ export function HomeScreen() {
         <Card mode="contained" style={styles.summaryCard}>
           <Card.Content style={styles.summaryContent}>
             <View style={styles.summaryIconRow}>
-              <Icon color="#4A6583" size={20} source="coffee" />
+              <AppIcon color="#4A6583" name="coffee" size={20} />
               <Text style={styles.mutedSummaryLabel}>BREAK TIME</Text>
             </View>
             <Text style={[styles.summaryValue, { fontSize: 16, color: activeBreak ? "#F39C12" : "#24312D" }]}>{breakTime}</Text>
@@ -417,7 +418,7 @@ export function HomeScreen() {
         <Card mode="contained" style={styles.summaryCard} onPress={() => navigation.navigate("Tasks")}>
           <Card.Content>
             <View style={styles.summaryIconRow}>
-              <Icon color="#24312D" size={20} source="check-circle-outline" />
+              <AppIcon color="#24312D" name="check-circle-outline" size={20} />
               <Text style={styles.mutedSummaryLabel}>TASKS</Text>
             </View>
             <Text style={styles.summaryValue}>{todaysTasks.length}</Text>
@@ -427,7 +428,7 @@ export function HomeScreen() {
         <Card mode="contained" style={styles.summaryCard} onPress={() => navigation.navigate("LeaveRequest")}>
           <Card.Content>
             <View style={styles.summaryIconRow}>
-              <Icon color="#24312D" size={20} source="calendar-clock" />
+              <AppIcon color="#24312D" name="calendar-clock" size={20} />
               <Text style={styles.mutedSummaryLabel}>LEAVE</Text>
             </View>
             <Text style={[styles.summaryValue, { fontSize: 14 }]}>Apply</Text>
@@ -437,7 +438,7 @@ export function HomeScreen() {
         <Card mode="contained" style={styles.summaryCard} onPress={() => navigation.navigate("MonthlyReport")}>
           <Card.Content style={styles.summaryContent}>
             <View style={styles.summaryIconRow}>
-              <Icon color="#24312D" size={20} source="file-document-outline" />
+              <AppIcon color="#24312D" name="file-document-outline" size={20} />
               <Text style={styles.mutedSummaryLabel}>REPORTS</Text>
             </View>
             <Text style={[styles.summaryValue, { fontSize: 14 }]}>View</Text>

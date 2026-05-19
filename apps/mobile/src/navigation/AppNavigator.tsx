@@ -6,8 +6,9 @@ import {
   DrawerItemList 
 } from "@react-navigation/drawer";
 import { ActivityIndicator, Image, View, StyleSheet, TouchableOpacity } from "react-native";
-import { Icon, Text, Divider, IconButton } from "react-native-paper";
+import { Text, Divider, IconButton } from "react-native-paper";
 
+import { appIconSource, AppIcon } from "../components/AppIcon";
 import { useAuth } from "../auth/AuthContext";
 import { LoginScreen } from "../auth/LoginScreen";
 import { AttendanceScreen } from "../screens/AttendanceScreen";
@@ -76,7 +77,7 @@ function CustomDrawerContent(props: any) {
         <View style={styles.headerTop}>
           <Image source={require("../../assets/logo.png")} style={styles.drawerLogo} />
           <IconButton 
-            icon="close" 
+            icon={appIconSource("close")}
             size={24} 
             iconColor="#1A202C"
             onPress={() => props.navigation.closeDrawer()} 
@@ -99,7 +100,7 @@ function CustomDrawerContent(props: any) {
           void signOut();
         }}
       >
-        <Icon source="logout" size={20} color="#DC2626" />
+        <AppIcon name="logout" size={20} color="#DC2626" />
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
     </DrawerContentScrollView>
@@ -116,7 +117,7 @@ function MainDrawer() {
         headerTitleStyle: { color: "#1A202C", fontWeight: "700" },
         headerLeft: () => (
           <IconButton
-            icon="menu"
+            icon={appIconSource("menu")}
             size={24}
             iconColor="#1A202C"
             onPress={() => navigation.toggleDrawer()}
@@ -133,35 +134,35 @@ function MainDrawer() {
         component={HomeScreen} 
         name="Home" 
         options={{ 
-          drawerIcon: ({ color, size }) => <Icon color={color} size={size} source="home" /> 
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="home" size={size} /> 
         }} 
       />
       <Drawer.Screen 
         component={TasksScreen} 
         name="Tasks" 
         options={{ 
-          drawerIcon: ({ color, size }) => <Icon color={color} size={size} source="clipboard-list" /> 
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="clipboard-list" size={size} /> 
         }} 
       />
       <Drawer.Screen 
         component={FormsScreen} 
         name="Forms" 
         options={{ 
-          drawerIcon: ({ color, size }) => <Icon color={color} size={size} source="file-document-edit-outline" /> 
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="file-document-edit-outline" size={size} /> 
         }} 
       />
       <Drawer.Screen 
         component={IssuesScreen} 
         name="Issues" 
         options={{ 
-          drawerIcon: ({ color, size }) => <Icon color={color} size={size} source="alert-decagram" /> 
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="check-circle-outline" size={size} /> 
         }} 
       />
       <Drawer.Screen 
         component={AttendanceScreen} 
         name="Attendance" 
         options={{ 
-          drawerIcon: ({ color, size }) => <Icon color={color} size={size} source="calendar-check" /> 
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="calendar-check" size={size} /> 
         }} 
       />
       <Drawer.Screen 
@@ -169,14 +170,14 @@ function MainDrawer() {
         name="DayEndReport" 
         options={{ 
           title: "Day End Report",
-          drawerIcon: ({ color, size }) => <Icon color={color} size={size} source="file-document-edit" /> 
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="file-document-edit" size={size} /> 
         }} 
       />
       <Drawer.Screen 
         component={ExpenseScreen} 
         name="Expenses" 
         options={{ 
-          drawerIcon: ({ color, size }) => <Icon color={color} size={size} source="receipt" /> 
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="file-document-outline" size={size} /> 
         }} 
       />
       <Drawer.Screen 
@@ -184,7 +185,7 @@ function MainDrawer() {
         name="LeaveRequest" 
         options={{ 
           title: "Leave Management",
-          drawerIcon: ({ color, size }) => <Icon color={color} size={size} source="calendar-clock" /> 
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="calendar-clock" size={size} /> 
         }} 
       />
       <Drawer.Screen 
@@ -192,14 +193,14 @@ function MainDrawer() {
         name="MonthlyReport" 
         options={{ 
           title: "Monthly Reports",
-          drawerIcon: ({ color, size }) => <Icon color={color} size={size} source="file-chart-outline" /> 
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="file-chart-outline" size={size} /> 
         }} 
       />
       <Drawer.Screen 
         component={ProfileScreen} 
         name="Profile" 
         options={{ 
-          drawerIcon: ({ color, size }) => <Icon color={color} size={size} source="account" /> 
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="account" size={size} /> 
         }} 
       />
     </Drawer.Navigator>

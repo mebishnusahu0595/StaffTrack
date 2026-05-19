@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Image, KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
 import { Button, HelperText, Surface, Text, TextInput } from "react-native-paper";
 
+import { appIconSource } from "../components/AppIcon";
 import { useAuth } from "./AuthContext";
 
 export function LoginScreen() {
@@ -74,8 +75,8 @@ export function LoginScreen() {
             theme={{ roundness: 12 }}
             contentStyle={{ paddingHorizontal: 16 }}
             right={
-              <TextInput.Icon 
-                icon={showPassword ? "eye-off" : "eye"} 
+              <TextInput.Icon
+                icon={appIconSource(showPassword ? "eye-off" : "eye")}
                 onPress={() => setShowPassword(!showPassword)}
                 color="#1A202C"
               />
@@ -86,7 +87,7 @@ export function LoginScreen() {
           </HelperText>
           <Button
             disabled={disabled}
-            icon="login"
+            icon={appIconSource("login")}
             loading={isSubmitting}
             mode="contained"
             onPress={handleSubmit}
