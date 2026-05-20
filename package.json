@@ -1,0 +1,24 @@
+{
+  "name": "stafftrack",
+  "private": true,
+  "packageManager": "pnpm@9.12.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "backend"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "db:push": "cd backend && npx prisma db push",
+    "db:seed": "cd backend && npx ts-node prisma/seed.ts",
+    "mobile:dev": "cd apps/mobile && expo start",
+    "mobile:build:preview": "cd apps/mobile && eas build --profile preview --platform android",
+    "mobile:build:prod": "cd apps/mobile && eas build --profile production --platform all"
+  },
+  "devDependencies": {
+    "turbo": "^2.1.3",
+    "typescript": "^5.5.4"
+  }
+}

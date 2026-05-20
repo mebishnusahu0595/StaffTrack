@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:15
+    ports:
+      - "5433:5432"
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-stafftrack}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    depends_on:
+      - postgres
+    env_file:
+      - .env
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-stafftrack}
+    ports:
+      - "4000:4000"
+
+  admin:
+    build: ./apps/admin
+    depends_on:
+      - backend
+    env_file:
+      - .env
+    environment:
+      PORT: 3000
+      API_BASE_URL: http://backend:4000
+      NEXT_PUBLIC_API_TARGET: http://backend:4000
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:

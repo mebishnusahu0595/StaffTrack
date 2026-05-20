@@ -1,0 +1,71 @@
+import { Prisma, UserRole } from "@prisma/client";
+import type { AuthUser } from "../types/auth";
+import { forbidden, notFound } from "../lib/errors";
+import { prisma } from "../lib/prisma";
+
+export async function ensureCanAccessUser(actor: AuthUser, targetUserId: string) {
+  const targetUser = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    select: {
+      id: true,
+      role: true,
+      companyId: true,
+      managerId: true
+    }
+  });
+
+  if (!targetUser) {
+    notFound("User not found");
+  }
+
+  if (actor.role === UserRole.SUPERADMIN || actor.role === UserRole.ADMIN) {
+    return targetUser;
+  }
+
+  if (targetUser.companyId !== actor.companyId) {
+    forbidden("User is outside your company");
+  }
+
+  if (actor.role === UserRole.EMPLOYEE && targetUser.id !== actor.id) {
+    forbidden("Employees can only access their own data");
+  }
+
+  if (
+    actor.role === UserRole.MANAGER &&
+    targetUser.id !== actor.id &&
+    targetUser.managerId !== actor.id
+  ) {
+    forbidden("Managers can only access their team data");
+  }
+
+  return targetUser;
+}
+
+export function accessibleUserWhere(actor: AuthUser): Prisma.UserWhereInput {
+  if (actor.role === UserRole.SUPERADMIN || actor.role === UserRole.ADMIN) {
+    return {};
+  }
+
+  if (actor.role === UserRole.MANAGER) {
+    return {
+      companyId: actor.companyId,
+      OR: [{ id: actor.id }, { managerId: actor.id }]
+    };
+  }
+
+  return {
+    id: actor.id
+  };
+}
+
+export async function ensureManagerCanUseEmployee(actor: AuthUser, employeeId: string): Promise<void> {
+  const employee = await ensureCanAccessUser(actor, employeeId);
+
+  if (actor.role === UserRole.MANAGER && employee.role !== UserRole.EMPLOYEE) {
+    forbidden("Managers can only assign work to employees");
+  }
+
+  if (actor.role === UserRole.MANAGER && employee.managerId !== actor.id) {
+    forbidden("Managers can only assign work to their own employees");
+  }
+}

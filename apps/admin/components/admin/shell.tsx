@@ -1,0 +1,244 @@
+"use client";
+ 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import {
+  Bell,
+  ClipboardList,
+  FileText,
+  HelpCircle,
+  LayoutDashboard,
+  LogOut,
+  Plus,
+  Receipt,
+  Search,
+  Settings,
+  Users,
+  UserCheck,
+  User,
+  Zap,
+  Folder,
+  AlertTriangle,
+  FileSpreadsheet,
+  Library,
+  ChevronDown,
+  Wallet,
+  Calendar,
+  CalendarDays,
+  Menu,
+  X,
+  Fingerprint,
+  CheckSquare
+} from "lucide-react";
+import { useAuth } from "@/components/auth-provider";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
+
+const navItems = [
+  { href: "/", label: "Home", icon: LayoutDashboard },
+  { href: "/projects", label: "Project", icon: Folder },
+  { href: "/tasks", label: "Tasks", icon: ClipboardList },
+  { href: "/issues", label: "Issues", icon: AlertTriangle },
+  { href: "/forms", label: "Forms", icon: FileSpreadsheet },
+  { href: "/leaves", label: "Leaves", icon: Calendar },
+  { href: "/holidays", label: "Holidays", icon: CalendarDays },
+  { href: "/templates", label: "Template Library", icon: Library },
+  { href: "/reports", label: "Reports", icon: FileText },
+  { href: "/reports/muster", label: "Muster Report", icon: FileSpreadsheet },
+  { href: "/employees", label: "User Management", icon: Users },
+  { href: "/payroll", label: "Payroll Console", icon: Zap },
+  { href: "/salary", label: "Salary Matrix", icon: Wallet },
+  { href: "/payroll/attendance-dashboard", label: "Attendance Dashboard", icon: Fingerprint },
+  { href: "/payroll/approval-requests", label: "Approval Requests", icon: CheckSquare },
+  { href: "/settings", label: "Settings", icon: Settings }
+];
+ 
+export function AdminShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const { user, signOut } = useAuth();
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setCurrentTime(new Date());
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
+ 
+  return (
+    <div className="flex min-h-screen bg-slate-50">
+      {/* Mobile Drawer Overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300 lg:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar - Desktop & Mobile Drawer */}
+      <aside className={cn(
+        "fixed inset-y-0 left-0 z-50 w-72 flex-col bg-[#0F172A] text-slate-100 transition-transform duration-300 lg:sticky lg:top-0 lg:flex lg:h-screen lg:translate-x-0",
+        isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+        <div className="px-8 py-8 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white shadow-md overflow-hidden p-1">
+              <img src="/logo.png" alt="StaffTrack" className="h-full w-full object-contain" />
+            </div>
+            <span className="text-xl font-black tracking-tight text-white">StaffTrack</span>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="lg:hidden text-slate-400 hover:text-white"
+            onClick={() => setIsMobileMenuOpen(false)}
+          >
+            <X className="h-6 w-6" />
+          </Button>
+        </div>
+        
+        <nav className="flex-1 space-y-1 px-4 overflow-y-auto custom-scrollbar">
+          {[
+            ...navItems
+          ].map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold",
+                  isActive
+                    ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20"
+                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                )}
+              >
+                <item.icon className={cn("h-5 w-5", isActive ? "text-white" : "text-slate-400")} />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="p-4 border-t border-slate-800/50">
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-3 rounded-xl px-4 py-3 text-sm font-bold text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 transition-colors"
+            onClick={() => signOut()}
+          >
+            <LogOut className="h-5 w-5" />
+            Logout
+          </Button>
+        </div>
+      </aside>
+ 
+      <div className="flex flex-1 flex-col min-w-0">
+        <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-slate-200 bg-white/80 px-4 md:px-8 backdrop-blur-md shadow-sm">
+          <div className="flex items-center gap-4 md:gap-6">
+            {/* Mobile Menu Trigger */}
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="lg:hidden h-10 w-10 text-slate-500"
+              onClick={() => setIsMobileMenuOpen(true)}
+            >
+              <LayoutDashboard className="h-6 w-6" />
+            </Button>
+            {/* Clock Widget */}
+            <div className="hidden md:flex items-center gap-4 px-5 py-2.5 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
+               <div className="flex items-center gap-2">
+                 <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                 <span className="text-sm font-black text-slate-700 tracking-tight tabular-nums">
+                   {currentTime ? currentTime.toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:-- --'}
+                 </span>
+               </div>
+               <div className="h-4 w-px bg-slate-200" />
+               <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                 {currentTime ? currentTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '---'}
+               </span>
+            </div>
+
+            <div className="relative group hidden lg:block">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+              <Input
+                placeholder="Search everything..."
+                className="w-72 rounded-xl border-slate-200 bg-slate-100/50 pl-11 h-11 focus:bg-white focus:ring-4 focus:ring-blue-500/5 transition-all text-sm font-medium"
+              />
+            </div>
+          </div>
+  
+          <div className="flex items-center gap-4">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-5 h-10 font-bold shadow-lg shadow-blue-100 gap-2">
+                  <Plus className="h-4 w-4" />
+                  Create
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48 rounded-2xl shadow-xl border-slate-100 p-2">
+                 <DropdownMenuItem className="gap-3 py-2.5 rounded-xl font-bold text-slate-600 focus:bg-blue-50 focus:text-blue-600 cursor-pointer">
+                    <ClipboardList className="h-4 w-4" /> Task
+                 </DropdownMenuItem>
+                 <DropdownMenuItem className="gap-3 py-2.5 rounded-xl font-bold text-slate-600 focus:bg-blue-50 focus:text-blue-600 cursor-pointer">
+                    <AlertTriangle className="h-4 w-4" /> Issue
+                 </DropdownMenuItem>
+                 <DropdownMenuItem className="gap-3 py-2.5 rounded-xl font-bold text-slate-600 focus:bg-blue-50 focus:text-blue-600 cursor-pointer">
+                    <FileSpreadsheet className="h-4 w-4" /> Form
+                 </DropdownMenuItem>
+                 <DropdownMenuItem className="gap-3 py-2.5 rounded-xl font-bold text-slate-600 focus:bg-blue-50 focus:text-blue-600 cursor-pointer">
+                    <Folder className="h-4 w-4" /> Project
+                 </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <div className="flex items-center gap-1 border-r border-slate-100 pr-4">
+              <Button variant="ghost" size="icon" className="h-10 w-10 text-slate-500 hover:bg-slate-50 rounded-xl">
+                <Bell className="h-5 w-5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-10 w-10 text-slate-500 hover:bg-slate-50 rounded-xl">
+                <Settings className="h-5 w-5" />
+              </Button>
+            </div>
+            
+            <div className="flex items-center gap-3 pl-2">
+              <div className="text-right hidden sm:block">
+                <p className="text-xs font-black text-slate-900 leading-tight">{user?.name || "Admin"}</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Super Admin</p>
+              </div>
+              <Link href="/profile">
+                <Avatar className="h-11 w-11 border-2 border-white shadow-md ring-1 ring-slate-100 transition-transform hover:scale-105 active:scale-95 cursor-pointer">
+                  {user?.avatarUrl ? (
+                    <img src={user.avatarUrl} alt="Admin" className="h-full w-full object-cover" />
+                  ) : (
+                    <AvatarFallback className="bg-slate-100 text-slate-400">
+                      <User className="h-5 w-5" />
+                    </AvatarFallback>
+                  )}
+                </Avatar>
+              </Link>
+            </div>
+          </div>
+        </header>
+ 
+        <main className="flex-1 min-w-0">
+          <div className="w-full max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8">
+            {children}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
