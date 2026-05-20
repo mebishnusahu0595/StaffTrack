@@ -287,6 +287,17 @@ export async function addIssueUpdate(issueId: string, data: any) {
   return response.data.data;
 }
 
+export async function uploadFile(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await api.post<{ success: boolean; url: string }>("/upload", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data"
+    }
+  });
+  return response.data.url;
+}
+
 // Forms
 export async function fetchForms(params?: { search?: string; status?: string }) {
   const response = await api.get<{ data: any[] }>("/forms", { params });

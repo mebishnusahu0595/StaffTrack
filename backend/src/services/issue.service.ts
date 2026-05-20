@@ -10,7 +10,8 @@ export async function listIssues(companyId: string, filter?: any) {
     },
     include: {
       assignee: { select: { id: true, name: true, group: true } },
-      reportedBy: { select: { id: true, name: true } }
+      reportedBy: { select: { id: true, name: true } },
+      project: { select: { id: true, name: true } }
     },
     orderBy: { createdAt: 'desc' }
   });
@@ -26,6 +27,7 @@ export async function getIssue(id: string) {
     include: {
       assignee: true,
       reportedBy: true,
+      project: true,
       updates: {
         include: { user: true },
         orderBy: { createdAt: 'desc' }
