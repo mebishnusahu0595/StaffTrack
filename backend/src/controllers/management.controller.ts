@@ -44,8 +44,8 @@ export async function createIssue(req: Request, res: Response) {
 
 // Forms
 export async function listForms(req: Request, res: Response) {
-  const { search } = req.query;
-  const result = await formService.listForms(req.user!, search as string);
+  const { search, status } = req.query;
+  const result = await formService.listForms(req.user!, search as string, status as string);
   sendSuccess(res, result, "Forms fetched");
 }
 
@@ -84,4 +84,9 @@ export async function listTemplates(req: Request, res: Response) {
   const { type, search } = req.query;
   const result = await templateService.listTemplates(type as string, search as string);
   sendSuccess(res, result, "Templates fetched");
+}
+
+export async function createTemplate(req: Request, res: Response) {
+  const result = await templateService.createTemplate(req.body);
+  sendSuccess(res, result, "Template created", 201);
 }

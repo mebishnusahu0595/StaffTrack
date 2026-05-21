@@ -3,12 +3,23 @@ import type { AuthUser } from "../types/auth";
 
 const prisma = new PrismaClient();
 
-export async function listForms(user: AuthUser, search?: string) {
+export async function listForms(user: AuthUser, search?: string, status?: string) {
+  const whereClause: any = {
+    companyId: user.companyId
+  };
+
+  if (search) {
+    whereClause.name = { contains: search, mode: "insensitive" };
+  }
+
+  if (status && status !== "All") {
+    // Map Saved tab to Draft status in database
+    const dbStatus = status === "Saved" ? "Draft" : status;
+    whereClause.status = dbStatus;
+  }
+
   return prisma.form.findMany({
-    where: {
-      companyId: user.companyId,
-      name: search ? { contains: search, mode: "insensitive" } : undefined
-    },
+    where: whereClause,
     include: {
       _count: { select: { responses: true } }
     },

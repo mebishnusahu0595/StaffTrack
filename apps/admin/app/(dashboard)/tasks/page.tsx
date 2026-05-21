@@ -1285,7 +1285,7 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
     setData(prev => ({
       ...prev,
       repeatDays: prev.repeatDays.includes(day) 
-        ? prev.repeatDays.filter(d => d !== day)
+        ? prev.repeatDays.filter((d: number) => d !== day)
         : [...prev.repeatDays, day]
     }));
   };
@@ -1294,7 +1294,7 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
     setData(prev => ({
       ...prev,
       repeatDates: prev.repeatDates.includes(date)
-        ? prev.repeatDates.filter(d => d !== date)
+        ? prev.repeatDates.filter((d: number) => d !== date)
         : [...prev.repeatDates, date]
     }));
   };

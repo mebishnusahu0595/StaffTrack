@@ -63,6 +63,35 @@ export default function MusterReportPage() {
     }
   };
 
+  const exportToCSV = () => {
+    const dayHeaders = days.map((day: string) => dayjs(day).format("DD"));
+    const headers = ["Employee", "Group/Dept", ...dayHeaders];
+
+    const rowsData = filteredData.map((item: any) => {
+      const dayValues = days.map((day: string) => item.attendance[day] || "-");
+      return [
+        item.userName,
+        item.group,
+        ...dayValues
+      ];
+    });
+
+    const csvContent = [
+      headers.join(","),
+      ...rowsData.map((e: any) => e.join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `muster_report_${selectedMonth.format("MMM_YYYY")}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="p-8 space-y-8 bg-slate-50/50 min-h-screen animate-in fade-in duration-700">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -91,7 +120,11 @@ export default function MusterReportPage() {
               <ChevronRight className="h-5 w-5" />
             </Button>
           </div>
-          <Button variant="outline" className="rounded-2xl h-12 px-6 gap-2 border-slate-200 font-black text-xs uppercase tracking-widest bg-white shadow-sm hover:bg-slate-50 transition-all">
+          <Button 
+            onClick={exportToCSV}
+            variant="outline" 
+            className="rounded-2xl h-12 px-6 gap-2 border-slate-200 font-black text-xs uppercase tracking-widest bg-white shadow-sm hover:bg-slate-50 transition-all"
+          >
             <Download className="h-4 w-4" /> Export
           </Button>
         </div>

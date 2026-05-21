@@ -68,6 +68,50 @@ export default function PayrollPage() {
     setSelectedMonth(prev => prev.add(delta, 'month'));
   }
 
+  const exportToCSV = () => {
+    const headers = [
+      "Employee Name",
+      "Designation",
+      "Present Days",
+      "Total Calendar Days",
+      "Holidays",
+      "Paid Leaves",
+      "Absences",
+      "Base Salary",
+      "Net Salary",
+      "Total Payable Days"
+    ];
+
+    const rowsData = filteredReports.map((report: any) => [
+      `"${(report.userName || "").replace(/"/g, '""')}"`,
+      `"${(report.designation || "Staff Member").replace(/"/g, '""')}"`,
+      report.presentDays,
+      report.totalDays,
+      report.holidayDays,
+      report.paidLeaveDays,
+      report.absentDays,
+      report.baseSalary,
+      report.netSalary,
+      report.totalPayableDays
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rowsData.map((row: any) => row.join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `payroll_report_${selectedMonth.format("MMM_YYYY")}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+
   return (
     <div className="p-8 space-y-8 bg-slate-50/50 min-h-screen animate-in fade-in duration-700">
       {/* Header Section */}
@@ -97,7 +141,10 @@ export default function PayrollPage() {
               <ChevronRight className="h-5 w-5" />
             </Button>
           </div>
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-2xl px-6 h-12 font-bold shadow-lg shadow-blue-200 gap-2">
+          <Button 
+            onClick={exportToCSV}
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded-2xl px-6 h-12 font-bold shadow-lg shadow-blue-200 gap-2"
+          >
             <Download className="h-5 w-5" /> Export All
           </Button>
         </div>
@@ -217,14 +264,14 @@ export default function PayrollPage() {
                   </TableCell>
                   <TableCell className="px-8 py-5 text-right">
                     <div className="flex items-center justify-end gap-2">
-                       <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="outline" size="sm" onClick={() => setSelectedReport(report)} className="h-9 rounded-xl border-slate-200 text-[10px] font-black uppercase tracking-widest gap-2 text-slate-600 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all">
-                               <Eye className="h-3.5 w-3.5" /> Details
-                            </Button>
-                          </DialogTrigger>
-                          {selectedReport && <PayrollDetailModal report={selectedReport} month={selectedMonth} />}
-                       </Dialog>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setSelectedReport(report)} 
+                        className="h-9 rounded-xl border-slate-200 text-[10px] font-black uppercase tracking-widest gap-2 text-slate-600 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all"
+                      >
+                         <Eye className="h-3.5 w-3.5" /> Details
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -233,6 +280,10 @@ export default function PayrollPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={!!selectedReport} onOpenChange={(open) => { if (!open) setSelectedReport(null); }}>
+         {selectedReport && <PayrollDetailModal report={selectedReport} month={selectedMonth} />}
+      </Dialog>
     </div>
   );
 }

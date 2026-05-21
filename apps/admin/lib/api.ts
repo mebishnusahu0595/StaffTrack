@@ -345,9 +345,18 @@ export async function fetchGroups() {
   return response.data.data;
 }
 
-export async function createGroup(data: { name: string; baseSalary: number }) {
+export async function createGroup(data: { name: string; baseSalary: number; userIds?: string[] }) {
   const response = await api.post<{ data: any }>("/groups", data);
   return response.data.data;
+}
+
+export async function updateGroup(id: string, data: { name?: string; baseSalary?: number; userIds?: string[] }) {
+  const response = await api.patch<{ data: any }>(`/groups/${id}`, data);
+  return response.data.data;
+}
+
+export async function deleteGroup(id: string) {
+  await api.delete(`/groups/${id}`);
 }
 
 // Holidays
@@ -356,7 +365,7 @@ export async function fetchHolidays() {
   return response.data.data;
 }
 
-export async function createHoliday(data: { date: Date; name: string; type: string; groupId?: string; userId?: string }) {
+export async function createHoliday(data: { date: Date; name: string; type: string; groupId?: string; userId?: string; userIds?: string[] }) {
   const response = await api.post<{ data: any }>("/holidays", data);
   return response.data.data;
 }

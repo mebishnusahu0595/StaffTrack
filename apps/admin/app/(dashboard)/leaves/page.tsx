@@ -33,7 +33,8 @@ import {
   fetchLeaves, 
   updateLeaveStatus, 
   fetchLeaveTypes, 
-  createLeaveType 
+  createLeaveType,
+  fetchHolidays
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -63,11 +64,15 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 export default function LeaveManagementPage() {
   const queryClient = useQueryClient();
-  const [activeMainTab, setActiveMainTab] = useState<"requests" | "setup">("requests");
+  const [activeMainTab, setActiveMainTab] = useState<"requests" | "calendar" | "setup">("requests");
   
   // Leave Requests state
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("PENDING");
+
+  // Calendar state
+  const [calendarDate, setCalendarDate] = useState(dayjs());
+  const [selectedDate, setSelectedDate] = useState(dayjs());
 
   // Leave Setup state
   const [showWelcome, setShowWelcome] = useState(true);
@@ -94,6 +99,11 @@ export default function LeaveManagementPage() {
   const leaveTypesQuery = useQuery({
     queryKey: ["leaveTypes"],
     queryFn: fetchLeaveTypes
+  });
+
+  const holidaysQuery = useQuery({
+    queryKey: ["holidays"],
+    queryFn: fetchHolidays
   });
 
   // Mutations
@@ -145,22 +155,34 @@ export default function LeaveManagementPage() {
   };
 
   const leaves = leavesQuery.data ?? [];
+  const holidays = holidaysQuery.data ?? [];
+
   const filteredLeaves = leaves.filter((l: any) => 
-    l.user.name.toLowerCase().includes(search.toLowerCase()) ||
-    l.reason.toLowerCase().includes(search.toLowerCase())
+    (l.user?.name || "").toLowerCase().includes(search.toLowerCase()) ||
+    (l.reason || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const leaveTypes = leaveTypesQuery.data ?? [];
+
+  // Generate calendar days
+  const startDay = calendarDate.startOf("month").startOf("week");
+  const endDay = calendarDate.endOf("month").endOf("week");
+  const days: dayjs.Dayjs[] = [];
+  let currentCalDay = startDay;
+  while (currentCalDay.isBefore(endDay) || currentCalDay.isSame(endDay, "day")) {
+    days.push(currentCalDay);
+    currentCalDay = currentCalDay.add(1, "day");
+  }
 
   const downloadCSV = () => {
     if (filteredLeaves.length === 0) return;
     const headers = ["Employee Name", "Designation", "Start Date", "End Date", "Reason", "Status", "Processed By", "Processed Date"];
     const rows = filteredLeaves.map((l: any) => [
-      l.user.name,
-      l.user.designation || "Staff",
+      l.user?.name || "Unknown",
+      l.user?.designation || "Staff",
       dayjs(l.startDate).format("YYYY-MM-DD"),
       dayjs(l.endDate).format("YYYY-MM-DD"),
-      l.reason,
+      l.reason || "",
       l.status,
       l.approvedBy?.name || "--",
       l.status !== "PENDING" ? dayjs(l.updatedAt).format("YYYY-MM-DD") : "--"
@@ -205,6 +227,17 @@ export default function LeaveManagementPage() {
             )}
           >
             Leave Requests
+          </button>
+          <button
+            onClick={() => setActiveMainTab("calendar")}
+            className={cn(
+              "px-5 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all",
+              activeMainTab === "calendar" 
+                ? "bg-white text-blue-600 shadow-sm"
+                : "text-slate-500 hover:text-slate-800"
+            )}
+          >
+            Leave Calendar
           </button>
           <button
             onClick={() => setActiveMainTab("setup")}
@@ -263,27 +296,27 @@ export default function LeaveManagementPage() {
               <div className="col-span-full py-24 text-center space-y-4 bg-white rounded-[40px] border-none shadow-sm ring-1 ring-slate-200/60">
                  <div className="h-20 w-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-slate-200">
                     <Calendar className="h-10 w-10" />
-                 </div>
-                 <div>
-                    <p className="text-xl font-black text-slate-900">No Applications Found</p>
-                    <p className="text-slate-400 font-bold text-sm">There are no leave requests matching your filters.</p>
-                 </div>
+                  </div>
+                  <div>
+                     <p className="text-xl font-black text-slate-900">No Applications Found</p>
+                     <p className="text-slate-400 font-bold text-sm">There are no leave requests matching your filters.</p>
+                  </div>
               </div>
             ) : (
               filteredLeaves.map((leave: any) => (
-                <Card key={leave.id} className="rounded-[32px] border-none shadow-sm ring-1 ring-slate-200/60 hover:ring-blue-400 transition-all duration-300 group bg-white overflow-hidden">
+                <Card key={leave.id} className="rounded-[32px] border-none shadow-sm ring-1 ring-slate-200/60 hover:ring-blue-400 transition-all duration-300 group bg-white overflow-hidden text-left">
                    <CardHeader className="p-6 border-b border-slate-50">
                       <div className="flex justify-between items-start">
                          <div className="flex items-center gap-3">
                             <Avatar className="h-12 w-12 rounded-2xl border-2 border-white shadow-md">
-                               <AvatarImage src={leave.user.avatarUrl} />
+                               <AvatarImage src={leave.user?.avatarUrl} />
                                <AvatarFallback className="bg-slate-50 text-slate-400 font-bold">
-                                  {leave.user.name[0]}
+                                  {leave.user?.name?.[0] || '?'}
                                </AvatarFallback>
                             </Avatar>
                             <div>
-                               <h3 className="font-black text-slate-900 leading-none">{leave.user.name}</h3>
-                               <p className="text-[10px] font-black uppercase text-slate-400 mt-1">{leave.user.designation || 'Staff'}</p>
+                               <h3 className="font-black text-slate-900 leading-none">{leave.user?.name || 'Unknown'}</h3>
+                               <p className="text-[10px] font-black uppercase text-slate-400 mt-1">{leave.user?.designation || 'Staff'}</p>
                             </div>
                          </div>
                          <Badge className={cn(
@@ -353,6 +386,236 @@ export default function LeaveManagementPage() {
               ))
             )}
           </div>
+        </div>
+      )}
+
+      {/* ==================== TAB 1.5: LEAVE CALENDAR ==================== */}
+      {activeMainTab === "calendar" && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in duration-300">
+           {/* Left Column: Calendar Grid */}
+           <Card className="lg:col-span-8 rounded-[40px] border-none shadow-sm ring-1 ring-slate-200/60 overflow-hidden bg-white p-8 space-y-6">
+              <div className="flex items-center justify-between">
+                 <div className="flex items-center gap-3">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-10 w-10 rounded-xl hover:bg-slate-100"
+                      onClick={() => setCalendarDate(calendarDate.subtract(1, "month"))}
+                    >
+                       <ChevronLeft className="h-5 w-5" />
+                    </Button>
+                    <h2 className="text-xl font-black text-slate-800 min-w-[140px] text-center">
+                       {calendarDate.format("MMMM YYYY")}
+                    </h2>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-10 w-10 rounded-xl hover:bg-slate-100"
+                      onClick={() => setCalendarDate(calendarDate.add(1, "month"))}
+                    >
+                       <ChevronRight className="h-5 w-5" />
+                    </Button>
+                 </div>
+                 <Button 
+                   variant="outline" 
+                   className="h-11 rounded-2xl border-slate-200 font-bold text-xs px-5 hover:bg-slate-50 text-slate-600 shadow-sm"
+                   onClick={() => {
+                      setCalendarDate(dayjs());
+                      setSelectedDate(dayjs());
+                   }}
+                 >
+                    Today
+                 </Button>
+              </div>
+
+              <div className="grid grid-cols-7 gap-2">
+                 {/* Weekday headers */}
+                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+                    <div className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest py-2" key={day}>
+                       {day}
+                    </div>
+                 ))}
+
+                 {/* Day cells */}
+                 {days.map((d, index) => {
+                    const isCurrentMonth = d.isSame(calendarDate, "month");
+                    const isToday = d.isSame(dayjs(), "day");
+                    const isSelected = d.isSame(selectedDate, "day");
+
+                    // Filter holidays on this day
+                    const dayHolidays = holidays.filter((h: any) => dayjs(h.date).isSame(d, "day"));
+
+                    // Filter leaves on this day
+                    const dayLeaves = leaves.filter((l: any) => {
+                       const start = dayjs(l.startDate).startOf("day");
+                       const end = dayjs(l.endDate).endOf("day");
+                       return (d.isAfter(start) || d.isSame(start)) && (d.isBefore(end) || d.isSame(end));
+                    });
+
+                    return (
+                       <div 
+                         key={index} 
+                         onClick={() => setSelectedDate(d)}
+                         className={cn(
+                            "h-28 border border-slate-100 p-2.5 rounded-2xl flex flex-col justify-between transition-all cursor-pointer select-none text-left",
+                            !isCurrentMonth && "opacity-30 bg-slate-50/50",
+                            isToday && "border-blue-600 bg-blue-50/10",
+                            isSelected && "ring-2 ring-blue-600 shadow-md",
+                            "hover:border-slate-300 hover:bg-slate-50/50"
+                         )}
+                       >
+                          <div className="flex justify-between items-center">
+                             <span className={cn(
+                                "text-xs font-black",
+                                isToday ? "text-blue-600" : "text-slate-800"
+                             )}>
+                                {d.date()}
+                             </span>
+                             {isToday && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+                             )}
+                          </div>
+
+                          <div className="space-y-1 overflow-y-auto max-h-[64px] scrollbar-thin">
+                             {dayHolidays.map((h: any) => (
+                                <div 
+                                  key={h.id} 
+                                  className="text-[8px] leading-tight font-black bg-amber-50 text-amber-600 border border-amber-100 rounded px-1 py-0.5 truncate"
+                                  title={h.name}
+                                >
+                                   🎉 {h.name}
+                                </div>
+                             ))}
+                             {dayLeaves.map((l: any) => (
+                                <div 
+                                  key={l.id} 
+                                  className={cn(
+                                     "text-[8px] leading-tight font-black rounded px-1 py-0.5 truncate border",
+                                     l.status === "APPROVED" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                                     l.status === "REJECTED" ? "bg-rose-50 text-rose-600 border-rose-100" :
+                                     "bg-blue-50 text-blue-600 border-blue-100"
+                                  )}
+                                  title={`${l.user?.name || 'Staff'}: ${l.reason}`}
+                                >
+                                   👤 {l.user?.name?.split(' ')[0] || 'Staff'}
+                                </div>
+                             ))}
+                          </div>
+                       </div>
+                    );
+                 })}
+              </div>
+           </Card>
+
+           {/* Right Column: Daily Details panel & Monthly Stats */}
+           <div className="lg:col-span-4 space-y-6 flex flex-col justify-start">
+              {/* Daily Details Card */}
+              <Card className="rounded-[32px] border-none shadow-sm ring-1 ring-slate-200/60 bg-white p-6 text-left">
+                 <CardHeader className="p-0 pb-4 border-b border-slate-50">
+                    <CardDescription className="text-[10px] font-black text-blue-600 uppercase tracking-wider">Schedule for</CardDescription>
+                    <CardTitle className="text-lg font-black text-slate-900 mt-1">
+                       {selectedDate.format("dddd, DD MMMM YYYY")}
+                    </CardTitle>
+                 </CardHeader>
+                 
+                 <CardContent className="p-0 pt-6 space-y-6">
+                    {/* Holidays on Selected Day */}
+                    <div className="space-y-3">
+                       <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Holidays ({holidays.filter((h: any) => dayjs(h.date).isSame(selectedDate, "day")).length})</h3>
+                       <div className="space-y-2">
+                          {holidays.filter((h: any) => dayjs(h.date).isSame(selectedDate, "day")).map((h: any) => (
+                             <div key={h.id} className="p-3 bg-amber-50/50 border border-amber-100 rounded-2xl flex items-center justify-between">
+                                <div>
+                                   <p className="text-xs font-black text-slate-800">{h.name}</p>
+                                   <p className="text-[9px] font-bold text-amber-600 mt-0.5">{h.type.replace("_", " ")}</p>
+                                </div>
+                                <span className="text-lg">🎉</span>
+                             </div>
+                          ))}
+                          {holidays.filter((h: any) => dayjs(h.date).isSame(selectedDate, "day")).length === 0 && (
+                             <p className="text-xs font-bold text-slate-400 italic">No holidays marked for today.</p>
+                          )}
+                       </div>
+                    </div>
+
+                    {/* Leaves on Selected Day */}
+                    <div className="space-y-3">
+                       <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Leave Applications ({
+                          leaves.filter((l: any) => {
+                             const start = dayjs(l.startDate).startOf("day");
+                             const end = dayjs(l.endDate).endOf("day");
+                             return (selectedDate.isAfter(start) || selectedDate.isSame(start)) && (selectedDate.isBefore(end) || selectedDate.isSame(end));
+                          }).length
+                       })</h3>
+                       <div className="space-y-3">
+                          {leaves.filter((l: any) => {
+                             const start = dayjs(l.startDate).startOf("day");
+                             const end = dayjs(l.endDate).endOf("day");
+                             return (selectedDate.isAfter(start) || selectedDate.isSame(start)) && (selectedDate.isBefore(end) || selectedDate.isSame(end));
+                          }).map((l: any) => (
+                             <div key={l.id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-3">
+                                <div className="flex items-center gap-2.5">
+                                   <Avatar className="h-8 w-8 rounded-xl border border-slate-200">
+                                      <AvatarImage src={l.user?.avatarUrl} />
+                                      <AvatarFallback className="bg-white text-slate-400 text-[10px] font-black">
+                                         {l.user?.name?.[0] || '?'}
+                                      </AvatarFallback>
+                                   </Avatar>
+                                   <div>
+                                      <p className="text-xs font-black text-slate-800">{l.user?.name || 'Staff'}</p>
+                                      <p className="text-[9px] font-bold text-slate-400 uppercase">{l.user?.designation || 'Employee'}</p>
+                                   </div>
+                                </div>
+                                <div className="space-y-1">
+                                   <p className="text-[9px] font-black uppercase text-slate-400">Reason</p>
+                                   <p className="text-[11px] font-medium text-slate-600 leading-normal bg-white p-2 rounded-xl border border-slate-100">{l.reason || 'No reason provided'}</p>
+                                </div>
+                                <div className="flex items-center justify-between pt-1">
+                                   <Badge className={cn(
+                                      "text-[8px] font-black uppercase rounded",
+                                      l.status === "APPROVED" ? "bg-emerald-50 text-emerald-600" :
+                                      l.status === "REJECTED" ? "bg-rose-50 text-rose-600" :
+                                      "bg-blue-50 text-blue-600"
+                                   )}>
+                                      {l.status}
+                                   </Badge>
+                                   <p className="text-[9px] font-bold text-slate-400 italic">
+                                      {dayjs(l.startDate).format("MMM DD")} - {dayjs(l.endDate).format("MMM DD")}
+                                   </p>
+                                </div>
+                             </div>
+                          ))}
+                          {leaves.filter((l: any) => {
+                             const start = dayjs(l.startDate).startOf("day");
+                             const end = dayjs(l.endDate).endOf("day");
+                             return (selectedDate.isAfter(start) || selectedDate.isSame(start)) && (selectedDate.isBefore(end) || selectedDate.isSame(end));
+                          }).length === 0 && (
+                             <p className="text-xs font-bold text-slate-400 italic">No leaves active for today.</p>
+                          )}
+                       </div>
+                    </div>
+                 </CardContent>
+              </Card>
+
+              {/* Monthly Stats Summary Card */}
+              <Card className="rounded-[32px] border-none shadow-sm ring-1 ring-slate-200/60 bg-white p-6 text-left space-y-4">
+                 <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Monthly Overview</h3>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-amber-50/30 border border-amber-100/50 rounded-2xl">
+                       <span className="text-[9px] font-black text-amber-600 uppercase tracking-wider block">Holidays</span>
+                       <span className="text-2xl font-black text-slate-800">
+                          {holidays.filter((h: any) => dayjs(h.date).isSame(calendarDate, "month")).length}
+                       </span>
+                    </div>
+                    <div className="p-4 bg-blue-50/30 border border-blue-100/50 rounded-2xl">
+                       <span className="text-[9px] font-black text-blue-600 uppercase tracking-wider block">Leaves Submitted</span>
+                       <span className="text-2xl font-black text-slate-800">
+                          {leaves.filter((l: any) => dayjs(l.startDate).isSame(calendarDate, "month") || dayjs(l.endDate).isSame(calendarDate, "month")).length}
+                       </span>
+                    </div>
+                 </div>
+              </Card>
+           </div>
         </div>
       )}
 

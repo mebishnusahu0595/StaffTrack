@@ -68,7 +68,7 @@ export default function HolidaysPage() {
     date: "", 
     type: "HOLIDAY",
     targetType: "COMPANY", 
-    targetId: ""
+    userIds: [] as string[]
   });
 
   // Holiday Templates Create Modal state
@@ -98,7 +98,7 @@ export default function HolidaysPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["holidays"] });
       setIsAddOpen(false);
-      setFormData({ name: "", date: "", type: "HOLIDAY", targetType: "COMPANY", targetId: "" });
+      setFormData({ name: "", date: "", type: "HOLIDAY", targetType: "COMPANY", userIds: [] });
     }
   });
 
@@ -667,36 +667,81 @@ export default function HolidaysPage() {
                      </div>
                      <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Date</Label>
-                          <Input 
-                            type="date"
-                            className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-                            value={formData.date}
-                            onChange={e => setFormData({...formData, date: e.target.value})}
-                          />
+                           <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Date</Label>
+                           <Input 
+                             type="date"
+                             className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+                             value={formData.date}
+                             onChange={e => setFormData({...formData, date: e.target.value})}
+                           />
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Type</Label>
-                          <Select onValueChange={v => setFormData({...formData, type: v})} defaultValue="HOLIDAY">
-                             <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 font-bold text-xs">
-                                <SelectValue />
-                             </SelectTrigger>
-                             <SelectContent className="rounded-2xl border-slate-200 shadow-xl bg-white">
-                                <SelectItem value="HOLIDAY">Public Holiday</SelectItem>
-                                <SelectItem value="PAID_LEAVE">Paid Leave</SelectItem>
-                             </SelectContent>
-                          </Select>
+                           <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Type</Label>
+                           <Select onValueChange={v => setFormData({...formData, type: v})} defaultValue="HOLIDAY">
+                              <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 font-bold text-xs">
+                                 <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="rounded-2xl border-slate-200 shadow-xl bg-white">
+                                 <SelectItem value="HOLIDAY">Public Holiday</SelectItem>
+                                 <SelectItem value="PAID_LEAVE">Paid Leave</SelectItem>
+                              </SelectContent>
+                           </Select>
                         </div>
                      </div>
 
+                     <div className="space-y-2">
+                        <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Assign To</Label>
+                        <Select 
+                          value={formData.targetType} 
+                          onValueChange={v => setFormData({...formData, targetType: v, userIds: []})}
+                        >
+                           <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 font-bold text-xs">
+                              <SelectValue />
+                           </SelectTrigger>
+                           <SelectContent className="rounded-2xl border-slate-200 shadow-xl bg-white">
+                              <SelectItem value="COMPANY">All Employees</SelectItem>
+                              <SelectItem value="USER">Specific Employees</SelectItem>
+                           </SelectContent>
+                        </Select>
+                     </div>
+
+                     {formData.targetType === "USER" && (
+                        <div className="space-y-2">
+                           <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Select Employees *</Label>
+                           <div className="border border-slate-100 rounded-2xl p-4 bg-slate-50 max-h-44 overflow-y-auto space-y-2">
+                              {employees.map((emp: any) => (
+                                 <div key={emp.id} className="flex items-center gap-2">
+                                    <input 
+                                      type="checkbox"
+                                      id={`holiday-emp-${emp.id}`}
+                                      checked={formData.userIds.includes(emp.id)}
+                                      onChange={e => {
+                                         if (e.target.checked) {
+                                            setFormData({...formData, userIds: [...formData.userIds, emp.id]});
+                                         } else {
+                                            setFormData({...formData, userIds: formData.userIds.filter(id => id !== emp.id)});
+                                         }
+                                      }}
+                                      className="h-4 w-4 text-blue-600 rounded border-slate-300 cursor-pointer"
+                                    />
+                                    <Label htmlFor={`holiday-emp-${emp.id}`} className="text-xs font-bold text-slate-700 cursor-pointer">
+                                       {emp.name} ({emp.designation || "Staff"})
+                                    </Label>
+                                 </div>
+                              ))}
+                           </div>
+                        </div>
+                     )}
+ 
                      <DialogFooter className="pt-4">
                        <Button 
                         onClick={() => createSpecialDayMutation.mutate({
                           name: formData.name,
                           date: new Date(formData.date),
-                          type: formData.type
+                          type: formData.type,
+                          userIds: formData.targetType === "USER" ? formData.userIds : undefined
                         })}
-                        disabled={createSpecialDayMutation.isPending || !formData.name || !formData.date}
+                        disabled={createSpecialDayMutation.isPending || !formData.name || !formData.date || (formData.targetType === "USER" && formData.userIds.length === 0)}
                         className="w-full h-14 bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-200 rounded-2xl font-black text-sm uppercase tracking-widest gap-2"
                        >
                          {createSpecialDayMutation.isPending ? "Syncing..." : "Save Special Day"}
@@ -706,7 +751,7 @@ export default function HolidaysPage() {
                 </DialogContent>
               </Dialog>
             </div>
-
+ 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {holidaysQuery.isLoading ? (
                 Array(4).fill(0).map((_, i) => <div key={i} className="h-40 bg-white ring-1 ring-slate-100 animate-pulse rounded-[32px]" />)
@@ -736,7 +781,7 @@ export default function HolidaysPage() {
                         <CardTitle className="text-xl font-black text-slate-900">{holiday.name}</CardTitle>
                         <CardDescription className="text-[10px] font-bold text-blue-600 flex items-center gap-1.5 uppercase tracking-tight">
                            {holiday.groupId ? <><Users className="h-3 w-3" /> Specific Group Only</> : 
-                            holiday.userId ? <><User className="h-3 w-3" /> Private Leave</> : 
+                            holiday.userId ? <><User className="h-3 w-3" /> Assigned to: {employees.find((e: any) => e.id === holiday.userId)?.name || holiday.userId}</> : 
                             <><ShieldCheck className="h-3 w-3" /> All Employees</>}
                         </CardDescription>
                       </div>

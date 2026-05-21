@@ -19,7 +19,8 @@ import {
   History,
   Link as LinkIcon,
   Copy,
-  Check
+  Check,
+  Download
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,8 @@ export default function FormsPage() {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("All");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [viewMode, setViewMode] = useState<"table" | "grid">("table");
   const queryClient = useQueryClient();
 
   const formsQuery = useQuery({
@@ -97,6 +100,11 @@ export default function FormsPage() {
   };
 
   const forms = formsQuery.data ?? [];
+  const categories = Array.from(new Set(forms.map((f: any) => f.category || "General")));
+
+  const displayedForms = forms.filter((f: any) => 
+    selectedCategory === "All" || (f.category || "General") === selectedCategory
+  );
 
   return (
     <div className="p-8 space-y-8 bg-slate-50/50 min-h-screen animate-in fade-in duration-700">
@@ -110,7 +118,7 @@ export default function FormsPage() {
           <h1 className="text-3xl font-black tracking-tight text-slate-900 flex items-center gap-3">
             Survey Engine
             <Badge variant="outline" className="h-6 px-2 rounded-lg border-blue-100 bg-blue-50/50 text-blue-600 font-bold">
-              {forms.length} Total
+              {displayedForms.length} Total
             </Badge>
           </h1>
         </div>
@@ -155,120 +163,222 @@ export default function FormsPage() {
         </div>
         
         <div className="flex items-center gap-2">
-           <Button variant="outline" className="h-12 rounded-2xl border-slate-200 font-bold text-slate-600 gap-2 px-6">
-              <Filter className="h-4 w-4" /> Filter
-           </Button>
-           <Button variant="outline" className="h-12 rounded-2xl border-slate-200 font-bold text-slate-600 gap-2 px-6">
-              <Eye className="h-4 w-4" /> View
+           <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                 <Button variant="outline" className="h-12 rounded-2xl border-slate-200 font-bold text-slate-600 gap-2 px-6">
+                    <Filter className="h-4 w-4" /> Category: {selectedCategory}
+                 </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="rounded-xl w-48 bg-white border border-slate-100 shadow-xl">
+                 <DropdownMenuItem onClick={() => setSelectedCategory("All")} className="text-xs font-bold">
+                    All Categories
+                 </DropdownMenuItem>
+                 {categories.map(cat => (
+                    <DropdownMenuItem key={cat} onClick={() => setSelectedCategory(cat)} className="text-xs font-bold">
+                       {cat}
+                    </DropdownMenuItem>
+                 ))}
+              </DropdownMenuContent>
+           </DropdownMenu>
+
+           <Button 
+             variant="outline" 
+             className="h-12 rounded-2xl border-slate-200 font-bold text-slate-600 gap-2 px-6"
+             onClick={() => setViewMode(prev => prev === "table" ? "grid" : "table")}
+           >
+              <Eye className="h-4 w-4" /> View: {viewMode === "table" ? "Table" : "Grid"}
            </Button>
         </div>
       </div>
 
-      {/* Forms Table */}
+      {/* Forms Table / Grid */}
       <Card className="rounded-[40px] border-none shadow-sm ring-1 ring-slate-200/60 overflow-hidden bg-white">
         <CardContent className="p-0">
-           <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                 <thead>
-                    <tr className="bg-slate-50/50">
-                       <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Table Name</th>
-                       <th className="py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Status</th>
-                       <th className="py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Response</th>
-                       <th className="py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Assigned To</th>
-                       <th className="py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Team</th>
-                       <th className="py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Created By</th>
-                       <th className="py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Created On</th>
-                       <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Actions</th>
-                    </tr>
-                 </thead>
-                 <tbody className="divide-y divide-slate-50">
-                    {forms.map(form => (
-                       <tr key={form.id} className="group hover:bg-slate-50/50 transition-colors">
-                          <td className="px-8 py-6">
-                             <p className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight">{form.name}</p>
-                          </td>
-                          <td className="py-6">
-                             <Badge className={cn(
-                                "text-[9px] font-black uppercase px-2.5 py-0.5 rounded-md border",
-                                form.status === "Published" ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-rose-50 text-rose-600 border-rose-100"
-                             )}>
-                                {form.status}
-                             </Badge>
-                          </td>
-                          <td className="py-6 text-center">
-                             <span className="text-xs font-black text-slate-900 bg-slate-100 px-3 py-1 rounded-full">{form.responses?.length || 0}</span>
-                          </td>
-                          <td className="py-6">
-                             <div className="flex items-center gap-3">
-                                <div className="h-7 w-7 rounded-full bg-emerald-600 flex items-center justify-center text-[8px] font-black text-white">P</div>
-                                <span className="text-xs font-bold text-slate-600">{form.assignedTo?.name || "Unassigned"}</span>
-                             </div>
-                          </td>
-                          <td className="py-6 text-xs font-bold text-slate-400">{form.team?.name || form.group?.name || "General"}</td>
-                          <td className="py-6">
-                             <div className="flex items-center gap-2">
-                                <div className="h-6 w-6 rounded-full bg-emerald-100 flex items-center justify-center text-[8px] font-black text-emerald-600">S</div>
-                                <span className="text-xs font-bold text-slate-600">{form.createdBy?.name || "System"}</span>
-                             </div>
-                          </td>
-                          <td className="py-6 text-xs font-bold text-slate-500">{dayjs(form.createdAt).format("DD-MM-YYYY")}</td>
-                          <td className="px-8 py-6 text-right">
-                             <div className="flex items-center justify-end gap-2">
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-9 w-9 rounded-xl hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition-all"
-                                  onClick={() => copyLink(form.id)}
-                                  title="Copy Form Link"
-                                >
-                                   <LinkIcon className="h-4 w-4" />
-                                </Button>
-                                <ViewResponsesDialog form={form} />
-                                <DropdownMenu>
-                                   <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-slate-100 text-slate-400 transition-all">
-                                         <MoreHorizontal className="h-4 w-4" />
-                                      </Button>
-                                   </DropdownMenuTrigger>
-                                   <DropdownMenuContent align="end" className="w-40 rounded-xl">
-                                      <Dialog>
-                                         <DialogTrigger asChild>
-                                            <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-xs font-bold gap-2">
-                                               Edit Form
-                                            </DropdownMenuItem>
-                                         </DialogTrigger>
-                                         <CreateFormDialog 
-                                            initialData={form}
-                                            onSubmit={(data: any) => updateMutation.mutate({ id: form.id, data })}
-                                            isSubmitting={updateMutation.isPending}
-                                         />
-                                      </Dialog>
-                                      <DropdownMenuItem 
-                                        className="text-xs font-bold gap-2 text-rose-500"
-                                        onClick={() => {
-                                          if (confirm("Are you sure you want to delete this form?")) {
-                                            deleteMutation.mutate(form.id);
-                                          }
-                                        }}
-                                      >
-                                        Delete Form
-                                      </DropdownMenuItem>
-                                   </DropdownMenuContent>
-                                </DropdownMenu>
-                             </div>
-                          </td>
-                       </tr>
-                    ))}
-                    {forms.length === 0 && (
-                       <tr>
-                          <td colSpan={8} className="py-32 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
-                             No survey forms found
-                          </td>
-                       </tr>
-                    )}
-                 </tbody>
-              </table>
-           </div>
+           {viewMode === "table" ? (
+             <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                   <thead>
+                      <tr className="bg-slate-50/50">
+                         <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Table Name</th>
+                         <th className="py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Status</th>
+                         <th className="py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Response</th>
+                         <th className="py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Assigned To</th>
+                         <th className="py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Team</th>
+                         <th className="py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Created By</th>
+                         <th className="py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Created On</th>
+                         <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Actions</th>
+                      </tr>
+                   </thead>
+                   <tbody className="divide-y divide-slate-50">
+                      {displayedForms.map(form => (
+                         <tr key={form.id} className="group hover:bg-slate-50/50 transition-colors">
+                            <td className="px-8 py-6">
+                               <p className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight">{form.name}</p>
+                            </td>
+                            <td className="py-6">
+                               <Badge className={cn(
+                                  "text-[9px] font-black uppercase px-2.5 py-0.5 rounded-md border",
+                                  form.status === "Published" ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-rose-50 text-rose-600 border-rose-100"
+                               )}>
+                                  {form.status}
+                               </Badge>
+                            </td>
+                            <td className="py-6 text-center">
+                               <span className="text-xs font-black text-slate-900 bg-slate-100 px-3 py-1 rounded-full">{form.responses?.length || 0}</span>
+                            </td>
+                            <td className="py-6">
+                               <div className="flex items-center gap-3">
+                                  <div className="h-7 w-7 rounded-full bg-emerald-600 flex items-center justify-center text-[8px] font-black text-white">P</div>
+                                  <span className="text-xs font-bold text-slate-600">{form.assignedTo?.name || "Unassigned"}</span>
+                                </div>
+                            </td>
+                            <td className="py-6 text-xs font-bold text-slate-400">{form.team?.name || form.group?.name || "General"}</td>
+                            <td className="py-6">
+                               <div className="flex items-center gap-2">
+                                  <div className="h-6 w-6 rounded-full bg-emerald-100 flex items-center justify-center text-[8px] font-black text-emerald-600">S</div>
+                                  <span className="text-xs font-bold text-slate-600">{form.createdBy?.name || "System"}</span>
+                                </div>
+                            </td>
+                            <td className="py-6 text-xs font-bold text-slate-500">{dayjs(form.createdAt).format("DD-MM-YYYY")}</td>
+                            <td className="px-8 py-6 text-right">
+                               <div className="flex items-center justify-end gap-2">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-9 w-9 rounded-xl hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition-all"
+                                    onClick={() => copyLink(form.id)}
+                                    title="Copy Form Link"
+                                  >
+                                     <LinkIcon className="h-4 w-4" />
+                                  </Button>
+                                  <ViewResponsesDialog form={form} />
+                                  <DropdownMenu>
+                                     <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-slate-100 text-slate-400 transition-all">
+                                           <MoreHorizontal className="h-4 w-4" />
+                                        </Button>
+                                     </DropdownMenuTrigger>
+                                     <DropdownMenuContent align="end" className="w-40 rounded-xl">
+                                        <Dialog>
+                                           <DialogTrigger asChild>
+                                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-xs font-bold gap-2">
+                                                 Edit Form
+                                              </DropdownMenuItem>
+                                           </DialogTrigger>
+                                           <CreateFormDialog 
+                                              initialData={form}
+                                              onSubmit={(data: any) => updateMutation.mutate({ id: form.id, data })}
+                                              isSubmitting={updateMutation.isPending}
+                                           />
+                                        </Dialog>
+                                        <DropdownMenuItem 
+                                          className="text-xs font-bold gap-2 text-rose-500"
+                                          onClick={() => {
+                                            if (confirm("Are you sure you want to delete this form?")) {
+                                              deleteMutation.mutate(form.id);
+                                            }
+                                          }}
+                                        >
+                                          Delete Form
+                                        </DropdownMenuItem>
+                                     </DropdownMenuContent>
+                                  </DropdownMenu>
+                               </div>
+                            </td>
+                         </tr>
+                      ))}
+                      {displayedForms.length === 0 && (
+                         <tr>
+                            <td colSpan={8} className="py-32 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
+                               No survey forms found
+                            </td>
+                         </tr>
+                      )}
+                   </tbody>
+                </table>
+             </div>
+           ) : (
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-8 bg-slate-50/10">
+                {displayedForms.map(form => (
+                   <Card key={form.id} className="rounded-3xl border border-slate-100 shadow-sm hover:ring-1 hover:ring-blue-500/20 hover:shadow-xl transition-all duration-300 overflow-hidden bg-white text-left">
+                      <CardHeader className="p-6 pb-3 flex flex-row items-start justify-between">
+                         <div className="space-y-1">
+                            <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest block">{form.category || "General"}</span>
+                            <h3 className="text-base font-black text-slate-900 transition-colors uppercase tracking-tight">{form.name}</h3>
+                         </div>
+                         <Badge className={cn(
+                            "text-[9px] font-black uppercase px-2 py-0.5 rounded border",
+                            form.status === "Published" ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-rose-50 text-rose-600 border-rose-100"
+                         )}>
+                            {form.status}
+                         </Badge>
+                      </CardHeader>
+                      <CardContent className="p-6 pt-3 space-y-4">
+                         <div className="flex items-center justify-between text-xs border-b border-slate-50 pb-3">
+                            <span className="text-slate-400 font-bold">Responses</span>
+                            <span className="text-sm font-black text-slate-800 bg-slate-100 px-3 py-1 rounded-full">{form.responses?.length || 0}</span>
+                         </div>
+                         <div className="flex items-center justify-between text-xs border-b border-slate-50 pb-3">
+                            <span className="text-slate-400 font-bold">Assigned To</span>
+                            <span className="font-extrabold text-slate-700">{form.assignedTo?.name || "Unassigned"}</span>
+                         </div>
+                         <div className="flex items-center justify-between text-xs text-slate-400 font-semibold pt-1">
+                            <span>Created: {dayjs(form.createdAt).format("DD-MM-YYYY")}</span>
+                         </div>
+                         
+                         <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-50">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-9 w-9 rounded-xl hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition-all"
+                              onClick={() => copyLink(form.id)}
+                              title="Copy Form Link"
+                            >
+                               <LinkIcon className="h-4 w-4" />
+                            </Button>
+                            <ViewResponsesDialog form={form} />
+                            <DropdownMenu>
+                               <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-slate-100 text-slate-400 transition-all">
+                                     <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                               </DropdownMenuTrigger>
+                               <DropdownMenuContent align="end" className="w-40 rounded-xl">
+                                  <Dialog>
+                                     <DialogTrigger asChild>
+                                        <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-xs font-bold gap-2">
+                                           Edit Form
+                                        </DropdownMenuItem>
+                                     </DialogTrigger>
+                                     <CreateFormDialog 
+                                        initialData={form}
+                                        onSubmit={(data: any) => updateMutation.mutate({ id: form.id, data })}
+                                        isSubmitting={updateMutation.isPending}
+                                     />
+                                  </Dialog>
+                                  <DropdownMenuItem 
+                                    className="text-xs font-bold gap-2 text-rose-500"
+                                    onClick={() => {
+                                      if (confirm("Are you sure you want to delete this form?")) {
+                                        deleteMutation.mutate(form.id);
+                                      }
+                                    }}
+                                  >
+                                    Delete Form
+                                  </DropdownMenuItem>
+                               </DropdownMenuContent>
+                            </DropdownMenu>
+                         </div>
+                      </CardContent>
+                   </Card>
+                ))}
+                {displayedForms.length === 0 && (
+                   <div className="col-span-full py-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
+                      No survey forms found
+                   </div>
+                )}
+             </div>
+           )}
         </CardContent>
         {/* Pagination placeholder */}
         <div className="p-8 border-t border-slate-50 bg-slate-50/30 flex items-center justify-between">
@@ -325,12 +435,12 @@ function CreateFormDialog({ onSubmit, isSubmitting, initialData }: any) {
         <p className="text-blue-100 text-xs font-bold mt-1">Design a data collection survey for the field team.</p>
       </DialogHeader>
       <div className="p-8 space-y-6">
-         <div className="grid grid-cols-2 gap-4">
+         <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
                <Label className="text-[10px] font-black uppercase text-slate-400">Form Name</Label>
                <Input 
                  placeholder="e.g. Sales Inquiry Form" 
-                 className="h-12 rounded-2xl bg-slate-50 border-none font-bold" 
+                 className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
                  value={data.name}
                  onChange={e => setData({...data, name: e.target.value})}
                />
@@ -339,10 +449,23 @@ function CreateFormDialog({ onSubmit, isSubmitting, initialData }: any) {
                <Label className="text-[10px] font-black uppercase text-slate-400">Category</Label>
                <Input 
                  placeholder="e.g. Operations" 
-                 className="h-12 rounded-2xl bg-slate-50 border-none font-bold" 
+                 className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
                  value={data.category}
                  onChange={e => setData({...data, category: e.target.value})}
                />
+            </div>
+            <div className="space-y-2">
+               <Label className="text-[10px] font-black uppercase text-slate-400">Status</Label>
+               <Select value={data.status} onValueChange={s => setData({...data, status: s})}>
+                  <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs">
+                     <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl bg-white border border-slate-100 shadow-xl">
+                     <SelectItem value="Published">Published</SelectItem>
+                     <SelectItem value="Draft">Draft</SelectItem>
+                     <SelectItem value="Trashed">Trashed</SelectItem>
+                  </SelectContent>
+               </Select>
             </div>
          </div>
 
@@ -375,21 +498,26 @@ function CreateFormDialog({ onSubmit, isSubmitting, initialData }: any) {
                            <SelectTrigger className="h-10 rounded-xl bg-white border-slate-200 font-bold text-xs">
                               <SelectValue />
                            </SelectTrigger>
-                           <SelectContent className="rounded-xl">
+                           <SelectContent className="rounded-xl bg-white border border-slate-150 shadow-md">
                               <SelectItem value="text">Text Input</SelectItem>
+                              <SelectItem value="textarea">Long Text (Textarea)</SelectItem>
                               <SelectItem value="number">Number</SelectItem>
                               <SelectItem value="select">Dropdown (Select)</SelectItem>
+                              <SelectItem value="checkbox">Checkbox (Multi-Select)</SelectItem>
+                              <SelectItem value="radio">Radio Group (Single-Select)</SelectItem>
+                              <SelectItem value="email">Email</SelectItem>
+                              <SelectItem value="phone">Phone Number</SelectItem>
                               <SelectItem value="photo">Photo Upload</SelectItem>
                               <SelectItem value="date">Date</SelectItem>
                            </SelectContent>
                         </Select>
                      </div>
-                     {field.type === 'select' && (
+                     {(field.type === 'select' || field.type === 'radio' || field.type === 'checkbox') && (
                         <div className="space-y-2">
                            <Label className="text-[9px] font-bold text-slate-400">Options (comma separated)</Label>
                            <Input 
                              placeholder="Option 1, Option 2, Option 3" 
-                             className="h-9 rounded-xl bg-white border-slate-200 text-xs" 
+                             className="h-9 rounded-xl bg-white border-slate-200 text-xs font-medium" 
                              value={Array.isArray(field.options) ? field.options.join(", ") : field.options}
                              onChange={e => updateField(index, { options: e.target.value.split(",").map((s: string) => s.trim()) })}
                            />
@@ -429,9 +557,48 @@ function CreateFormDialog({ onSubmit, isSubmitting, initialData }: any) {
 }
 
 function ViewResponsesDialog({ form }: any) {
+  const [respSearch, setRespSearch] = useState("");
   const { data: responses = [], isLoading } = useQuery({
     queryKey: ["responses", form.id],
     queryFn: () => fetchFormResponses(form.id)
+  });
+
+  const downloadCSV = () => {
+    if (responses.length === 0) return;
+    const fieldsList = form.fields || [];
+    const headers = ["Submitter", "Date Submitted", ...fieldsList.map((f: any) => f.label)];
+    
+    const rows = responses.map((resp: any) => {
+      let respData = {} as any;
+      try {
+        respData = JSON.parse(resp.data || "{}");
+      } catch (e) {}
+      return [
+        resp.user?.name || "System",
+        dayjs(resp.submittedAt).format("YYYY-MM-DD HH:mm"),
+        ...fieldsList.map((f: any) => respData[f.label] || "")
+      ];
+    });
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Responses_${form.name.replace(/\s+/g, "_")}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const filteredResponses = responses.filter((resp: any) => {
+    const userMatch = resp.user?.name?.toLowerCase().includes(respSearch.toLowerCase());
+    const dataMatch = resp.data?.toLowerCase().includes(respSearch.toLowerCase());
+    return userMatch || dataMatch;
   });
 
   return (
@@ -452,49 +619,68 @@ function ViewResponsesDialog({ form }: any) {
           <DialogTitle className="text-2xl font-black">{form.name} - Responses</DialogTitle>
           <p className="text-slate-400 text-xs font-bold mt-1">Viewing all submissions from the field team.</p>
         </DialogHeader>
+
+        <div className="p-8 pb-4 flex items-center justify-between gap-4 border-b border-slate-100 flex-shrink-0">
+           <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <Input 
+                 placeholder="Search responses..." 
+                 value={respSearch}
+                 onChange={e => setRespSearch(e.target.value)}
+                 className="h-10 pl-9 rounded-xl bg-slate-50 border-none font-bold text-xs" 
+              />
+           </div>
+           <Button 
+              onClick={downloadCSV}
+              disabled={responses.length === 0}
+              className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-2 px-4 shadow-sm"
+           >
+              <Download className="h-4 w-4" /> Export CSV
+           </Button>
+        </div>
         
         <div className="flex-1 overflow-y-auto p-8">
            {isLoading ? (
-             <div className="py-20 flex justify-center"><div className="h-8 w-8 animate-spin border-4 border-blue-600 border-t-transparent rounded-full" /></div>
-           ) : responses.length === 0 ? (
-             <div className="py-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">No responses received yet</div>
+              <div className="py-20 flex justify-center"><div className="h-8 w-8 animate-spin border-4 border-blue-600 border-t-transparent rounded-full" /></div>
+           ) : filteredResponses.length === 0 ? (
+              <div className="py-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">No responses received yet</div>
            ) : (
-             <div className="space-y-6">
-                {responses.map((resp: any) => {
-                  const data = JSON.parse(resp.data);
-                  return (
-                    <div key={resp.id} className="bg-slate-50 rounded-[32px] border border-slate-100 overflow-hidden">
-                       <div className="px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                             <Avatar className="h-8 w-8">
-                                <AvatarImage src={resp.user.avatarUrl} />
-                                <AvatarFallback className="bg-blue-600 text-white text-[10px] font-black">{resp.user.name.slice(0, 1)}</AvatarFallback>
-                             </Avatar>
-                             <div>
-                                <p className="text-xs font-black text-slate-900 uppercase tracking-tight">{resp.user.name}</p>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">{dayjs(resp.submittedAt).format("DD MMM YYYY, hh:mm A")}</p>
-                             </div>
-                          </div>
-                          <Badge variant="outline" className="text-[10px] font-bold border-slate-200"># {resp.id.slice(-6)}</Badge>
-                       </div>
-                       <div className="p-6 grid grid-cols-2 gap-6">
-                          {Object.entries(data).map(([key, value]: [string, any]) => (
-                             <div key={key} className="space-y-1">
-                                <Label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">{key}</Label>
-                                {typeof value === 'string' && (value.startsWith('http') || value.includes('data:image')) ? (
-                                   <div className="h-32 w-full rounded-2xl overflow-hidden border border-slate-200">
-                                      <img src={value} className="h-full w-full object-cover" alt={key} />
-                                   </div>
-                                ) : (
-                                   <p className="text-sm font-bold text-slate-700">{String(value)}</p>
-                                )}
-                             </div>
-                          ))}
-                       </div>
-                    </div>
-                  )
-                })}
-             </div>
+              <div className="space-y-6">
+                 {filteredResponses.map((resp: any) => {
+                   const data = JSON.parse(resp.data);
+                   return (
+                     <div key={resp.id} className="bg-slate-50 rounded-[32px] border border-slate-100 overflow-hidden text-left">
+                        <div className="px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between">
+                           <div className="flex items-center gap-3">
+                              <Avatar className="h-8 w-8">
+                                 <AvatarImage src={resp.user.avatarUrl} />
+                                 <AvatarFallback className="bg-blue-600 text-white text-[10px] font-black">{resp.user.name.slice(0, 1)}</AvatarFallback>
+                              </Avatar>
+                              <div>
+                                 <p className="text-xs font-black text-slate-900 uppercase tracking-tight">{resp.user.name}</p>
+                                 <p className="text-[10px] font-bold text-slate-400 uppercase">{dayjs(resp.submittedAt).format("DD MMM YYYY, hh:mm A")}</p>
+                              </div>
+                           </div>
+                           <Badge variant="outline" className="text-[10px] font-bold border-slate-200"># {resp.id.slice(-6)}</Badge>
+                        </div>
+                        <div className="p-6 grid grid-cols-2 gap-6">
+                           {Object.entries(data).map(([key, value]: [string, any]) => (
+                              <div key={key} className="space-y-1">
+                                 <Label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">{key}</Label>
+                                 {typeof value === 'string' && (value.startsWith('http') || value.includes('data:image')) ? (
+                                    <div className="h-32 w-full rounded-2xl overflow-hidden border border-slate-200">
+                                       <img src={value} className="h-full w-full object-cover" alt={key} />
+                                    </div>
+                                 ) : (
+                                    <p className="text-sm font-bold text-slate-700">{String(value)}</p>
+                                 )}
+                              </div>
+                           ))}
+                        </div>
+                     </div>
+                   )
+                 })}
+              </div>
            )}
         </div>
       </DialogContent>

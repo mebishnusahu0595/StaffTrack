@@ -1,7 +1,8 @@
 "use client";
  
-import React, { Fragment, useMemo, useState } from "react";
+import React, { Fragment, useMemo, useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useReactToPrint } from "react-to-print";
 import { 
   ChevronDown, 
   ChevronUp, 
@@ -79,6 +80,55 @@ export default function ReportsPage() {
   const [chartMetric, setChartMetric] = useState<"orders" | "distance">("orders");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+
+  const printRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+  });
+
+  const exportToCSV = () => {
+    const headers = [
+      "Agent Name",
+      "Agent Email",
+      "Cycle Date",
+      "Orders Taken",
+      "Orders Cancelled",
+      "KM Travelled",
+      "Submitted At",
+      "Visits Summary",
+      "Remarks"
+    ];
+    const rowsData = filteredRows.map(row => {
+      const summaryClean = (row.visitsSummary || "").replace(/"/g, '""');
+      const remarksClean = (row.remarks || "").replace(/"/g, '""');
+      return [
+        row.user?.name || "N/A",
+        row.user?.email || "N/A",
+        formatDate(row.date, "yyyy-MM-dd"),
+        row.ordersTaken,
+        row.ordersCancelled,
+        row.kmTravelled,
+        formatDateTime(row.submittedAt),
+        `"${summaryClean}"`,
+        `"${remarksClean}"`
+      ];
+    });
+
+    const csvContent = [
+      headers.join(","),
+      ...rowsData.map(e => e.join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `reports_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
   
   const usersQuery = useQuery({ 
     queryKey: ["users", "reports"], 
@@ -159,22 +209,82 @@ export default function ReportsPage() {
  
   return (
     <div className="space-y-8 pb-12">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between print:hidden">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Advanced Analytics</h1>
           <p className="mt-1 text-slate-500">Comprehensive field performance and efficiency tracking.</p>
         </div>
         <div className="flex items-center gap-3">
-           <Button variant="outline" className="h-10 rounded-xl border-slate-200 text-xs font-bold text-slate-600 bg-white shadow-sm hover:shadow-md transition-all">
+           <Button 
+             variant="outline" 
+             onClick={exportToCSV}
+             className="h-10 rounded-xl border-slate-200 text-xs font-bold text-slate-600 bg-white shadow-sm hover:shadow-md transition-all"
+           >
               <Download className="h-4 w-4 mr-2 text-slate-400" />
               CSV
            </Button>
-           <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100 rounded-xl px-5 h-10 font-bold">
+           <Button 
+             onClick={handlePrint}
+             className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100 rounded-xl px-5 h-10 font-bold"
+           >
               <FileText className="mr-2 h-4 w-4" />
               Full PDF Report
            </Button>
         </div>
       </div>
+
+      {/* Printable Wrapper */}
+      <div ref={printRef} className="space-y-8 print:p-8 bg-transparent">
+        {/* Printable Header */}
+        <div className="hidden print:flex items-center justify-between border-b pb-4 mb-4">
+          <div>
+            <h1 className="text-2xl font-black text-slate-900">Advanced Analytics Report</h1>
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mt-1">StaffTrack Performance Analytics</p>
+          </div>
+          <div className="text-right text-xs text-slate-400 font-bold">
+            Printed on: {new Date().toLocaleDateString()}
+          </div>
+        </div>
+
+        {/* Search & Intelligence Filters (now on top of graphs) */}
+        <div className="flex flex-col md:flex-row gap-4 items-end print:hidden">
+           <Card className="flex-1 border-none shadow-sm ring-1 ring-slate-200/50">
+              <CardContent className="p-4 grid gap-6 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Target Employee</Label>
+                  <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+                    <SelectTrigger className="h-11 bg-slate-50/50 border-slate-100 rounded-xl focus:ring-blue-500 shadow-none text-xs font-bold">
+                      <div className="flex items-center gap-2">
+                        <UserIcon className="h-3.5 w-3.5 text-slate-400" />
+                        <SelectValue placeholder="Global Search" />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Global (All Employees)</SelectItem>
+                      {employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Date Range From</Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3.5 top-3.5 h-3.5 w-3.5 text-slate-400" />
+                    <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-11 pl-10 bg-slate-50/50 border-slate-100 rounded-xl text-xs font-bold" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Date Range To</Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3.5 top-3.5 h-3.5 w-3.5 text-slate-400" />
+                    <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-11 pl-10 bg-slate-50/50 border-slate-100 rounded-xl text-xs font-bold" />
+                  </div>
+                </div>
+              </CardContent>
+           </Card>
+           <Button variant="outline" className="h-14 w-14 rounded-2xl border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm">
+              <Filter className="h-6 w-6" />
+           </Button>
+        </div>
  
       {/* Top Level Intelligence Stats */}
       <div className="grid gap-6 md:grid-cols-4">
@@ -344,45 +454,7 @@ export default function ReportsPage() {
         </Card>
       </div>
  
-      {/* Search & Intelligence Filters */}
-      <div className="flex flex-col md:flex-row gap-4 items-end">
-         <Card className="flex-1 border-none shadow-sm ring-1 ring-slate-200/50">
-            <CardContent className="p-4 grid gap-6 md:grid-cols-3">
-              <div className="space-y-2">
-                <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Target Employee</Label>
-                <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
-                  <SelectTrigger className="h-11 bg-slate-50/50 border-slate-100 rounded-xl focus:ring-blue-500 shadow-none text-xs font-bold">
-                    <div className="flex items-center gap-2">
-                      <UserIcon className="h-3.5 w-3.5 text-slate-400" />
-                      <SelectValue placeholder="Global Search" />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Global (All Employees)</SelectItem>
-                    {employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Date Range From</Label>
-                <div className="relative">
-                  <Calendar className="absolute left-3.5 top-3.5 h-3.5 w-3.5 text-slate-400" />
-                  <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-11 pl-10 bg-slate-50/50 border-slate-100 rounded-xl text-xs font-bold" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Date Range To</Label>
-                <div className="relative">
-                  <Calendar className="absolute left-3.5 top-3.5 h-3.5 w-3.5 text-slate-400" />
-                  <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-11 pl-10 bg-slate-50/50 border-slate-100 rounded-xl text-xs font-bold" />
-                </div>
-              </div>
-            </CardContent>
-         </Card>
-         <Button variant="outline" className="h-14 w-14 rounded-2xl border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm">
-            <Filter className="h-6 w-6" />
-         </Button>
-      </div>
+      {/* Search & Intelligence Filters removed from bottom */}
  
       {/* Intelligent Data Table */}
       <Card className="border-none shadow-sm ring-1 ring-slate-200/50 overflow-hidden bg-white">
@@ -553,6 +625,7 @@ export default function ReportsPage() {
           </TableBody>
         </Table>
       </Card>
+      </div>
     </div>
   );
 }

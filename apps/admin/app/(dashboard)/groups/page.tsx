@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchGroups, createGroup } from "@/lib/api";
+import { fetchGroups, createGroup, updateGroup, deleteGroup, fetchUsers } from "@/lib/api";
 import { 
   Dialog, 
   DialogContent, 
@@ -33,20 +33,46 @@ import { Label } from "@/components/ui/label";
 export default function GroupsPage() {
   const queryClient = useQueryClient();
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [formData, setFormData] = useState({ name: "", baseSalary: "" });
+  const [formData, setFormData] = useState<{ name: string; baseSalary: string; userIds: string[] }>({ name: "", baseSalary: "", userIds: [] });
+  const [editFormData, setEditFormData] = useState<{ name: string; baseSalary: string; userIds: string[] }>({ name: "", baseSalary: "", userIds: [] });
 
   const groupsQuery = useQuery({
     queryKey: ["groups"],
     queryFn: fetchGroups
   });
 
+  const usersQuery = useQuery({
+    queryKey: ["users", "groups"],
+    queryFn: () => fetchUsers({ page: 1, pageSize: 100 })
+  });
+  const employees = usersQuery.data?.items ?? [];
+
   const createMutation = useMutation({
-    mutationFn: createGroup,
+    mutationFn: (data: { name: string; baseSalary: number; userIds: string[] }) => createGroup(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["groups"] });
       setIsAddOpen(false);
-      setFormData({ name: "", baseSalary: "" });
+      setFormData({ name: "", baseSalary: "", userIds: [] });
+    }
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, name, baseSalary, userIds }: { id: string; name: string; baseSalary: number; userIds: string[] }) => 
+      updateGroup(id, { name, baseSalary, userIds }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      setIsEditOpen(false);
+      setSelectedGroupId(null);
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteGroup,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
     }
   });
 
@@ -105,9 +131,34 @@ export default function GroupsPage() {
                     Salary is distributed across all members.
                   </p>
                </div>
+               <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Assign Members</Label>
+                  <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-2xl p-4 bg-slate-50 space-y-2">
+                     {employees.map((emp: any) => (
+                       <label key={emp.id} className="flex items-center gap-3 cursor-pointer hover:bg-slate-100/55 p-1 rounded-lg transition-colors">
+                         <input 
+                           type="checkbox" 
+                           checked={formData.userIds.includes(emp.id)}
+                           onChange={(e) => {
+                             if (e.target.checked) {
+                               setFormData({ ...formData, userIds: [...formData.userIds, emp.id] });
+                             } else {
+                               setFormData({ ...formData, userIds: formData.userIds.filter(id => id !== emp.id) });
+                             }
+                           }}
+                           className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                         />
+                         <div className="flex flex-col">
+                           <span className="text-xs font-bold text-slate-700">{emp.name}</span>
+                           <span className="text-[9px] text-slate-400 uppercase tracking-tight">{emp.role}</span>
+                         </div>
+                       </label>
+                     ))}
+                  </div>
+               </div>
                <DialogFooter className="pt-4">
                  <Button 
-                  onClick={() => createMutation.mutate({ name: formData.name, baseSalary: parseFloat(formData.baseSalary) })}
+                  onClick={() => createMutation.mutate({ name: formData.name, baseSalary: parseFloat(formData.baseSalary), userIds: formData.userIds })}
                   disabled={createMutation.isPending || !formData.name || !formData.baseSalary}
                   className="w-full h-14 bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-200 rounded-2xl font-black text-sm uppercase tracking-widest gap-2"
                  >
@@ -194,13 +245,36 @@ export default function GroupsPage() {
                       <ShieldCheck className="h-8 w-8" />
                    </div>
                    <div className="flex items-center gap-2">
-                      <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors">
-                        <Edit2 className="h-5 w-5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors">
-                        <Trash2 className="h-5 w-5" />
-                      </Button>
-                   </div>
+                       <Button 
+                         variant="ghost" 
+                         size="icon" 
+                         onClick={() => {
+                           setSelectedGroupId(group.id);
+                           setEditFormData({
+                             name: group.name,
+                             baseSalary: String(group.baseSalary),
+                             userIds: (group.members || []).map((m: any) => m.id)
+                           });
+                           setIsEditOpen(true);
+                         }}
+                         className="h-10 w-10 rounded-2xl text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                       >
+                         <Edit2 className="h-5 w-5" />
+                       </Button>
+                       <Button 
+                         variant="ghost" 
+                         size="icon" 
+                         onClick={() => {
+                           if (confirm(`Are you sure you want to delete the group "${group.name}"?`)) {
+                             deleteMutation.mutate(group.id);
+                           }
+                         }}
+                         disabled={deleteMutation.isPending}
+                         className="h-10 w-10 rounded-2xl text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                       >
+                         <Trash2 className="h-5 w-5" />
+                       </Button>
+                    </div>
                 </div>
                 <div className="space-y-2">
                   <CardTitle className="text-2xl font-black text-slate-900 leading-tight">{group.name}</CardTitle>
@@ -243,6 +317,70 @@ export default function GroupsPage() {
           </Card>
         ))}
       </div>
+
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-3xl">
+          <DialogHeader className="p-8 bg-blue-600 text-white">
+            <DialogTitle className="text-2xl font-black">Edit Group</DialogTitle>
+            <CardDescription className="text-blue-100 text-sm font-medium mt-1">Modify group details and member assignments.</CardDescription>
+          </DialogHeader>
+          <div className="p-8 space-y-6">
+             <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Group Name</Label>
+                <Input 
+                  placeholder="e.g. Sales Team - Raipur" 
+                  className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold" 
+                  value={editFormData.name}
+                  onChange={e => setEditFormData({...editFormData, name: e.target.value})}
+                />
+             </div>
+             <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Base Salary (Monthly INR)</Label>
+                <Input 
+                  type="number"
+                  placeholder="30000" 
+                  className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold" 
+                  value={editFormData.baseSalary}
+                  onChange={e => setEditFormData({...editFormData, baseSalary: e.target.value})}
+                />
+             </div>
+             <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Assign Members</Label>
+                <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-2xl p-4 bg-slate-50 space-y-2">
+                   {employees.map((emp: any) => (
+                     <label key={emp.id} className="flex items-center gap-3 cursor-pointer hover:bg-slate-100/50 p-1 rounded-lg transition-colors">
+                       <input 
+                         type="checkbox" 
+                         checked={editFormData.userIds.includes(emp.id)}
+                         onChange={(e) => {
+                           if (e.target.checked) {
+                             setEditFormData({ ...editFormData, userIds: [...editFormData.userIds, emp.id] });
+                           } else {
+                             setEditFormData({ ...editFormData, userIds: editFormData.userIds.filter(id => id !== emp.id) });
+                           }
+                         }}
+                         className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                       />
+                       <div className="flex flex-col">
+                         <span className="text-xs font-bold text-slate-700">{emp.name}</span>
+                         <span className="text-[9px] text-slate-400 uppercase tracking-tight">{emp.role}</span>
+                       </div>
+                     </label>
+                   ))}
+                </div>
+             </div>
+             <DialogFooter className="pt-4">
+               <Button 
+                onClick={() => updateMutation.mutate({ id: selectedGroupId!, name: editFormData.name, baseSalary: parseFloat(editFormData.baseSalary), userIds: editFormData.userIds })}
+                disabled={updateMutation.isPending || !editFormData.name || !editFormData.baseSalary}
+                className="w-full h-14 bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-200 rounded-2xl font-black text-sm uppercase tracking-widest gap-2"
+               >
+                 {updateMutation.isPending ? "Saving..." : "Save Changes"}
+               </Button>
+             </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

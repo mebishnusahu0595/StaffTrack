@@ -35,6 +35,7 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
 
   const payrollReports = users.map((user: any) => {
     const userJoiningDate = new Date(user.joiningDate);
+    userJoiningDate.setHours(0, 0, 0, 0);
     const effectiveBaseSalary = user.group?.baseSalary || user.baseSalary || 0;
     const dailySalary = effectiveBaseSalary / daysInMonth.length;
 
@@ -46,15 +47,15 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
     let totalPayableDays = 0;
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setHours(23, 59, 59, 999);
 
     const dailyBreakdown = daysInMonth.map((day: any) => {
       const dayDate = new Date(day);
       dayDate.setHours(0, 0, 0, 0);
 
       // Skip days before joining
-      if (dayDate < startOfMonth(userJoiningDate) && !isSameDay(dayDate, userJoiningDate)) {
-        if (dayDate < userJoiningDate) return { date: format(day, "yyyy-MM-dd"), status: "PRE_JOINING", payable: false };
+      if (dayDate < userJoiningDate) {
+        return { date: format(day, "yyyy-MM-dd"), status: "PRE_JOINING", payable: false };
       }
 
       // Check if it's a holiday for this specific user
@@ -160,6 +161,7 @@ export async function calculateSalaryMatrix(companyId: string, month: number, ye
 
   const salaryReports = users.map((user: any) => {
     const userJoiningDate = new Date(user.joiningDate);
+    userJoiningDate.setHours(0, 0, 0, 0);
     const effectiveBaseSalary = user.group?.baseSalary || user.baseSalary || 0;
 
     let presentDays = 0;
@@ -169,15 +171,15 @@ export async function calculateSalaryMatrix(companyId: string, month: number, ye
     let weekendDays = 0;
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setHours(23, 59, 59, 999);
 
     const dailyBreakdown = daysInMonth.map((day: any) => {
       const dayDate = new Date(day);
       dayDate.setHours(0, 0, 0, 0);
 
       // Skip days before joining
-      if (dayDate < startOfMonth(userJoiningDate) && !isSameDay(dayDate, userJoiningDate)) {
-        if (dayDate < userJoiningDate) return { date: format(day, "yyyy-MM-dd"), status: "PRE_JOINING", payable: false };
+      if (dayDate < userJoiningDate) {
+        return { date: format(day, "yyyy-MM-dd"), status: "PRE_JOINING", payable: false };
       }
 
       // Check if it's a holiday for this specific user
@@ -286,9 +288,17 @@ export async function calculateMusterReport(companyId: string, month: number, ye
 
   const report = users.map((user: any) => {
     const attendanceMap: Record<string, string> = {};
+    const joiningDate = user.joiningDate ? new Date(user.joiningDate) : null;
+    if (joiningDate) {
+      joiningDate.setHours(0, 0, 0, 0);
+    }
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
     
     daysInMonth.forEach(day => {
       const dateStr = format(day, "yyyy-MM-dd");
+      const dayDate = new Date(day);
+      dayDate.setHours(0, 0, 0, 0);
       
       // Default
       let status = "A"; // Absent
@@ -306,6 +316,16 @@ export async function calculateMusterReport(companyId: string, month: number, ye
         if (attendance.status === "PRESENT") status = "P";
         else if (attendance.status === "HALF_DAY") status = "HD";
         else if (attendance.status === "ON_LEAVE") status = "L";
+      }
+
+      // If day is before joining date, status is '-'
+      if (joiningDate && dayDate < joiningDate) {
+        status = "-";
+      }
+
+      // If day is in the future, status is '-'
+      if (dayDate > today) {
+        status = "-";
       }
 
       attendanceMap[dateStr] = status;
