@@ -16,6 +16,12 @@ const publicUserSelect = {
   companyId: true,
   managerId: true,
   groupId: true,
+  group: {
+    select: {
+      id: true,
+      name: true
+    }
+  },
   avatarUrl: true,
   shiftStart: true,
   shiftEnd: true,

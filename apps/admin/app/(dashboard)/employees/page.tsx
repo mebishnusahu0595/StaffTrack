@@ -216,13 +216,14 @@ export default function EmployeesPage() {
 
   const downloadCSV = () => {
     if (filteredUsers.length === 0) return;
-    const headers = ["Employee Name", "Email", "Phone", "Role", "Designation", "Work Mode", "Salary", "Manager"];
+    const headers = ["Employee Name", "Email", "Phone", "Role", "Designation", "Department", "Work Mode", "Salary", "Manager"];
     const rows = filteredUsers.map(e => [
       e.name || "",
       e.email || "",
       e.phone || "--",
       e.role || "",
       e.designation || "Staff",
+      e.group?.name || "Unassigned",
       e.workMode || "",
       e.baseSalary ? `INR ${e.baseSalary}` : "--",
       e.managerId ? (managersById.get(e.managerId)?.name || "--") : "--"
@@ -351,6 +352,7 @@ export default function EmployeesPage() {
                 <th className="py-4 px-8 text-[11px] font-black uppercase tracking-wider text-slate-400">Name</th>
                 <th className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Phone</th>
                 <th className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Designation</th>
+                <th className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Department</th>
                 <th className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Manager</th>
                 <th className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400 text-center">Work Mode</th>
                 <th className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Last Seen</th>
@@ -393,6 +395,9 @@ export default function EmployeesPage() {
                           <span className="text-xs font-bold text-slate-700 leading-tight">{user.designation || "Staff"}</span>
                           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">{user.role}</span>
                         </div>
+                      </td>
+                      <td className="py-5 px-6 text-xs font-semibold text-slate-700">
+                        {user.group?.name || "Unassigned"}
                       </td>
                       <td className="py-5 px-6 text-xs font-semibold text-slate-700">
                         {user.role === "MANAGER" 
@@ -483,7 +488,7 @@ export default function EmployeesPage() {
                     </tr>
                     {isExpanded && (
                       <tr>
-                        <td colSpan={7} className="p-0 border-none bg-slate-50/80">
+                        <td colSpan={8} className="p-0 border-none bg-slate-50/80">
                            <div className="px-8 py-8 animate-in slide-in-from-top-4 duration-300">
                               <div className="grid grid-cols-12 gap-8">
                                  {/* Left: Profile & Quick Stats */}

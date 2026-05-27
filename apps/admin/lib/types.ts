@@ -26,6 +26,10 @@ export interface User {
   companyId: string;
   managerId?: string | null;
   groupId?: string | null;
+  group?: {
+    id: string;
+    name: string;
+  } | null;
   baseSalary: number;
   createdAt: string;
 }
