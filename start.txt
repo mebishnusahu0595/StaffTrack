@@ -1,0 +1,44 @@
+# StaffTrack Execution Guide
+
+## 1. Backend (API & Database)
+Commands to run in terminal 1:
+```bash
+cd backend
+pnpm install
+npx prisma db push
+npx prisma db seed
+pnpm run dev
+```
+*Wait until you see "API listening on port 4000"*
+
+---
+
+## 2. Admin Panel (Web)
+Commands to run in terminal 2:
+```bash
+cd apps/admin
+rm -rf .next
+pnpm install
+npm run dev
+```
+*Access at: http://localhost:3000*
+*Credentials: admin@demo.com / Admin@123*
+
+---
+
+## 3. Staff App (Mobile Web)
+Commands to run in terminal 3:
+```bash
+cd apps/mobile
+pnpm install
+npx expo start --web --clear
+```
+*Access at: http://localhost:8081*
+*Credentials: employee1@demo.com / Admin@123*
+
+---
+
+## Important Notes:
+- **Missing Required Error**: If you see this on port 3000, please hard refresh (Ctrl+F5) and wait for Next.js to finish re-compiling.
+- **White Screen on App**: Wait for the "Web bundling complete" message in the Expo terminal before refreshing.
+- **Database**: Ensure your .env in the backend folder has the correct PostgreSQL connection string.
