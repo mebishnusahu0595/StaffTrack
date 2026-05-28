@@ -50,6 +50,7 @@ coverage/
 *.p12
 *.key
 *.mobileprovision
+*.apk
 
 # Database
 prisma/dev.db
@@ -70,5 +71,5 @@ backend/test*.js
 # Project specific
 scratch/
 dayTrack_codex_prompt.txt
-stafftrack/
+/stafftrack/
 backend/uploads/
