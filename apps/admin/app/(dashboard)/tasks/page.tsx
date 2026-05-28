@@ -156,7 +156,7 @@ export default function TasksPage() {
       setIsEditOpen(false);
       setEditingTask(null);
     }
-  };
+  });
 
   // Apply inline status transitions
   const handleStatusChange = async (taskId: string, newStatus: string) => {
