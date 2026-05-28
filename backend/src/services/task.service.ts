@@ -35,6 +35,8 @@ interface CreateTaskInput {
   reminder?: number | null;
   subtasks?: any[];
   projectId?: string | null;
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
 }
 
 export async function createTask(actor: AuthUser, input: CreateTaskInput) {
@@ -69,7 +71,9 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
       geofenceLng: input.geofenceLng,
       geofenceRadius: input.geofenceRadius,
       reminder: input.reminder,
-      projectId: input.projectId || null
+      projectId: input.projectId || null,
+      attachmentUrl: input.attachmentUrl,
+      attachmentName: input.attachmentName
     },
     include: taskInclude
   });
@@ -292,7 +296,9 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
       geofenceLng: input.geofenceLng,
       geofenceRadius: input.geofenceRadius,
       reminder: input.reminder,
-      projectId: input.projectId !== undefined ? input.projectId : undefined
+      projectId: input.projectId !== undefined ? input.projectId : undefined,
+      attachmentUrl: input.attachmentUrl,
+      attachmentName: input.attachmentName
     },
     include: taskInclude
   });
@@ -335,6 +341,20 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
         }
       });
       await preGenerateTasksForSeries(updatedTask, actor.companyId);
+    }
+  }
+
+  // Notify employee that task has been updated
+  if (updatedTask.assignedToId && actor.id !== updatedTask.assignedToId) {
+    try {
+      await notificationService.createNotification(
+        updatedTask.assignedToId,
+        "Task Updated",
+        `Task "${updatedTask.title}" has been updated by the manager.`,
+        "TASK_UPDATED"
+      );
+    } catch (err) {
+      console.error("Failed to send task update notification:", err);
     }
   }
 
@@ -570,7 +590,9 @@ async function preGenerateTasksForSeries(baseTask: any, companyId: string) {
       skipHolidays: baseTask.skipHolidays,
       priority: baseTask.priority,
       points: baseTask.points,
-      parentTaskId: baseTask.id
+      parentTaskId: baseTask.id,
+      attachmentUrl: baseTask.attachmentUrl,
+      attachmentName: baseTask.attachmentName
     });
 
     // Move state to next occurrence

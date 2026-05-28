@@ -35,9 +35,13 @@ import {
   Mic,
   Image,
   FileText,
-  ListTodo
+  ListTodo,
+  Paperclip,
+  Download,
+  Loader2
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
 import { fetchTasks, deleteTask, updateTask, createTask as apiCreateTask, fetchUsers, createTemplate, fetchProjects, createProject as apiCreateProject } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -152,7 +156,7 @@ export default function TasksPage() {
       setIsEditOpen(false);
       setEditingTask(null);
     }
-  });
+  };
 
   // Apply inline status transitions
   const handleStatusChange = async (taskId: string, newStatus: string) => {
@@ -162,6 +166,99 @@ export default function TasksPage() {
     } catch {
       alert("Failed to update status");
     }
+  };
+
+  // Generate Daily PDF for a specific user
+  const generateDailyPDF = (employeeName: string, employeeTasks: any[], date: string) => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const statusColor: Record<string, string> = {
+      COMPLETED: "#10b981",
+      PENDING: "#f59e0b",
+      IN_PROGRESS: "#3b82f6",
+      MISSED: "#ef4444",
+      REVIEW: "#8b5cf6"
+    };
+
+    const taskRows = employeeTasks.map((task, i) => `
+      <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#ffffff'}; page-break-inside: avoid;">
+        <td style="padding: 12px 16px; font-weight: 700; color: #1e293b; font-size: 13px;">${i + 1}. ${task.title}</td>
+        <td style="padding: 12px 16px; text-align:center;">
+          <span style="background:${statusColor[task.status] || '#94a3b8'}20; color:${statusColor[task.status] || '#94a3b8'}; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">${task.status}</span>
+        </td>
+        <td style="padding: 12px 16px; color: #64748b; font-size: 12px; font-weight: 600;">${task.priority || "Medium"}</td>
+        <td style="padding: 12px 16px; color: #64748b; font-size: 12px;">${task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "—"}</td>
+        <td style="padding: 12px 16px; color: #64748b; font-size: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${task.description ? task.description.slice(0, 80) + (task.description.length > 80 ? "..." : "") : "—"}</td>
+        ${task.attachmentName ? `<td style="padding:12px 16px;"><a href="${task.attachmentUrl}" style="color:#3b82f6; font-size:11px; font-weight:700; text-decoration:none;">📎 ${task.attachmentName.slice(0, 20)}</a></td>` : '<td style="padding:12px 16px; color:#94a3b8; font-size:11px;">—</td>'}
+      </tr>
+    `).join("");
+
+    const completed = employeeTasks.filter(t => t.status === "COMPLETED").length;
+    const pending = employeeTasks.filter(t => t.status === "PENDING").length;
+    const inProgress = employeeTasks.filter(t => t.status === "IN_PROGRESS").length;
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Daily Task Schedule – ${employeeName}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #f1f5f9; color: #0f172a; }
+    @media print {
+      body { background: white; }
+      .no-print { display: none; }
+    }
+    .page { max-width: 900px; margin: 0 auto; background: white; box-shadow: 0 4px 40px rgba(0,0,0,0.1); }
+    .header { background: linear-gradient(135deg, #1e293b 0%, #334155 100%); color: white; padding: 40px 48px 32px; }
+    .company-badge { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 6px 14px; display:inline-block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-bottom: 24px; }
+    .header h1 { font-size: 28px; font-weight: 900; margin-bottom: 6px; }
+    .header p { color: rgba(255,255,255,0.65); font-size: 13px; font-weight: 600; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 24px 48px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+    .stat-card { background: white; border-radius: 12px; padding: 16px; text-align: center; border: 1px solid #e2e8f0; }
+    .stat-num { font-size: 26px; font-weight: 900; color: #1e293b; }
+    .stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; margin-top: 2px; }
+    .content { padding: 32px 48px; }
+    .section-title { font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
+    th { background: #1e293b; color: white; padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+    .footer { padding: 20px 48px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; }
+    .footer p { color: #94a3b8; font-size: 11px; font-weight: 700; }
+    .print-btn { no-print: block; background: #3b82f6; color: white; border: none; padding: 12px 28px; border-radius: 10px; font-weight: 800; font-size: 13px; cursor: pointer; margin: 24px auto; display: block; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <div class="company-badge">StaffTrack</div>
+      <h1>Daily Task Schedule</h1>
+      <p>${employeeName} &nbsp;•&nbsp; ${new Date(date || Date.now()).toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+    </div>
+    <div class="stats">
+      <div class="stat-card"><div class="stat-num">${employeeTasks.length}</div><div class="stat-label">Total Tasks</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:#10b981;">${completed}</div><div class="stat-label">Completed</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:#3b82f6;">${inProgress}</div><div class="stat-label">In Progress</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:#f59e0b;">${pending}</div><div class="stat-label">Pending</div></div>
+    </div>
+    <div class="content">
+      <p class="section-title">Task Breakdown</p>
+      <table>
+        <thead><tr><th>Task</th><th>Status</th><th>Priority</th><th>Due</th><th>Description</th><th>Attachment</th></tr></thead>
+        <tbody>${taskRows}</tbody>
+      </table>
+    </div>
+    <div class="footer">
+      <p>Generated by StaffTrack &nbsp;|&nbsp; ${new Date().toLocaleString("en-IN")}</p>
+      <p>Confidential</p>
+    </div>
+  </div>
+  <button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>
+  <script>window.onload = () => setTimeout(() => window.print(), 500);</script>
+</body>
+</html>`;
+    printWindow.document.write(html);
+    printWindow.document.close();
   };
 
   const filteredTasks = useMemo(() => {
@@ -349,6 +446,20 @@ export default function TasksPage() {
            </div>
            <div className="flex items-center gap-3">
               <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full hover:bg-slate-50"><Lightbulb className="h-5 w-5 text-slate-400" /></Button>
+              <Button
+                 variant="outline"
+                 className="h-10 rounded-lg px-4 font-bold text-xs gap-2 border-slate-200 hover:bg-slate-50"
+                 onClick={() => {
+                   const date = filterDate || new Date().toISOString().split('T')[0];
+                   const tasksForPDF = filteredTasks;
+                   const name = selectedAssignee !== "ALL"
+                     ? (users.items?.find((u: any) => u.id === selectedAssignee)?.name || "All Staff")
+                     : "All Staff";
+                   generateDailyPDF(name, tasksForPDF, date);
+                 }}
+               >
+                 <FileText className="h-4 w-4 text-emerald-600" /> Daily PDF
+               </Button>
                <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                   <DialogTrigger asChild>
                      <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 h-10 font-bold flex items-center gap-2 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]">
@@ -1082,6 +1193,42 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
   const [showPoints, setShowPoints] = useState(true);
   const [showGeofence, setShowGeofence] = useState(false);
 
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [fileUploadProgress, setFileUploadProgress] = useState(0);
+  const [fileError, setFileError] = useState("");
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingFile(true);
+    setFileUploadProgress(0);
+    setFileError("");
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await axios.post("/api/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / (progressEvent.total || progressEvent.loaded)
+          );
+          setFileUploadProgress(percentCompleted);
+        }
+      });
+      setData(prev => ({
+        ...prev,
+        attachmentUrl: response.data.url,
+        attachmentName: file.name
+      }));
+    } catch (err: any) {
+      setFileError("Upload failed. Try again.");
+      console.error(err);
+    } finally {
+      setIsUploadingFile(false);
+    }
+  };
+
   const [data, setData] = useState({ 
     title: "", 
     description: "", 
@@ -1095,6 +1242,8 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
     repeatDays: [] as number[],
     repeatDates: [] as number[],
     skipHolidays: false,
+    attachmentUrl: null as string | null,
+    attachmentName: null as string | null,
     validations: [] as string[],
     checklist: [] as Array<{
       id: string;
@@ -1443,6 +1592,60 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
                     onChange={e => setData({...data, description: e.target.value})}
                   />
                )}
+            </div>
+
+            {/* Task Attachment Upload */}
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1.5">
+                <Paperclip className="h-3.5 w-3.5 text-blue-500" /> Task Attachment
+              </Label>
+              {data.attachmentUrl ? (
+                <div className="flex items-center gap-3 p-3 bg-blue-50/50 border border-blue-100 rounded-2xl animate-in fade-in duration-200">
+                  <div className="h-10 w-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center font-bold text-xs uppercase">
+                    {data.attachmentName?.split('.').pop()?.slice(0, 4) || 'FILE'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-slate-700 truncate">{data.attachmentName}</p>
+                    <p className="text-[10px] font-medium text-slate-400">Attached successfully</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setData(prev => ({ ...prev, attachmentUrl: null, attachmentName: null }))}
+                    className="p-1 text-slate-400 hover:text-rose-500 transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : isUploadingFile ? (
+                <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-600">
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
+                      Uploading Attachment...
+                    </span>
+                    <span>{fileUploadProgress}%</span>
+                  </div>
+                  <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-blue-600 h-1.5 rounded-full transition-all duration-150" style={{ width: `${fileUploadProgress}%` }}></div>
+                  </div>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center h-28 border-2 border-dashed border-slate-200 hover:border-blue-400 bg-slate-50/50 hover:bg-slate-50 rounded-2xl cursor-pointer group transition-all duration-200">
+                  <div className="flex flex-col items-center justify-center p-4 text-center">
+                    <div className="h-9 w-9 bg-white rounded-xl shadow-sm flex items-center justify-center text-slate-400 group-hover:text-blue-600 group-hover:scale-110 transition-all mb-2">
+                      <Paperclip className="h-4 w-4" />
+                    </div>
+                    <p className="text-[11px] font-bold text-slate-500 group-hover:text-blue-600 transition-colors">Click to attach document</p>
+                    <p className="text-[9px] text-slate-400 mt-0.5">PDF, Excel, Word, Image, ZIP up to 500MB</p>
+                  </div>
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                </label>
+              )}
+              {fileError && <p className="text-[10px] font-bold text-rose-500">{fileError}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -1952,6 +2155,42 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
   const [showPoints, setShowPoints] = useState(task.points !== undefined && task.points !== null && task.points > 0);
   const [showGeofence, setShowGeofence] = useState(!!task.geofenceLat);
 
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [fileUploadProgress, setFileUploadProgress] = useState(0);
+  const [fileError, setFileError] = useState("");
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingFile(true);
+    setFileUploadProgress(0);
+    setFileError("");
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await axios.post("/api/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / (progressEvent.total || progressEvent.loaded)
+          );
+          setFileUploadProgress(percentCompleted);
+        }
+      });
+      setData(prev => ({
+        ...prev,
+        attachmentUrl: response.data.url,
+        attachmentName: file.name
+      }));
+    } catch (err: any) {
+      setFileError("Upload failed. Try again.");
+      console.error(err);
+    } finally {
+      setIsUploadingFile(false);
+    }
+  };
+
   const [data, setData] = useState({
     id: task.id,
     title: task.title || "",
@@ -1963,6 +2202,8 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
     priority: task.priority || "Medium",
     points: task.points || 10,
     status: task.status || "PENDING",
+    attachmentUrl: task.attachmentUrl || null as string | null,
+    attachmentName: task.attachmentName || null as string | null,
     repeatFrequency: task.repeatFrequency || "NONE",
     repeatDays: task.repeatDays ? task.repeatDays.split(',').map((x: string) => parseInt(x)).filter((x: number) => !isNaN(x)) : [] as number[],
     repeatDates: task.repeatDates ? task.repeatDates.split(',').map((x: string) => parseInt(x)).filter((x: number) => !isNaN(x)) : [] as number[],
@@ -2235,6 +2476,60 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
                     onChange={e => setData({...data, description: e.target.value})}
                   />
                )}
+            </div>
+
+            {/* Task Attachment Upload */}
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1.5">
+                <Paperclip className="h-3.5 w-3.5 text-blue-500" /> Task Attachment
+              </Label>
+              {data.attachmentUrl ? (
+                <div className="flex items-center gap-3 p-3 bg-blue-50/50 border border-blue-100 rounded-2xl animate-in fade-in duration-200">
+                  <div className="h-10 w-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center font-bold text-xs uppercase">
+                    {data.attachmentName?.split('.').pop()?.slice(0, 4) || 'FILE'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-slate-700 truncate">{data.attachmentName}</p>
+                    <p className="text-[10px] font-medium text-slate-400">Attached successfully</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setData(prev => ({ ...prev, attachmentUrl: null, attachmentName: null }))}
+                    className="p-1 text-slate-400 hover:text-rose-500 transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : isUploadingFile ? (
+                <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-600">
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
+                      Uploading Attachment...
+                    </span>
+                    <span>{fileUploadProgress}%</span>
+                  </div>
+                  <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-blue-600 h-1.5 rounded-full transition-all duration-150" style={{ width: `${fileUploadProgress}%` }}></div>
+                  </div>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center h-28 border-2 border-dashed border-slate-200 hover:border-blue-400 bg-slate-50/50 hover:bg-slate-50 rounded-2xl cursor-pointer group transition-all duration-200">
+                  <div className="flex flex-col items-center justify-center p-4 text-center">
+                    <div className="h-9 w-9 bg-white rounded-xl shadow-sm flex items-center justify-center text-slate-400 group-hover:text-blue-600 group-hover:scale-110 transition-all mb-2">
+                      <Paperclip className="h-4 w-4" />
+                    </div>
+                    <p className="text-[11px] font-bold text-slate-500 group-hover:text-blue-600 transition-colors">Click to attach document</p>
+                    <p className="text-[9px] text-slate-400 mt-0.5">PDF, Excel, Word, Image, ZIP up to 500MB</p>
+                  </div>
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                </label>
+              )}
+              {fileError && <p className="text-[10px] font-bold text-rose-500">{fileError}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -2811,6 +3106,28 @@ function ViewTaskDetailsDialog({ task }: any) {
                   <p className="text-sm font-bold text-slate-800 bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50">
                      {task.completionRemarks || "No remarks provided."}
                   </p>
+               </div>
+            )}
+
+            {task.attachmentUrl && (
+               <div className="space-y-2 pt-4 border-t border-slate-100">
+                  <Label className="text-[10px] font-black uppercase text-blue-600">Task Attachment</Label>
+                  <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200/50 rounded-2xl">
+                     <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="h-8 w-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
+                           {task.attachmentName?.split('.').pop()?.slice(0, 4) || 'FILE'}
+                        </div>
+                        <span className="text-xs font-bold text-slate-700 truncate max-w-[150px]">{task.attachmentName || "Attachment"}</span>
+                     </div>
+                     <Button 
+                       size="sm" 
+                       variant="ghost" 
+                       className="h-8 rounded-lg text-blue-600 hover:text-blue-700 font-bold text-xs gap-1"
+                       onClick={() => window.open(task.attachmentUrl)}
+                     >
+                        <Download className="h-3.5 w-3.5" /> Download
+                     </Button>
+                  </div>
                </div>
             )}
          </div>

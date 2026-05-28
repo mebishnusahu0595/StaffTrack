@@ -1,10 +1,13 @@
 import React, { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, View, RefreshControl, Alert, TouchableOpacity } from "react-native";
+import { ScrollView, StyleSheet, View, RefreshControl, Alert, TouchableOpacity, Linking } from "react-native";
 import { Text, Card, Button, ActivityIndicator, IconButton, Portal, Modal, TextInput, Chip, Avatar } from "react-native-paper";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
 import { fetchTasks, fetchUsers, createTask, deleteTask, updateTask, fetchTemplates, type Task } from "../../api";
 import { AppIcon } from "../../components/AppIcon";
+import { API_ORIGIN_URL } from "../../config/env";
 
 type TabValue = "ALL" | "PENDING" | "COMPLETED";
 
@@ -167,12 +170,58 @@ export function ManagerTasksScreen() {
     }
   }, [tasksQuery.data, activeTab]);
 
+  function openAttachment(task: Task) {
+    if (!task.attachmentUrl) return;
+    const fullUrl = task.attachmentUrl.startsWith("http") ? task.attachmentUrl : `${API_ORIGIN_URL}${task.attachmentUrl}`;
+    Linking.openURL(fullUrl).catch(() => Alert.alert("Error", "Could not open this file."));
+  }
+
+  async function exportDailyPDF() {
+    const dateLabel = dayjs().format("dddd, DD MMMM YYYY");
+    const tasks = tasksQuery.data || [];
+    const total = tasks.length;
+    const completed = tasks.filter(t => t.status === "COMPLETED").length;
+    const pending = tasks.filter(t => t.status === "PENDING").length;
+    const inProgress = tasks.filter(t => t.status === "IN_PROGRESS").length;
+    const statusColor: Record<string, string> = {
+      COMPLETED: "#10b981", PENDING: "#f59e0b", IN_PROGRESS: "#3b82f6",
+      MISSED: "#ef4444", REVIEW: "#8b5cf6", CANCELLED: "#94a3b8"
+    };
+    const taskRows = tasks.map((task, i) => `
+      <tr style="background:${i % 2 === 0 ? "#f8fafc" : "#ffffff"};">
+        <td style="padding:10px 14px;font-weight:700;color:#1e293b;font-size:12px;">${i + 1}. ${task.title}</td>
+        <td style="padding:10px 14px;color:#64748b;font-size:11px;">${task.assignedTo?.name || "—"}</td>
+        <td style="padding:10px 14px;text-align:center;">
+          <span style="background:${(statusColor[task.status] || "#94a3b8")}20;color:${statusColor[task.status] || "#94a3b8"};padding:2px 8px;border-radius:20px;font-size:10px;font-weight:800;text-transform:uppercase;">${task.status.replace("_", " ")}</span>
+        </td>
+        <td style="padding:10px 14px;color:#64748b;font-size:11px;font-weight:600;">${task.priority || "Medium"}</td>
+        <td style="padding:10px 14px;color:#64748b;font-size:11px;">${task.attachmentName ? "📎 " + task.attachmentName.slice(0, 18) : "—"}</td>
+      </tr>`).join("");
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Team Daily Schedule</title>
+<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:'Segoe UI',Arial,sans-serif;background:#f1f5f9;}.page{max-width:900px;margin:0 auto;background:white;}.header{background:linear-gradient(135deg,#1e293b 0%,#334155 100%);color:white;padding:36px 40px 28px;}.badge{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:4px 12px;display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:20px;}h1{font-size:24px;font-weight:900;margin-bottom:4px;}.header p{color:rgba(255,255,255,0.65);font-size:12px;}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:20px 40px;background:#f8fafc;border-bottom:1px solid #e2e8f0;}.stat{background:white;border-radius:10px;padding:12px;text-align:center;border:1px solid #e2e8f0;}.stat-num{font-size:22px;font-weight:900;color:#1e293b;}.stat-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#94a3b8;margin-top:2px;}.content{padding:28px 40px;}.section-title{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:12px;}table{width:100%;border-collapse:collapse;border:1px solid #e2e8f0;}th{background:#1e293b;color:white;padding:10px 14px;text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;}.footer{padding:16px 40px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;background:#f8fafc;}.footer p{color:#94a3b8;font-size:10px;font-weight:700;}</style></head><body>
+<div class="page"><div class="header"><div class="badge">StaffTrack – Manager View</div><h1>Team Daily Schedule</h1><p>${dateLabel}</p></div>
+<div class="stats"><div class="stat"><div class="stat-num">${total}</div><div class="stat-label">Total</div></div><div class="stat"><div class="stat-num" style="color:#10b981;">${completed}</div><div class="stat-label">Done</div></div><div class="stat"><div class="stat-num" style="color:#3b82f6;">${inProgress}</div><div class="stat-label">In Progress</div></div><div class="stat"><div class="stat-num" style="color:#f59e0b;">${pending}</div><div class="stat-label">Pending</div></div></div>
+<div class="content"><p class="section-title">All Tasks</p><table><thead><tr><th>Task</th><th>Assignee</th><th>Status</th><th>Priority</th><th>Attachment</th></tr></thead><tbody>${taskRows || '<tr><td colspan="5" style="text-align:center;padding:20px;color:#94a3b8;">No tasks</td></tr>'}</tbody></table></div>
+<div class="footer"><p>Generated by StaffTrack</p><p>Confidential</p></div></div></body></html>`;
+    try {
+      const { uri } = await Print.printToFileAsync({ html });
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: "Share Team Daily Schedule" });
+      } else {
+        Alert.alert("PDF Saved", "Team daily schedule PDF has been generated.");
+      }
+    } catch (err) {
+      Alert.alert("Error", "Could not generate PDF.");
+    }
+  }
+
   const team = usersQuery.data || [];
   const selectedAssignee = team.find(u => u.id === assignedToId);
 
   return (
     <View style={styles.container}>
-      {/* Top Tabs */}
+      {/* Top Tabs + PDF button */}
       <View style={styles.tabHeader}>
         {(["ALL", "PENDING", "COMPLETED"] as TabValue[]).map((tab) => (
           <TouchableOpacity
@@ -183,6 +232,9 @@ export function ManagerTasksScreen() {
             <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
           </TouchableOpacity>
         ))}
+        <TouchableOpacity style={styles.pdfTabBtn} onPress={exportDailyPDF}>
+          <Text style={styles.pdfTabBtnText}>📄 PDF</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Main List */}
@@ -274,6 +326,11 @@ export function ManagerTasksScreen() {
                       onPress={() => openEditForm(task)}
                     />
                   </View>
+                  {task.attachmentUrl && (
+                    <TouchableOpacity style={styles.attachmentRow} onPress={() => openAttachment(task)}>
+                      <Text style={styles.attachmentRowText}>📎 {task.attachmentName || "View Attachment"}</Text>
+                    </TouchableOpacity>
+                  )}
                 </Card.Content>
               </Card>
             );
@@ -462,7 +519,37 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderColor: "#E2E8F0"
+    borderColor: "#E2E8F0",
+    alignItems: "center"
+  },
+  pdfTabBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 8,
+    backgroundColor: "#ECFDF5",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#A7F3D0"
+  },
+  pdfTabBtnText: {
+    color: "#065F46",
+    fontWeight: "800",
+    fontSize: 10
+  },
+  attachmentRow: {
+    marginTop: 8,
+    backgroundColor: "#EFF6FF",
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    alignSelf: "flex-start"
+  },
+  attachmentRowText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#2563EB"
   },
   tabButton: {
     flex: 1,

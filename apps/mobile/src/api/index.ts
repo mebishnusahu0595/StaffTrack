@@ -66,6 +66,8 @@ export type Task = {
   completionRemarks?: string | null;
   completionLat?: number | null;
   completionLng?: number | null;
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
   createdAt?: string;
 };
 

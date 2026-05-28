@@ -73,6 +73,8 @@ export interface Task {
   reminder?: number | null;
   parentTaskId?: string | null;
   subtasks?: Task[];
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
 }
 
 export interface Break {

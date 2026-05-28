@@ -28,7 +28,9 @@ export const createTaskBodySchema = z
     geofenceLng: z.number().optional().nullable(),
     geofenceRadius: z.number().optional().nullable(),
     reminder: z.number().optional().nullable(),
-    subtasks: z.array(z.any()).optional()
+    subtasks: z.array(z.any()).optional(),
+    attachmentUrl: z.string().optional().nullable(),
+    attachmentName: z.string().optional().nullable()
   })
   .refine((value) => value.location || (value.lat === undefined && value.lng === undefined) || (value.lat !== undefined && value.lng !== undefined), {
     message: "Both lat and lng are required when setting task coordinates"
@@ -71,7 +73,9 @@ export const updateTaskBodySchema = z.object({
   geofenceLng: z.number().optional().nullable(),
   geofenceRadius: z.number().optional().nullable(),
   reminder: z.number().optional().nullable(),
-  subtasks: z.array(z.any()).optional()
+  subtasks: z.array(z.any()).optional(),
+  attachmentUrl: z.string().optional().nullable(),
+  attachmentName: z.string().optional().nullable()
 });
 
 

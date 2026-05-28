@@ -4,6 +4,7 @@ import { forbidden, notFound } from "../lib/errors";
 import { nextDay, startOfDay } from "../lib/date";
 import { prisma } from "../lib/prisma";
 import { ensureCanAccessUser } from "./access.service";
+import * as notificationService from "./notification.service";
 
 interface CreateExpenseInput {
   category: ExpenseCategory;
@@ -76,13 +77,27 @@ export async function approveExpense(actor: AuthUser, expenseId: string, approve
     forbidden("Employees cannot approve expenses");
   }
 
-  return prisma.expense.update({
+  const updatedExpense = await prisma.expense.update({
     where: { id: expenseId },
     data: {
       approved,
       approvedById: actor.id
     }
   });
+
+  // Create notification
+  try {
+    await notificationService.createNotification(
+      expense.userId,
+      `Expense ${approved ? "Approved" : "Rejected"}`,
+      `Your expense request of ₹${expense.amount} for ${expense.category.toLowerCase().replace(/_/g, " ")} has been ${approved ? "approved" : "rejected"} by ${actor.name}.`,
+      "EXPENSE"
+    );
+  } catch (err) {
+    console.error("Failed to send expense notification:", err);
+  }
+
+  return updatedExpense;
 }
 
 async function expenseAccessWhere(

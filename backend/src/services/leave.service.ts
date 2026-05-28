@@ -1,5 +1,6 @@
 import { PrismaClient, LeaveStatus } from "@prisma/client";
 const prisma = new PrismaClient();
+import * as notificationService from "./notification.service";
 
 export async function createLeaveRequest(userId: string, companyId: string, data: { startDate: Date; endDate: Date; reason: string }) {
   return prisma.leaveRequest.create({
@@ -44,6 +45,19 @@ export async function updateLeaveStatus(id: string, adminId: string, status: "AP
       approvedById: adminId
     }
   });
+
+  // Notify user
+  try {
+    const adminUser = await prisma.user.findUnique({ where: { id: adminId }, select: { name: true } });
+    await notificationService.createNotification(
+      leave.userId,
+      `Leave Request ${status === "APPROVED" ? "Approved" : "Rejected"}`,
+      `Your leave request from ${new Date(leave.startDate).toLocaleDateString()} to ${new Date(leave.endDate).toLocaleDateString()} has been ${status === "APPROVED" ? "approved" : "rejected"}${adminUser ? ` by ${adminUser.name}` : ""}.`,
+      "LEAVE"
+    );
+  } catch (err) {
+    console.error("Failed to send leave notification:", err);
+  }
 
   // If approved, mark attendance as ON_LEAVE for those dates
   if (status === "APPROVED") {
