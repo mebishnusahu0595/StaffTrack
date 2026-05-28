@@ -197,6 +197,7 @@ export async function createTask(input: {
   geofenceRadius?: number | null;
   reminder?: number | null;
   subtasks?: any[];
+  projectId?: string | null;
 }) {
   const response = await api.post<{ data: Task }>("/tasks", input);
   return response.data.data;

@@ -399,19 +399,7 @@ function groupTaskPointsByUserDate(tasks: Array<{ id: string; assignedToId: stri
     const key = getUserDateKey(task.assignedToId, format(new Date(task.updatedAt), "yyyy-MM-dd"));
     
     const points = Number(task.points ?? 0);
-    let finalPoints = points;
-    if (points > 0) {
-      const due = new Date(task.dueDate).getTime();
-      const completed = new Date(task.updatedAt).getTime();
-      if (completed > due) {
-        // Deterministic reduction between 10% and 30% based on task ID seed
-        const seed = task.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        const reductionPercent = 0.1 + (seed % 20) / 100; // 10% to 30%
-        finalPoints = Math.max(1, Math.round(points * (1 - reductionPercent)));
-      }
-    }
-
-    map.set(key, (map.get(key) ?? 0) + finalPoints);
+    map.set(key, (map.get(key) ?? 0) + points);
   }
 
   return map;

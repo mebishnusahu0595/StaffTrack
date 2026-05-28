@@ -38,7 +38,7 @@ import {
   ListTodo
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchTasks, deleteTask, updateTask, createTask as apiCreateTask, fetchUsers, createTemplate } from "@/lib/api";
+import { fetchTasks, deleteTask, updateTask, createTask as apiCreateTask, fetchUsers, createTemplate, fetchProjects, createProject as apiCreateProject } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -590,13 +590,13 @@ export default function TasksPage() {
                          )}>
                             {task.isRepeating ? <RefreshCw className="h-3 w-3" /> : <CalendarIcon className="h-3 w-3" />}
                             <span className="text-[9px] font-black uppercase tracking-tighter">
-                               {task.isRepeating 
-                                 ? (task.repeatFrequency === 'DAILY' ? 'Every Day' : 
-                                    task.repeatFrequency === 'WEEKLY' ? 'Every Week' : 
-                                    task.repeatFrequency === 'MONTHLY' ? 'Every Month' : 
-                                    task.repeatFrequency)
-                                 : "Particular Date"}
-                            </span>
+                                 {task.isRepeating 
+                                   ? (task.repeatFrequency === 'DAILY' ? 'Every Day' : 
+                                      task.repeatFrequency === 'WEEKLY' ? 'Every Week' : 
+                                      task.repeatFrequency === 'MONTHLY' ? 'Every Month' : 
+                                      task.repeatFrequency)
+                                   : format(new Date(task.createdAt), "dd MMM, yyyy")}
+                                 </span>
                          </div>
                          <div>
                             <p className="text-sm font-bold text-slate-700 leading-tight flex items-center gap-2">
@@ -1106,6 +1106,7 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
     geofenceLng: "",
     geofenceRadius: "",
     reminder: "",
+    projectId: "",
     subtasks: [] as Array<{
       id: string;
       title: string;
@@ -1290,6 +1291,30 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
     }
   };
 
+  const [showInlineProject, setShowInlineProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [creatingProject, setCreatingProject] = useState(false);
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ["projects-for-tasks"],
+    queryFn: () => fetchProjects()
+  });
+
+  const handleCreateInlineProject = async () => {
+    if (!newProjectName.trim()) return;
+    setCreatingProject(true);
+    try {
+      const created = await apiCreateProject({ name: newProjectName.trim(), status: "Ongoing" });
+      setData(d => ({ ...d, projectId: created.id }));
+      setNewProjectName("");
+      setShowInlineProject(false);
+    } catch {
+      // silently ignore
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
   return (
     <DialogContent className="max-w-2xl p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] hide-close max-h-[85vh] flex flex-col">
       <DialogHeader className="p-6 bg-blue-50/50 border-b border-blue-100 relative shrink-0">
@@ -1314,6 +1339,79 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
                      ))}
                   </SelectContent>
                </Select>
+            </div>
+
+            {/* Project Selection */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1.5">
+                  <Folder className="h-3 w-3 text-blue-500" /> Add Project (optional)
+                </Label>
+                <button
+                  type="button"
+                  onClick={() => { setShowInlineProject(!showInlineProject); setNewProjectName(""); }}
+                  className="text-[10px] font-black text-blue-600 hover:text-blue-700 uppercase tracking-wider flex items-center gap-1"
+                >
+                  {showInlineProject ? "✕ Cancel" : "+ New Project"}
+                </button>
+              </div>
+
+              {showInlineProject ? (
+                <div className="flex gap-2 items-center p-3 bg-blue-50/60 rounded-2xl border border-blue-100 animate-in fade-in slide-in-from-top-1 duration-150">
+                  <span className="text-blue-500"><Folder className="h-4 w-4" /></span>
+                  <input
+                    type="text"
+                    placeholder="New project name..."
+                    value={newProjectName}
+                    onChange={e => setNewProjectName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleCreateInlineProject(); if (e.key === 'Escape') setShowInlineProject(false); }}
+                    className="flex-1 bg-transparent text-sm font-bold text-slate-800 placeholder:text-slate-400 outline-none"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCreateInlineProject}
+                    disabled={creatingProject || !newProjectName.trim()}
+                    className="h-8 px-3 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider hover:bg-blue-700 disabled:opacity-50 transition-all"
+                  >
+                    {creatingProject ? "Creating..." : "Create"}
+                  </button>
+                </div>
+              ) : (
+                <Select value={data.projectId} onValueChange={v => setData({...data, projectId: v === "__none__" ? "" : v})}>
+                  <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold">
+                    <SelectValue placeholder="Select a project..." />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl">
+                    <SelectItem value="__none__" className="rounded-xl font-bold text-slate-500 italic">No Project</SelectItem>
+                    {(projects as any[]).map((p: any) => (
+                      <SelectItem key={p.id} value={p.id} className="rounded-xl font-bold">
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            "h-2 w-2 rounded-full flex-shrink-0",
+                            p.status === "Ongoing" ? "bg-amber-400" : p.status === "Completed" ? "bg-emerald-400" : "bg-blue-400"
+                          )} />
+                          {p.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {data.projectId && !showInlineProject && (() => {
+                const proj = (projects as any[]).find((p: any) => p.id === data.projectId);
+                return proj ? (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-50 border border-blue-100">
+                    <Folder className="h-3.5 w-3.5 text-blue-500" />
+                    <span className="text-xs font-bold text-blue-700">{proj.name}</span>
+                    <span className={cn(
+                      "ml-auto text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg",
+                      proj.status === "Ongoing" ? "bg-amber-100 text-amber-700" : proj.status === "Completed" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"
+                    )}>{proj.status}</span>
+                  </div>
+                ) : null;
+              })()}
             </div>
 
             <div className="space-y-2">
@@ -1823,6 +1921,7 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
              geofenceLng: data.geofenceLng ? parseFloat(data.geofenceLng) : null,
              geofenceRadius: data.geofenceRadius ? parseFloat(data.geofenceRadius) : null,
              reminder: data.reminder ? parseInt(data.reminder) : null,
+             projectId: data.projectId || null,
              subtasks: data.subtasks.map(s => ({
                ...s,
                startDate: s.startDate ? new Date(s.startDate) : null,
@@ -2054,6 +2153,30 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
       alert("Template saved successfully!");
     } catch (err: any) {
       alert("Failed to save template: " + (err.message || "Unknown error"));
+    }
+  };
+
+  const [showInlineProject, setShowInlineProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [creatingProject, setCreatingProject] = useState(false);
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ["projects-for-tasks"],
+    queryFn: () => fetchProjects()
+  });
+
+  const handleCreateInlineProject = async () => {
+    if (!newProjectName.trim()) return;
+    setCreatingProject(true);
+    try {
+      const created = await apiCreateProject({ name: newProjectName.trim(), status: "Ongoing" });
+      setData(d => ({ ...d, projectId: created.id }));
+      setNewProjectName("");
+      setShowInlineProject(false);
+    } catch {
+      // silently ignore
+    } finally {
+      setCreatingProject(false);
     }
   };
 

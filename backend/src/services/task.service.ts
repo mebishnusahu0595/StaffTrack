@@ -34,6 +34,7 @@ interface CreateTaskInput {
   geofenceRadius?: number | null;
   reminder?: number | null;
   subtasks?: any[];
+  projectId?: string | null;
 }
 
 export async function createTask(actor: AuthUser, input: CreateTaskInput) {
@@ -67,7 +68,8 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
       geofenceLat: input.geofenceLat,
       geofenceLng: input.geofenceLng,
       geofenceRadius: input.geofenceRadius,
-      reminder: input.reminder
+      reminder: input.reminder,
+      projectId: input.projectId || null
     },
     include: taskInclude
   });
@@ -150,7 +152,8 @@ export async function listTasks(actor: AuthUser) {
         }
       },
       data: {
-        dueDate: todayStart
+        dueDate: todayStart,
+        points: 0
       }
     });
   }
@@ -288,7 +291,8 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
       geofenceLat: input.geofenceLat,
       geofenceLng: input.geofenceLng,
       geofenceRadius: input.geofenceRadius,
-      reminder: input.reminder
+      reminder: input.reminder,
+      projectId: input.projectId !== undefined ? input.projectId : undefined
     },
     include: taskInclude
   });
@@ -664,6 +668,13 @@ const taskInclude = {
       role: true,
       companyId: true,
       managerId: true
+    }
+  },
+  project: {
+    select: {
+      id: true,
+      name: true,
+      status: true
     }
   },
   subtasks: {
