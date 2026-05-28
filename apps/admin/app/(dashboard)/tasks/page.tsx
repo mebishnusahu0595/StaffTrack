@@ -168,7 +168,7 @@ export default function TasksPage() {
     }
   };
 
-  // Generate Daily PDF for a specific user
+  // Generate Daily PDF for a specific user or grouped by user
   const generateDailyPDF = (employeeName: string, employeeTasks: any[], date: string) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
@@ -178,25 +178,106 @@ export default function TasksPage() {
       PENDING: "#f59e0b",
       IN_PROGRESS: "#3b82f6",
       MISSED: "#ef4444",
-      REVIEW: "#8b5cf6"
+      REVIEW: "#8b5cf6",
+      CANCELLED: "#94a3b8"
     };
 
-    const taskRows = employeeTasks.map((task, i) => `
-      <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#ffffff'}; page-break-inside: avoid;">
-        <td style="padding: 12px 16px; font-weight: 700; color: #1e293b; font-size: 13px;">${i + 1}. ${task.title}</td>
-        <td style="padding: 12px 16px; text-align:center;">
-          <span style="background:${statusColor[task.status] || '#94a3b8'}20; color:${statusColor[task.status] || '#94a3b8'}; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">${task.status}</span>
-        </td>
-        <td style="padding: 12px 16px; color: #64748b; font-size: 12px; font-weight: 600;">${task.priority || "Medium"}</td>
-        <td style="padding: 12px 16px; color: #64748b; font-size: 12px;">${task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "—"}</td>
-        <td style="padding: 12px 16px; color: #64748b; font-size: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${task.description ? task.description.slice(0, 80) + (task.description.length > 80 ? "..." : "") : "—"}</td>
-        ${task.attachmentName ? `<td style="padding:12px 16px;"><a href="${task.attachmentUrl}" style="color:#3b82f6; font-size:11px; font-weight:700; text-decoration:none;">📎 ${task.attachmentName.slice(0, 20)}</a></td>` : '<td style="padding:12px 16px; color:#94a3b8; font-size:11px;">—</td>'}
-      </tr>
-    `).join("");
+    const isGrouped = employeeName === "All Staff";
+    let bodyContent = "";
 
-    const completed = employeeTasks.filter(t => t.status === "COMPLETED").length;
-    const pending = employeeTasks.filter(t => t.status === "PENDING").length;
-    const inProgress = employeeTasks.filter(t => t.status === "IN_PROGRESS").length;
+    if (isGrouped) {
+      // Group tasks by assignee name
+      const tasksByUser: Record<string, { name: string; tasks: any[] }> = {};
+      employeeTasks.forEach(task => {
+        const userId = task.assignedTo?.id || "unassigned";
+        const userName = task.assignedTo?.name || "Unassigned / Group Tasks";
+        if (!tasksByUser[userId]) {
+          tasksByUser[userId] = { name: userName, tasks: [] };
+        }
+        tasksByUser[userId].tasks.push(task);
+      });
+
+      bodyContent = Object.values(tasksByUser).map(({ name, tasks }) => {
+        const completed = tasks.filter(t => t.status === "COMPLETED").length;
+        const pending = tasks.filter(t => t.status === "PENDING").length;
+        const inProgress = tasks.filter(t => t.status === "IN_PROGRESS").length;
+        const userRows = tasks.map((task, i) => `
+          <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#ffffff'}; page-break-inside: avoid;">
+            <td style="padding: 10px 14px; font-weight: 700; color: #1e293b; font-size: 12px;">${i + 1}. ${task.title}</td>
+            <td style="padding: 10px 14px; text-align:center;">
+              <span style="background:${statusColor[task.status] || '#94a3b8'}20; color:${statusColor[task.status] || '#94a3b8'}; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase;">${task.status}</span>
+            </td>
+            <td style="padding: 10px 14px; color: #64748b; font-size: 11px; font-weight: 600; text-align:center;">${task.priority || "Medium"}</td>
+            <td style="padding: 10px 14px; color: #64748b; font-size: 11px;">${task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "—"}</td>
+            <td style="padding: 10px 14px; color: #64748b; font-size: 11px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${task.description || "—"}</td>
+            ${task.attachmentName ? `<td style="padding:10px 14px;"><a href="${task.attachmentUrl}" style="color:#3b82f6; font-size:10px; font-weight:700; text-decoration:none;">📎 ${task.attachmentName.slice(0, 15)}</a></td>` : '<td style="padding:10px 14px; color:#94a3b8; font-size:10px;">—</td>'}
+          </tr>
+        `).join("");
+
+        return `
+          <div style="margin-bottom: 30px; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; page-break-inside: avoid; background: white;">
+            <div style="background: #f8fafc; padding: 14px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+              <h2 style="font-size: 15px; font-weight: 800; color: #0f172a;">👤 ${name}</h2>
+              <div style="display: flex; gap: 8px;">
+                <span style="background: #ef8f0b15; color: #d97706; padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 700;">Total: ${tasks.length}</span>
+                <span style="background: #10b98115; color: #059669; padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 700;">Done: ${completed}</span>
+                <span style="background: #3b82f615; color: #2563eb; padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 700;">In Progress: ${inProgress}</span>
+                <span style="background: #ef444415; color: #dc2626; padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 700;">Pending: ${pending}</span>
+              </div>
+            </div>
+            <div style="padding: 12px;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr style="text-align: left; background: #1e293b; color: white;">
+                    <th style="padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Task</th>
+                    <th style="padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase; text-align: center;">Status</th>
+                    <th style="padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase; text-align: center;">Priority</th>
+                    <th style="padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Due</th>
+                    <th style="padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Description</th>
+                    <th style="padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Attachment</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${userRows}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }).join("");
+    } else {
+      const completed = employeeTasks.filter(t => t.status === "COMPLETED").length;
+      const pending = employeeTasks.filter(t => t.status === "PENDING").length;
+      const inProgress = employeeTasks.filter(t => t.status === "IN_PROGRESS").length;
+      const taskRows = employeeTasks.map((task, i) => `
+        <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#ffffff'}; page-break-inside: avoid;">
+          <td style="padding: 12px 16px; font-weight: 700; color: #1e293b; font-size: 13px;">${i + 1}. ${task.title}</td>
+          <td style="padding: 12px 16px; text-align:center;">
+            <span style="background:${statusColor[task.status] || '#94a3b8'}20; color:${statusColor[task.status] || '#94a3b8'}; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">${task.status}</span>
+          </td>
+          <td style="padding: 12px 16px; color: #64748b; font-size: 12px; font-weight: 600; text-align:center;">${task.priority || "Medium"}</td>
+          <td style="padding: 12px 16px; color: #64748b; font-size: 12px;">${task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "—"}</td>
+          <td style="padding: 12px 16px; color: #64748b; font-size: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${task.description || "—"}</td>
+          ${task.attachmentName ? `<td style="padding:12px 16px;"><a href="${task.attachmentUrl}" style="color:#3b82f6; font-size:11px; font-weight:700; text-decoration:none;">📎 ${task.attachmentName.slice(0, 20)}</a></td>` : '<td style="padding:12px 16px; color:#94a3b8; font-size:11px;">—</td>'}
+        </tr>
+      `).join("");
+
+      bodyContent = `
+        <div class="stats" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 24px 48px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; margin-bottom: 30px;">
+          <div class="stat-card" style="background: white; border-radius: 12px; padding: 16px; text-align: center; border: 1px solid #e2e8f0;"><div class="stat-num" style="font-size: 26px; font-weight: 900; color: #1e293b;">${employeeTasks.length}</div><div class="stat-label" style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; margin-top: 2px;">Total Tasks</div></div>
+          <div class="stat-card" style="background: white; border-radius: 12px; padding: 16px; text-align: center; border: 1px solid #e2e8f0;"><div class="stat-num" style="font-size: 26px; font-weight: 900; color: #10b981;">${completed}</div><div class="stat-label" style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; margin-top: 2px;">Completed</div></div>
+          <div class="stat-card" style="background: white; border-radius: 12px; padding: 16px; text-align: center; border: 1px solid #e2e8f0;"><div class="stat-num" style="font-size: 26px; font-weight: 900; color: #3b82f6;">${inProgress}</div><div class="stat-label" style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; margin-top: 2px;">In Progress</div></div>
+          <div class="stat-card" style="background: white; border-radius: 12px; padding: 16px; text-align: center; border: 1px solid #e2e8f0;"><div class="stat-num" style="font-size: 26px; font-weight: 900; color: #f59e0b;">${pending}</div><div class="stat-label" style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; margin-top: 2px;">Pending</div></div>
+        </div>
+        <div class="content" style="padding: 0 48px 48px;">
+          <p class="section-title" style="font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 16px;">Task Breakdown</p>
+          <table style="width: 100%; border-collapse: collapse; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0;">
+            <thead><tr style="background: #1e293b; color: white;"><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Task</th><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Status</th><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Priority</th><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Due</th><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Description</th><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Attachment</th></tr></thead>
+            <tbody>${taskRows}</tbody>
+          </table>
+        </div>
+      `;
+    }
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -215,14 +296,6 @@ export default function TasksPage() {
     .company-badge { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 6px 14px; display:inline-block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-bottom: 24px; }
     .header h1 { font-size: 28px; font-weight: 900; margin-bottom: 6px; }
     .header p { color: rgba(255,255,255,0.65); font-size: 13px; font-weight: 600; }
-    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 24px 48px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
-    .stat-card { background: white; border-radius: 12px; padding: 16px; text-align: center; border: 1px solid #e2e8f0; }
-    .stat-num { font-size: 26px; font-weight: 900; color: #1e293b; }
-    .stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; margin-top: 2px; }
-    .content { padding: 32px 48px; }
-    .section-title { font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 16px; }
-    table { width: 100%; border-collapse: collapse; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
-    th { background: #1e293b; color: white; padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
     .footer { padding: 20px 48px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; }
     .footer p { color: #94a3b8; font-size: 11px; font-weight: 700; }
     .print-btn { no-print: block; background: #3b82f6; color: white; border: none; padding: 12px 28px; border-radius: 10px; font-weight: 800; font-size: 13px; cursor: pointer; margin: 24px auto; display: block; }
@@ -235,19 +308,7 @@ export default function TasksPage() {
       <h1>Daily Task Schedule</h1>
       <p>${employeeName} &nbsp;•&nbsp; ${new Date(date || Date.now()).toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
     </div>
-    <div class="stats">
-      <div class="stat-card"><div class="stat-num">${employeeTasks.length}</div><div class="stat-label">Total Tasks</div></div>
-      <div class="stat-card"><div class="stat-num" style="color:#10b981;">${completed}</div><div class="stat-label">Completed</div></div>
-      <div class="stat-card"><div class="stat-num" style="color:#3b82f6;">${inProgress}</div><div class="stat-label">In Progress</div></div>
-      <div class="stat-card"><div class="stat-num" style="color:#f59e0b;">${pending}</div><div class="stat-label">Pending</div></div>
-    </div>
-    <div class="content">
-      <p class="section-title">Task Breakdown</p>
-      <table>
-        <thead><tr><th>Task</th><th>Status</th><th>Priority</th><th>Due</th><th>Description</th><th>Attachment</th></tr></thead>
-        <tbody>${taskRows}</tbody>
-      </table>
-    </div>
+    ${bodyContent}
     <div class="footer">
       <p>Generated by StaffTrack &nbsp;|&nbsp; ${new Date().toLocaleString("en-IN")}</p>
       <p>Confidential</p>
@@ -678,128 +739,277 @@ export default function TasksPage() {
                       <td colSpan={9} className="p-8"><div className="h-10 bg-slate-100 rounded-xl" /></td>
                     </tr>
                   ))
-                ) : paginatedTasks.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="py-20 text-center text-slate-400 font-bold uppercase tracking-widest bg-slate-50/10">
-                      No tasks found matching current filters
-                    </td>
-                  </tr>
-                ) : paginatedTasks.map((task) => (
-                  <tr 
-                    key={task.id} 
-                    className={cn(
-                      "group hover:bg-[#f1f3f5]/30 transition-colors",
-                      viewDensity === "COMPACT" ? "h-11" : "h-16"
-                    )}
-                  >
-                    <td className="py-2 px-6"><input type="checkbox" className="rounded border-slate-300" /></td>
-                    <td className="py-2 px-4">
-                      <div className="flex items-center gap-3">
-                         <div className={cn(
-                            "flex items-center gap-1.5 px-2 py-0.5 rounded-md border transition-colors",
-                            task.isRepeating ? "bg-blue-50 border-blue-100 text-blue-600" : "bg-slate-100 border-slate-200 text-slate-400"
-                         )}>
-                            {task.isRepeating ? <RefreshCw className="h-3 w-3" /> : <CalendarIcon className="h-3 w-3" />}
-                            <span className="text-[9px] font-black uppercase tracking-tighter">
-                                 {task.isRepeating 
-                                   ? (task.repeatFrequency === 'DAILY' ? 'Every Day' : 
-                                      task.repeatFrequency === 'WEEKLY' ? 'Every Week' : 
-                                      task.repeatFrequency === 'MONTHLY' ? 'Every Month' : 
-                                      task.repeatFrequency)
-                                   : format(new Date(task.createdAt), "dd MMM, yyyy")}
-                                 </span>
-                         </div>
-                         <div>
-                            <p className="text-sm font-bold text-slate-700 leading-tight flex items-center gap-2">
-                               {task.title}
-                            </p>
-                         </div>
-                      </div>
-                    </td>
-                    <td className="py-2 px-4">
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-7 w-7 rounded-full border border-slate-100">
-                          <AvatarImage src={task.assignedTo?.avatarUrl} />
-                          <AvatarFallback className="bg-blue-600 text-white text-[9px] font-black">
-                            {task.assignedTo?.name?.slice(0, 1).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-xs font-bold text-slate-600">{task.assignedTo?.name}</span>
-                      </div>
-                    </td>
-                    <td className="py-2 px-4">
-                      <span className="text-xs font-bold text-slate-500">{task.assignedTo?.workMode || "Unassigned"}</span>
-                    </td>
-                    <td className="py-2 px-4">
-                      <div className="flex justify-center">
-                         <StatusBadge status={task.status} dueDate={task.dueDate} />
-                      </div>
-                    </td>
-                    <td className="py-2 px-4 text-center">
-                      <div className="inline-flex items-center justify-center h-7 w-12 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 text-[10px] font-black">
-                         {task.points || 0}
-                      </div>
-                    </td>
-                    <td className="py-2 px-4 text-center">
-                      <Badge variant="outline" className={cn(
-                         "text-[10px] font-black uppercase tracking-widest px-2 py-0.5",
-                         task.priority === "High" ? "border-rose-200 text-rose-600 bg-rose-50" :
-                         task.priority === "Medium" ? "border-amber-200 text-amber-600 bg-amber-50" :
-                         "border-emerald-200 text-emerald-600 bg-emerald-50"
-                      )}>
-                         {task.priority || "Medium"}
-                      </Badge>
-                    </td>
-                    <td className="py-2 px-4">
-                      <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.createdAt), 'dd-MM-yyyy, hh:mm a')}</span>
-                    </td>
-                    <td className="py-2 px-6 text-right">
-                      <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <Button 
-                           variant="ghost" 
-                           size="icon" 
-                           className="h-8 w-8 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50"
-                           onClick={() => {
-                             setViewingTask(task);
-                             setIsDetailsOpen(true);
-                           }}
-                         >
-                            <Eye className="h-4 w-4" />
-                         </Button>
-                         <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                               <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400">
-                                  <MoreHorizontal className="h-4 w-4" />
-                               </Button>
-                            </DropdownMenuTrigger>
-                             <DropdownMenuContent align="end" className="w-40 rounded-xl bg-white z-50 border shadow-md">
-                                <DropdownMenuItem 
-                                  className="text-xs font-bold gap-2 cursor-pointer"
-                                  onClick={() => {
-                                    setEditingTask(task);
-                                    setIsEditOpen(true);
-                                  }}
-                                >
-                                  Edit Task
-                                </DropdownMenuItem>
-                                <DropdownMenuItem 
-                                  className="text-xs font-bold gap-2 text-rose-500 cursor-pointer"
-                                  onClick={() => {
-                                    if (confirm("Are you sure you want to cancel this task?")) {
-                                      updateTask(task.id, { status: "CANCELLED" }).then(() => {
-                                        queryClient.invalidateQueries({ queryKey: ["tasks"] });
-                                      });
-                                    }
-                                  }}
-                                >
-                                  Cancel Task
-                                </DropdownMenuItem>
-                             </DropdownMenuContent>
-                          </DropdownMenu>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                                ) : (() => {
+                  if (selectedAssignee === "ALL") {
+                    const tasksByUser: Record<string, { user: any; tasks: any[] }> = {};
+                    paginatedTasks.forEach(task => {
+                      const userId = task.assignedTo?.id || "unassigned";
+                      if (!tasksByUser[userId]) {
+                        tasksByUser[userId] = {
+                          user: task.assignedTo || { name: "Unassigned / Group Tasks" },
+                          tasks: []
+                        };
+                      }
+                      tasksByUser[userId].tasks.push(task);
+                    });
+
+                    return Object.entries(tasksByUser).map(([userId, group]) => {
+                      const completed = group.tasks.filter(t => t.status === "COMPLETED").length;
+                      const pending = group.tasks.filter(t => t.status === "PENDING" || t.status === "IN_PROGRESS" || t.status === "MISSED").length;
+                      return (
+                        <React.Fragment key={userId}>
+                          <tr className="bg-slate-50/70 hover:bg-slate-100/50 transition-colors">
+                            <td colSpan={9} className="py-2.5 px-6">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-black text-slate-800">👤 {group.user.name}</span>
+                                  <span className="text-[10px] bg-slate-200/60 text-slate-600 px-2 py-0.5 rounded-full font-bold">Total: {group.tasks.length}</span>
+                                </div>
+                                <div className="flex gap-2">
+                                  <span className="text-[9px] bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full font-black uppercase">Done: {completed}</span>
+                                  <span className="text-[9px] bg-amber-50 text-amber-700 px-2.5 py-0.5 rounded-full font-black uppercase">Pending: {pending}</span>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                          {group.tasks.map((task) => (
+                            <tr 
+                              key={task.id} 
+                              className={cn(
+                                "group hover:bg-[#f1f3f5]/30 transition-colors",
+                                viewDensity === "COMPACT" ? "h-11" : "h-16"
+                              )}
+                            >
+                              <td className="py-2 px-6"><input type="checkbox" className="rounded border-slate-300" /></td>
+                              <td className="py-2 px-4">
+                                <div className="flex items-center gap-3">
+                                   <div className={cn(
+                                      "flex items-center gap-1.5 px-2 py-0.5 rounded-md border transition-colors",
+                                      task.isRepeating ? "bg-blue-50 border-blue-100 text-blue-600" : "bg-slate-100 border-slate-200 text-slate-400"
+                                   )}>
+                                      {task.isRepeating ? <RefreshCw className="h-3 w-3" /> : <CalendarIcon className="h-3 w-3" />}
+                                      <span className="text-[9px] font-black uppercase tracking-tighter">
+                                           {task.isRepeating 
+                                             ? (task.repeatFrequency === 'DAILY' ? 'Every Day' : 
+                                                task.repeatFrequency === 'WEEKLY' ? 'Every Week' : 
+                                                task.repeatFrequency === 'MONTHLY' ? 'Every Month' : 
+                                                task.repeatFrequency)
+                                             : format(new Date(task.createdAt), "dd MMM, yyyy")}
+                                           </span>
+                                   </div>
+                                   <div>
+                                      <p className="text-sm font-bold text-slate-700 leading-tight flex items-center gap-2">
+                                         {task.title}
+                                      </p>
+                                   </div>
+                                </div>
+                              </td>
+                              <td className="py-2 px-4">
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="h-7 w-7 rounded-full border border-slate-100">
+                                    <AvatarImage src={task.assignedTo?.avatarUrl} />
+                                    <AvatarFallback className="bg-blue-600 text-white text-[9px] font-black">
+                                      {task.assignedTo?.name?.slice(0, 1).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="text-xs font-bold text-slate-600">{task.assignedTo?.name}</span>
+                                </div>
+                              </td>
+                              <td className="py-2 px-4">
+                                <span className="text-xs font-bold text-slate-500">{task.assignedTo?.workMode || "Unassigned"}</span>
+                              </td>
+                              <td className="py-2 px-4">
+                                <div className="flex justify-center">
+                                   <StatusBadge status={task.status} dueDate={task.dueDate} />
+                                </div>
+                              </td>
+                              <td className="py-2 px-4 text-center">
+                                <div className="inline-flex items-center justify-center h-7 w-12 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 text-[10px] font-black">
+                                   {task.points || 0}
+                                </div>
+                              </td>
+                              <td className="py-2 px-4 text-center">
+                                <Badge variant="outline" className={cn(
+                                   "text-[10px] font-black uppercase tracking-widest px-2 py-0.5",
+                                   task.priority === "High" ? "border-rose-200 text-rose-600 bg-rose-50" :
+                                   task.priority === "Medium" ? "border-amber-200 text-amber-600 bg-amber-50" :
+                                   "border-emerald-200 text-emerald-600 bg-emerald-50"
+                                )}>
+                                   {task.priority || "Medium"}
+                                </Badge>
+                              </td>
+                              <td className="py-2 px-4">
+                                <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.createdAt), 'dd-MM-yyyy, hh:mm a')}</span>
+                              </td>
+                              <td className="py-2 px-6 text-right">
+                                <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                   <Button 
+                                     variant="ghost" 
+                                     size="icon" 
+                                     className="h-8 w-8 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                                     onClick={() => {
+                                       setViewingTask(task);
+                                       setIsDetailsOpen(true);
+                                     }}
+                                   >
+                                      <Eye className="h-4 w-4" />
+                                   </Button>
+                                   <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                         <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400">
+                                            <MoreHorizontal className="h-4 w-4" />
+                                         </Button>
+                                      </DropdownMenuTrigger>
+                                       <DropdownMenuContent align="end" className="w-40 rounded-xl bg-white z-50 border shadow-md">
+                                          <DropdownMenuItem 
+                                            className="text-xs font-bold gap-2 cursor-pointer"
+                                            onClick={() => {
+                                              setEditingTask(task);
+                                              setIsEditOpen(true);
+                                            }}
+                                          >
+                                            Edit Task
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem 
+                                            className="text-xs font-bold gap-2 text-rose-500 cursor-pointer"
+                                            onClick={() => {
+                                              if (confirm("Are you sure you want to cancel this task?")) {
+                                                updateTask(task.id, { status: "CANCELLED" }).then(() => {
+                                                  queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                                                });
+                                              }
+                                            }}
+                                          >
+                                            Cancel Task
+                                          </DropdownMenuItem>
+                                       </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      );
+                    });
+                  }
+
+                  return paginatedTasks.map((task) => (
+                    <tr 
+                      key={task.id} 
+                      className={cn(
+                        "group hover:bg-[#f1f3f5]/30 transition-colors",
+                        viewDensity === "COMPACT" ? "h-11" : "h-16"
+                      )}
+                    >
+                      <td className="py-2 px-6"><input type="checkbox" className="rounded border-slate-300" /></td>
+                      <td className="py-2 px-4">
+                        <div className="flex items-center gap-3">
+                           <div className={cn(
+                              "flex items-center gap-1.5 px-2 py-0.5 rounded-md border transition-colors",
+                              task.isRepeating ? "bg-blue-50 border-blue-100 text-blue-600" : "bg-slate-100 border-slate-200 text-slate-400"
+                           )}>
+                              {task.isRepeating ? <RefreshCw className="h-3 w-3" /> : <CalendarIcon className="h-3 w-3" />}
+                              <span className="text-[9px] font-black uppercase tracking-tighter">
+                                   {task.isRepeating 
+                                     ? (task.repeatFrequency === 'DAILY' ? 'Every Day' : 
+                                        task.repeatFrequency === 'WEEKLY' ? 'Every Week' : 
+                                        task.repeatFrequency === 'MONTHLY' ? 'Every Month' : 
+                                        task.repeatFrequency)
+                                     : format(new Date(task.createdAt), "dd MMM, yyyy")}
+                                   </span>
+                           </div>
+                           <div>
+                              <p className="text-sm font-bold text-slate-700 leading-tight flex items-center gap-2">
+                                 {task.title}
+                              </p>
+                           </div>
+                        </div>
+                      </td>
+                      <td className="py-2 px-4">
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-7 w-7 rounded-full border border-slate-100">
+                            <AvatarImage src={task.assignedTo?.avatarUrl} />
+                            <AvatarFallback className="bg-blue-600 text-white text-[9px] font-black">
+                              {task.assignedTo?.name?.slice(0, 1).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-xs font-bold text-slate-600">{task.assignedTo?.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-2 px-4">
+                        <span className="text-xs font-bold text-slate-500">{task.assignedTo?.workMode || "Unassigned"}</span>
+                      </td>
+                      <td className="py-2 px-4">
+                        <div className="flex justify-center">
+                           <StatusBadge status={task.status} dueDate={task.dueDate} />
+                        </div>
+                      </td>
+                      <td className="py-2 px-4 text-center">
+                        <div className="inline-flex items-center justify-center h-7 w-12 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 text-[10px] font-black">
+                           {task.points || 0}
+                        </div>
+                      </td>
+                      <td className="py-2 px-4 text-center">
+                        <Badge variant="outline" className={cn(
+                           "text-[10px] font-black uppercase tracking-widest px-2 py-0.5",
+                           task.priority === "High" ? "border-rose-200 text-rose-600 bg-rose-50" :
+                           task.priority === "Medium" ? "border-amber-200 text-amber-600 bg-amber-50" :
+                           "border-emerald-200 text-emerald-600 bg-emerald-50"
+                        )}>
+                           {task.priority || "Medium"}
+                        </Badge>
+                      </td>
+                      <td className="py-2 px-4">
+                        <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.createdAt), 'dd-MM-yyyy, hh:mm a')}</span>
+                      </td>
+                      <td className="py-2 px-6 text-right">
+                        <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                           <Button 
+                             variant="ghost" 
+                             size="icon" 
+                             className="h-8 w-8 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                             onClick={() => {
+                               setViewingTask(task);
+                               setIsDetailsOpen(true);
+                             }}
+                           >
+                              <Eye className="h-4 w-4" />
+                           </Button>
+                           <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                 <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                 </Button>
+                              </DropdownMenuTrigger>
+                               <DropdownMenuContent align="end" className="w-40 rounded-xl bg-white z-50 border shadow-md">
+                                  <DropdownMenuItem 
+                                    className="text-xs font-bold gap-2 cursor-pointer"
+                                    onClick={() => {
+                                      setEditingTask(task);
+                                      setIsEditOpen(true);
+                                    }}
+                                  >
+                                    Edit Task
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    className="text-xs font-bold gap-2 text-rose-500 cursor-pointer"
+                                    onClick={() => {
+                                      if (confirm("Are you sure you want to cancel this task?")) {
+                                        updateTask(task.id, { status: "CANCELLED" }).then(() => {
+                                          queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    Cancel Task
+                                  </DropdownMenuItem>
+                               </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
+                      </td>
+                    </tr>
+                  ));
+                })()}
               </tbody>
             </table>
           </div>
