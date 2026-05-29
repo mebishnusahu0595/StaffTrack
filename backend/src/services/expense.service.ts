@@ -20,7 +20,7 @@ interface ListExpensesInput {
 }
 
 export async function createExpense(actor: AuthUser, input: CreateExpenseInput) {
-  return prisma.expense.create({
+  const expense = await prisma.expense.create({
     data: {
       userId: actor.id,
       category: input.category,
@@ -30,6 +30,21 @@ export async function createExpense(actor: AuthUser, input: CreateExpenseInput) 
       date: startOfDay(input.date)
     }
   });
+
+  if (actor.managerId) {
+    try {
+      await notificationService.createNotification(
+        actor.managerId,
+        "New Expense Claim Filed",
+        `${actor.name} has submitted an expense claim of ₹${input.amount} for ${input.category.toLowerCase().replace(/_/g, " ")}.`,
+        "EXPENSE_FILED"
+      );
+    } catch (err) {
+      console.error("[Expense Service] Failed to send expense notification:", err);
+    }
+  }
+
+  return expense;
 }
 
 export async function listExpenses(actor: AuthUser, input: ListExpensesInput) {

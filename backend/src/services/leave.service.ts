@@ -3,7 +3,12 @@ const prisma = new PrismaClient();
 import * as notificationService from "./notification.service";
 
 export async function createLeaveRequest(userId: string, companyId: string, data: { startDate: Date; endDate: Date; reason: string }) {
-  return prisma.leaveRequest.create({
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, managerId: true }
+  });
+
+  const leave = await prisma.leaveRequest.create({
     data: {
       userId,
       companyId,
@@ -13,6 +18,21 @@ export async function createLeaveRequest(userId: string, companyId: string, data
       status: "PENDING"
     }
   });
+
+  if (user?.managerId) {
+    try {
+      await notificationService.createNotification(
+        user.managerId,
+        "New Leave Request",
+        `${user.name} has requested leave from ${new Date(data.startDate).toLocaleDateString()} to ${new Date(data.endDate).toLocaleDateString()}.`,
+        "LEAVE_REQUESTED"
+      );
+    } catch (err) {
+      console.error("[Leave Service] Failed to send leave request notification:", err);
+    }
+  }
+
+  return leave;
 }
 
 export async function listLeaveRequests(companyId: string, filter?: any) {

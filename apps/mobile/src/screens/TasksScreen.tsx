@@ -1,16 +1,17 @@
 import dayjs from "dayjs";
 import { useCallback, useMemo, useState } from "react";
-import { Alert, FlatList, Linking, RefreshControl, StyleSheet, TouchableOpacity, View, Image } from "react-native";
+import { Alert, FlatList, Linking, RefreshControl, StyleSheet, TouchableOpacity, View, Image, ScrollView } from "react-native";
 import { Menu, Button, Text, Portal, Modal, TextInput, IconButton, Divider, TouchableRipple } from "react-native-paper";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import * as DocumentPicker from "expo-document-picker";
 
 import type { Task, TaskStatus } from "../api";
 import { TaskCard } from "../components/TaskCard";
 import { useTasks } from "../hooks/useTasks";
-import { uploadPhoto } from "../api";
+import { uploadPhoto, uploadFile } from "../api";
 import { API_ORIGIN_URL } from "../config/env";
 import { appIconSource } from "../components/AppIcon";
 
@@ -28,6 +29,137 @@ export function TasksScreen() {
   const [completionRemarks, setCompletionRemarks] = useState("");
   const [isSubmittingCompletion, setIsSubmittingCompletion] = useState(false);
   const [selectedDate, setSelectedDate] = useState(dayjs().startOf("day"));
+
+  const [checklistResponses, setChecklistResponses] = useState<Record<string, { text?: string; dropdown?: string; image?: string; video?: string; audio?: string; file?: { url: string; name: string }; geotag?: { lat: number; lng: number } }>>({});
+
+  const isChecklistComplete = useMemo(() => {
+    if (!selectedTask?.checklist) return true;
+    const checklist = selectedTask.checklist as any[];
+    for (const item of checklist) {
+      if (item.required) {
+        const resp = checklistResponses[item.id] || {};
+        for (const valType of item.validations) {
+          if (valType === "TEXT" && !resp.text?.trim()) return false;
+          if (valType === "DROPDOWN" && !resp.dropdown) return false;
+          if (valType === "IMAGE" && !resp.image) return false;
+          if (valType === "VIDEO" && !resp.video) return false;
+          if (valType === "AUDIO" && !resp.audio) return false;
+          if (valType === "FILE" && !resp.file) return false;
+          if (valType === "GEOTAG" && !resp.geotag) return false;
+        }
+      }
+    }
+    return true;
+  }, [selectedTask, checklistResponses]);
+
+  async function captureChecklistImage(itemId: string) {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission required", "Camera access is needed to take a photo.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({ 
+      allowsEditing: true, 
+      aspect: [4, 3], 
+      quality: 0.7 
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      const asset = result.assets[0];
+      try {
+        Alert.alert("Uploading", "Please wait while your image is uploading...");
+        const url = await uploadPhoto(asset);
+        setChecklistResponses(prev => ({
+          ...prev,
+          [itemId]: {
+            ...prev[itemId],
+            image: url
+          }
+        }));
+        Alert.alert("Success", "Image uploaded successfully.");
+      } catch (err) {
+        Alert.alert("Upload failed", err instanceof Error ? err.message : "Error uploading file");
+      }
+    }
+  }
+
+  async function captureChecklistVideo(itemId: string) {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission required", "Camera access is needed to record a video.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({ 
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      allowsEditing: true, 
+      quality: 0.7 
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      const asset = result.assets[0];
+      try {
+        Alert.alert("Uploading", "Please wait while your video is uploading...");
+        const url = await uploadFile(asset.uri, `video-${Date.now()}.mp4`, "video/mp4");
+        setChecklistResponses(prev => ({
+          ...prev,
+          [itemId]: {
+            ...prev[itemId],
+            video: url
+          }
+        }));
+        Alert.alert("Success", "Video uploaded successfully.");
+      } catch (err) {
+        Alert.alert("Upload failed", err instanceof Error ? err.message : "Error uploading file");
+      }
+    }
+  }
+
+  async function selectChecklistFile(itemId: string, isAudio = false) {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: isAudio ? "audio/*" : "*/*",
+        copyToCacheDirectory: true
+      });
+      if (!result.canceled && result.assets?.[0]) {
+        const asset = result.assets[0];
+        Alert.alert("Uploading", "Please wait while your file is uploading...");
+        const url = await uploadFile(asset.uri, asset.name, asset.mimeType || "application/octet-stream");
+        setChecklistResponses(prev => ({
+          ...prev,
+          [itemId]: {
+            ...prev[itemId],
+            [isAudio ? "audio" : "file"]: isAudio ? url : { url, name: asset.name }
+          }
+        }));
+        Alert.alert("Success", `${isAudio ? "Audio" : "File"} uploaded successfully.`);
+      }
+    } catch (err) {
+      Alert.alert("Upload failed", err instanceof Error ? err.message : "Error uploading file");
+    }
+  }
+
+  async function captureChecklistGeoTag(itemId: string) {
+    try {
+      Alert.alert("Locating", "Fetching current GPS coordinates...");
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== Location.PermissionStatus.GRANTED) {
+        Alert.alert("Permission required", "Location permission is required to capture geo tag.");
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setChecklistResponses(prev => ({
+        ...prev,
+        [itemId]: {
+          ...prev[itemId],
+          geotag: {
+            lat: loc.coords.latitude,
+            lng: loc.coords.longitude
+          }
+        }
+      }));
+      Alert.alert("Success", `Geo tag captured: ${loc.coords.latitude.toFixed(4)}, ${loc.coords.longitude.toFixed(4)}`);
+    } catch (err) {
+      Alert.alert("Failed", "Failed to retrieve live coordinates.");
+    }
+  }
 
   const filteredTasks = useMemo(() => {
     let result = tasks;
@@ -79,6 +211,10 @@ export function TasksScreen() {
       Alert.alert("Missing Details", "Photo and remarks are required to complete this task.");
       return;
     }
+    if (!isChecklistComplete) {
+      Alert.alert("Incomplete Checklist", "Please complete all required checklist items first.");
+      return;
+    }
     setIsSubmittingCompletion(true);
     try {
       let photoUrl = selectedTask.completionPhotoUrl || "";
@@ -97,14 +233,52 @@ export function TasksScreen() {
       } catch (locErr) {
         console.warn("[TasksScreen] Failed to retrieve GPS:", locErr);
       }
+
+      const compiledResponses: any[] = [];
+      if (selectedTask?.checklist) {
+        const checklist = (selectedTask.checklist as any[]);
+        for (const item of checklist) {
+          const resp = checklistResponses[item.id] || {};
+          for (const valType of item.validations) {
+            if (valType === "TEXT" && resp.text) {
+              compiledResponses.push({ id: item.id, title: item.title, type: "TEXT", value: resp.text });
+            }
+            if (valType === "DROPDOWN" && resp.dropdown) {
+              compiledResponses.push({ id: item.id, title: item.title, type: "DROPDOWN", value: resp.dropdown });
+            }
+            if (valType === "IMAGE" && resp.image) {
+              compiledResponses.push({ id: item.id, title: item.title, type: "IMAGE", fileUrl: resp.image });
+            }
+            if (valType === "VIDEO" && resp.video) {
+              compiledResponses.push({ id: item.id, title: item.title, type: "VIDEO", fileUrl: resp.video });
+            }
+            if (valType === "AUDIO" && resp.audio) {
+              compiledResponses.push({ id: item.id, title: item.title, type: "AUDIO", fileUrl: resp.audio });
+            }
+            if (valType === "FILE" && resp.file) {
+              compiledResponses.push({ id: item.id, title: item.title, type: "FILE", fileUrl: resp.file.url, fileName: resp.file.name });
+            }
+            if (valType === "GEOTAG" && resp.geotag) {
+              compiledResponses.push({ 
+                id: item.id, 
+                title: item.title, 
+                type: "GEOTAG", 
+                value: `${resp.geotag.lat},${resp.geotag.lng}` 
+              });
+            }
+          }
+        }
+      }
+
       await updateStatus({
         taskId: selectedTask.id,
         status: "COMPLETED",
-        completionData: { photoUrl, remarks: completionRemarks.trim(), lat, lng },
+        completionData: { photoUrl, remarks: completionRemarks.trim(), lat, lng, checklistResponses: compiledResponses },
       });
       setCompletionModalVisible(false);
       setCompletionPhoto(null);
       setCompletionRemarks("");
+      setChecklistResponses({});
       setSelectedTask(null);
       Alert.alert("Success", "Task submission updated.");
     } catch (error) {
@@ -120,6 +294,40 @@ export function TasksScreen() {
       setSelectedTask(task);
       setCompletionRemarks(task.completionRemarks || "");
       setCompletionPhoto(null);
+
+      const initialResponses: any = {};
+      if (task.checklistResponses) {
+        const responsesArray = (task.checklistResponses as any[]);
+        for (const resp of responsesArray) {
+          if (!initialResponses[resp.id]) {
+            initialResponses[resp.id] = {};
+          }
+          if (resp.type === "TEXT") {
+            initialResponses[resp.id].text = resp.value;
+          }
+          if (resp.type === "DROPDOWN") {
+            initialResponses[resp.id].dropdown = resp.value;
+          }
+          if (resp.type === "IMAGE") {
+            initialResponses[resp.id].image = resp.fileUrl;
+          }
+          if (resp.type === "VIDEO") {
+            initialResponses[resp.id].video = resp.fileUrl;
+          }
+          if (resp.type === "AUDIO") {
+            initialResponses[resp.id].audio = resp.fileUrl;
+          }
+          if (resp.type === "FILE") {
+            initialResponses[resp.id].file = { url: resp.fileUrl, name: resp.fileName || "File" };
+          }
+          if (resp.type === "GEOTAG" && resp.value) {
+            const [latStr, lngStr] = resp.value.split(",");
+            initialResponses[resp.id].geotag = { lat: parseFloat(latStr), lng: parseFloat(lngStr) };
+          }
+        }
+      }
+      setChecklistResponses(initialResponses);
+
       setCompletionModalVisible(true);
       return;
     }
@@ -347,55 +555,239 @@ export function TasksScreen() {
           onDismiss={() => !isSubmittingCompletion && setCompletionModalVisible(false)}
           contentContainerStyle={styles.modalContent}
         >
-          <Text style={styles.modalTitle} variant="titleLarge">
-            Complete Task
-          </Text>
-          <Text style={styles.modalSubtitle} variant="bodyMedium">
-            Please provide proof of completion
-          </Text>
+          <ScrollView contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
+            <Text style={styles.modalTitle} variant="titleLarge">
+              Complete Task
+            </Text>
+            <Text style={styles.modalSubtitle} variant="bodyMedium">
+              Please provide proof of completion
+            </Text>
 
-          <Divider style={styles.divider} />
+            <Divider style={styles.divider} />
 
-          <View style={styles.photoSection}>
-            {(completionPhoto || selectedTask?.completionPhotoUrl) && (
-              <View style={styles.photoPreview}>
-                <Image
-                  source={{
-                    uri: completionPhoto
-                      ? completionPhoto.uri
-                      : selectedTask?.completionPhotoUrl?.startsWith("http")
-                      ? selectedTask.completionPhotoUrl
-                      : `${API_ORIGIN_URL}${selectedTask?.completionPhotoUrl}`,
-                  }}
-                  style={styles.thumbnail}
-                />
-                <View>
-                  <Text style={styles.photoNote}>
-                    {completionPhoto ? "New Photo Captured" : "Previous Evidence"}
-                  </Text>
-                  <Button compact onPress={pickCompletionPhoto} mode="text" labelStyle={{ fontSize: 10 }}>
-                    Change Photo
-                  </Button>
-                </View>
+            {/* Checklist Section */}
+            {selectedTask?.checklist && (selectedTask.checklist as any[]).length > 0 && (
+              <View style={styles.checklistSection}>
+                <Text style={styles.checklistHeading}>Task Checklist</Text>
+                {(selectedTask.checklist as any[]).map((item) => {
+                  const resp = checklistResponses[item.id] || {};
+                  return (
+                    <View key={item.id} style={styles.checklistItem}>
+                      <Text style={styles.checklistItemTitle}>
+                        {item.title} {item.required ? <Text style={{ color: "#EF4444" }}>*</Text> : ""}
+                      </Text>
+                      <View style={styles.checklistFields}>
+                        {item.validations.map((valType: string) => {
+                          if (valType === "TEXT") {
+                            return (
+                              <TextInput
+                                key="TEXT"
+                                label="Enter Text"
+                                mode="outlined"
+                                value={resp.text || ""}
+                                onChangeText={(text) =>
+                                  setChecklistResponses((prev) => ({
+                                    ...prev,
+                                    [item.id]: { ...prev[item.id], text }
+                                  }))
+                                }
+                                style={styles.checklistTextInput}
+                              />
+                            );
+                          }
+                          if (valType === "DROPDOWN") {
+                            const options = ["Yes", "No", "Done", "Pending", "N/A"];
+                            return (
+                              <View key="DROPDOWN" style={styles.dropdownContainer}>
+                                <Text style={styles.fieldLabel}>Select Status:</Text>
+                                <View style={styles.optionsButtonGroup}>
+                                  {options.map((opt) => (
+                                    <TouchableOpacity
+                                      key={opt}
+                                      style={[
+                                        styles.optionButton,
+                                        resp.dropdown === opt && styles.optionButtonActive
+                                      ]}
+                                      onPress={() =>
+                                        setChecklistResponses((prev) => ({
+                                          ...prev,
+                                          [item.id]: { ...prev[item.id], dropdown: opt }
+                                        }))
+                                      }
+                                    >
+                                      <Text
+                                        style={[
+                                          styles.optionText,
+                                          resp.dropdown === opt && styles.optionTextActive
+                                        ]}
+                                      >
+                                        {opt}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
+                              </View>
+                            );
+                          }
+                          if (valType === "GEOTAG") {
+                            return (
+                              <View key="GEOTAG" style={styles.checklistFieldRow}>
+                                <Button
+                                  mode="outlined"
+                                  compact
+                                  icon="map-marker"
+                                  onPress={() => captureChecklistGeoTag(item.id)}
+                                >
+                                  {resp.geotag
+                                    ? `Geo Tag Captured (${resp.geotag.lat.toFixed(4)}, ${resp.geotag.lng.toFixed(4)})`
+                                    : "Capture Geo Tag"}
+                                </Button>
+                              </View>
+                            );
+                          }
+                          if (valType === "IMAGE") {
+                            return (
+                              <View key="IMAGE" style={styles.checklistFieldRow}>
+                                {resp.image ? (
+                                  <View style={styles.mediaPreviewContainer}>
+                                    <Image source={{ uri: resp.image }} style={styles.mediaPreview} />
+                                    <Button compact mode="text" onPress={() => captureChecklistImage(item.id)}>
+                                      Change Image
+                                    </Button>
+                                  </View>
+                                ) : (
+                                  <Button
+                                    mode="outlined"
+                                    compact
+                                    icon="camera"
+                                    onPress={() => captureChecklistImage(item.id)}
+                                  >
+                                    Capture Image
+                                  </Button>
+                                )}
+                              </View>
+                            );
+                          }
+                          if (valType === "VIDEO") {
+                            return (
+                              <View key="VIDEO" style={styles.checklistFieldRow}>
+                                {resp.video ? (
+                                  <View style={styles.mediaPreviewContainer}>
+                                    <Text style={styles.uploadedFileName}>🎥 Video Uploaded</Text>
+                                    <Button compact mode="text" onPress={() => captureChecklistVideo(item.id)}>
+                                      Re-capture Video
+                                    </Button>
+                                  </View>
+                                ) : (
+                                  <Button
+                                    mode="outlined"
+                                    compact
+                                    icon="video"
+                                    onPress={() => captureChecklistVideo(item.id)}
+                                  >
+                                    Record Video
+                                  </Button>
+                                )}
+                              </View>
+                            );
+                          }
+                          if (valType === "AUDIO") {
+                            return (
+                              <View key="AUDIO" style={styles.checklistFieldRow}>
+                                {resp.audio ? (
+                                  <View style={styles.mediaPreviewContainer}>
+                                    <Text style={styles.uploadedFileName}>🎵 Audio Uploaded</Text>
+                                    <Button compact mode="text" onPress={() => selectChecklistFile(item.id, true)}>
+                                      Re-select Audio
+                                    </Button>
+                                  </View>
+                                ) : (
+                                  <Button
+                                    mode="outlined"
+                                    compact
+                                    icon="microphone"
+                                    onPress={() => selectChecklistFile(item.id, true)}
+                                  >
+                                    Upload Audio File
+                                  </Button>
+                                )}
+                              </View>
+                            );
+                          }
+                          if (valType === "FILE") {
+                            return (
+                              <View key="FILE" style={styles.checklistFieldRow}>
+                                {resp.file ? (
+                                  <View style={styles.mediaPreviewContainer}>
+                                    <Text style={styles.uploadedFileName}>📎 {resp.file.name}</Text>
+                                    <Button compact mode="text" onPress={() => selectChecklistFile(item.id, false)}>
+                                      Re-select File
+                                    </Button>
+                                  </View>
+                                ) : (
+                                  <Button
+                                    mode="outlined"
+                                    compact
+                                    icon="file"
+                                    onPress={() => selectChecklistFile(item.id, false)}
+                                  >
+                                    Upload Document/File
+                                  </Button>
+                                )}
+                              </View>
+                            );
+                          }
+                          return null;
+                        })}
+                      </View>
+                      <Divider style={{ marginVertical: 8 }} />
+                    </View>
+                  );
+                })}
               </View>
             )}
-            {!completionPhoto && !selectedTask?.completionPhotoUrl && (
-              <Button mode="outlined" onPress={pickCompletionPhoto} icon="camera" style={styles.photoButton}>
-                Take Completion Photo
-              </Button>
-            )}
-          </View>
 
-          <TextInput
-            label="Remarks / Description"
-            mode="outlined"
-            multiline
-            numberOfLines={4}
-            value={completionRemarks}
-            onChangeText={setCompletionRemarks}
-            placeholder="Describe what you did..."
-            style={styles.remarksInput}
-          />
+            <View style={styles.photoSection}>
+              {(completionPhoto || selectedTask?.completionPhotoUrl) && (
+                <View style={styles.photoPreview}>
+                  <Image
+                    source={{
+                      uri: completionPhoto
+                        ? completionPhoto.uri
+                        : selectedTask?.completionPhotoUrl?.startsWith("http")
+                        ? selectedTask.completionPhotoUrl
+                        : `${API_ORIGIN_URL}${selectedTask?.completionPhotoUrl}`,
+                    }}
+                    style={styles.thumbnail}
+                  />
+                  <View>
+                    <Text style={styles.photoNote}>
+                      {completionPhoto ? "New Photo Captured" : "Previous Evidence"}
+                    </Text>
+                    <Button compact onPress={pickCompletionPhoto} mode="text" labelStyle={{ fontSize: 10 }}>
+                      Change Photo
+                    </Button>
+                  </View>
+                </View>
+              )}
+              {!completionPhoto && !selectedTask?.completionPhotoUrl && (
+                <Button mode="outlined" onPress={pickCompletionPhoto} icon="camera" style={styles.photoButton}>
+                  Take Completion Photo
+                </Button>
+              )}
+            </View>
+
+            <TextInput
+              label="Remarks / Description"
+              mode="outlined"
+              multiline
+              numberOfLines={4}
+              value={completionRemarks}
+              onChangeText={setCompletionRemarks}
+              placeholder="Describe what you did..."
+              style={styles.remarksInput}
+            />
+          </ScrollView>
 
           <View style={styles.modalActions}>
             <Button onPress={() => setCompletionModalVisible(false)} disabled={isSubmittingCompletion}>
@@ -408,7 +800,8 @@ export function TasksScreen() {
               disabled={
                 isSubmittingCompletion ||
                 (!completionPhoto && !selectedTask?.completionPhotoUrl) ||
-                !completionRemarks.trim()
+                !completionRemarks.trim() ||
+                !isChecklistComplete
               }
             >
               {selectedTask?.status === "COMPLETED" ? "Update Submission" : "Confirm Completion"}
@@ -493,7 +886,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   attachmentChipText: { fontSize: 11, fontWeight: "700", color: "#2563EB" },
-  modalContent: { backgroundColor: "white", padding: 24, margin: 20, borderRadius: 16 },
+  modalContent: { backgroundColor: "white", padding: 24, margin: 20, borderRadius: 16, maxHeight: "90%" },
   modalTitle: { fontWeight: "bold", color: "#1A201E" },
   modalSubtitle: { color: "#66736F", marginTop: 4, marginBottom: 16 },
   divider: { marginBottom: 16 },
@@ -503,5 +896,22 @@ const styles = StyleSheet.create({
   thumbnail: { width: 60, height: 60, borderRadius: 8 },
   photoNote: { fontSize: 12, color: "#2E7D32", fontWeight: "bold" },
   remarksInput: { backgroundColor: "white", marginBottom: 20 },
-  modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 12 },
+  modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 12, borderTopWidth: 1, borderTopColor: "#E0E0E0", paddingTop: 12 },
+  checklistSection: { marginTop: 8, marginBottom: 16 },
+  checklistHeading: { fontSize: 14, fontWeight: "bold", color: "#1A201E", marginBottom: 12 },
+  checklistItem: { marginBottom: 12 },
+  checklistItemTitle: { fontSize: 13, fontWeight: "800", color: "#24312D", marginBottom: 6 },
+  checklistFields: { gap: 8, paddingLeft: 4 },
+  checklistTextInput: { backgroundColor: "white", height: 45, fontSize: 12, marginVertical: 4 },
+  dropdownContainer: { marginVertical: 4 },
+  fieldLabel: { fontSize: 11, fontWeight: "bold", color: "#66736F", marginBottom: 4 },
+  optionsButtonGroup: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  optionButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, borderWidth: 1, borderColor: "#E0E0E0", backgroundColor: "#F7F9F8" },
+  optionButtonActive: { borderColor: "#1A201E", backgroundColor: "#1A201E" },
+  optionText: { fontSize: 11, fontWeight: "bold", color: "#66736F" },
+  optionTextActive: { color: "white" },
+  checklistFieldRow: { flexDirection: "row", alignItems: "center", marginVertical: 4 },
+  mediaPreviewContainer: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  mediaPreview: { width: 50, height: 50, borderRadius: 6 },
+  uploadedFileName: { fontSize: 11, fontWeight: "bold", color: "#2E7D32" },
 });

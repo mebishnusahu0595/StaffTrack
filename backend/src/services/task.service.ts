@@ -416,7 +416,7 @@ export async function updateTaskStatus(
   actor: AuthUser, 
   taskId: string, 
   status: TaskStatus, 
-  completionData?: { photoUrl?: string; remarks?: string; lat?: number; lng?: number }
+  completionData?: { photoUrl?: string; remarks?: string; lat?: number; lng?: number; checklistResponses?: any }
 ) {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
@@ -462,6 +462,9 @@ export async function updateTaskStatus(
     data.completionRemarks = completionData.remarks;
     data.completionLat = completionData.lat;
     data.completionLng = completionData.lng;
+    if (completionData.checklistResponses !== undefined) {
+      data.checklistResponses = completionData.checklistResponses;
+    }
   }
 
   const updatedTask = await prisma.task.update({

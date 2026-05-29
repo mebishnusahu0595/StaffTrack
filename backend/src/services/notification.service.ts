@@ -43,8 +43,8 @@ export async function markAsRead(id: string) {
 }
 
 async function sendExpoPushNotification(token: string, title: string, message: string, data?: any) {
-  if (!token || !token.startsWith("ExponentPushToken")) {
-    console.log("[Push Notification] Invalid Expo push token:", token);
+  if (!token || (!token.startsWith("ExponentPushToken") && !token.startsWith("ExpoPushToken"))) {
+    console.log("[Push Notification] Invalid Expo push token prefix:", token);
     return;
   }
 

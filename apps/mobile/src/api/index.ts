@@ -68,6 +68,8 @@ export type Task = {
   completionLng?: number | null;
   attachmentUrl?: string | null;
   attachmentName?: string | null;
+  checklist?: any[] | null;
+  checklistResponses?: any[] | null;
   createdAt?: string;
 };
 
@@ -212,7 +214,7 @@ export async function fetchTasks(): Promise<Task[]> {
 export async function updateTaskStatus(
   taskId: string, 
   status: TaskStatus, 
-  completionData?: { photoUrl?: string; remarks?: string; lat?: number; lng?: number }
+  completionData?: { photoUrl?: string; remarks?: string; lat?: number; lng?: number; checklistResponses?: any }
 ): Promise<Task> {
   return unwrap(await api.patch<ApiEnvelope<Task>>(`/tasks/${taskId}/status`, { status, completionData }));
 }
@@ -263,6 +265,47 @@ export async function uploadPhoto(asset: ImagePickerAsset): Promise<string> {
   }
 
   return url;
+}
+
+export async function uploadFile(uri: string, name: string, mimeType: string): Promise<string> {
+  console.log("[API] Preparing file upload for:", uri, name, mimeType);
+  const formData = new FormData();
+  
+  const uploadUri = Platform.OS === "android" && !uri.startsWith("file://") && !uri.startsWith("content://")
+    ? `file://${uri}`
+    : uri;
+
+  formData.append("file", {
+    uri: uploadUri,
+    name: name,
+    type: mimeType
+  } as unknown as Blob);
+
+  const response = await api.post<ApiEnvelope<{ url: string }>>(
+    "/upload",
+    formData,
+    { 
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+      transformRequest: (data) => data,
+      timeout: 60000 
+    }
+  );
+
+  console.log("[API] Upload file response received:", response.data);
+  if (!response.data.success) {
+    throw new Error(response.data.message || "File upload failed");
+  }
+  
+  const responseData = response.data as any;
+  const url = responseData.data?.url ?? responseData.url;
+
+  if (!url) {
+    throw new Error("File upload did not return a URL");
+  }
+
+  return toAbsoluteUploadUrl(url);
 }
 
 export async function fetchMonthlyAttendance(

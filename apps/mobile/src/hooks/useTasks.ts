@@ -20,7 +20,7 @@ export function useTasks() {
     }: { 
       taskId: string; 
       status: TaskStatus; 
-      completionData?: { photoUrl?: string; remarks?: string; lat?: number; lng?: number } 
+      completionData?: { photoUrl?: string; remarks?: string; lat?: number; lng?: number; checklistResponses?: any } 
     }) =>
       updateTaskStatus(taskId, status, completionData),
     onSuccess: () => {

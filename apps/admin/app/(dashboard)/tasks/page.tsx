@@ -3366,6 +3366,83 @@ function ViewTaskDetailsDialog({ task }: any) {
                   <p className="text-[10px] mt-2 font-medium">Photo will appear here after staff completes the task.</p>
                </div>
             )}
+
+            {task.checklistResponses && (task.checklistResponses as any[]).length > 0 && (
+               <div className="space-y-3 pt-4 border-t border-slate-100">
+                  <Label className="text-[10px] font-black uppercase text-blue-600">Checklist Responses</Label>
+                  <div className="grid grid-cols-1 gap-4 max-h-[350px] overflow-y-auto pr-1">
+                     {(task.checklistResponses as any[]).map((item: any, idx: number) => (
+                        <div key={idx} className="p-3 bg-slate-50/50 border border-slate-100 rounded-2xl space-y-2">
+                           {item.type === "IMAGE" && item.fileUrl && (
+                              <div className="space-y-1.5">
+                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.title}</span>
+                                 <div className="relative w-32 h-32 rounded-xl overflow-hidden border border-slate-200/50 shadow-inner group">
+                                    <img src={item.fileUrl} alt={item.title} className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                       <Button size="sm" variant="secondary" className="h-7 text-[10px] px-2 font-black" onClick={() => window.open(item.fileUrl)}>OPEN</Button>
+                                    </div>
+                                 </div>
+                              </div>
+                           )}
+                           {item.type === "VIDEO" && item.fileUrl && (
+                              <div className="space-y-1.5 w-full">
+                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.title}</span>
+                                 <video src={item.fileUrl} controls className="w-full max-h-48 rounded-xl border border-slate-200/50 bg-black" />
+                              </div>
+                           )}
+                           {item.type === "AUDIO" && item.fileUrl && (
+                              <div className="space-y-1.5 w-full">
+                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.title}</span>
+                                 <audio src={item.fileUrl} controls className="w-full h-9" />
+                              </div>
+                           )}
+                           {item.type === "FILE" && item.fileUrl && (
+                              <div className="space-y-1.5 w-full">
+                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.title}</span>
+                                 <div className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl">
+                                    <span className="text-xs font-bold text-slate-700 truncate max-w-[180px]">{item.fileName || "File"}</span>
+                                    <Button size="sm" variant="ghost" className="h-8 text-blue-600 hover:text-blue-700 font-bold text-xs gap-1" onClick={() => window.open(item.fileUrl)}>
+                                       Download
+                                    </Button>
+                                 </div>
+                              </div>
+                           )}
+                           {item.type === "TEXT" && (
+                              <div className="space-y-1.5">
+                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.title}</span>
+                                 <p className="text-xs font-bold text-slate-800 bg-white border border-slate-100 p-3 rounded-xl">{item.value}</p>
+                              </div>
+                           )}
+                           {item.type === "DROPDOWN" && (
+                              <div className="space-y-1.5">
+                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.title}</span>
+                                 <div>
+                                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-blue-100 text-blue-800 uppercase tracking-wide">
+                                       {item.value}
+                                    </span>
+                                 </div>
+                              </div>
+                           )}
+                           {item.type === "GEOTAG" && (
+                              <div className="space-y-1.5">
+                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.title}</span>
+                                 <div>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      className="h-8 font-black text-xs gap-1.5 rounded-xl border-slate-200 hover:bg-slate-50" 
+                                      onClick={() => window.open(`https://maps.google.com/?q=${item.value}`)}
+                                    >
+                                       📍 {item.value} (Open Maps)
+                                    </Button>
+                                 </div>
+                              </div>
+                           )}
+                        </div>
+                     ))}
+                  </div>
+               </div>
+            )}
          </div>
       </div>
     </DialogContent>

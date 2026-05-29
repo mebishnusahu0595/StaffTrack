@@ -5,6 +5,7 @@ import { monthRange, startOfDay } from "../lib/date";
 import { prisma } from "../lib/prisma";
 import { ensureCanAccessUser, getManagerGroupId } from "./access.service";
 import { createDayEndReport } from "./report.service";
+import * as notificationService from "./notification.service";
 
 interface CheckInInput {
   lat: number;
@@ -56,12 +57,48 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
     conflict("Already checked in. Please check out first.");
   }
 
-  try {
-    return await prisma.$transaction(async (tx) => {
-      return tx.attendance.create({
-        data: {
+  const result = await (async () => {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        return tx.attendance.create({
+          data: {
+            userId: actor.id,
+            date,
+            checkInTime: now,
+            checkInLat: input.lat,
+            checkInLng: input.lng,
+            punchType: input.punchType,
+            checkInPhotoUrl: input.photoUrl,
+            startOdometerPhotoUrl: input.punchType === PunchType.FIELD ? input.startOdometerPhotoUrl : undefined,
+            startOdometer: input.punchType === PunchType.FIELD ? input.startOdometer : undefined,
+            status: AttendanceStatus.PRESENT
+          }
+        });
+      });
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      const existing = await prisma.attendance.findFirst({
+        where: {
           userId: actor.id,
-          date,
+          date
+        },
+        orderBy: { checkInTime: "desc" }
+      });
+
+      if (!existing) {
+        throw error;
+      }
+
+      if (existing.checkInTime && !existing.checkOutTime) {
+        conflict("Already checked in. Please check out first.");
+      }
+
+      return prisma.attendance.update({
+        where: { id: existing.id },
+        data: {
           checkInTime: now,
           checkInLat: input.lat,
           checkInLng: input.lng,
@@ -69,51 +106,37 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
           checkInPhotoUrl: input.photoUrl,
           startOdometerPhotoUrl: input.punchType === PunchType.FIELD ? input.startOdometerPhotoUrl : undefined,
           startOdometer: input.punchType === PunchType.FIELD ? input.startOdometer : undefined,
+          checkOutTime: null,
+          checkOutLat: null,
+          checkOutLng: null,
+          checkOutPhotoUrl: null,
+          endOdometerPhotoUrl: null,
+          endOdometer: null,
           status: AttendanceStatus.PRESENT
         }
       });
-    });
-  } catch (error) {
-    if (!isUniqueConstraintError(error)) {
-      throw error;
     }
+  })();
 
-    const existing = await prisma.attendance.findFirst({
-      where: {
-        userId: actor.id,
-        date
-      },
-      orderBy: { checkInTime: "desc" }
+  // Send Push Notification to Manager
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: actor.id },
+      select: { name: true, managerId: true }
     });
-
-    if (!existing) {
-      throw error;
+    if (user?.managerId) {
+      await notificationService.createNotification(
+        user.managerId,
+        "Check In Alert",
+        `${user.name} has checked in.`,
+        "ATTENDANCE_CHECK_IN"
+      );
     }
-
-    if (existing.checkInTime && !existing.checkOutTime) {
-      conflict("Already checked in. Please check out first.");
-    }
-
-    return prisma.attendance.update({
-      where: { id: existing.id },
-      data: {
-        checkInTime: now,
-        checkInLat: input.lat,
-        checkInLng: input.lng,
-        punchType: input.punchType,
-        checkInPhotoUrl: input.photoUrl,
-        startOdometerPhotoUrl: input.punchType === PunchType.FIELD ? input.startOdometerPhotoUrl : undefined,
-        startOdometer: input.punchType === PunchType.FIELD ? input.startOdometer : undefined,
-        checkOutTime: null,
-        checkOutLat: null,
-        checkOutLng: null,
-        checkOutPhotoUrl: null,
-        endOdometerPhotoUrl: null,
-        endOdometer: null,
-        status: AttendanceStatus.PRESENT
-      }
-    });
+  } catch (err) {
+    console.error("[Attendance Service] Failed to send check-in notification:", err);
   }
+
+  return result;
 }
 
 function isUniqueConstraintError(error: unknown) {
@@ -233,6 +256,24 @@ export async function checkOut(actor: AuthUser, input: CheckOutInput) {
     } catch (err) {
       console.error("[AUTO-DER-ERROR] Failed to auto-generate Day End Report:", err);
     }
+  }
+
+  // Send Push Notification to Manager
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: actor.id },
+      select: { name: true, managerId: true }
+    });
+    if (user?.managerId) {
+      await notificationService.createNotification(
+        user.managerId,
+        "Check Out Alert",
+        `${user.name} has checked out.`,
+        "ATTENDANCE_CHECK_OUT"
+      );
+    }
+  } catch (err) {
+    console.error("[Attendance Service] Failed to send check-out notification:", err);
   }
 
   return updatedAttendance;
@@ -900,6 +941,18 @@ export async function approveAttendanceRequest(actor: AuthUser, requestId: strin
     });
   }
 
+  // Notify employee of attendance request approval
+  try {
+    await notificationService.createNotification(
+      request.userId,
+      "Attendance Request Approved",
+      `Your attendance request for ${new Date(request.date).toLocaleDateString()} has been approved by ${actor.name}.`,
+      "ATTENDANCE_APPROVAL"
+    );
+  } catch (err) {
+    console.error("[Attendance Service] Failed to send attendance approval notification:", err);
+  }
+
   return { success: true };
 }
 
@@ -917,6 +970,18 @@ export async function rejectAttendanceRequest(actor: AuthUser, requestId: string
     where: { id: requestId },
     data: { status: "REJECTED" }
   });
+
+  // Notify employee of attendance request rejection
+  try {
+    await notificationService.createNotification(
+      request.userId,
+      "Attendance Request Rejected",
+      `Your attendance request for ${new Date(request.date).toLocaleDateString()} has been rejected by ${actor.name}.`,
+      "ATTENDANCE_REJECTION"
+    );
+  } catch (err) {
+    console.error("[Attendance Service] Failed to send attendance rejection notification:", err);
+  }
 
   return { success: true };
 }

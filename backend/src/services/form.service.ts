@@ -2,6 +2,7 @@ import { UserRole } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import type { AuthUser } from "../types/auth";
 import { prisma } from "../lib/prisma";
+import * as notificationService from "./notification.service";
 
 type FormTemplate = {
   category: string;
@@ -102,7 +103,7 @@ export async function getFormDetails(user: AuthUser, formId: string) {
 
 export async function createForm(user: AuthUser, data: any) {
   const { fields, ...formData } = data;
-  return prisma.form.create({
+  const newForm = await prisma.form.create({
     data: {
       ...formData,
       companyId: user.companyId,
@@ -115,6 +116,34 @@ export async function createForm(user: AuthUser, data: any) {
       fields: true
     }
   });
+
+  // Notify all employees about the new form if it's published
+  if (newForm.status === "Published") {
+    try {
+      const employees = await prisma.user.findMany({
+        where: {
+          companyId: user.companyId,
+          role: UserRole.EMPLOYEE
+        },
+        select: { id: true }
+      });
+
+      for (const emp of employees) {
+        if (emp.id !== user.id) {
+          await notificationService.createNotification(
+            emp.id,
+            "New Form Published",
+            `A new form "${newForm.name}" is now available for you to fill.`,
+            "FORM_PUBLISHED"
+          );
+        }
+      }
+    } catch (err) {
+      console.error("[Form Service] Failed to send form publication notifications:", err);
+    }
+  }
+
+  return newForm;
 }
 
 export async function updateForm(user: AuthUser, formId: string, data: any) {
@@ -154,13 +183,49 @@ export async function deleteForm(user: AuthUser, formId: string) {
 }
 
 export async function submitFormResponse(user: AuthUser, formId: string, data: any) {
-  return prisma.formResponse.create({
+  const form = await prisma.form.findUnique({
+    where: { id: formId },
+    select: { name: true, createdById: true }
+  });
+
+  const response = await prisma.formResponse.create({
     data: {
       formId,
       userId: user.id,
       data: JSON.stringify(data)
     }
   });
+
+  if (form) {
+    const notificationTitle = "New Form Response Submitted";
+    const notificationMessage = `${user.name} has submitted a response for the form: ${form.name}`;
+
+    try {
+      // Notify form creator
+      if (form.createdById && form.createdById !== user.id) {
+        await notificationService.createNotification(
+          form.createdById,
+          notificationTitle,
+          notificationMessage,
+          "FORM_SUBMITTED"
+        );
+      }
+
+      // Notify manager if manager exists and is different from creator
+      if (user.managerId && user.managerId !== user.id && user.managerId !== form.createdById) {
+        await notificationService.createNotification(
+          user.managerId,
+          notificationTitle,
+          notificationMessage,
+          "FORM_SUBMITTED"
+        );
+      }
+    } catch (err) {
+      console.error("[Form Service] Failed to send form response submission notification:", err);
+    }
+  }
+
+  return response;
 }
 
 export async function getFormResponses(user: AuthUser, formId: string) {

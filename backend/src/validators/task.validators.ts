@@ -43,7 +43,8 @@ export const taskStatusBodySchema = z.object({
       photoUrl: z.string().optional(),
       remarks: z.string().optional(),
       lat: z.number().optional(),
-      lng: z.number().optional()
+      lng: z.number().optional(),
+      checklistResponses: z.any().optional()
     })
     .optional()
 });
