@@ -26,14 +26,21 @@ export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
   return (
     <Card mode="elevated" onPress={disabled ? undefined : () => onPress?.(task)} style={styles.card}>
       <Card.Content>
-        <View style={styles.header}>
-          <Text numberOfLines={2} style={styles.title} variant="titleMedium">
-            {task.title}
-          </Text>
-          <View style={[styles.statusBadge, { backgroundColor: meta.color }]}>
-            <Text style={[styles.statusBadgeText, { color: meta.textColor }]}>
-              {meta.label.toUpperCase()}
+        <View style={styles.headerWrapper}>
+          {task.isSubtask && task.parentTask && (
+            <View style={styles.subtaskBadge}>
+              <Text style={styles.subtaskBadgeText}>↳ Subtask of: {task.parentTask.title}</Text>
+            </View>
+          )}
+          <View style={styles.header}>
+            <Text numberOfLines={2} style={styles.title} variant="titleMedium">
+              {task.title}
             </Text>
+            <View style={[styles.statusBadge, { backgroundColor: meta.color }]}>
+              <Text style={[styles.statusBadgeText, { color: meta.textColor }]}>
+                {meta.label.toUpperCase()}
+              </Text>
+            </View>
           </View>
         </View>
         
@@ -185,12 +192,29 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     backgroundColor: "#FFFFFF"
   },
+  headerWrapper: {
+    marginBottom: 12
+  },
+  subtaskBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginBottom: 6,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#BFDBFE'
+  },
+  subtaskBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#2563EB'
+  },
   header: {
     alignItems: "flex-start",
     flexDirection: "row",
     gap: 8,
     justifyContent: "space-between",
-    marginBottom: 12
   },
   title: {
     flex: 1,

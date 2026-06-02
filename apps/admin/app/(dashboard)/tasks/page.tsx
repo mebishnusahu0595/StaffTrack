@@ -323,7 +323,7 @@ export default function TasksPage() {
   };
 
   const filteredTasks = useMemo(() => {
-    let filtered = tasks;
+    let filtered = tasks.filter(t => !t.isSubtask); // Exclude subtasks from main list
 
     // Search
     if (searchQuery) {
@@ -839,7 +839,7 @@ export default function TasksPage() {
                                 </Badge>
                               </td>
                               <td className="py-2 px-4">
-                                <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.createdAt), 'dd-MM-yyyy, hh:mm a')}</span>
+                                <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.createdAt), 'dd-MM-yyyy')}</span>
                               </td>
                               <td className="py-2 px-6 text-right">
                                 <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -960,7 +960,7 @@ export default function TasksPage() {
                         </Badge>
                       </td>
                       <td className="py-2 px-4">
-                        <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.createdAt), 'dd-MM-yyyy, hh:mm a')}</span>
+                        <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.createdAt), 'dd-MM-yyyy')}</span>
                       </td>
                       <td className="py-2 px-6 text-right">
                         <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1444,8 +1444,8 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
     description: "", 
     assignedToId: "", 
     dueDate: initialDate || format(addDays(new Date(), 1), 'yyyy-MM-dd'),
-    startDate: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-    endDate: format(addDays(new Date(), 1), "yyyy-MM-dd'T'23:59"),
+    startDate: format(new Date(), 'yyyy-MM-dd'),
+    endDate: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
     priority: "Medium",
     points: 10,
     repeatFrequency: "NONE",
@@ -1570,8 +1570,8 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
           title: "",
           description: "",
           assignedToId: "",
-          startDate: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-          endDate: format(addDays(new Date(), 1), "yyyy-MM-dd'T'23:59"),
+          startDate: format(new Date(), 'yyyy-MM-dd'),
+          endDate: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
           priority: "Medium",
           validations: [],
           checklist: [],
@@ -1860,21 +1860,21 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
 
             <div className="grid grid-cols-2 gap-4">
                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">Start Date & Time</Label>
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Start Date</Label>
                   <Input 
-                    type="datetime-local" 
+                    type="date" 
                     className="h-12 rounded-2xl bg-slate-50 border-none font-bold" 
                     value={data.startDate}
                     onChange={e => setData({...data, startDate: e.target.value})}
                   />
                </div>
                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">End Date & Time</Label>
+                  <Label className="text-[10px] font-black uppercase text-slate-400">End Date</Label>
                   <Input 
-                    type="datetime-local" 
+                    type="date" 
                     className="h-12 rounded-2xl bg-slate-50 border-none font-bold" 
                     value={data.endDate}
-                    onChange={e => setData({...data, endDate: e.target.value, dueDate: e.target.value.split('T')[0]})}
+                    onChange={e => setData({...data, endDate: e.target.value, dueDate: e.target.value})}
                   />
                </div>
             </div>
@@ -2159,7 +2159,7 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
                            <div className="space-y-1">
                               <Label className="text-[9px] font-black uppercase text-slate-400">Start Date & Time</Label>
                               <Input 
-                                type="datetime-local"
+                                type="date"
                                 className="h-10 bg-slate-50 border-none font-bold text-xs rounded-xl"
                                 value={sub.startDate}
                                 onChange={e => updateSubtask(sub.id, { startDate: e.target.value })}
@@ -2168,7 +2168,7 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
                            <div className="space-y-1">
                               <Label className="text-[9px] font-black uppercase text-slate-400">End Date & Time</Label>
                               <Input 
-                                type="datetime-local"
+                                type="date"
                                 className="h-10 bg-slate-50 border-none font-bold text-xs rounded-xl"
                                 value={sub.endDate}
                                 onChange={e => updateSubtask(sub.id, { endDate: e.target.value })}
@@ -2176,6 +2176,27 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
                            </div>
                         </div>
 
+
+                         {/* Subtask Checklist Builder */}
+                         <div className="border-t border-slate-100 pt-3">
+                           <div className="flex items-center justify-between mb-2">
+                             <span className="text-[9px] font-black uppercase text-slate-400">Subtask Checklist Questions</span>
+                             <button type="button" onClick={() => { const newCl = [...(sub.checklist||[]),{id:Math.random().toString(36).slice(2),title:"",required:true,validations:[]}]; updateSubtask(sub.id,{checklist:newCl}); }} className="text-[9px] font-black uppercase text-blue-600 hover:text-blue-700">+ Add Question</button>
+                           </div>
+                           {(sub.checklist||[]).map((ci:any)=>(
+                             <div key={ci.id} className="p-2 bg-slate-50 rounded-lg mb-2 space-y-2 relative border border-slate-100">
+                               <button type="button" onClick={()=>updateSubtask(sub.id,{checklist:(sub.checklist||[]).filter((c:any)=>c.id!==ci.id)})} className="absolute right-2 top-2 text-slate-400 hover:text-rose-500"><X className="h-3 w-3"/></button>
+                               <div className="flex items-center gap-3 pr-6">
+                                 <label className="flex items-center gap-1 text-[9px] font-black uppercase text-slate-500 cursor-pointer shrink-0"><input type="checkbox" checked={ci.required} onChange={e=>updateSubtask(sub.id,{checklist:(sub.checklist||[]).map((c:any)=>c.id===ci.id?{...c,required:e.target.checked}:c)})} className="rounded border-slate-300"/> Required</label>
+                                 <Input placeholder="Question title" className="h-8 border-none bg-white font-bold text-xs rounded-lg flex-1" value={ci.title} onChange={e=>updateSubtask(sub.id,{checklist:(sub.checklist||[]).map((c:any)=>c.id===ci.id?{...c,title:e.target.value}:c)})}/>
+                               </div>
+                               <div className="flex flex-wrap gap-2">
+                                 {validationTypes.map(v=>(<label key={v.val} className="flex items-center gap-1 text-[9px] font-bold text-slate-600 cursor-pointer"><input type="checkbox" checked={(ci.validations||[]).includes(v.val)} onChange={()=>{const nv=(ci.validations||[]).includes(v.val)?(ci.validations||[]).filter((x:string)=>x!==v.val):[...(ci.validations||[]),v.val];updateSubtask(sub.id,{checklist:(sub.checklist||[]).map((c:any)=>c.id===ci.id?{...c,validations:nv}:c)});}} className="rounded border-slate-300"/> {v.label}</label>))}
+                               </div>
+                             </div>
+                           ))}
+                           {(!sub.checklist||sub.checklist.length===0)&&<p className="text-[9px] text-slate-400 font-bold text-center py-1">No questions yet.</p>}
+                         </div>
                         <div className="space-y-2">
                            <span className="text-[8px] font-black uppercase text-slate-400">Subtask Validations</span>
                            <div className="flex flex-wrap gap-3">
@@ -2407,8 +2428,8 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
     description: task.description || "",
     assignedToId: task.assignedToId || "",
     dueDate: task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : format(addDays(new Date(), 1), 'yyyy-MM-dd'),
-    startDate: task.startDate ? format(new Date(task.startDate), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-    endDate: task.endDate ? format(new Date(task.endDate), "yyyy-MM-dd'T'HH:mm") : format(new Date(task.dueDate || new Date()), "yyyy-MM-dd'T'23:59"),
+    startDate: task.startDate ? format(new Date(task.startDate), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+    endDate: task.endDate ? format(new Date(task.endDate), 'yyyy-MM-dd') : format(new Date(task.dueDate || new Date()), 'yyyy-MM-dd'),
     priority: task.priority || "Medium",
     points: task.points || 10,
     status: task.status || "PENDING",
@@ -2744,21 +2765,21 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
 
             <div className="grid grid-cols-2 gap-4">
                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">Start Date & Time</Label>
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Start Date</Label>
                   <Input 
-                    type="datetime-local"
+                    type="date"
                     className="h-12 rounded-2xl bg-slate-50 border-none font-bold" 
                     value={data.startDate}
                     onChange={e => setData({...data, startDate: e.target.value})}
                   />
                </div>
                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">End Date & Time</Label>
+                  <Label className="text-[10px] font-black uppercase text-slate-400">End Date</Label>
                   <Input 
-                    type="datetime-local"
+                    type="date"
                     className="h-12 rounded-2xl bg-slate-50 border-none font-bold" 
                     value={data.endDate}
-                    onChange={e => setData({...data, endDate: e.target.value, dueDate: e.target.value.split('T')[0]})}
+                    onChange={e => setData({...data, endDate: e.target.value, dueDate: e.target.value})}
                   />
                </div>
             </div>
@@ -3058,7 +3079,7 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
                            <div className="space-y-1">
                               <Label className="text-[9px] font-black uppercase text-slate-400">Start Date & Time</Label>
                               <Input 
-                                type="datetime-local"
+                                type="date"
                                 className="h-10 bg-slate-50 border-none font-bold text-xs rounded-xl"
                                 value={sub.startDate}
                                 onChange={e => updateSubtask(sub.id, { startDate: e.target.value })}
@@ -3067,7 +3088,7 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
                            <div className="space-y-1">
                               <Label className="text-[9px] font-black uppercase text-slate-400">End Date & Time</Label>
                               <Input 
-                                type="datetime-local"
+                                type="date"
                                 className="h-10 bg-slate-50 border-none font-bold text-xs rounded-xl"
                                 value={sub.endDate}
                                 onChange={e => updateSubtask(sub.id, { endDate: e.target.value })}
@@ -3075,6 +3096,27 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
                            </div>
                         </div>
 
+
+                         {/* Subtask Checklist Builder */}
+                         <div className="border-t border-slate-100 pt-3">
+                           <div className="flex items-center justify-between mb-2">
+                             <span className="text-[9px] font-black uppercase text-slate-400">Subtask Checklist Questions</span>
+                             <button type="button" onClick={() => { const newCl = [...(sub.checklist||[]),{id:Math.random().toString(36).slice(2),title:"",required:true,validations:[]}]; updateSubtask(sub.id,{checklist:newCl}); }} className="text-[9px] font-black uppercase text-blue-600 hover:text-blue-700">+ Add Question</button>
+                           </div>
+                           {(sub.checklist||[]).map((ci:any)=>(
+                             <div key={ci.id} className="p-2 bg-slate-50 rounded-lg mb-2 space-y-2 relative border border-slate-100">
+                               <button type="button" onClick={()=>updateSubtask(sub.id,{checklist:(sub.checklist||[]).filter((c:any)=>c.id!==ci.id)})} className="absolute right-2 top-2 text-slate-400 hover:text-rose-500"><X className="h-3 w-3"/></button>
+                               <div className="flex items-center gap-3 pr-6">
+                                 <label className="flex items-center gap-1 text-[9px] font-black uppercase text-slate-500 cursor-pointer shrink-0"><input type="checkbox" checked={ci.required} onChange={e=>updateSubtask(sub.id,{checklist:(sub.checklist||[]).map((c:any)=>c.id===ci.id?{...c,required:e.target.checked}:c)})} className="rounded border-slate-300"/> Required</label>
+                                 <Input placeholder="Question title" className="h-8 border-none bg-white font-bold text-xs rounded-lg flex-1" value={ci.title} onChange={e=>updateSubtask(sub.id,{checklist:(sub.checklist||[]).map((c:any)=>c.id===ci.id?{...c,title:e.target.value}:c)})}/>
+                               </div>
+                               <div className="flex flex-wrap gap-2">
+                                 {validationTypes.map(v=>(<label key={v.val} className="flex items-center gap-1 text-[9px] font-bold text-slate-600 cursor-pointer"><input type="checkbox" checked={(ci.validations||[]).includes(v.val)} onChange={()=>{const nv=(ci.validations||[]).includes(v.val)?(ci.validations||[]).filter((x:string)=>x!==v.val):[...(ci.validations||[]),v.val];updateSubtask(sub.id,{checklist:(sub.checklist||[]).map((c:any)=>c.id===ci.id?{...c,validations:nv}:c)});}} className="rounded border-slate-300"/> {v.label}</label>))}
+                               </div>
+                             </div>
+                           ))}
+                           {(!sub.checklist||sub.checklist.length===0)&&<p className="text-[9px] text-slate-400 font-bold text-center py-1">No questions yet.</p>}
+                         </div>
                         <div className="space-y-2">
                            <span className="text-[8px] font-black uppercase text-slate-400">Subtask Validations</span>
                            <div className="flex flex-wrap gap-3">

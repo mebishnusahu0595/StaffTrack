@@ -716,5 +716,11 @@ const taskInclude = {
         }
       }
     }
+  },
+  parentTask: {
+    select: {
+      id: true,
+      title: true
+    }
   }
 } satisfies Prisma.TaskInclude;

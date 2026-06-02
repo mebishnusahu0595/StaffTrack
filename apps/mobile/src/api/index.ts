@@ -70,6 +70,9 @@ export type Task = {
   attachmentName?: string | null;
   checklist?: any[] | null;
   checklistResponses?: any[] | null;
+  isSubtask?: boolean;
+  parentTask?: { id: string; title: string } | null;
+  subtasks?: Task[] | null;
   createdAt?: string;
 };
 

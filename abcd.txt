@@ -1,0 +1,3 @@
+employee ke timing mein (jo add employee mein set hai .. for example agar 9:30 am hai to usse 15 min baad tak check in kar sakta hai .. 9:45 am ) employee need approval from manager or admin karega .. bina uske checkin ni hoga pending dikhayega .. ?? 
+-without location on field employee ka working time pause ho jayega agar usne check in ke baad location off kar diya hai toh and break time start ho jayega if location is off .
+and staff and manager ki mobile ki bettery health bhi dikhaye ..  and staff 

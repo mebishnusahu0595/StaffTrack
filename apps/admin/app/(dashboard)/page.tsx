@@ -95,7 +95,7 @@ export default function OverviewPage() {
   const formsQuery  = useQuery({ queryKey: ["forms"],    queryFn: () => fetchForms() });
 
   const employees = useMemo(() => usersQuery.data?.items  ?? [], [usersQuery.data]);
-  const tasks     = useMemo(() => tasksQuery.data         ?? [], [tasksQuery.data]);
+  const tasks     = useMemo(() => (tasksQuery.data ?? []).filter((t: any) => !t.isSubtask), [tasksQuery.data]);
   const reports   = useMemo(() => reportsQuery.data       ?? [], [reportsQuery.data]);
   const projects  = useMemo(() => projectsQuery.data      ?? [], [projectsQuery.data]);
   const issues    = useMemo(() => issuesQuery.data        ?? [], [issuesQuery.data]);
