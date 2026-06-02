@@ -1366,28 +1366,74 @@ function FilterTab({ active, onClick, label }: { active: boolean, onClick: () =>
 }
 
 function StatusBadge({ status, dueDate }: { status: string, dueDate: string }) {
-  const isOverdue = isBefore(new Date(dueDate), startOfDay(new Date())) && status !== "COMPLETED";
+  const now = new Date();
+  const due = new Date(dueDate);
+  const isOverdue = isBefore(due, startOfDay(now)) && status !== "COMPLETED";
   
-  if (isOverdue) {
-    return (
-      <div className="px-3 py-1 rounded-lg border border-rose-100 bg-rose-50 text-rose-500 text-[10px] font-black uppercase tracking-widest">
-        Overdue
-      </div>
-    );
+  // Calculate remaining time text
+  let timeText = "";
+  if (status !== "COMPLETED" && status !== "CANCELLED") {
+    const diffMs = due.getTime() - now.getTime();
+    const diffMin = Math.round(diffMs / (60 * 1000));
+    
+    if (diffMin < 0) {
+      const absMin = Math.abs(diffMin);
+      if (absMin < 60) {
+        timeText = `Overdue by ${absMin}m`;
+      } else if (absMin < 24 * 60) {
+        timeText = `Overdue by ${Math.floor(absMin / 60)}h`;
+      } else {
+        timeText = `Overdue by ${Math.floor(absMin / (24 * 60))}d`;
+      }
+    } else {
+      if (diffMin < 60) {
+        timeText = `${diffMin}m left`;
+      } else if (diffMin < 24 * 60) {
+        const hours = Math.floor(diffMin / 60);
+        const mins = diffMin % 60;
+        timeText = `${hours}h ${mins}m left`;
+      } else {
+        timeText = `${Math.floor(diffMin / (24 * 60))}d left`;
+      }
+    }
   }
 
-  const configs: any = {
-    PENDING: { label: "Pending", bg: "bg-slate-50", text: "text-slate-500", border: "border-slate-200" },
-    IN_PROGRESS: { label: "Ongoing", bg: "bg-blue-50", text: "text-blue-600", border: "border-blue-100" },
-    COMPLETED: { label: "Completed", bg: "bg-indigo-50", text: "text-indigo-600", border: "border-indigo-100" },
-    CANCELLED: { label: "Cancelled", bg: "bg-slate-50", text: "text-slate-400", border: "border-slate-200" },
-  };
+  const badgeElement = (() => {
+    if (isOverdue) {
+      return (
+        <div className="px-3 py-1 rounded-lg border border-rose-100 bg-rose-50 text-rose-500 text-[10px] font-black uppercase tracking-widest">
+          Overdue
+        </div>
+      );
+    }
 
-  const config = configs[status] || configs.PENDING;
+    const configs: any = {
+      PENDING: { label: "Pending", bg: "bg-slate-50", text: "text-slate-500", border: "border-slate-200" },
+      IN_PROGRESS: { label: "Ongoing", bg: "bg-blue-50", text: "text-blue-600", border: "border-blue-100" },
+      COMPLETED: { label: "Completed", bg: "bg-indigo-50", text: "text-indigo-600", border: "border-indigo-100" },
+      CANCELLED: { label: "Cancelled", bg: "bg-slate-50", text: "text-slate-400", border: "border-slate-200" },
+    };
+
+    const config = configs[status] || configs.PENDING;
+
+    return (
+      <div className={cn("px-3 py-1 rounded-lg border text-[10px] font-black uppercase tracking-widest", config.bg, config.text, config.border)}>
+        {config.label}
+      </div>
+    );
+  })();
 
   return (
-    <div className={cn("px-3 py-1 rounded-lg border text-[10px] font-black uppercase tracking-widest", config.bg, config.text, config.border)}>
-      {config.label}
+    <div className="flex flex-col items-center">
+      {badgeElement}
+      {timeText && (
+        <span className={cn(
+          "text-[9px] font-bold mt-0.5",
+          isOverdue ? "text-rose-500" : "text-amber-500"
+        )}>
+          {timeText}
+        </span>
+      )}
     </div>
   );
 }

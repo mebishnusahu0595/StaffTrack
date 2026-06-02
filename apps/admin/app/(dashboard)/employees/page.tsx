@@ -382,7 +382,24 @@ export default function EmployeesPage() {
                             )}
                           </Avatar>
                           <div className="flex flex-col">
-                            <span className="font-bold text-slate-900 text-sm leading-tight">{user.name}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900 text-sm leading-tight">{user.name}</span>
+                              {user.batteryLevel !== undefined && user.batteryLevel !== null && (
+                                <div className="flex items-center gap-0.5 text-[9px] font-black text-slate-500 bg-slate-100/80 px-1.5 py-0.5 rounded-md border border-slate-200/50">
+                                  <Battery className="h-2.5 w-2.5 text-slate-500" />
+                                  <span>{user.batteryLevel}%</span>
+                                </div>
+                              )}
+                              {user.isLocationOn !== undefined && (
+                                <span 
+                                  className={cn(
+                                    "h-2 w-2 rounded-full ring-2 ring-white shadow-sm",
+                                    user.isLocationOn ? "bg-emerald-500" : "bg-rose-500 animate-pulse"
+                                  )} 
+                                  title={user.isLocationOn ? "Location On" : "Location Off"} 
+                                />
+                              )}
+                            </div>
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-1">
                               {user.email}
                             </span>
@@ -513,7 +530,7 @@ export default function EmployeesPage() {
                                              </div>
                                           </div>
  
-                                           <div className="space-y-4">
+                                            <div className="space-y-4">
                                              <div className="flex items-center gap-3 text-slate-500 pt-2">
                                                 <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center">
                                                    <Navigation className="h-4 w-4 text-slate-400" />
@@ -525,6 +542,20 @@ export default function EmployeesPage() {
                                                    </p>
                                                 </div>
                                              </div>
+                                             
+                                             {(user.batteryLevel !== undefined && user.batteryLevel !== null) && (
+                                               <div className="flex items-center gap-3 text-slate-500">
+                                                  <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center">
+                                                     <Battery className="h-4 w-4 text-slate-400" />
+                                                  </div>
+                                                  <div className="flex-1">
+                                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none mb-1">Device Battery</p>
+                                                     <p className="text-xs font-bold text-slate-700">
+                                                       {user.batteryLevel}% • Status: {user.isLocationOn ? "Online / On" : "Location Off / Off"}
+                                                     </p>
+                                                  </div>
+                                               </div>
+                                             )}
                                           </div>
  
                                              <div className="mt-8 grid grid-cols-2 gap-4">

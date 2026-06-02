@@ -2,7 +2,7 @@
  
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download } from "lucide-react";
+import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download, Battery } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -307,8 +307,25 @@ export default function AttendancePage() {
                         <AvatarFallback className="bg-slate-50 text-slate-400 font-bold text-xs">{record.user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
                       </Avatar>
                       <div className="flex flex-col">
-                        <span className="font-bold text-slate-900 text-sm leading-tight group-hover:text-blue-600 transition-colors">{record.user.name}</span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{record.user.email} / {record.user.workMode}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900 text-sm leading-tight group-hover:text-blue-600 transition-colors">{record.user.name}</span>
+                          {record.user.batteryLevel !== undefined && record.user.batteryLevel !== null && (
+                            <div className="flex items-center gap-0.5 text-[9px] font-black text-slate-500 bg-slate-100/80 px-1.5 py-0.5 rounded-md border border-slate-200/50">
+                              <Battery className="h-2.5 w-2.5 text-slate-500" />
+                              <span>{record.user.batteryLevel}%</span>
+                            </div>
+                          )}
+                          {record.user.isLocationOn !== undefined && (
+                            <span 
+                              className={cn(
+                                "h-2 w-2 rounded-full ring-2 ring-white shadow-sm",
+                                record.user.isLocationOn ? "bg-emerald-500" : "bg-rose-500 animate-pulse"
+                              )} 
+                              title={record.user.isLocationOn ? "Location On" : "Location Off"} 
+                            />
+                          )}
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{record.user.email} / {record.user.workMode}</span>
                       </div>
                     </div>
                   </TableCell>

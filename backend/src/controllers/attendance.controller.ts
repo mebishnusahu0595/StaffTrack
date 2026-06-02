@@ -123,3 +123,33 @@ export async function rejectAttendanceRequest(req: Request, res: Response): Prom
   sendSuccess(res, result, "Attendance request rejected");
 }
 
+export async function getPendingLateCheckIns(req: Request, res: Response): Promise<void> {
+  const result = await attendanceService.getPendingLateCheckIns(req.user!);
+  sendSuccess(res, result, "Pending late check-ins fetched");
+}
+
+export async function approveLateCheckIn(req: Request, res: Response): Promise<void> {
+  const result = await attendanceService.approveLateCheckIn(req.user!, req.params.id);
+  
+  // Emit WS update to sync UI
+  getIO().to(`company:${req.user!.companyId}`).emit(SOCKET_EVENTS.ATTENDANCE_UPDATE, {
+    userId: result.userId,
+    type: "late-checkin-approve",
+    data: result
+  });
+
+  sendSuccess(res, result, "Late check-in approved");
+}
+
+export async function rejectLateCheckIn(req: Request, res: Response): Promise<void> {
+  const result = await attendanceService.rejectLateCheckIn(req.user!, req.params.id);
+
+  // Emit WS update to sync UI
+  getIO().to(`company:${req.user!.companyId}`).emit(SOCKET_EVENTS.ATTENDANCE_UPDATE, {
+    type: "late-checkin-reject",
+    data: { id: req.params.id }
+  });
+
+  sendSuccess(res, result, "Late check-in rejected");
+}
+

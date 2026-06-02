@@ -17,6 +17,12 @@ router.post(
   validate({ body: locationBatchBodySchema }),
   asyncHandler(locationController.createLocationLogs)
 );
+router.post(
+  "/status",
+  roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER, UserRole.EMPLOYEE),
+  asyncHandler(locationController.updateLocationStatus)
+);
+
 router.get(
   "/:userId/today",
   validate({ params: locationUserParamSchema }),

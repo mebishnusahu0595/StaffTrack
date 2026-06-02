@@ -88,6 +88,8 @@ export function HomeScreen() {
   const isFieldPunch = (activeAttendance || todayAttendance)?.punchType === "FIELD";
   const currentStatusLabel = !isCheckedIn
     ? "Ready to Start"
+    : activeAttendance?.isCheckInPending
+    ? "Pending Approval"
     : activeBreak
     ? "On Break"
     : activeAttendance?.punchType === "OFFICE"
@@ -462,44 +464,59 @@ export function HomeScreen() {
                   ) : null}
                 </View>
               )}
-              <View style={{ flexDirection: "row", gap: 12, marginTop: 24 }}>
-                {!activeBreak ? (
+              {activeAttendance?.isCheckInPending ? (
+                <View style={styles.pendingCard}>
+                  <View style={styles.pendingHeaderRow}>
+                    <Icon source="clock-alert-outline" size={24} color="#D97706" />
+                    <Text style={styles.pendingTitle}>Check-In Pending Approval</Text>
+                  </View>
+                  <Text style={styles.pendingText}>
+                    Your check-in is pending approval from a manager or admin because it was registered after your shift start time (plus a 15-minute buffer).
+                  </Text>
+                  <Text style={styles.pendingSubtext}>
+                    Break and check-out features will be enabled once your check-in is approved.
+                  </Text>
+                </View>
+              ) : (
+                <View style={{ flexDirection: "row", gap: 12, marginTop: 24 }}>
+                  {!activeBreak ? (
+                    <Button
+                      buttonColor="#F39C12"
+                      disabled={isStartingBreak || isEndingBreak}
+                      icon="coffee"
+                      loading={isStartingBreak}
+                      mode="contained"
+                      onPress={() => void startBreak()}
+                      style={{ flex: 1, borderRadius: 8 }}
+                    >
+                      Break On
+                    </Button>
+                  ) : (
+                    <Button
+                      buttonColor="#27AE60"
+                      disabled={isStartingBreak || isEndingBreak}
+                      icon="coffee-outline"
+                      loading={isEndingBreak}
+                      mode="contained"
+                      onPress={() => void endBreak()}
+                      style={{ flex: 1, borderRadius: 8 }}
+                    >
+                      Break Off
+                    </Button>
+                  )}
                   <Button
-                    buttonColor="#F39C12"
-                    disabled={isStartingBreak || isEndingBreak}
-                    icon="coffee"
-                    loading={isStartingBreak}
+                    buttonColor="#A4262C"
+                    disabled={isBusy || Boolean(activeBreak)}
+                    icon="logout"
+                    loading={isCheckingOut}
                     mode="contained"
-                    onPress={() => void startBreak()}
+                    onPress={handleCheckOut}
                     style={{ flex: 1, borderRadius: 8 }}
                   >
-                    Break On
+                    Check out
                   </Button>
-                ) : (
-                  <Button
-                    buttonColor="#27AE60"
-                    disabled={isStartingBreak || isEndingBreak}
-                    icon="coffee-outline"
-                    loading={isEndingBreak}
-                    mode="contained"
-                    onPress={() => void endBreak()}
-                    style={{ flex: 1, borderRadius: 8 }}
-                  >
-                    Break Off
-                  </Button>
-                )}
-                <Button
-                  buttonColor="#A4262C"
-                  disabled={isBusy || Boolean(activeBreak)}
-                  icon="logout"
-                  loading={isCheckingOut}
-                  mode="contained"
-                  onPress={handleCheckOut}
-                  style={{ flex: 1, borderRadius: 8 }}
-                >
-                  Check out
-                </Button>
-              </View>
+                </View>
+              )}
             </View>
           )}
 
@@ -663,7 +680,7 @@ export function HomeScreen() {
       ) : null}
 
       {/* Today's Odometer Readings */}
-      {todayAttendance && todayAttendance.punchType === "FIELD" && (todayAttendance.startOdometerPhotoUrl || todayAttendance.endOdometerPhotoUrl || todayAttendance.startOdometer !== undefined && todayAttendance.startOdometer !== null) ? (
+      {todayAttendance && !todayAttendance.isCheckInPending && todayAttendance.punchType === "FIELD" && (todayAttendance.startOdometerPhotoUrl || todayAttendance.endOdometerPhotoUrl || todayAttendance.startOdometer !== undefined && todayAttendance.startOdometer !== null) ? (
         <Card mode="contained" style={{ borderRadius: 12, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E2E8F0", marginTop: 16 }}>
           <Card.Content style={{ padding: 12 }}>
             <Text style={{ fontSize: 13, fontWeight: "800", color: "#24312D", marginBottom: 12, letterSpacing: 0.5 }}>
@@ -1268,6 +1285,37 @@ const styles = StyleSheet.create({
   derButton: {
     borderRadius: 8,
     marginTop: 16
+  },
+  pendingCard: {
+    backgroundColor: "#FEF3C7",
+    borderColor: "#F59E0B",
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 20,
+    gap: 8
+  },
+  pendingHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  pendingTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#B45309"
+  },
+  pendingText: {
+    fontSize: 13,
+    color: "#92400E",
+    lineHeight: 18,
+    fontWeight: "500"
+  },
+  pendingSubtext: {
+    fontSize: 11,
+    color: "#B45309",
+    fontWeight: "700",
+    fontStyle: "italic"
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

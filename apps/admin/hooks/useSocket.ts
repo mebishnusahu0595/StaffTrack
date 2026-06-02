@@ -55,6 +55,14 @@ export function useSocket(companyId?: string) {
       void queryClient.invalidateQueries({ queryKey: ["location", data.userId] });
     });
 
+    socket.on("LOCATION_OFF_EVENT", (data) => {
+      console.log("WS Location Off Event:", data);
+      if (typeof window !== "undefined") {
+        const event = new CustomEvent("location-off-alert", { detail: data });
+        window.dispatchEvent(event);
+      }
+    });
+
     socket.on("disconnect", () => {
       console.log("Disconnected from WebSocket");
     });

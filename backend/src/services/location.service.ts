@@ -2,6 +2,9 @@ import type { AuthUser } from "../types/auth";
 import { nextDay, startOfDay } from "../lib/date";
 import { prisma } from "../lib/prisma";
 import { ensureCanAccessUser } from "./access.service";
+import { UserRole } from "@prisma/client";
+import { getIO, SOCKET_EVENTS } from "../lib/socket";
+import * as notificationService from "./notification.service";
 
 interface LocationLogInput {
   lat: number;
@@ -28,9 +31,156 @@ export async function createLocationLogs(
     }))
   });
 
+  if (logs.length > 0) {
+    const latestLog = logs.reduce((latest, current) => {
+      return new Date(current.timestamp) > new Date(latest.timestamp) ? current : latest;
+    });
+
+    await prisma.user.update({
+      where: { id: actor.id },
+      data: {
+        isLocationOn: true,
+        ...(latestLog.batteryLevel !== undefined && { batteryLevel: latestLog.batteryLevel })
+      }
+    });
+
+    // Notify listeners that location has updated
+    getIO().to(`company:${actor.companyId}`).emit(SOCKET_EVENTS.LOCATION_UPDATE, {
+      userId: actor.id,
+      lat: latestLog.lat,
+      lng: latestLog.lng,
+      timestamp: latestLog.timestamp,
+      batteryLevel: latestLog.batteryLevel
+    });
+  }
+
   return {
     count: result.count
   };
+}
+
+export async function updateLocationStatus(
+  actor: AuthUser,
+  input: { isLocationOn: boolean; batteryLevel?: number }
+) {
+  const user = await prisma.user.update({
+    where: { id: actor.id },
+    data: {
+      isLocationOn: input.isLocationOn,
+      ...(input.batteryLevel !== undefined && { batteryLevel: input.batteryLevel })
+    }
+  });
+
+  // If location is turned off:
+  if (!input.isLocationOn) {
+    // 1. Pause working hours by auto-starting break if punched in on FIELD
+    const activeAttendance = await prisma.attendance.findFirst({
+      where: {
+        userId: actor.id,
+        checkOutTime: null,
+        punchType: "FIELD"
+      }
+    });
+
+    if (activeAttendance) {
+      const activeBreak = await prisma.break.findFirst({
+        where: {
+          attendanceId: activeAttendance.id,
+          endTime: null
+        }
+      });
+
+      if (!activeBreak) {
+        await prisma.break.create({
+          data: {
+            attendanceId: activeAttendance.id,
+            startTime: new Date()
+          }
+        });
+
+        // Emit WS update so the app and admin panels refresh
+        getIO().to(`company:${actor.companyId}`).emit(SOCKET_EVENTS.ATTENDANCE_UPDATE, {
+          userId: actor.id,
+          type: "break-start-auto",
+          data: activeAttendance
+        });
+      }
+    }
+
+    // 2. Alert manager and admins
+    const batteryInfo = input.batteryLevel !== undefined ? `${input.batteryLevel}%` : "N/A";
+    const alertMessage = `${actor.name} has turned off their location. Battery level: ${batteryInfo}.`;
+
+    if (user.managerId) {
+      await notificationService.createNotification(
+        user.managerId,
+        "Location Alert",
+        alertMessage,
+        "LOCATION_OFF"
+      );
+    }
+
+    const admins = await prisma.user.findMany({
+      where: {
+        companyId: actor.companyId,
+        role: { in: ["ADMIN", "SUPERADMIN"] }
+      },
+      select: { id: true }
+    });
+
+    for (const admin of admins) {
+      if (admin.id !== user.managerId) {
+        await notificationService.createNotification(
+          admin.id,
+          "Location Alert",
+          alertMessage,
+          "LOCATION_OFF"
+        );
+      }
+    }
+
+    // Emit live popup WS event for current logged-in admins
+    getIO().to(`company:${actor.companyId}`).emit("LOCATION_OFF_EVENT", {
+      userId: actor.id,
+      name: actor.name,
+      batteryLevel: input.batteryLevel ?? null,
+      timestamp: new Date().toISOString()
+    });
+  } else {
+    // If location is turned back on, resume working hours by auto-ending break if active
+    const activeAttendance = await prisma.attendance.findFirst({
+      where: {
+        userId: actor.id,
+        checkOutTime: null,
+        punchType: "FIELD"
+      }
+    });
+
+    if (activeAttendance) {
+      const activeBreak = await prisma.break.findFirst({
+        where: {
+          attendanceId: activeAttendance.id,
+          endTime: null
+        }
+      });
+
+      if (activeBreak) {
+        await prisma.break.update({
+          where: { id: activeBreak.id },
+          data: { endTime: new Date() }
+        });
+
+        // Emit WS update so the app and admin panels refresh
+        getIO().to(`company:${actor.companyId}`).emit(SOCKET_EVENTS.ATTENDANCE_UPDATE, {
+          userId: actor.id,
+          type: "break-end-auto",
+          data: activeAttendance
+        });
+      }
+    }
+  }
+
+  return { success: true };
 }
 
 export async function getTodayLocationLogs(actor: AuthUser, userId: string, dateStr?: string) {

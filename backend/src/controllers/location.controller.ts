@@ -23,3 +23,8 @@ export async function getTodayLocationLogs(req: Request, res: Response): Promise
   const result = await locationService.getTodayLocationLogs(req.user!, req.params.userId, dateStr);
   sendSuccess(res, result, "Location logs fetched");
 }
+
+export async function updateLocationStatus(req: Request, res: Response): Promise<void> {
+  const result = await locationService.updateLocationStatus(req.user!, req.body);
+  sendSuccess(res, result, "Location status updated");
+}

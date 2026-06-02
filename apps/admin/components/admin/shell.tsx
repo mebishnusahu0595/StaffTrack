@@ -70,10 +70,35 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  type LocationOffAlert = {
+    userId: string;
+    name: string;
+    batteryLevel: number | null;
+    timestamp: string;
+  };
+  const [alerts, setAlerts] = useState<LocationOffAlert[]>([]);
+
   useEffect(() => {
     setCurrentTime(new Date());
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const handleAlert = (e: Event) => {
+      const customEvent = e as CustomEvent<LocationOffAlert>;
+      setAlerts((prev) => {
+        if (prev.some((a) => a.userId === customEvent.detail.userId)) {
+          return prev;
+        }
+        return [...prev, customEvent.detail];
+      });
+    };
+
+    window.addEventListener("location-off-alert", handleAlert);
+    return () => {
+      window.removeEventListener("location-off-alert", handleAlert);
+    };
   }, []);
 
   useEffect(() => {
@@ -247,6 +272,71 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             {children}
           </div>
         </main>
+      </div>
+
+      {/* Floating Location Alerts */}
+      <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 max-w-sm w-full">
+        {alerts.map((alert) => (
+          <div
+            key={alert.userId}
+            className="flex flex-col gap-3 rounded-2xl border border-rose-100 bg-white/95 p-5 shadow-2xl backdrop-blur-md animate-in slide-in-from-bottom duration-300 ring-1 ring-rose-500/10"
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-500">
+                  <AlertTriangle className="h-5 w-5 animate-bounce" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-slate-900 leading-tight">Location Off Alert</h4>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Alert Notification</p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 -mt-1 -mr-1"
+                onClick={() => setAlerts((prev) => prev.filter((a) => a.userId !== alert.userId))}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-bold text-slate-500">Employee:</span>
+                <span className="font-black text-slate-900">{alert.name}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-bold text-slate-500">Battery Health:</span>
+                <span className={cn(
+                  "font-black px-2 py-0.5 rounded-full text-[10px]",
+                  alert.batteryLevel !== null && alert.batteryLevel <= 20 
+                    ? "bg-rose-50 text-rose-600"
+                    : "bg-slate-50 text-slate-700"
+                )}>
+                  {alert.batteryLevel !== null ? `${alert.batteryLevel}%` : "N/A"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-bold text-slate-500">Time:</span>
+                <span className="font-medium text-slate-600">
+                  {new Date(alert.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-1">
+              <Button
+                size="sm"
+                variant="destructive"
+                className="w-full rounded-xl font-bold text-xs"
+                onClick={() => setAlerts((prev) => prev.filter((a) => a.userId !== alert.userId))}
+              >
+                Acknowledge
+              </Button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

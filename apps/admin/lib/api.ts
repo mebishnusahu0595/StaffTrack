@@ -497,6 +497,22 @@ export async function rejectAttendanceRequest(id: string) {
   return response.data.data;
 }
 
+// Late Check-in Approvals
+export async function fetchPendingLateCheckIns() {
+  const response = await api.get<{ data: any[] }>("/attendance/late-checkins/pending");
+  return response.data.data;
+}
+
+export async function approveLateCheckIn(id: string) {
+  const response = await api.post<{ data: any }>(`/attendance/late-checkins/${id}/approve`);
+  return response.data.data;
+}
+
+export async function rejectLateCheckIn(id: string) {
+  const response = await api.post<{ data: any }>(`/attendance/late-checkins/${id}/reject`);
+  return response.data.data;
+}
+
 // Leave Types & Holiday Templates
 export async function fetchLeaveTypes() {
   const response = await api.get<{ data: any[] }>("/leaves/types");

@@ -57,6 +57,26 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
     conflict("Already checked in. Please check out first.");
   }
 
+  // Load user shiftStart to check for lateness
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: actor.id },
+    select: { shiftStart: true, managerId: true, name: true }
+  });
+
+  let isCheckInPending = false;
+  let checkInApproved = true;
+
+  if (user.shiftStart && user.shiftStart !== "00:00") {
+    const [hours, minutes] = user.shiftStart.split(":").map(Number);
+    const shiftTime = new Date(now);
+    shiftTime.setHours(hours, minutes, 0, 0);
+    const lateThreshold = new Date(shiftTime.getTime() + 15 * 60 * 1000); // 15 mins buffer
+    if (now > lateThreshold) {
+      isCheckInPending = true;
+      checkInApproved = false;
+    }
+  }
+
   const result = await (async () => {
     try {
       return await prisma.$transaction(async (tx) => {
@@ -71,7 +91,9 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
             checkInPhotoUrl: input.photoUrl,
             startOdometerPhotoUrl: input.punchType === PunchType.FIELD ? input.startOdometerPhotoUrl : undefined,
             startOdometer: input.punchType === PunchType.FIELD ? input.startOdometer : undefined,
-            status: AttendanceStatus.PRESENT
+            status: AttendanceStatus.PRESENT,
+            isCheckInPending,
+            checkInApproved
           }
         });
       });
@@ -112,7 +134,11 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
           checkOutPhotoUrl: null,
           endOdometerPhotoUrl: null,
           endOdometer: null,
-          status: AttendanceStatus.PRESENT
+          status: AttendanceStatus.PRESENT,
+          isCheckInPending,
+          checkInApproved,
+          checkInApprovedBy: null,
+          checkInApprovedAt: null
         }
       });
     }
@@ -120,17 +146,22 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
 
   // Send Push Notification to Manager
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: actor.id },
-      select: { name: true, managerId: true }
-    });
     if (user?.managerId) {
-      await notificationService.createNotification(
-        user.managerId,
-        "Check In Alert",
-        `${user.name} has checked in.`,
-        "ATTENDANCE_CHECK_IN"
-      );
+      if (isCheckInPending) {
+        await notificationService.createNotification(
+          user.managerId,
+          "Check-In Pending Approval",
+          `${user.name} checked in late (at ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}) and requires approval.`,
+          "LATE_CHECK_IN_PENDING"
+        );
+      } else {
+        await notificationService.createNotification(
+          user.managerId,
+          "Check In Alert",
+          `${user.name} has checked in.`,
+          "ATTENDANCE_CHECK_IN"
+        );
+      }
     }
   } catch (err) {
     console.error("[Attendance Service] Failed to send check-in notification:", err);
@@ -487,6 +518,10 @@ export async function getAttendanceByDate(actor: AuthUser, date: string) {
         endOdometerPhotoUrl: null,
         endOdometer: null,
         status: AttendanceStatus.ABSENT,
+        isCheckInPending: false,
+        checkInApproved: true,
+        checkInApprovedBy: null,
+        checkInApprovedAt: null,
         user: {
           id: user.id,
           name: user.name,
@@ -547,6 +582,10 @@ function buildAbsentRecord(userId: string, date: Date) {
     checkOutLng: null,
     checkOutPhotoUrl: null,
     status: AttendanceStatus.ABSENT,
+    isCheckInPending: false,
+    checkInApproved: true,
+    checkInApprovedBy: null,
+    checkInApprovedAt: null,
     breaks: []
   };
 }
@@ -981,6 +1020,117 @@ export async function rejectAttendanceRequest(actor: AuthUser, requestId: string
     );
   } catch (err) {
     console.error("[Attendance Service] Failed to send attendance rejection notification:", err);
+  }
+
+  return { success: true };
+}
+
+export async function getPendingLateCheckIns(actor: AuthUser) {
+  if (actor.role === UserRole.EMPLOYEE) {
+    throw new Error("Unauthorized");
+  }
+  
+  const companyId = actor.companyId;
+  const pendingList = await prisma.attendance.findMany({
+    where: {
+      isCheckInPending: true,
+      user: { companyId }
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          designation: true,
+          shiftStart: true,
+          shiftEnd: true,
+          group: { select: { name: true } }
+        }
+      }
+    },
+    orderBy: { checkInTime: "desc" }
+  });
+
+  return pendingList.map(item => ({
+    id: item.id,
+    userId: item.userId,
+    employeeId: item.userId.slice(-4).toUpperCase(),
+    name: item.user.name,
+    email: item.user.email,
+    designation: item.user.designation || "Employee",
+    department: item.user.group?.name || "General",
+    date: item.date.toISOString(),
+    checkInTime: item.checkInTime ? item.checkInTime.toISOString() : null,
+    shiftStart: item.user.shiftStart,
+    createdAt: item.checkInTime ? item.checkInTime.toISOString() : new Date().toISOString()
+  }));
+}
+
+export async function approveLateCheckIn(actor: AuthUser, id: string) {
+  if (actor.role === UserRole.EMPLOYEE) {
+    throw new Error("Unauthorized");
+  }
+
+  const attendance = await prisma.attendance.findUnique({
+    where: { id },
+    include: { user: true }
+  });
+
+  if (!attendance) {
+    throw new Error("Attendance record not found");
+  }
+
+  const result = await prisma.attendance.update({
+    where: { id },
+    data: {
+      isCheckInPending: false,
+      checkInApproved: true,
+      checkInApprovedBy: actor.id,
+      checkInApprovedAt: new Date()
+    }
+  });
+
+  try {
+    await notificationService.createNotification(
+      attendance.userId,
+      "Check-In Approved",
+      "Your late check-in has been approved by your manager/admin.",
+      "LATE_CHECK_IN_APPROVED"
+    );
+  } catch (err) {
+    console.error("[Attendance Service] Failed to send approval notification:", err);
+  }
+
+  return result;
+}
+
+export async function rejectLateCheckIn(actor: AuthUser, id: string) {
+  if (actor.role === UserRole.EMPLOYEE) {
+    throw new Error("Unauthorized");
+  }
+
+  const attendance = await prisma.attendance.findUnique({
+    where: { id }
+  });
+
+  if (!attendance) {
+    throw new Error("Attendance record not found");
+  }
+
+  await prisma.attendance.delete({
+    where: { id }
+  });
+
+  try {
+    await notificationService.createNotification(
+      attendance.userId,
+      "Check-In Rejected",
+      "Your late check-in request was rejected.",
+      "LATE_CHECK_IN_REJECTED"
+    );
+  } catch (err) {
+    console.error("[Attendance Service] Failed to send rejection notification:", err);
   }
 
   return { success: true };

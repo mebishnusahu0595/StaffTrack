@@ -118,6 +118,8 @@ model User {
   holidayTemplateId  String?
   holidayTemplate    HolidayTemplate? @relation(fields: [holidayTemplateId], references: [id], onDelete: SetNull)
   expoPushToken      String?
+  batteryLevel       Int?
+  isLocationOn       Boolean        @default(true)
 
   @@index([companyId])
   @@index([managerId])
@@ -223,6 +225,11 @@ model Attendance {
   status                AttendanceStatus @default(PRESENT)
   user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   breaks                Break[]
+  
+  isCheckInPending      Boolean          @default(false)
+  checkInApproved       Boolean          @default(true)
+  checkInApprovedBy     String?
+  checkInApprovedAt     DateTime?
 
   @@index([userId, date])
 }

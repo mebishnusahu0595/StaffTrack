@@ -2,11 +2,15 @@ import * as Battery from "expo-battery";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import { useEffect } from "react";
-import { Platform } from "react-native";
+import { Platform, Alert } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { sendLocationLogs, type LocationPing } from "../api";
+import { sendLocationLogs, updateLocationStatus, type LocationPing } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useAttendance } from "../hooks/useAttendance";
+
+let lastLocationState: boolean | null = null;
+let isAlertOpen = false;
 
 export const LOCATION_TASK_NAME = "background-location";
 
@@ -36,6 +40,74 @@ if (Platform.OS !== "web") {
     });
   } catch (error) {
     console.warn("[LocationTracker] Background task registration failed", error);
+  }
+}
+
+async function syncOfflineQueue() {
+  try {
+    const stored = await AsyncStorage.getItem("@location_sync_queue");
+    if (!stored) return;
+    const queue = JSON.parse(stored);
+    if (queue.length === 0) return;
+    
+    console.log(`[LocationTracker] [Periodic] Syncing ${queue.length} cached logs...`);
+    await sendLocationLogs(queue);
+    await AsyncStorage.removeItem("@location_sync_queue");
+    console.log("[LocationTracker] [Periodic] Cached logs synced and cleared.");
+  } catch (error) {
+    console.log("[LocationTracker] [Periodic] Cached logs sync failed (offline).");
+  }
+}
+
+async function checkLocationStatus() {
+  try {
+    const enabled = await Location.hasServicesEnabledAsync();
+    const permission = await Location.getForegroundPermissionsAsync();
+    const locationIsOn = enabled && permission.status === "granted";
+    
+    if (locationIsOn) {
+      isAlertOpen = false;
+    }
+
+    if (lastLocationState === null) {
+      lastLocationState = locationIsOn;
+      if (!locationIsOn && !isAlertOpen) {
+        isAlertOpen = true;
+        Alert.alert(
+          "Location Required!",
+          "Your location services are disabled. Your working hours are paused and auto-break has started. Please turn on location services immediately to resume work.",
+          [{ text: "OK", onPress: () => { isAlertOpen = false; } }],
+          { cancelable: false }
+        );
+      }
+      return;
+    }
+
+    if (locationIsOn !== lastLocationState) {
+      console.log(`[LocationTracker] Location state changed. Was: ${lastLocationState}, Now: ${locationIsOn}`);
+      lastLocationState = locationIsOn;
+
+      const level = await Battery.getBatteryLevelAsync();
+      const batteryLevel = level >= 0 ? Math.round(level * 100) : undefined;
+
+      // Report to backend
+      await updateLocationStatus({ isLocationOn: locationIsOn, batteryLevel }).catch((err) => {
+        console.warn("[LocationTracker] Failed to update location status on backend:", err);
+      });
+    }
+
+    // Always alert the employee if location is turned off and no alert is currently open
+    if (!locationIsOn && !isAlertOpen) {
+      isAlertOpen = true;
+      Alert.alert(
+        "Location Required!",
+        "Your location services are disabled. Your working hours are paused and auto-break has started. Please turn on location services immediately to resume work.",
+        [{ text: "OK", onPress: () => { isAlertOpen = false; } }],
+        { cancelable: false }
+      );
+    }
+  } catch (err) {
+    console.warn("[LocationTracker] Error checking location status:", err);
   }
 }
 
@@ -102,6 +174,12 @@ export function LocationTracker() {
           console.warn("[LocationTracker] Failed to start tracking", error);
           return false;
         });
+
+        // Sync cached locations if any
+        void syncOfflineQueue();
+
+        // Monitor location provider toggle
+        void checkLocationStatus();
       }
     }
 
@@ -201,9 +279,9 @@ async function handleBackgroundLocations(data: unknown) {
     return;
   }
 
-  console.log(`[LocationTracker] [Mobile] Received ${locations.length} background locations. Sending to server...`);
+  console.log(`[LocationTracker] [Mobile] Received ${locations.length} background locations. Queuing/Sending...`);
   const batteryLevel = await getBatteryPercentage().catch(() => undefined);
-  const logs: LocationPing[] = locations.map((location) => ({
+  const newLogs: LocationPing[] = locations.map((location) => ({
     lat: location.coords.latitude,
     lng: location.coords.longitude,
     accuracy: location.coords.accuracy ?? 0,
@@ -211,10 +289,39 @@ async function handleBackgroundLocations(data: unknown) {
     batteryLevel
   }));
 
-  await sendLocationLogs(logs).catch((error) => {
-    console.warn("[LocationTracker] Failed to send location logs", error);
-  });
-  console.log("[LocationTracker] [Mobile] Ping sent successfully.");
+  // Fetch current queue from storage
+  let queue: LocationPing[] = [];
+  try {
+    const stored = await AsyncStorage.getItem("@location_sync_queue");
+    if (stored) {
+      queue = JSON.parse(stored);
+    }
+  } catch (err) {
+    console.warn("[LocationTracker] Failed to read location queue:", err);
+  }
+
+  // Append new logs to queue
+  queue.push(...newLogs);
+
+  // Limit queue size to avoid memory overflow (e.g. max 1000 items)
+  if (queue.length > 1000) {
+    queue = queue.slice(-1000);
+  }
+
+  try {
+    console.log(`[LocationTracker] Attempting to sync ${queue.length} coordinates...`);
+    await sendLocationLogs(queue);
+    // Success! Clear queue
+    await AsyncStorage.removeItem("@location_sync_queue");
+    console.log("[LocationTracker] Synced successfully. Queue cleared.");
+  } catch (error) {
+    console.warn("[LocationTracker] Offline. Saving pings locally.", error);
+    try {
+      await AsyncStorage.setItem("@location_sync_queue", JSON.stringify(queue));
+    } catch (saveErr) {
+      console.error("[LocationTracker] Failed to save queue:", saveErr);
+    }
+  }
 }
 
 async function getBatteryPercentage(): Promise<number | undefined> {

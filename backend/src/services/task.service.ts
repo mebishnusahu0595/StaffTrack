@@ -344,8 +344,32 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
     }
   }
 
-  // Notify employee that task has been updated
-  if (updatedTask.assignedToId && actor.id !== updatedTask.assignedToId) {
+  // Notify employee that task has been updated/re-assigned
+  if (task.assignedToId !== updatedTask.assignedToId) {
+    // Notify the old assignee
+    try {
+      await notificationService.createNotification(
+        task.assignedToId,
+        "Task Unassigned",
+        `You have been unassigned from task: ${task.title}.`,
+        "TASK_UNASSIGNED"
+      );
+    } catch (err) {
+      console.error("Failed to send task unassigned notification:", err);
+    }
+    
+    // Notify the new assignee
+    try {
+      await notificationService.createNotification(
+        updatedTask.assignedToId,
+        "New Task Assigned",
+        `You have been assigned a new task: ${updatedTask.title}. Due on ${new Date(updatedTask.dueDate).toLocaleDateString()}`,
+        "TASK_ASSIGNED"
+      );
+    } catch (err) {
+      console.error("Failed to send task assigned notification:", err);
+    }
+  } else if (updatedTask.assignedToId && actor.id !== updatedTask.assignedToId) {
     try {
       await notificationService.createNotification(
         updatedTask.assignedToId,

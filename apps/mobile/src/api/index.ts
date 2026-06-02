@@ -104,6 +104,10 @@ export type Attendance = {
   endOdometer?: number | null;
   status: AttendanceStatus;
   breaks?: Break[];
+  isCheckInPending?: boolean;
+  checkInApproved?: boolean;
+  checkInApprovedBy?: string | null;
+  checkInApprovedAt?: string | null;
 };
 
 export type DayEndReport = {
@@ -660,5 +664,9 @@ export type Template = {
 
 export async function fetchTemplates(params?: { type?: string; search?: string }): Promise<Template[]> {
   return unwrap(await api.get<ApiEnvelope<Template[]>>("/templates", { params }));
+}
+
+export async function updateLocationStatus(payload: { isLocationOn: boolean; batteryLevel?: number }): Promise<any> {
+  return unwrap(await api.post<ApiEnvelope<any>>("/location/status", payload));
 }
 

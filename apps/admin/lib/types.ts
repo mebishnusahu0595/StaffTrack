@@ -31,6 +31,8 @@ export interface User {
     name: string;
   } | null;
   baseSalary: number;
+  batteryLevel?: number | null;
+  isLocationOn?: boolean;
   createdAt: string;
 }
 
@@ -103,6 +105,10 @@ export interface AttendanceRecord {
   endOdometer?: number | null;
   status: AttendanceStatus;
   breaks?: Break[];
+  isCheckInPending?: boolean;
+  checkInApproved?: boolean;
+  checkInApprovedBy?: string | null;
+  checkInApprovedAt?: string | null;
 }
 
 export interface DayEndReport {

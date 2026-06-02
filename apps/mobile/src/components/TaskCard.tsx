@@ -49,6 +49,45 @@ export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
           <Text style={styles.metaText}>Deadline: {dayjs(task.dueDate).format("DD MMM YYYY")}</Text>
         </View>
 
+        {(() => {
+          const now = dayjs();
+          const due = dayjs(task.dueDate);
+          const diffMinutes = due.diff(now, "minute");
+          let timeLeftText = "";
+          let isOverdue = false;
+
+          if (diffMinutes < 0) {
+            isOverdue = true;
+            const absMin = Math.abs(diffMinutes);
+            if (absMin < 60) {
+              timeLeftText = `Overdue by ${absMin} mins`;
+            } else if (absMin < 24 * 60) {
+              timeLeftText = `Overdue by ${Math.floor(absMin / 60)} hrs`;
+            } else {
+              timeLeftText = `Overdue by ${Math.floor(absMin / (24 * 60))} days`;
+            }
+          } else {
+            if (diffMinutes < 60) {
+              timeLeftText = `${diffMinutes} mins left`;
+            } else if (diffMinutes < 24 * 60) {
+              const hours = Math.floor(diffMinutes / 60);
+              const mins = diffMinutes % 60;
+              timeLeftText = `${hours}h ${mins}m left`;
+            } else {
+              timeLeftText = `${Math.floor(diffMinutes / (24 * 60))} days left`;
+            }
+          }
+
+          return task.status !== "COMPLETED" && task.status !== "CANCELLED" ? (
+            <View style={styles.metaRow}>
+              <Icon source="clock-alert-outline" size={16} color={isOverdue ? "#A4262C" : "#D48806"} />
+              <Text style={[styles.metaText, { color: isOverdue ? "#A4262C" : "#D48806", fontWeight: "700" }]}>
+                Time Left: {timeLeftText}
+              </Text>
+            </View>
+          ) : null;
+        })()}
+
         <View style={styles.badgeRow}>
           <View style={[styles.repeatBadge, !task.isRepeating && { backgroundColor: '#E0E4E7' }]}>
             <Icon 

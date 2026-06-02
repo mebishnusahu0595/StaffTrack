@@ -90,6 +90,24 @@ router.post(
 );
 
 router.get(
+  "/late-checkins/pending",
+  roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER),
+  asyncHandler(attendanceController.getPendingLateCheckIns)
+);
+
+router.post(
+  "/late-checkins/:id/approve",
+  roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER),
+  asyncHandler(attendanceController.approveLateCheckIn)
+);
+
+router.post(
+  "/late-checkins/:id/reject",
+  roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER),
+  asyncHandler(attendanceController.rejectLateCheckIn)
+);
+
+router.get(
   "/:userId",
   validate({ params: attendanceUserParamSchema, query: attendanceMonthQuerySchema }),
   asyncHandler(attendanceController.getMonthlyAttendance)
