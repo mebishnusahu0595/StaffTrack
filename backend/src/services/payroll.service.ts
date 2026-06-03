@@ -85,8 +85,6 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
   const taskPointsByUserDate = groupTaskPointsByUserDate(completedTasks);
 
   return users.map((user: any) => {
-    const userJoiningDate = new Date(user.joiningDate);
-    userJoiningDate.setHours(0, 0, 0, 0);
     const effectiveBaseSalary = user.group?.baseSalary || user.baseSalary || 0;
     const dailySalary = effectiveBaseSalary / daysInMonth.length;
 
@@ -105,10 +103,6 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
     const dailyBreakdown = daysInMonth.map((day: Date) => {
       const dayDate = startOfDate(day);
       const dayKey = format(day, "yyyy-MM-dd");
-
-      if (dayDate < userJoiningDate) {
-        return { date: dayKey, status: "PRE_JOINING", payable: false, points: 0 };
-      }
 
       const applicableHoliday = findHolidayForUser(holidays, user, day);
       const attendance = user.attendances.find((row: any) => isSameDay(new Date(row.date), day));
@@ -144,10 +138,8 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
           status = "ON_LEAVE";
         }
       } else if (isWeekend(day)) {
-        holidayDays++;
-        totalPayableDays++;
-        payable = true;
         status = "WEEKEND";
+        payable = false;
       } else if (dayDate > today) {
         status = "UPCOMING";
       } else {
@@ -313,7 +305,6 @@ export async function calculateMusterReport(companyId: string, month: number, ye
   const report = users.map((user: any) => {
     const attendanceMap: Record<string, string> = {};
     const dailyPoints: Record<string, number> = {};
-    const joiningDate = user.joiningDate ? startOfDate(user.joiningDate) : null;
     const today = new Date();
     today.setHours(23, 59, 59, 999);
     let monthlyPoints = 0;
@@ -335,10 +326,6 @@ export async function calculateMusterReport(companyId: string, month: number, ye
         if (attendance.status === "PRESENT") status = "P";
         else if (attendance.status === "HALF_DAY") status = "HD";
         else if (attendance.status === "ON_LEAVE") status = "L";
-      }
-
-      if (joiningDate && dayDate < joiningDate) {
-        status = "-";
       }
 
       if (dayDate > today) {
