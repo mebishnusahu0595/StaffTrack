@@ -42,6 +42,19 @@ interface CreateTaskInput {
 export async function createTask(actor: AuthUser, input: CreateTaskInput) {
   await ensureManagerCanUseEmployee(actor, input.assignedToId);
 
+  // A manager assigning subtasks to a different person must still stay within
+  // their own team — validate every distinct subtask assignee.
+  if (input.subtasks && input.subtasks.length > 0) {
+    const subAssignees = new Set(
+      input.subtasks
+        .map((sub) => sub.assignedToId)
+        .filter((id): id is string => Boolean(id) && id !== input.assignedToId)
+    );
+    for (const subAssigneeId of subAssignees) {
+      await ensureManagerCanUseEmployee(actor, subAssigneeId);
+    }
+  }
+
   const lat = input.location?.lat ?? input.lat;
   const lng = input.location?.lng ?? input.lng;
 

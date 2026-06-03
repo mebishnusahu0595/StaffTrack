@@ -596,6 +596,15 @@ export async function fetchUserProfile(userId: string): Promise<User> {
 }
 
 // Manager Specific Endpoints
+export type CreateSubtaskPayload = {
+  title: string;
+  description?: string;
+  assignedToId?: string;
+  priority?: "High" | "Medium" | "Low";
+  points?: number;
+  dueDate?: string;
+};
+
 export type CreateTaskPayload = {
   title: string;
   description?: string;
@@ -603,6 +612,7 @@ export type CreateTaskPayload = {
   assignedToId: string;
   priority?: "High" | "Medium" | "Low";
   points?: number;
+  subtasks?: CreateSubtaskPayload[];
 };
 
 export async function fetchUsers(): Promise<User[]> {

@@ -28,6 +28,12 @@ export function ManagerTasksScreen() {
   const [dueDate, setDueDate] = useState(dayjs().format("YYYY-MM-DD"));
   const [assignedToId, setAssignedToId] = useState("");
 
+  // Subtasks (only when creating a new task)
+  type DraftSubtask = { id: string; title: string; points: string; assignedToId: string };
+  const [subtasks, setSubtasks] = useState<DraftSubtask[]>([]);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+  const [newSubtaskPoints, setNewSubtaskPoints] = useState("5");
+
   // Assignee Dropdown Picker State
   const [pickerVisible, setPickerVisible] = useState(false);
 
@@ -99,6 +105,9 @@ export function ManagerTasksScreen() {
     setPoints("10");
     setPriority("Medium");
     setDueDate(dayjs().format("YYYY-MM-DD"));
+    setSubtasks([]);
+    setNewSubtaskTitle("");
+    setNewSubtaskPoints("5");
     const users = usersQuery.data || [];
     setAssignedToId(users.length > 0 ? users[0].id : "");
     setFormVisible(true);
@@ -112,8 +121,21 @@ export function ManagerTasksScreen() {
     setPriority(task.priority || "Medium");
     setDueDate(dayjs(task.dueDate).format("YYYY-MM-DD"));
     setAssignedToId(task.assignedTo?.id || "");
+    setSubtasks([]); // subtasks are only added at creation time
     setFormVisible(true);
   };
+
+  const addSubtask = () => {
+    if (!newSubtaskTitle.trim()) return;
+    setSubtasks((prev) => [
+      ...prev,
+      { id: Math.random().toString(), title: newSubtaskTitle.trim(), points: newSubtaskPoints || "0", assignedToId }
+    ]);
+    setNewSubtaskTitle("");
+    setNewSubtaskPoints("5");
+  };
+
+  const removeSubtask = (id: string) => setSubtasks((prev) => prev.filter((s) => s.id !== id));
 
   const closeForm = () => {
     setFormVisible(false);
@@ -138,7 +160,16 @@ export function ManagerTasksScreen() {
     if (editingTask) {
       updateTaskMutation.mutate({ id: editingTask.id, payload });
     } else {
-      createTaskMutation.mutate(payload);
+      createTaskMutation.mutate({
+        ...payload,
+        subtasks: subtasks.map((s) => ({
+          title: s.title,
+          points: parseInt(s.points) || 0,
+          assignedToId: s.assignedToId || assignedToId,
+          priority,
+          dueDate: dayjs(dueDate).toISOString()
+        }))
+      });
     }
   };
 
@@ -429,6 +460,54 @@ export function ManagerTasksScreen() {
               );
             })}
           </View>
+
+          {/* Subtasks (creation only) */}
+          {!editingTask && (
+            <View style={{ marginTop: 4, marginBottom: 8 }}>
+              <Text style={styles.pickerTitle}>Subtasks</Text>
+              {subtasks.map((s) => {
+                const sa = team.find((u) => u.id === s.assignedToId);
+                return (
+                  <View key={s.id} style={styles.subtaskRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.subtaskTitle}>{s.title}</Text>
+                      <Text style={styles.subtaskMeta}>{s.points} pts · {sa ? sa.name : "Same assignee"}</Text>
+                    </View>
+                    <IconButton
+                      icon={() => <AppIcon name="close" size={16} color="#EF4444" />}
+                      onPress={() => removeSubtask(s.id)}
+                      style={{ margin: 0 }}
+                    />
+                  </View>
+                );
+              })}
+              <View style={{ flexDirection: "row", gap: 8, alignItems: "center", marginTop: 4 }}>
+                <TextInput
+                  label="Subtask title"
+                  value={newSubtaskTitle}
+                  onChangeText={setNewSubtaskTitle}
+                  mode="outlined"
+                  dense
+                  activeOutlineColor="#1A202C"
+                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                />
+                <TextInput
+                  label="Pts"
+                  value={newSubtaskPoints}
+                  onChangeText={setNewSubtaskPoints}
+                  mode="outlined"
+                  dense
+                  keyboardType="numeric"
+                  activeOutlineColor="#1A202C"
+                  style={[styles.input, { width: 64, marginBottom: 0 }]}
+                />
+                <Button mode="contained-tonal" compact onPress={addSubtask} style={{ borderRadius: 10 }}>
+                  Add
+                </Button>
+              </View>
+              <Text style={styles.subtaskHint}>Subtasks are assigned to the same staff member. Open each later to reassign.</Text>
+            </View>
+          )}
 
           <View style={styles.modalButtons}>
             <Button mode="text" textColor="#64748B" onPress={closeForm} style={styles.modalBtn}>
@@ -813,5 +892,32 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#64748B",
     marginTop: 2
+  },
+  subtaskRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#EEF2F6",
+    paddingLeft: 12,
+    marginBottom: 6
+  },
+  subtaskTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#1A202C"
+  },
+  subtaskMeta: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#64748B",
+    marginTop: 2
+  },
+  subtaskHint: {
+    fontSize: 10,
+    color: "#94A3B8",
+    fontStyle: "italic",
+    marginTop: 6
   }
 });
