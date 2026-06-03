@@ -18,7 +18,10 @@ import {
   Eye,
   FileText,
   DollarSign,
-  X
+  X,
+  Plus,
+  Trash2,
+  Printer
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
@@ -50,6 +53,7 @@ export default function PayrollPage() {
   const [selectedMonth, setSelectedMonth] = useState(dayjs());
   const [search, setSearch] = useState("");
   const [selectedReport, setSelectedReport] = useState<any>(null);
+  const [customizingReport, setCustomizingReport] = useState<any>(null);
 
   const payrollQuery = useQuery({
     queryKey: ["payroll", selectedMonth.month() + 1, selectedMonth.year()],
@@ -309,7 +313,26 @@ export default function PayrollPage() {
       </Card>
 
       <Dialog open={!!selectedReport} onOpenChange={(open) => { if (!open) setSelectedReport(null); }}>
-         {selectedReport && <PayrollDetailModal report={selectedReport} month={selectedMonth} />}
+         {selectedReport && (
+           <PayrollDetailModal 
+             report={selectedReport} 
+             month={selectedMonth} 
+             onCustomize={(rep) => {
+               setSelectedReport(null);
+               setCustomizingReport(rep);
+             }}
+           />
+         )}
+      </Dialog>
+
+      <Dialog open={!!customizingReport} onOpenChange={(open) => { if (!open) setCustomizingReport(null); }}>
+         {customizingReport && (
+           <SalarySlipCustomizerModal 
+             report={customizingReport} 
+             month={selectedMonth} 
+             onClose={() => setCustomizingReport(null)}
+           />
+         )}
       </Dialog>
     </div>
   );
@@ -342,7 +365,7 @@ function StatsCard({ label, value, description, icon, color }: any) {
   );
 }
 
-function PayrollDetailModal({ report, month }: { report: any, month: any }) {
+function PayrollDetailModal({ report, month, onCustomize }: { report: any, month: any, onCustomize: (report: any) => void }) {
   const printPayslip = () => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
@@ -527,13 +550,13 @@ function PayrollDetailModal({ report, month }: { report: any, month: any }) {
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Final Net Salary</p>
                 <div className="flex items-center gap-4">
                    <h3 className="text-4xl font-black text-blue-600 tracking-tighter">₹{report.netSalary.toLocaleString()}</h3>
-                   <Button 
-                     variant="outline"
-                     className="h-14 px-6 rounded-2xl border-slate-200 font-black uppercase tracking-widest text-xs gap-3 shadow-sm hover:bg-slate-50 transition-all"
-                     onClick={printPayslip}
-                   >
-                      <FileText className="h-4 w-4 text-slate-500" /> Print Payslip
-                   </Button>
+                    <Button 
+                      variant="outline"
+                      className="h-14 px-6 rounded-2xl border-slate-200 font-black uppercase tracking-widest text-xs gap-3 shadow-sm hover:bg-slate-50 transition-all"
+                      onClick={() => onCustomize(report)}
+                    >
+                       <FileText className="h-4 w-4 text-slate-500" /> Print Payslip
+                    </Button>
                    <Button className="h-14 px-8 rounded-2xl bg-blue-600 hover:bg-blue-700 font-black uppercase tracking-widest text-xs gap-3 shadow-xl shadow-blue-200">
                       Process Payment <ArrowRight className="h-4 w-4" />
                    </Button>
@@ -577,5 +600,531 @@ function ArrowRight(props: any) {
       <path d="M5 12h14" />
       <path d="m12 5 7 7-7 7" />
     </svg>
+  );
+}
+
+interface CustomItem {
+  id: string;
+  name: string;
+  amount: number;
+}
+
+function SalarySlipCustomizerModal({ report, month, onClose }: { report: any, month: any, onClose: () => void }) {
+  const [empName, setEmpName] = useState(report.userName || "");
+  const [designation, setDesignation] = useState(report.designation || "Staff Member");
+  const [baseSalary, setBaseSalary] = useState<number>(report.baseSalary || 0);
+  const [totalDays, setTotalDays] = useState<number>(report.totalDays || 30);
+  const [presentDays, setPresentDays] = useState<number>(report.presentDays || 0);
+  const [halfDays, setHalfDays] = useState<number>(report.halfDays || 0);
+  const [holidayDays, setHolidayDays] = useState<number>(report.holidayDays || 0);
+  const [paidLeaveDays, setPaidLeaveDays] = useState<number>(report.paidLeaveDays || 0);
+  const [absentDays, setAbsentDays] = useState<number>(report.absentDays || 0);
+  
+  const [expenses, setExpenses] = useState<number>(report.approvedExpensesTotal || 0);
+  const [travelAllowance, setTravelAllowance] = useState<number>(report.travelAllowance || 0);
+  
+  const [waiveLeaveDeduction, setWaiveLeaveDeduction] = useState(false);
+  
+  // Custom Earnings & Deductions
+  const [customEarnings, setCustomEarnings] = useState<CustomItem[]>([]);
+  const [customDeductions, setCustomDeductions] = useState<CustomItem[]>([]);
+  
+  // Inputs for adding custom items
+  const [newEarningName, setNewEarningName] = useState("");
+  const [newEarningAmount, setNewEarningAmount] = useState("");
+  
+  const [newDeductionName, setNewDeductionName] = useState("");
+  const [newDeductionAmount, setNewDeductionAmount] = useState("");
+
+  // Live calculations
+  const dailySalary = totalDays > 0 ? baseSalary / totalDays : 0;
+  
+  const calculatedPayableDays = useMemo(() => {
+    if (waiveLeaveDeduction) {
+      return totalDays;
+    }
+    return presentDays + (halfDays * 0.5) + holidayDays + paidLeaveDays;
+  }, [waiveLeaveDeduction, totalDays, presentDays, halfDays, holidayDays, paidLeaveDays]);
+
+  const netSalary = useMemo(() => {
+    return Math.round(calculatedPayableDays * dailySalary);
+  }, [calculatedPayableDays, dailySalary]);
+
+  const deductionAmount = useMemo(() => {
+    return Math.max(0, baseSalary - netSalary);
+  }, [baseSalary, netSalary]);
+
+  const totalEarningsSum = useMemo(() => {
+    return customEarnings.reduce((sum, item) => sum + item.amount, 0);
+  }, [customEarnings]);
+
+  const totalDeductionsSum = useMemo(() => {
+    return customDeductions.reduce((sum, item) => sum + item.amount, 0);
+  }, [customDeductions]);
+
+  const totalPayout = useMemo(() => {
+    return netSalary + expenses + travelAllowance + totalEarningsSum - totalDeductionsSum;
+  }, [netSalary, expenses, travelAllowance, totalEarningsSum, totalDeductionsSum]);
+
+  const addCustomEarning = () => {
+    if (!newEarningName.trim() || !newEarningAmount) return;
+    const amount = parseFloat(newEarningAmount);
+    if (isNaN(amount)) return;
+    setCustomEarnings(prev => [...prev, { id: Math.random().toString(), name: newEarningName.trim(), amount }]);
+    setNewEarningName("");
+    setNewEarningAmount("");
+  };
+
+  const deleteCustomEarning = (id: string) => {
+    setCustomEarnings(prev => prev.filter(item => item.id !== id));
+  };
+
+  const addCustomDeduction = () => {
+    if (!newDeductionName.trim() || !newDeductionAmount) return;
+    const amount = parseFloat(newDeductionAmount);
+    if (isNaN(amount)) return;
+    setCustomDeductions(prev => [...prev, { id: Math.random().toString(), name: newDeductionName.trim(), amount }]);
+    setNewDeductionName("");
+    setNewDeductionAmount("");
+  };
+
+  const deleteCustomDeduction = (id: string) => {
+    setCustomDeductions(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handlePrint = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const monthName = month.format("MMMM YYYY");
+    
+    // Build tables of custom earnings and deductions
+    let customEarningsRows = "";
+    customEarnings.forEach(item => {
+      customEarningsRows += `
+        <tr>
+          <td>${item.name} (Custom Earning)</td>
+          <td style="text-align: right;">--</td>
+          <td style="text-align: right; color: #10b981;">+ ₹${item.amount.toLocaleString()}</td>
+        </tr>
+      `;
+    });
+
+    let customDeductionsRows = "";
+    customDeductions.forEach(item => {
+      customDeductionsRows += `
+        <tr>
+          <td>${item.name} (Custom Deduction)</td>
+          <td style="text-align: right;">--</td>
+          <td style="text-align: right; color: #ef4444;">- ₹${item.amount.toLocaleString()}</td>
+        </tr>
+      `;
+    });
+
+    const html = `
+      <html>
+        <head>
+          <title>Payslip - ${empName}</title>
+          <style>
+            body { font-family: 'Inter', sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
+            .header { border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
+            .logo { font-size: 24px; font-weight: 800; color: #2563eb; }
+            .title { font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #475569; }
+            .meta-grid { display: grid; grid-template-cols: 2fr 1fr; gap: 40px; margin-bottom: 40px; }
+            .meta-block h3 { margin: 0 0 8px 0; font-size: 11px; text-transform: uppercase; color: #94a3b8; letter-spacing: 1px; }
+            .meta-block p { margin: 0; font-size: 14px; font-weight: 600; }
+            .breakdown-table { border-collapse: collapse; width: 100%; margin-bottom: 40px; }
+            .breakdown-table th, .breakdown-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #f1f5f9; }
+            .breakdown-table th { background: #f8fafc; font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700; }
+            .breakdown-table td { font-size: 13px; font-weight: 500; }
+            .total-section { display: flex; justify-content: flex-end; padding-top: 20px; }
+            .total-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 30px; text-align: right; }
+            .total-box h4 { margin: 0 0 5px 0; font-size: 10px; text-transform: uppercase; color: #64748b; letter-spacing: 1px; }
+            .total-box p { margin: 0; font-size: 28px; font-weight: 800; color: #2563eb; }
+            .footer-note { text-align: center; margin-top: 80px; font-size: 11px; color: #94a3b8; border-top: 1px dashed #e2e8f0; padding-top: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="logo">Demo Corp</div>
+            <div class="title">Salary Slip</div>
+          </div>
+          
+          <div class="meta-grid">
+            <div class="meta-block">
+              <h3>Employee Information</h3>
+              <p>${empName}</p>
+              <p style="font-size: 12px; color: #64748b; font-weight: 500;">${designation}</p>
+            </div>
+            <div class="meta-block" style="text-align: right;">
+              <h3>Pay Period</h3>
+              <p>${monthName}</p>
+            </div>
+          </div>
+          
+          <table class="breakdown-table">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th style="text-align: right;">Count / Value</th>
+                <th style="text-align: right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Monthly Calendar Days</td>
+                <td style="text-align: right;">${totalDays} Days</td>
+                <td style="text-align: right;">--</td>
+              </tr>
+              <tr>
+                <td>Days Present</td>
+                <td style="text-align: right;">${presentDays} Days</td>
+                <td style="text-align: right;">--</td>
+              </tr>
+              ${halfDays > 0 ? `
+              <tr>
+                <td>Half Days worked</td>
+                <td style="text-align: right;">${halfDays} Days</td>
+                <td style="text-align: right;">--</td>
+              </tr>` : ""}
+              <tr>
+                <td>Paid Holidays / Leaves</td>
+                <td style="text-align: right;">${holidayDays + paidLeaveDays} Days</td>
+                <td style="text-align: right;">--</td>
+              </tr>
+              ${!waiveLeaveDeduction && deductionAmount > 0 ? `
+              <tr>
+                <td>Unpaid Absences</td>
+                <td style="text-align: right; color: #ef4444;">${absentDays} Days</td>
+                <td style="text-align: right; color: #ef4444;">- ₹${deductionAmount.toLocaleString()}</td>
+              </tr>` : ""}
+              <tr style="font-weight: 700; border-top: 2px solid #e2e8f0;">
+                <td>Basic Salary</td>
+                <td style="text-align: right;">Base Rate</td>
+                <td style="text-align: right;">₹${baseSalary.toLocaleString()}</td>
+              </tr>
+              <tr style="font-weight: 700;">
+                <td>Net Calculated Basic Salary</td>
+                <td style="text-align: right;">${calculatedPayableDays} Payable Days</td>
+                <td style="text-align: right;">₹${netSalary.toLocaleString()}</td>
+              </tr>
+              ${expenses > 0 ? `
+              <tr>
+                <td>Reimbursed Expenses</td>
+                <td style="text-align: right;">Approved</td>
+                <td style="text-align: right; color: #10b981;">+ ₹${expenses.toLocaleString()}</td>
+              </tr>` : ""}
+              ${travelAllowance > 0 ? `
+              <tr>
+                <td>Travel Allowance</td>
+                <td style="text-align: right;">Calculated Mileage</td>
+                <td style="text-align: right; color: #10b981;">+ ₹${travelAllowance.toLocaleString()}</td>
+              </tr>` : ""}
+              
+              ${customEarningsRows}
+              ${customDeductionsRows}
+            </tbody>
+          </table>
+          
+          <div class="total-section">
+            <div class="total-box">
+              <h4>Net Take Home</h4>
+              <p>₹${totalPayout.toLocaleString()}</p>
+            </div>
+          </div>
+          
+          <div class="footer-note">
+            This is a computer-generated document and does not require a physical signature.
+          </div>
+          
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
+  return (
+    <DialogContent className="max-w-4xl p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[40px] hide-close max-h-[90vh] flex flex-col">
+       <DialogHeader className="p-8 bg-slate-900 text-white relative flex-shrink-0">
+          <DialogClose className="absolute right-6 top-6 z-50 rounded-2xl bg-white/10 p-2 text-white/50 hover:bg-white/20 hover:text-white transition-all outline-none">
+             <X className="h-5 w-5" />
+          </DialogClose>
+          <div className="relative z-10 flex items-center justify-between">
+             <div>
+                <h2 className="text-2xl font-black tracking-tight">Salary Slip Customizer</h2>
+                <p className="text-slate-400 text-xs font-bold mt-1">
+                  Customize earnings, leaves, deductions, and print a custom payslip for {report.userName}.
+                </p>
+             </div>
+          </div>
+       </DialogHeader>
+
+       <div className="p-8 space-y-6 overflow-y-auto flex-grow">
+          {/* Section 1: Employee and Basic Salary Details */}
+          <div className="bg-slate-50 p-6 rounded-3xl space-y-4 border border-slate-100">
+             <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Base Salary & Employee Profile</h3>
+             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                   <label className="text-[10px] font-bold text-slate-400 uppercase">Employee Name</label>
+                   <Input 
+                      value={empName}
+                      onChange={e => setEmpName(e.target.value)}
+                      className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800"
+                   />
+                </div>
+                <div>
+                   <label className="text-[10px] font-bold text-slate-400 uppercase">Designation</label>
+                   <Input 
+                      value={designation}
+                      onChange={e => setDesignation(e.target.value)}
+                      className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800"
+                   />
+                </div>
+                <div>
+                   <label className="text-[10px] font-bold text-slate-400 uppercase">Base Salary (₹)</label>
+                   <Input 
+                      type="number"
+                      value={baseSalary || ""}
+                      onChange={e => setBaseSalary(Number(e.target.value))}
+                      className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800"
+                   />
+                </div>
+                <div>
+                   <label className="text-[10px] font-bold text-slate-400 uppercase">Month Calendar Days</label>
+                   <Input 
+                      type="number"
+                      value={totalDays || ""}
+                      onChange={e => setTotalDays(Number(e.target.value))}
+                      className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800"
+                   />
+                </div>
+             </div>
+          </div>
+
+          {/* Section 2: Attendance, Leaves & Absences Override */}
+          <div className="bg-slate-50 p-6 rounded-3xl space-y-4 border border-slate-100">
+             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Attendance, Leaves & Absences</h3>
+                <label className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-1.5 rounded-2xl border border-blue-100 cursor-pointer select-none">
+                   <input 
+                      type="checkbox"
+                      checked={waiveLeaveDeduction}
+                      onChange={e => setWaiveLeaveDeduction(e.target.checked)}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                   />
+                   <span className="text-xs font-black uppercase tracking-wider">Waive Leave Deductions (Full Pay)</span>
+                </label>
+             </div>
+
+             <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                <div>
+                   <label className="text-[10px] font-bold text-slate-400 uppercase">Present Days</label>
+                   <Input 
+                      type="number"
+                      disabled={waiveLeaveDeduction}
+                      value={presentDays || ""}
+                      onChange={e => setPresentDays(Number(e.target.value))}
+                      className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800 disabled:opacity-50"
+                   />
+                </div>
+                <div>
+                   <label className="text-[10px] font-bold text-slate-400 uppercase">Half Days</label>
+                   <Input 
+                      type="number"
+                      disabled={waiveLeaveDeduction}
+                      value={halfDays || ""}
+                      onChange={e => setHalfDays(Number(e.target.value))}
+                      className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800 disabled:opacity-50"
+                   />
+                </div>
+                <div>
+                   <label className="text-[10px] font-bold text-slate-400 uppercase">Holidays</label>
+                   <Input 
+                      type="number"
+                      disabled={waiveLeaveDeduction}
+                      value={holidayDays || ""}
+                      onChange={e => setHolidayDays(Number(e.target.value))}
+                      className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800 disabled:opacity-50"
+                   />
+                </div>
+                <div>
+                   <label className="text-[10px] font-bold text-slate-400 uppercase">Paid Leaves</label>
+                   <Input 
+                      type="number"
+                      disabled={waiveLeaveDeduction}
+                      value={paidLeaveDays || ""}
+                      onChange={e => setPaidLeaveDays(Number(e.target.value))}
+                      className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800 disabled:opacity-50"
+                   />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                   <label className="text-[10px] font-bold text-slate-400 uppercase">Unpaid Absences</label>
+                   <Input 
+                      type="number"
+                      disabled={waiveLeaveDeduction}
+                      value={absentDays || ""}
+                      onChange={e => setAbsentDays(Number(e.target.value))}
+                      className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800 disabled:opacity-50"
+                   />
+                </div>
+             </div>
+          </div>
+
+          {/* Section 3: Expenses, Travel & Custom Earnings/Deductions CRUD */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+             {/* Left Column: Earnings & Reimbursements */}
+             <div className="bg-slate-50 p-6 rounded-3xl space-y-4 border border-slate-100 flex flex-col">
+                <h3 className="text-xs font-black text-emerald-600 uppercase tracking-widest">Earnings & Reimbursements</h3>
+                <div className="grid grid-cols-2 gap-4">
+                   <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Approved Expenses (₹)</label>
+                      <Input 
+                         type="number"
+                         value={expenses || ""}
+                         onChange={e => setExpenses(Number(e.target.value))}
+                         className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800"
+                      />
+                   </div>
+                   <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Travel Allowance (₹)</label>
+                      <Input 
+                         type="number"
+                         value={travelAllowance || ""}
+                         onChange={e => setTravelAllowance(Number(e.target.value))}
+                         className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800"
+                      />
+                   </div>
+                </div>
+
+                <div className="border-t border-slate-200/60 pt-4 flex-grow flex flex-col space-y-3">
+                   <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Add Custom Earnings</p>
+                   <div className="flex gap-2">
+                      <Input 
+                         placeholder="Earning Name (e.g. Bonus)" 
+                         value={newEarningName}
+                         onChange={e => setNewEarningName(e.target.value)}
+                         className="bg-white border-slate-200/80 rounded-xl font-bold text-xs"
+                      />
+                      <Input 
+                         type="number" 
+                         placeholder="Amount (₹)" 
+                         value={newEarningAmount}
+                         onChange={e => setNewEarningAmount(e.target.value)}
+                         className="bg-white border-slate-200/80 rounded-xl font-bold text-xs w-28"
+                      />
+                      <Button onClick={addCustomEarning} variant="secondary" className="rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100">
+                         <Plus className="h-4 w-4" />
+                      </Button>
+                   </div>
+
+                   {/* List of Custom Earnings */}
+                   <div className="flex-grow overflow-y-auto max-h-[150px] space-y-2 pt-2">
+                      {customEarnings.length === 0 ? (
+                         <p className="text-[10px] text-slate-400 italic">No custom earnings added.</p>
+                      ) : (
+                         customEarnings.map(item => (
+                            <div key={item.id} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-sm">
+                               <div>
+                                  <p className="text-xs font-black text-slate-800">{item.name}</p>
+                                  <p className="text-[9px] text-emerald-600 font-bold">+ ₹{item.amount.toLocaleString()}</p>
+                               </div>
+                               <Button onClick={() => deleteCustomEarning(item.id)} variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:bg-rose-50 rounded-lg">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                               </Button>
+                            </div>
+                         ))
+                      )}
+                   </div>
+                </div>
+             </div>
+
+             {/* Right Column: Deductions */}
+             <div className="bg-slate-50 p-6 rounded-3xl space-y-4 border border-slate-100 flex flex-col">
+                <h3 className="text-xs font-black text-rose-500 uppercase tracking-widest">Deductions</h3>
+                <div>
+                   <p className="text-[10px] font-bold text-slate-400 uppercase">Leave Absence Deduction</p>
+                   <div className="h-10 flex items-center">
+                      <span className="text-sm font-black text-rose-500">
+                         {waiveLeaveDeduction ? "₹0 (Waived)" : `₹${deductionAmount.toLocaleString()}`}
+                      </span>
+                   </div>
+                </div>
+
+                <div className="border-t border-slate-200/60 pt-4 flex-grow flex flex-col space-y-3">
+                   <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Add Custom Deductions</p>
+                   <div className="flex gap-2">
+                      <Input 
+                         placeholder="Deduction Name (e.g. Penalty)" 
+                         value={newDeductionName}
+                         onChange={e => setNewDeductionName(e.target.value)}
+                         className="bg-white border-slate-200/80 rounded-xl font-bold text-xs"
+                      />
+                      <Input 
+                         type="number" 
+                         placeholder="Amount (₹)" 
+                         value={newDeductionAmount}
+                         onChange={e => setNewDeductionAmount(e.target.value)}
+                         className="bg-white border-slate-200/80 rounded-xl font-bold text-xs w-28"
+                      />
+                      <Button onClick={addCustomDeduction} variant="secondary" className="rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100">
+                         <Plus className="h-4 w-4" />
+                      </Button>
+                   </div>
+
+                   {/* List of Custom Deductions */}
+                   <div className="flex-grow overflow-y-auto max-h-[150px] space-y-2 pt-2">
+                      {customDeductions.length === 0 ? (
+                         <p className="text-[10px] text-slate-400 italic">No custom deductions added.</p>
+                      ) : (
+                         customDeductions.map(item => (
+                            <div key={item.id} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-sm">
+                               <div>
+                                  <p className="text-xs font-black text-slate-800">{item.name}</p>
+                                  <p className="text-[9px] text-rose-500 font-bold">- ₹{item.amount.toLocaleString()}</p>
+                               </div>
+                               <Button onClick={() => deleteCustomDeduction(item.id)} variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:bg-rose-50 rounded-lg">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                               </Button>
+                            </div>
+                         ))
+                      )}
+                   </div>
+                </div>
+             </div>
+          </div>
+       </div>
+
+       {/* Footer Section with Live Payout and Print Trigger */}
+       <div className="p-8 bg-slate-900 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-6 flex-shrink-0">
+          <div className="space-y-1 text-center sm:text-left">
+             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Live Calculated Payout</p>
+             <div className="flex items-baseline gap-2 justify-center sm:justify-start">
+                <span className="text-3xl font-black text-white">₹{totalPayout.toLocaleString()}</span>
+                <span className="text-xs text-blue-400 font-bold">
+                   ({calculatedPayableDays} Payable Days)
+                </span>
+             </div>
+          </div>
+          <div className="flex items-center gap-4 w-full sm:w-auto">
+             <Button 
+                variant="outline"
+                onClick={onClose}
+                className="w-full sm:w-auto h-12 rounded-2xl border-white/10 text-white bg-transparent hover:bg-white/5 font-black uppercase tracking-widest text-xs"
+             >
+                Cancel
+             </Button>
+             <Button 
+                onClick={handlePrint}
+                className="w-full sm:w-auto h-12 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-xs gap-3 shadow-xl shadow-blue-200"
+             >
+                <Printer className="h-4 w-4" /> Print Custom Payslip
+             </Button>
+          </div>
+       </div>
+    </DialogContent>
   );
 }
