@@ -60,6 +60,7 @@ model Company {
   syncDevices SyncDevice[]
   leaveTypes    LeaveType[]
   holidayTemplates HolidayTemplate[]
+  salarySlips   SalarySlip[]
 }
 
 model Group {
@@ -120,6 +121,7 @@ model User {
   expoPushToken      String?
   batteryLevel       Int?
   isLocationOn       Boolean        @default(true)
+  salarySlips        SalarySlip[]   @relation("UserSalarySlips")
 
   @@index([companyId])
   @@index([managerId])
@@ -511,4 +513,59 @@ model HolidayTemplateItem {
   template    HolidayTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   @@index([templateId])
+}
+
+enum SalarySlipStatus {
+  DRAFT
+  PUBLISHED
+}
+
+// A customisable, admin-built salary slip for one employee for one month.
+// Bank / trainee details and earning / deduction line items are stored so the
+// slip can be re-opened, edited (CRUD), printed to PDF, and shown to the
+// employee once published.
+model SalarySlip {
+  id            String           @id @default(cuid())
+  userId        String
+  companyId     String
+  month         Int
+  year          Int
+  status        SalarySlipStatus @default(DRAFT)
+
+  // Organisation / header block (configurable per slip)
+  orgName       String?
+  orgSubtitle   String?
+  orgCode       String?
+
+  // Bank / trainee detail block
+  companyCode    String?
+  bankName       String?
+  bankAccountNo  String?
+  ifscCode       String?
+  departmentName String?
+  divisionName   String?
+  designation    String?
+  traineeType    String?
+  aadhaarNumber  String?
+  monthDays      Float?
+  payableDays    Float?
+
+  // Line items: JSON arrays of { label, actual, calculated } / { label, amount }
+  earnings      Json?
+  deductions    Json?
+
+  netPay        Float            @default(0)
+  netPayWords   String?
+  remarks       String?
+
+  createdById   String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  user          User             @relation("UserSalarySlips", fields: [userId], references: [id], onDelete: Cascade)
+  company       Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month, year])
+  @@index([companyId])
+  @@index([userId])
 }

@@ -571,4 +571,25 @@ export async function fetchTeamOverview(params?: { month?: number; year?: number
   return response.data.data;
 }
 
+// Salary slips
+export async function fetchSalarySlips(params?: { userId?: string; month?: number; year?: number }) {
+  const response = await api.get<{ data: any[] }>("/salary-slips", { params });
+  return response.data.data;
+}
+
+export async function saveSalarySlip(payload: any) {
+  const response = await api.post<{ data: any }>("/salary-slips", payload);
+  return response.data.data;
+}
+
+export async function setSalarySlipStatus(id: string, status: "DRAFT" | "PUBLISHED") {
+  const response = await api.patch<{ data: any }>(`/salary-slips/${id}/status`, { status });
+  return response.data.data;
+}
+
+export async function deleteSalarySlip(id: string) {
+  const response = await api.delete<{ data: any }>(`/salary-slips/${id}`);
+  return response.data.data;
+}
+
 

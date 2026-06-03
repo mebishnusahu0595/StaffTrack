@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
-import { fetchPayrollReport } from "@/lib/api";
+import { fetchPayrollReport, saveSalarySlip } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -609,6 +609,30 @@ interface CustomItem {
   amount: number;
 }
 
+// Indian-style amount in words, e.g. 25133 -> "Twenty Five Thousand One Hundred And Thirty Three Only".
+function amountInWords(value: number): string {
+  const num = Math.floor(Math.abs(value));
+  if (num === 0) return "Zero Only";
+  const a = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+  const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  const two = (n: number): string => (n < 20 ? a[n] : `${b[Math.floor(n / 10)]}${n % 10 ? " " + a[n % 10] : ""}`);
+  const three = (n: number): string => {
+    const h = Math.floor(n / 100);
+    const r = n % 100;
+    return `${h ? a[h] + " Hundred" : ""}${r ? (h ? " And " : "") + two(r) : ""}`;
+  };
+  const crore = Math.floor(num / 10000000);
+  const lakh = Math.floor((num % 10000000) / 100000);
+  const thousand = Math.floor((num % 100000) / 1000);
+  const rest = num % 1000;
+  const parts: string[] = [];
+  if (crore) parts.push(`${two(crore)} Crore`);
+  if (lakh) parts.push(`${two(lakh)} Lakh`);
+  if (thousand) parts.push(`${two(thousand)} Thousand`);
+  if (rest) parts.push(three(rest));
+  return `${parts.join(" ").trim()} Only`;
+}
+
 function SalarySlipCustomizerModal({ report, month, onClose }: { report: any, month: any, onClose: () => void }) {
   const [empName, setEmpName] = useState(report.userName || "");
   const [designation, setDesignation] = useState(report.designation || "Staff Member");
@@ -632,9 +656,25 @@ function SalarySlipCustomizerModal({ report, month, onClose }: { report: any, mo
   // Inputs for adding custom items
   const [newEarningName, setNewEarningName] = useState("");
   const [newEarningAmount, setNewEarningAmount] = useState("");
-  
+
   const [newDeductionName, setNewDeductionName] = useState("");
   const [newDeductionAmount, setNewDeductionAmount] = useState("");
+
+  // Organisation header + bank / trainee details (saved with the slip)
+  const [orgName, setOrgName] = useState(report.companyName || "");
+  const [orgSubtitle, setOrgSubtitle] = useState("");
+  const [orgCode, setOrgCode] = useState("");
+  const [companyCode, setCompanyCode] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [bankAccountNo, setBankAccountNo] = useState("");
+  const [ifscCode, setIfscCode] = useState("");
+  const [departmentName, setDepartmentName] = useState(report.departmentName || "");
+  const [divisionName, setDivisionName] = useState("");
+  const [traineeType, setTraineeType] = useState("");
+  const [aadhaarNumber, setAadhaarNumber] = useState("");
+
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
   // Live calculations
   const dailySalary = totalDays > 0 ? baseSalary / totalDays : 0;
@@ -692,154 +732,164 @@ function SalarySlipCustomizerModal({ report, month, onClose }: { report: any, mo
     setCustomDeductions(prev => prev.filter(item => item.id !== id));
   };
 
+  // Assemble the earning / deduction line items the slip is built from.
+  const buildEarnings = () => {
+    const items: { label: string; actual: number; calculated: number }[] = [];
+    items.push({ label: "Basic Salary", actual: baseSalary, calculated: netSalary });
+    if (travelAllowance > 0) items.push({ label: "Travel Allowance", actual: travelAllowance, calculated: travelAllowance });
+    if (expenses > 0) items.push({ label: "Reimbursed Expenses", actual: expenses, calculated: expenses });
+    customEarnings.forEach((e) => items.push({ label: e.name, actual: e.amount, calculated: e.amount }));
+    return items;
+  };
+
+  const buildDeductions = () => {
+    const items: { label: string; calculated: number }[] = [];
+    if (!waiveLeaveDeduction && deductionAmount > 0) items.push({ label: "Absence Deduction", calculated: deductionAmount });
+    customDeductions.forEach((d) => items.push({ label: d.name, calculated: d.amount }));
+    return items;
+  };
+
+  const persistSlip = async (status: "DRAFT" | "PUBLISHED") => {
+    setSaving(true);
+    setSaveMsg(null);
+    try {
+      await saveSalarySlip({
+        userId: report.userId,
+        month: month.month() + 1,
+        year: month.year(),
+        status,
+        orgName,
+        orgSubtitle,
+        orgCode,
+        companyCode,
+        bankName,
+        bankAccountNo,
+        ifscCode,
+        departmentName,
+        divisionName,
+        designation,
+        traineeType,
+        aadhaarNumber,
+        monthDays: totalDays,
+        payableDays: calculatedPayableDays,
+        earnings: buildEarnings(),
+        deductions: buildDeductions()
+      });
+      setSaveMsg(status === "PUBLISHED" ? "Saved & published to employee" : "Saved as draft");
+    } catch (err: any) {
+      setSaveMsg(err?.response?.data?.message || "Failed to save salary slip");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handlePrint = () => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
     const monthName = month.format("MMMM YYYY");
-    
-    // Build tables of custom earnings and deductions
-    let customEarningsRows = "";
-    customEarnings.forEach(item => {
-      customEarningsRows += `
-        <tr>
-          <td>${item.name} (Custom Earning)</td>
-          <td style="text-align: right;">--</td>
-          <td style="text-align: right; color: #10b981;">+ ₹${item.amount.toLocaleString()}</td>
-        </tr>
-      `;
-    });
+    const earningItems = buildEarnings();
+    const deductionItems = buildDeductions();
+    const totalEarn = earningItems.reduce((s, e) => s + e.calculated, 0);
+    const totalActual = earningItems.reduce((s, e) => s + e.actual, 0);
+    const totalDed = deductionItems.reduce((s, d) => s + d.calculated, 0);
+    const netPay = Math.round(totalEarn - totalDed);
+    const detailRow = (l: string, v: string, l2: string, v2: string) =>
+      `<tr><td class="dk">${l}</td><td class="dv">${v || "-"}</td><td class="dk">${l2}</td><td class="dv">${v2 || "-"}</td></tr>`;
 
-    let customDeductionsRows = "";
-    customDeductions.forEach(item => {
-      customDeductionsRows += `
-        <tr>
-          <td>${item.name} (Custom Deduction)</td>
-          <td style="text-align: right;">--</td>
-          <td style="text-align: right; color: #ef4444;">- ₹${item.amount.toLocaleString()}</td>
-        </tr>
-      `;
-    });
+    const earnRows = earningItems
+      .map(
+        (e) =>
+          `<tr><td>${e.label}</td><td class="amt">${e.actual.toLocaleString()}</td><td class="amt">${e.calculated.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>`
+      )
+      .join("");
+    const dedRows = deductionItems.length
+      ? deductionItems
+          .map((d) => `<tr><td>${d.label}</td><td class="amt">${d.calculated.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>`)
+          .join("")
+      : `<tr><td>-</td><td class="amt">0.00</td></tr>`;
 
     const html = `
       <html>
         <head>
-          <title>Payslip - ${empName}</title>
+          <title>Salary Slip - ${empName}</title>
           <style>
-            body { font-family: 'Inter', sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
-            .header { border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
-            .logo { font-size: 24px; font-weight: 800; color: #2563eb; }
-            .title { font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #475569; }
-            .meta-grid { display: grid; grid-template-cols: 2fr 1fr; gap: 40px; margin-bottom: 40px; }
-            .meta-block h3 { margin: 0 0 8px 0; font-size: 11px; text-transform: uppercase; color: #94a3b8; letter-spacing: 1px; }
-            .meta-block p { margin: 0; font-size: 14px; font-weight: 600; }
-            .breakdown-table { border-collapse: collapse; width: 100%; margin-bottom: 40px; }
-            .breakdown-table th, .breakdown-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #f1f5f9; }
-            .breakdown-table th { background: #f8fafc; font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700; }
-            .breakdown-table td { font-size: 13px; font-weight: 500; }
-            .total-section { display: flex; justify-content: flex-end; padding-top: 20px; }
-            .total-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 30px; text-align: right; }
-            .total-box h4 { margin: 0 0 5px 0; font-size: 10px; text-transform: uppercase; color: #64748b; letter-spacing: 1px; }
-            .total-box p { margin: 0; font-size: 28px; font-weight: 800; color: #2563eb; }
-            .footer-note { text-align: center; margin-top: 80px; font-size: 11px; color: #94a3b8; border-top: 1px dashed #e2e8f0; padding-top: 20px; }
+            * { box-sizing: border-box; }
+            body { font-family: Arial, 'Inter', sans-serif; padding: 32px; color: #1e293b; line-height: 1.45; font-size: 12px; }
+            .org { text-align: center; margin-bottom: 4px; }
+            .org h1 { margin: 0; font-size: 18px; font-weight: 800; }
+            .org .sub { font-size: 12px; color: #475569; margin-top: 2px; }
+            .org .period { font-size: 13px; font-weight: 700; margin-top: 8px; }
+            .org .code { font-size: 11px; color: #64748b; margin-top: 2px; }
+            .sheet { border: 1px solid #1e293b; margin-top: 14px; }
+            .details { width: 100%; border-collapse: collapse; }
+            .details td { border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 11px; }
+            .details .dk { background: #f1f5f9; font-weight: 700; width: 18%; text-transform: capitalize; }
+            .details .dv { width: 32%; }
+            .cols { display: flex; border-top: 2px solid #1e293b; }
+            .col { flex: 1; }
+            .col + .col { border-left: 1px solid #1e293b; }
+            .tbl { width: 100%; border-collapse: collapse; }
+            .tbl th { background: #f1f5f9; font-size: 11px; text-transform: uppercase; padding: 6px 10px; border-bottom: 1px solid #cbd5e1; text-align: left; }
+            .tbl th.amt, .tbl td.amt { text-align: right; }
+            .tbl td { padding: 6px 10px; border-bottom: 1px solid #eef2f6; font-size: 12px; }
+            .tbl tr.total td { font-weight: 800; border-top: 2px solid #1e293b; background: #f8fafc; }
+            .net { border-top: 2px solid #1e293b; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; }
+            .net .lbl { font-size: 14px; font-weight: 800; }
+            .net .words { font-size: 11px; color: #475569; font-style: italic; }
+            .sysnote { text-align: center; margin-top: 16px; font-size: 10px; color: #64748b; letter-spacing: 0.5px; }
           </style>
         </head>
         <body>
-          <div class="header">
-            <div class="logo">Demo Corp</div>
-            <div class="title">Salary Slip</div>
+          <div class="org">
+            <h1>${orgName || "Company"}</h1>
+            ${orgSubtitle ? `<div class="sub">${orgSubtitle}</div>` : ""}
+            <div class="period">Salary slip for the month of ${monthName}</div>
+            ${orgCode ? `<div class="code">${orgCode}</div>` : ""}
           </div>
-          
-          <div class="meta-grid">
-            <div class="meta-block">
-              <h3>Employee Information</h3>
-              <p>${empName}</p>
-              <p style="font-size: 12px; color: #64748b; font-weight: 500;">${designation}</p>
+
+          <div class="sheet">
+            <table class="details">
+              ${detailRow("Company Code", companyCode, "Bank Name", bankName)}
+              ${detailRow("Employee Name", empName, "Bank A/C No", bankAccountNo)}
+              ${detailRow("Department Name", departmentName, "IFSC Code", ifscCode)}
+              ${detailRow("Designation", designation, "Month Days", String(totalDays))}
+              ${detailRow("Division Name", divisionName, "Payable Days", String(calculatedPayableDays))}
+              ${detailRow("Trainee Type", traineeType, "Aadhaar Number", aadhaarNumber)}
+            </table>
+
+            <div class="cols">
+              <div class="col">
+                <table class="tbl">
+                  <thead><tr><th>Earnings</th><th class="amt">Actual</th><th class="amt">Calculated</th></tr></thead>
+                  <tbody>
+                    ${earnRows}
+                    <tr class="total"><td>Total</td><td class="amt">${totalActual.toLocaleString()}</td><td class="amt">${totalEarn.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="col">
+                <table class="tbl">
+                  <thead><tr><th>Deduction</th><th class="amt">Calculated</th></tr></thead>
+                  <tbody>
+                    ${dedRows}
+                    <tr class="total"><td>Total</td><td class="amt">${totalDed.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div class="meta-block" style="text-align: right;">
-              <h3>Pay Period</h3>
-              <p>${monthName}</p>
-            </div>
-          </div>
-          
-          <table class="breakdown-table">
-            <thead>
-              <tr>
-                <th>Description</th>
-                <th style="text-align: right;">Count / Value</th>
-                <th style="text-align: right;">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Monthly Calendar Days</td>
-                <td style="text-align: right;">${totalDays} Days</td>
-                <td style="text-align: right;">--</td>
-              </tr>
-              <tr>
-                <td>Days Present</td>
-                <td style="text-align: right;">${presentDays} Days</td>
-                <td style="text-align: right;">--</td>
-              </tr>
-              ${halfDays > 0 ? `
-              <tr>
-                <td>Half Days worked</td>
-                <td style="text-align: right;">${halfDays} Days</td>
-                <td style="text-align: right;">--</td>
-              </tr>` : ""}
-              <tr>
-                <td>Paid Holidays / Leaves</td>
-                <td style="text-align: right;">${holidayDays + paidLeaveDays} Days</td>
-                <td style="text-align: right;">--</td>
-              </tr>
-              ${!waiveLeaveDeduction && deductionAmount > 0 ? `
-              <tr>
-                <td>Unpaid Absences</td>
-                <td style="text-align: right; color: #ef4444;">${absentDays} Days</td>
-                <td style="text-align: right; color: #ef4444;">- ₹${deductionAmount.toLocaleString()}</td>
-              </tr>` : ""}
-              <tr style="font-weight: 700; border-top: 2px solid #e2e8f0;">
-                <td>Basic Salary</td>
-                <td style="text-align: right;">Base Rate</td>
-                <td style="text-align: right;">₹${baseSalary.toLocaleString()}</td>
-              </tr>
-              <tr style="font-weight: 700;">
-                <td>Net Calculated Basic Salary</td>
-                <td style="text-align: right;">${calculatedPayableDays} Payable Days</td>
-                <td style="text-align: right;">₹${netSalary.toLocaleString()}</td>
-              </tr>
-              ${expenses > 0 ? `
-              <tr>
-                <td>Reimbursed Expenses</td>
-                <td style="text-align: right;">Approved</td>
-                <td style="text-align: right; color: #10b981;">+ ₹${expenses.toLocaleString()}</td>
-              </tr>` : ""}
-              ${travelAllowance > 0 ? `
-              <tr>
-                <td>Travel Allowance</td>
-                <td style="text-align: right;">Calculated Mileage</td>
-                <td style="text-align: right; color: #10b981;">+ ₹${travelAllowance.toLocaleString()}</td>
-              </tr>` : ""}
-              
-              ${customEarningsRows}
-              ${customDeductionsRows}
-            </tbody>
-          </table>
-          
-          <div class="total-section">
-            <div class="total-box">
-              <h4>Net Take Home</h4>
-              <p>₹${totalPayout.toLocaleString()}</p>
+
+            <div class="net">
+              <div>
+                <div class="lbl">Total Net Pay Rs.${netPay.toLocaleString()}/-</div>
+                <div class="words">( In Words: ${amountInWords(netPay)} )</div>
+              </div>
             </div>
           </div>
-          
-          <div class="footer-note">
-            This is a computer-generated document and does not require a physical signature.
-          </div>
-          
-          <script>
-            window.onload = function() { window.print(); }
-          </script>
+
+          <div class="sysnote">THIS IS SYSTEM GENERATED DOCUMENT, HENCE SIGNATURE IS NOT REQUIRED.</div>
+
+          <script>window.onload = function() { window.print(); }</script>
         </body>
       </html>
     `;
@@ -902,6 +952,24 @@ function SalarySlipCustomizerModal({ report, month, onClose }: { report: any, mo
                       className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800"
                    />
                 </div>
+             </div>
+          </div>
+
+          {/* Section 1b: Organisation header + Bank / Trainee details (saved with slip) */}
+          <div className="bg-slate-50 p-6 rounded-3xl space-y-4 border border-slate-100">
+             <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Organisation & Bank / Trainee Details</h3>
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <DetailInput label="Company / Org Name" value={orgName} onChange={setOrgName} placeholder="e.g. Vaniki Crop Science" />
+                <DetailInput label="Org Subtitle" value={orgSubtitle} onChange={setOrgSubtitle} placeholder="e.g. Chemical Crop Care" />
+                <DetailInput label="Org Code" value={orgCode} onChange={setOrgCode} placeholder="e.g. Yashaswi Code : 100175394" />
+                <DetailInput label="Company Code" value={companyCode} onChange={setCompanyCode} />
+                <DetailInput label="Bank Name" value={bankName} onChange={setBankName} />
+                <DetailInput label="Bank A/C No" value={bankAccountNo} onChange={setBankAccountNo} />
+                <DetailInput label="IFSC Code" value={ifscCode} onChange={setIfscCode} />
+                <DetailInput label="Department Name" value={departmentName} onChange={setDepartmentName} />
+                <DetailInput label="Division Name" value={divisionName} onChange={setDivisionName} placeholder="e.g. Retail_Chhatisgarh" />
+                <DetailInput label="Trainee Type" value={traineeType} onChange={setTraineeType} placeholder="e.g. NAPS" />
+                <DetailInput label="Aadhaar Number" value={aadhaarNumber} onChange={setAadhaarNumber} />
              </div>
           </div>
 
@@ -1109,22 +1177,66 @@ function SalarySlipCustomizerModal({ report, month, onClose }: { report: any, mo
                 </span>
              </div>
           </div>
-          <div className="flex items-center gap-4 w-full sm:w-auto">
-             <Button 
-                variant="outline"
-                onClick={onClose}
-                className="w-full sm:w-auto h-12 rounded-2xl border-white/10 text-white bg-transparent hover:bg-white/5 font-black uppercase tracking-widest text-xs"
-             >
-                Cancel
-             </Button>
-             <Button 
-                onClick={handlePrint}
-                className="w-full sm:w-auto h-12 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-xs gap-3 shadow-xl shadow-blue-200"
-             >
-                <Printer className="h-4 w-4" /> Print Custom Payslip
-             </Button>
+          <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
+             {saveMsg && (
+                <span className="text-[11px] font-bold text-emerald-400">{saveMsg}</span>
+             )}
+             <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap justify-end">
+                <Button
+                   variant="outline"
+                   onClick={onClose}
+                   className="h-12 rounded-2xl border-white/10 text-white bg-transparent hover:bg-white/5 font-black uppercase tracking-widest text-xs"
+                >
+                   Cancel
+                </Button>
+                <Button
+                   variant="outline"
+                   disabled={saving}
+                   onClick={() => persistSlip("DRAFT")}
+                   className="h-12 rounded-2xl border-white/10 text-white bg-transparent hover:bg-white/5 font-black uppercase tracking-widest text-xs"
+                >
+                   Save Draft
+                </Button>
+                <Button
+                   disabled={saving}
+                   onClick={() => persistSlip("PUBLISHED")}
+                   className="h-12 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest text-xs gap-2"
+                >
+                   <CheckCircle2 className="h-4 w-4" /> {saving ? "Saving..." : "Save & Publish"}
+                </Button>
+                <Button
+                   onClick={handlePrint}
+                   className="h-12 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-xs gap-3 shadow-xl shadow-blue-200"
+                >
+                   <Printer className="h-4 w-4" /> Print / PDF
+                </Button>
+             </div>
           </div>
        </div>
     </DialogContent>
+  );
+}
+
+function DetailInput({
+  label,
+  value,
+  onChange,
+  placeholder
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <label className="text-[10px] font-bold text-slate-400 uppercase">{label}</label>
+      <Input
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800 text-xs"
+      />
+    </div>
   );
 }

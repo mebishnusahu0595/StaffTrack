@@ -23,6 +23,7 @@ import payrollRoutes from "./routes/payroll.routes";
 import notificationRoutes from "./routes/notification.routes";
 import leaveRoutes from "./routes/leave.routes";
 import teamRoutes from "./routes/team.routes";
+import salaryRoutes from "./routes/salary.routes";
 import path from "path";
 import { initSocket } from "./lib/socket";
 import { corsOrigin } from "./lib/cors";
@@ -77,6 +78,7 @@ app.use("/api/payroll", payrollRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/leaves", leaveRoutes);
 app.use("/api/team", teamRoutes);
+app.use("/api/salary-slips", salaryRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({

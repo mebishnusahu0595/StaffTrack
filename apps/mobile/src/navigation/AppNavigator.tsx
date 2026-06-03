@@ -23,6 +23,7 @@ import { FormsScreen } from "../screens/FormsScreen";
 import { MonthlyReportScreen } from "../screens/MonthlyReportScreen";
 import { IssuesScreen } from "../screens/IssuesScreen";
 import { LeaveRequestScreen } from "../screens/LeaveRequestScreen";
+import { SalarySlipScreen } from "../screens/SalarySlipScreen";
 
 // Manager Screens
 import { ManagerHomeScreen } from "../screens/manager/ManagerHomeScreen";
@@ -49,6 +50,7 @@ export type MainDrawerParamList = {
   MonthlyReport: undefined;
   Profile: undefined;
   LeaveRequest: undefined;
+  SalarySlips: undefined;
   ManagerHome: undefined;
   ManagerAttendance: undefined;
   ManagerTasks: undefined;
@@ -67,6 +69,7 @@ export type ManagerDrawerParamList = {
   ManagerIssues: undefined;
   Tasks: undefined;
   MonthlyReport: undefined;
+  SalarySlips: undefined;
   Profile: undefined;
 };
 
@@ -274,17 +277,25 @@ function MainDrawer() {
           drawerIcon: ({ color, size }) => <AppIcon color={color} name="calendar-clock" size={size} /> 
         }} 
       />
-      <Drawer.Screen 
-        component={MonthlyReportScreen} 
-        name="MonthlyReport" 
-        options={{ 
+      <Drawer.Screen
+        component={MonthlyReportScreen}
+        name="MonthlyReport"
+        options={{
           title: "Monthly Reports",
-          drawerIcon: ({ color, size }) => <AppIcon color={color} name="file-chart-outline" size={size} /> 
-        }} 
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="file-chart-outline" size={size} />
+        }}
       />
-      <Drawer.Screen 
-        component={ProfileScreen} 
-        name="Profile" 
+      <Drawer.Screen
+        component={SalarySlipScreen}
+        name="SalarySlips"
+        options={{
+          title: "Salary Slips",
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="file-document-outline" size={size} />
+        }}
+      />
+      <Drawer.Screen
+        component={ProfileScreen}
+        name="Profile"
         options={{ 
           drawerIcon: ({ color, size }) => <AppIcon color={color} name="account" size={size} /> 
         }} 
@@ -382,17 +393,25 @@ function ManagerDrawer() {
           drawerIcon: ({ color, size }) => <AppIcon color={color} name="clipboard-list" size={size} /> 
         }} 
       />
-      <ManagerDrawerNavigator.Screen 
-        component={MonthlyReportScreen} 
-        name="MonthlyReport" 
-        options={{ 
+      <ManagerDrawerNavigator.Screen
+        component={MonthlyReportScreen}
+        name="MonthlyReport"
+        options={{
           title: "My Reports",
-          drawerIcon: ({ color, size }) => <AppIcon color={color} name="file-chart-outline" size={size} /> 
-        }} 
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="file-chart-outline" size={size} />
+        }}
       />
-      <ManagerDrawerNavigator.Screen 
-        component={ProfileScreen} 
-        name="Profile" 
+      <ManagerDrawerNavigator.Screen
+        component={SalarySlipScreen}
+        name="SalarySlips"
+        options={{
+          title: "My Salary Slips",
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="file-document-outline" size={size} />
+        }}
+      />
+      <ManagerDrawerNavigator.Screen
+        component={ProfileScreen}
+        name="Profile"
         options={{ 
           title: "Profile",
           drawerIcon: ({ color, size }) => <AppIcon color={color} name="account" size={size} /> 

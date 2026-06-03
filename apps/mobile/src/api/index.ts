@@ -659,6 +659,11 @@ export async function fetchTeamOverview(params?: { month?: number; year?: number
   return unwrap(await api.get<ApiEnvelope<any>>("/team/overview", { params }));
 }
 
+// Salary slips (employees see their own published slips)
+export async function fetchSalarySlips(params?: { userId?: string; month?: number; year?: number }): Promise<any[]> {
+  return unwrap(await api.get<ApiEnvelope<any[]>>("/salary-slips", { params }));
+}
+
 export type Template = {
   id: string;
   name: string;
