@@ -1135,3 +1135,43 @@ export async function rejectLateCheckIn(actor: AuthUser, id: string) {
 
   return { success: true };
 }
+
+export async function forceCheckout(actor: AuthUser, userId: string) {
+  await ensureCanAccessUser(actor, userId);
+
+  const active = await prisma.attendance.findFirst({
+    where: {
+      userId,
+      checkOutTime: null
+    }
+  });
+
+  if (!active) {
+    return { success: true, message: "No active check-in found for this user." };
+  }
+
+  const activeBreak = await prisma.break.findFirst({
+    where: {
+      attendanceId: active.id,
+      endTime: null
+    }
+  });
+
+  if (activeBreak) {
+    await prisma.break.update({
+      where: { id: activeBreak.id },
+      data: { endTime: new Date() }
+    });
+  }
+
+  const updated = await prisma.attendance.update({
+    where: { id: active.id },
+    data: {
+      checkOutTime: new Date(),
+      checkOutLat: 0,
+      checkOutLng: 0
+    }
+  });
+
+  return { success: true, data: updated };
+}

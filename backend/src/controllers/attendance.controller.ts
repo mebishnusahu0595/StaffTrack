@@ -153,3 +153,15 @@ export async function rejectLateCheckIn(req: Request, res: Response): Promise<vo
   sendSuccess(res, result, "Late check-in rejected");
 }
 
+export async function forceCheckout(req: Request, res: Response): Promise<void> {
+  const result = await attendanceService.forceCheckout(req.user!, req.body.userId);
+  
+  getIO().to(`company:${req.user!.companyId}`).emit(SOCKET_EVENTS.ATTENDANCE_UPDATE, {
+    userId: req.body.userId,
+    type: "check-out",
+    data: result
+  });
+
+  sendSuccess(res, result, "Force checked out successfully");
+}
+

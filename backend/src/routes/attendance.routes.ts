@@ -38,6 +38,11 @@ router.post(
   asyncHandler(attendanceController.clearAttendance)
 );
 router.post(
+  "/force-checkout",
+  roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER),
+  asyncHandler(attendanceController.forceCheckout)
+);
+router.post(
   "/break/start",
   roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER, UserRole.EMPLOYEE),
   asyncHandler(attendanceController.startBreak)

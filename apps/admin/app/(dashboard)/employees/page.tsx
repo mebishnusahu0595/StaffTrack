@@ -66,7 +66,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { createUser, fetchAllAttendance, fetchAttendance, fetchTodayLocation, fetchUsers, updateUser, createTask, deleteUser, fetchTasks, fetchDerHistory, fetchGroups } from "@/lib/api";
+import { createUser, fetchAllAttendance, fetchAttendance, fetchTodayLocation, fetchUsers, updateUser, createTask, deleteUser, fetchTasks, fetchDerHistory, fetchGroups, forceCheckoutUser } from "@/lib/api";
 import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { AttendanceRecord, WorkMode, User } from "@/lib/types";
@@ -213,6 +213,20 @@ export default function EmployeesPage() {
   const employeeReports = useMemo(() => {
     return reportsQuery.data ?? [];
   }, [reportsQuery.data]);
+
+  const handleForceCheckout = async (userId: string) => {
+    if (!confirm("Are you sure you want to force check-out this employee? This will close their active attendance session.")) {
+      return;
+    }
+    try {
+      await forceCheckoutUser(userId);
+      alert("Employee checked out successfully.");
+      queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+    } catch (err: any) {
+      alert(err?.response?.data?.message ?? "Failed to force check-out employee.");
+    }
+  };
 
   const downloadCSV = () => {
     if (filteredUsers.length === 0) return;
@@ -469,6 +483,13 @@ export default function EmployeesPage() {
                                >
                                  <UserPlus className="h-4 w-4" />
                                  Assign Task
+                               </DropdownMenuItem>
+                               <DropdownMenuItem 
+                                 className="gap-3 py-2.5 px-3 cursor-pointer text-sm font-semibold text-amber-600 focus:bg-amber-50 focus:text-amber-700 rounded-lg"
+                                 onSelect={(e) => { e.preventDefault(); handleForceCheckout(user.id); }}
+                               >
+                                 <Clock className="h-4 w-4" />
+                                 Force Check-Out
                                </DropdownMenuItem>
                                <DropdownMenuSeparator />
                                <DropdownMenuItem 

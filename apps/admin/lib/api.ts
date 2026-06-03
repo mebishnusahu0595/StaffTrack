@@ -555,4 +555,9 @@ export async function assignHolidayTemplate(data: {
   return response.data.data;
 }
 
+export async function forceCheckoutUser(userId: string) {
+  const response = await api.post<{ data: any }>("/attendance/force-checkout", { userId });
+  return response.data.data;
+}
+
 
