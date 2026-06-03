@@ -43,20 +43,32 @@ export async function ensureCanAccessUser(actor: AuthUser, targetUserId: string)
     if (targetUser.role !== UserRole.EMPLOYEE || targetUser.companyId !== actor.companyId) {
       forbidden("Managers can only access employee data within their company");
     }
+    // Managers may only access their own direct reports (or members of their group).
+    const managerGroupId = await getManagerGroupId(actor.id);
+    const isDirectReport = targetUser.managerId === actor.id;
+    const isInGroup = !!managerGroupId && targetUser.groupId === managerGroupId;
+    if (!isDirectReport && !isInGroup) {
+      forbidden("Managers can only access their own team members");
+    }
   }
 
   return targetUser;
 }
 
-export function accessibleUserWhere(actor: AuthUser): Prisma.UserWhereInput {
+export async function accessibleUserWhere(actor: AuthUser): Promise<Prisma.UserWhereInput> {
   if (actor.role === UserRole.SUPERADMIN || actor.role === UserRole.ADMIN) {
     return {};
   }
 
   if (actor.role === UserRole.MANAGER) {
+    const managerGroupId = await getManagerGroupId(actor.id);
     return {
       companyId: actor.companyId,
-      OR: [{ id: actor.id }, { role: UserRole.EMPLOYEE }]
+      OR: [
+        { id: actor.id },
+        { managerId: actor.id },
+        ...(managerGroupId ? [{ groupId: managerGroupId }] : [])
+      ]
     };
   }
 

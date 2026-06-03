@@ -560,4 +560,15 @@ export async function forceCheckoutUser(userId: string) {
   return response.data.data;
 }
 
+// Team overview (manager / admin)
+export async function fetchTeamMembers(params?: { managerId?: string }) {
+  const response = await api.get<{ data: any[] }>("/team/members", { params });
+  return response.data.data;
+}
+
+export async function fetchTeamOverview(params?: { month?: number; year?: number; managerId?: string }) {
+  const response = await api.get<{ data: any }>("/team/overview", { params });
+  return response.data.data;
+}
+
 

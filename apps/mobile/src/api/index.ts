@@ -650,6 +650,15 @@ export async function fetchAttendanceByDate(date: string): Promise<any[]> {
   return unwrap(await api.get<ApiEnvelope<any[]>>("/attendance/by-date", { params: { date } }));
 }
 
+// Team overview (manager / admin)
+export async function fetchTeamMembers(): Promise<any[]> {
+  return unwrap(await api.get<ApiEnvelope<any[]>>("/team/members"));
+}
+
+export async function fetchTeamOverview(params?: { month?: number; year?: number }): Promise<any> {
+  return unwrap(await api.get<ApiEnvelope<any>>("/team/overview", { params }));
+}
+
 export type Template = {
   id: string;
   name: string;

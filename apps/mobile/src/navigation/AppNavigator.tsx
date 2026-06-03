@@ -26,6 +26,7 @@ import { LeaveRequestScreen } from "../screens/LeaveRequestScreen";
 
 // Manager Screens
 import { ManagerHomeScreen } from "../screens/manager/ManagerHomeScreen";
+import { ManagerTeamScreen } from "../screens/manager/ManagerTeamScreen";
 import { ManagerAttendanceScreen } from "../screens/manager/ManagerAttendanceScreen";
 import { ManagerTasksScreen } from "../screens/manager/ManagerTasksScreen";
 import { ManagerReportsScreen } from "../screens/manager/ManagerReportsScreen";
@@ -58,6 +59,7 @@ export type MainDrawerParamList = {
 
 export type ManagerDrawerParamList = {
   ManagerHome: undefined;
+  ManagerTeam: undefined;
   ManagerAttendance: undefined;
   ManagerTasks: undefined;
   ManagerReports: undefined;
@@ -324,9 +326,17 @@ function ManagerDrawer() {
           drawerIcon: ({ color, size }) => <AppIcon color={color} name="home" size={size} /> 
         }} 
       />
-      <ManagerDrawerNavigator.Screen 
-        component={ManagerAttendanceScreen} 
-        name="ManagerAttendance" 
+      <ManagerDrawerNavigator.Screen
+        component={ManagerTeamScreen}
+        name="ManagerTeam"
+        options={{
+          title: "Team Overview",
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="account-group" size={size} />
+        }}
+      />
+      <ManagerDrawerNavigator.Screen
+        component={ManagerAttendanceScreen}
+        name="ManagerAttendance"
         options={{ 
           title: "Attendance",
           drawerIcon: ({ color, size }) => <AppIcon color={color} name="calendar-check" size={size} /> 

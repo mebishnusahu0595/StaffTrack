@@ -1,5 +1,6 @@
-import { PrismaClient, LeaveStatus } from "@prisma/client";
+import { PrismaClient, LeaveStatus, UserRole, Prisma } from "@prisma/client";
 const prisma = new PrismaClient();
+import type { AuthUser } from "../types/auth";
 import * as notificationService from "./notification.service";
 
 export async function createLeaveRequest(userId: string, companyId: string, data: { startDate: Date; endDate: Date; reason: string }) {
@@ -35,15 +36,31 @@ export async function createLeaveRequest(userId: string, companyId: string, data
   return leave;
 }
 
-export async function listLeaveRequests(companyId: string, filter?: any) {
+export async function listLeaveRequests(actor: AuthUser, filter?: any) {
+  const where: Prisma.LeaveRequestWhereInput = {
+    companyId: actor.companyId,
+    ...(filter?.status && { status: filter.status as LeaveStatus })
+  };
+
+  if (actor.role === UserRole.EMPLOYEE) {
+    // Employees can only ever see their own leave requests.
+    where.userId = actor.id;
+  } else if (actor.role === UserRole.MANAGER) {
+    // Managers see their own requests plus those of their direct reports.
+    const scope: Prisma.LeaveRequestWhereInput = {
+      OR: [{ userId: actor.id }, { user: { managerId: actor.id } }]
+    };
+    // An explicit user filter must still stay within the manager's scope.
+    where.AND = filter?.userId ? [scope, { userId: filter.userId }] : [scope];
+  } else if (filter?.userId) {
+    // ADMIN / SUPERADMIN: full company visibility, optional explicit user filter.
+    where.userId = filter.userId;
+  }
+
   return prisma.leaveRequest.findMany({
-    where: { 
-      companyId,
-      ...(filter?.status && { status: filter.status as LeaveStatus }),
-      ...(filter?.userId && { userId: filter.userId })
-    },
+    where,
     include: {
-      user: { select: { id: true, name: true, designation: true, group: true } },
+      user: { select: { id: true, name: true, designation: true, group: true, managerId: true } },
       approvedBy: { select: { id: true, name: true } }
     },
     orderBy: { createdAt: "desc" }

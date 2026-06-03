@@ -13,7 +13,7 @@ export async function createLeaveRequest(req: Request, res: Response) {
 }
 
 export async function listLeaveRequests(req: Request, res: Response) {
-  const result = await leaveService.listLeaveRequests(req.user!.companyId, req.query);
+  const result = await leaveService.listLeaveRequests(req.user!, req.query);
   sendSuccess(res, result, "Leave requests fetched");
 }
 

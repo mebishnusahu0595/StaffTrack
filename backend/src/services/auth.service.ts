@@ -20,9 +20,19 @@ const publicUserSelect = {
 };
 
 export async function login(email: string, password: string) {
-  const user = await prisma.user.findUnique({
-    where: { email }
+  // Emails are matched case-insensitively and trimmed so that a stray space or
+  // a different capitalisation does not block an otherwise valid login.
+  const normalizedEmail = email.trim();
+
+  let user = await prisma.user.findUnique({
+    where: { email: normalizedEmail }
   });
+
+  if (!user) {
+    user = await prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: "insensitive" } }
+    });
+  }
 
   if (!user) {
     unauthorized("Account with this email does not exist.");

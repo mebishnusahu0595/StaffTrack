@@ -566,10 +566,15 @@ async function taskAccessWhere(actor: AuthUser): Promise<Prisma.TaskWhereInput> 
   }
 
   if (actor.role === UserRole.MANAGER) {
+    // Managers see tasks of their direct reports / group members, tasks they
+    // created, and their own tasks — not every employee in the company.
+    const managerGroupId = await getManagerGroupId(actor.id);
     return {
       assignedTo: { companyId: actor.companyId },
       OR: [
-        { assignedTo: { role: UserRole.EMPLOYEE } },
+        { assignedTo: { managerId: actor.id } },
+        ...(managerGroupId ? [{ assignedTo: { groupId: managerGroupId } }] : []),
+        { assignedById: actor.id },
         { assignedToId: actor.id }
       ]
     };

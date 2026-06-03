@@ -43,8 +43,12 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 
-const navItems = [
+type Role = "SUPERADMIN" | "ADMIN" | "MANAGER" | "EMPLOYEE";
+
+// `roles` omitted means "visible to everyone who can reach the dashboard".
+const navItems: { href: string; label: string; icon: any; roles?: Role[] }[] = [
   { href: "/", label: "Home", icon: LayoutDashboard },
+  { href: "/team", label: "Team Overview", icon: UserCheck },
   { href: "/projects", label: "Project", icon: Folder },
   { href: "/tasks", label: "Tasks", icon: ClipboardList },
   { href: "/issues", label: "Issues", icon: AlertTriangle },
@@ -138,9 +142,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex-1 space-y-1 px-4 overflow-y-auto custom-scrollbar">
-          {[
-            ...navItems
-          ].map((item) => {
+          {navItems
+            .filter((item) => !item.roles || (user?.role && item.roles.includes(user.role as Role)))
+            .map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link
