@@ -244,15 +244,27 @@ export async function checkOut(actor: AuthUser, input: CheckOutInput) {
       }
       points.push({ lat: input.lat, lng: input.lng });
 
-      // 3. Compute total distance
+      // 3. Compute total distance (use odometer if available, otherwise fallback to GPS)
       let kmTravelled = 0;
-      for (let i = 0; i < points.length - 1; i++) {
-        kmTravelled += calculateHaversineDistance(
-          points[i].lat,
-          points[i].lng,
-          points[i + 1].lat,
-          points[i + 1].lng
-        );
+      if (
+        attendance.startOdometer !== null &&
+        attendance.startOdometer !== undefined &&
+        input.endOdometer !== null &&
+        input.endOdometer !== undefined &&
+        input.endOdometer >= attendance.startOdometer
+      ) {
+        kmTravelled = input.endOdometer - attendance.startOdometer;
+        console.log(`[Odometer Calculation] kmTravelled calculated via Odometer: ${kmTravelled} (Start: ${attendance.startOdometer}, End: ${input.endOdometer})`);
+      } else {
+        for (let i = 0; i < points.length - 1; i++) {
+          kmTravelled += calculateHaversineDistance(
+            points[i].lat,
+            points[i].lng,
+            points[i + 1].lat,
+            points[i + 1].lng
+          );
+        }
+        console.log(`[GPS Calculation] kmTravelled calculated via GPS points: ${kmTravelled}`);
       }
 
       // 4. Count completed tasks for today
