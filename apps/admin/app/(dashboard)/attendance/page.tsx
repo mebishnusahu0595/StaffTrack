@@ -470,6 +470,37 @@ function AttendanceDetailDialog({
            </div>
         </div>
 
+        {record.punchType === "FIELD" && (record.startOdometer != null || record.endOdometer != null) && (
+          <div className="px-8 pt-8">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4 shadow-sm grid grid-cols-3 gap-6">
+              <div className="flex flex-col justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Start Odometer</p>
+                  <p className="mt-1 text-sm font-bold text-slate-800">
+                    {record.startOdometer != null ? `${record.startOdometer} km` : "No reading"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">End Odometer</p>
+                  <p className="mt-1 text-sm font-bold text-slate-800">
+                    {record.endOdometer != null ? `${record.endOdometer} km` : "No reading"}
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-xl bg-blue-50/50 p-3 border border-blue-100/60 flex flex-col justify-center">
+                <p className="text-[10px] font-black uppercase tracking-wider text-blue-500">Odometer Distance</p>
+                <p className="mt-1 text-lg font-black text-blue-700">
+                  {record.startOdometer != null && record.endOdometer != null && record.endOdometer >= record.startOdometer
+                    ? `${(record.endOdometer - record.startOdometer).toFixed(1)} km`
+                    : "--"}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="p-8 grid grid-cols-2 gap-8">
            {/* Punch In */}
            <div className="space-y-4">
