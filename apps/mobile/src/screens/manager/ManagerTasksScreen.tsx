@@ -189,7 +189,8 @@ export function ManagerTasksScreen() {
   };
 
   const filteredTasks = useMemo(() => {
-    const list = tasksQuery.data || [];
+    // Hide subtasks from the top level — they are shown nested under their parent.
+    const list = (tasksQuery.data || []).filter((t) => !t.isSubtask);
     switch (activeTab) {
       case "PENDING":
         return list.filter(t => t.status === "PENDING" || t.status === "IN_PROGRESS");
@@ -362,6 +363,37 @@ export function ManagerTasksScreen() {
                       <Text style={styles.attachmentRowText}>📎 {task.attachmentName || "View Attachment"}</Text>
                     </TouchableOpacity>
                   )}
+
+                  {task.subtasks && task.subtasks.length > 0 ? (
+                    <View style={styles.subtaskBlock}>
+                      <Text style={styles.subtaskBlockTitle}>
+                        SUBTASKS ({task.subtasks.filter((s) => s.status === "COMPLETED").length}/{task.subtasks.length})
+                      </Text>
+                      {task.subtasks.map((sub) => {
+                        const done = sub.status === "COMPLETED";
+                        return (
+                          <View key={sub.id} style={styles.subtaskItem}>
+                            <AppIcon
+                              name={done ? "check-circle-outline" : "calendar-clock"}
+                              size={16}
+                              color={done ? "#10B981" : "#F59E0B"}
+                            />
+                            <View style={{ flex: 1, marginLeft: 8 }}>
+                              <Text style={[styles.subtaskItemTitle, done && { textDecorationLine: "line-through", color: "#94A3B8" }]}>
+                                {sub.title}
+                              </Text>
+                              <Text style={styles.subtaskItemMeta}>
+                                {sub.assignedTo?.name || "Unassigned"} · {sub.points || 0} pts
+                              </Text>
+                            </View>
+                            <Text style={[styles.subtaskStatus, { color: done ? "#10B981" : "#F59E0B" }]}>
+                              {sub.status.replace("_", " ")}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ) : null}
                 </Card.Content>
               </Card>
             );
@@ -919,5 +951,42 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
     fontStyle: "italic",
     marginTop: 6
+  },
+  subtaskBlock: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderColor: "#EEF2F6",
+    paddingTop: 10
+  },
+  subtaskBlockTitle: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#94A3B8",
+    letterSpacing: 0.5,
+    marginBottom: 8
+  },
+  subtaskItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 6
+  },
+  subtaskItemTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1A202C"
+  },
+  subtaskItemMeta: {
+    fontSize: 10,
+    color: "#64748B",
+    marginTop: 1,
+    fontWeight: "600"
+  },
+  subtaskStatus: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase"
   }
 });
