@@ -1139,6 +1139,12 @@ export async function rejectLateCheckIn(actor: AuthUser, id: string) {
 export async function forceCheckout(actor: AuthUser, userId: string) {
   await ensureCanAccessUser(actor, userId);
 
+  // Turn off location tracking state on the user model so the admin panel UI dot updates
+  await prisma.user.update({
+    where: { id: userId },
+    data: { isLocationOn: false }
+  });
+
   const active = await prisma.attendance.findFirst({
     where: {
       userId,
