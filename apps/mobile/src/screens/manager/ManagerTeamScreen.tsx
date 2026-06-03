@@ -28,15 +28,13 @@ export function ManagerTeamScreen() {
     setRefreshing(false);
   };
 
-  const members: any[] = overviewQuery.data?.members ?? [];
-  const filtered = useMemo(
-    () =>
-      members.filter((m) =>
-        (m.user?.name || "").toLowerCase().includes(search.toLowerCase()) ||
-        (m.user?.department || "").toLowerCase().includes(search.toLowerCase())
-      ),
-    [members, search]
-  );
+  const filtered = useMemo(() => {
+    const members: any[] = overviewQuery.data?.members ?? [];
+    return members.filter((m) =>
+      (m.user?.name || "").toLowerCase().includes(search.toLowerCase()) ||
+      (m.user?.department || "").toLowerCase().includes(search.toLowerCase())
+    );
+  }, [overviewQuery.data, search]);
 
   return (
     <View style={styles.container}>
