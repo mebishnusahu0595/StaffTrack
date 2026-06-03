@@ -1,16 +1,21 @@
 import React, { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, View, RefreshControl, Dimensions, Image } from "react-native";
-import { Text, Card, Avatar, IconButton, ActivityIndicator } from "react-native-paper";
+import { ScrollView, StyleSheet, View, RefreshControl, Dimensions } from "react-native";
+import { Text, Card, Avatar, ActivityIndicator } from "react-native-paper";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigation } from "@react-navigation/native";
+import type { DrawerNavigationProp } from "@react-navigation/drawer";
 import dayjs from "dayjs";
 import { useAuth } from "../../auth/AuthContext";
 import { fetchAttendanceByDate, fetchMonthlyPerformanceReport } from "../../api";
 import { AppIcon } from "../../components/AppIcon";
+import { PersonalAttendancePanel } from "../../components/PersonalAttendancePanel";
+import type { ManagerDrawerParamList } from "../../navigation/AppNavigator";
 
 const { width } = Dimensions.get("window");
 
 export function ManagerHomeScreen() {
   const { user } = useAuth();
+  const navigation = useNavigation<DrawerNavigationProp<ManagerDrawerParamList, "ManagerHome">>();
   const [refreshing, setRefreshing] = useState(false);
   const todayStr = useMemo(() => dayjs().format("YYYY-MM-DD"), []);
 
@@ -94,6 +99,20 @@ export function ManagerHomeScreen() {
           style={styles.avatar} 
           labelStyle={styles.avatarLabel}
         />
+      </View>
+
+      {/* Manager's own attendance / odometer / KM (same as staff app) */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>My Attendance</Text>
+        <Text style={styles.dateLabel}>{dayjs().format("ddd, MMM D, YYYY")}</Text>
+      </View>
+      <View style={{ marginBottom: 20 }}>
+        <PersonalAttendancePanel onNavigateDayEnd={() => navigation.navigate("DayEndReport")} />
+      </View>
+
+      {/* Team header */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Team Snapshot</Text>
       </View>
 
       {/* Statistics Row */}
