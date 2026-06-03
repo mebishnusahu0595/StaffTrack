@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AttendanceStatusBadge } from "@/components/admin/status-badge";
-import { fetchAllAttendance, fetchUsers, markAttendanceStatus } from "@/lib/api";
+import { fetchAllAttendance, fetchUsers, markAttendanceStatus, superUpdateAttendance } from "@/lib/api";
 import { formatTime } from "@/lib/format";
 import { calculateDurations, formatDurationLabel } from "@/lib/timeTracking";
 import { Badge } from "@/components/ui/badge";
@@ -417,20 +417,74 @@ export default function AttendancePage() {
 }
 
 function AttendanceDetailDialog({ 
-  record, 
+  record: propRecord, 
   userRecords,
   onOpenChange 
 }: { 
   record: (AttendanceRecord & { user: User }) | null; 
-  userRecords: AttendanceRecord[];
+  userRecords: (AttendanceRecord & { user: User })[];
   onOpenChange: (open: boolean) => void 
 }) {
-  if (!record) return null;
+  const queryClient = useQueryClient();
+  const [isEditingOdo, setIsEditingOdo] = useState(false);
+  const [startOdoVal, setStartOdoVal] = useState("");
+  const [endOdoVal, setEndOdoVal] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
+  useEffect(() => {
+    if (propRecord) {
+      setStartOdoVal(propRecord.startOdometer?.toString() ?? "");
+      setEndOdoVal(propRecord.endOdometer?.toString() ?? "");
+      setIsEditingOdo(false);
+    }
+  }, [propRecord]);
+
+  if (!propRecord) return null;
+
+  const record = userRecords.find(r => r.id === propRecord.id) || propRecord;
   const totals = calculateDurations(userRecords);
 
+  const handleSaveOdometer = async () => {
+    setIsSaving(true);
+    try {
+      const startOdo = startOdoVal.trim() !== "" ? parseFloat(startOdoVal) : null;
+      const endOdo = endOdoVal.trim() !== "" ? parseFloat(endOdoVal) : null;
+
+      if (startOdo !== null && isNaN(startOdo)) {
+        alert("Start odometer must be a valid number");
+        setIsSaving(false);
+        return;
+      }
+      if (endOdo !== null && isNaN(endOdo)) {
+        alert("End odometer must be a valid number");
+        setIsSaving(false);
+        return;
+      }
+
+      await superUpdateAttendance(record.id, {
+        userId: record.userId,
+        date: record.date,
+        startOdometer: startOdo,
+        endOdometer: endOdo
+      });
+
+      await queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      setIsEditingOdo(false);
+    } catch (err: any) {
+      alert(err?.response?.data?.message ?? "Failed to update odometer readings.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setStartOdoVal(record.startOdometer?.toString() ?? "");
+    setEndOdoVal(record.endOdometer?.toString() ?? "");
+    setIsEditingOdo(false);
+  };
+
   return (
-    <Dialog open={!!record} onOpenChange={onOpenChange}>
+    <Dialog open={!!propRecord} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl p-0 overflow-hidden border-none shadow-2xl bg-white">
         <div className="bg-slate-900 p-8 text-white">
            <div className="flex items-center justify-between">
@@ -470,34 +524,131 @@ function AttendanceDetailDialog({
            </div>
         </div>
 
-        {record.punchType === "FIELD" && (record.startOdometer != null || record.endOdometer != null) && (
+        {record.punchType === "FIELD" && (
           <div className="px-8 pt-8">
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4 shadow-sm grid grid-cols-3 gap-6">
-              <div className="flex flex-col justify-between">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Start Odometer</p>
-                  <p className="mt-1 text-sm font-bold text-slate-800">
-                    {record.startOdometer != null ? `${record.startOdometer} km` : "No reading"}
+            {isEditingOdo ? (
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4 shadow-sm space-y-4">
+                <p className="text-xs font-black uppercase tracking-wider text-slate-700">Edit Odometer Readings</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="startOdo" className="text-[10px] font-black uppercase text-slate-500">Start Odometer</Label>
+                    <Input 
+                      id="startOdo"
+                      type="number" 
+                      placeholder="e.g. 452538"
+                      value={startOdoVal}
+                      onChange={(e) => setStartOdoVal(e.target.value)}
+                      className="h-9 text-xs rounded-lg"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="endOdo" className="text-[10px] font-black uppercase text-slate-500">End Odometer</Label>
+                    <Input 
+                      id="endOdo"
+                      type="number" 
+                      placeholder="e.g. 452597"
+                      value={endOdoVal}
+                      onChange={(e) => setEndOdoVal(e.target.value)}
+                      className="h-9 text-xs rounded-lg"
+                    />
+                  </div>
+                </div>
+                
+                {startOdoVal !== "" && endOdoVal !== "" && (
+                  <div className={cn(
+                     "rounded-xl p-3 border flex flex-col justify-center text-center",
+                     parseFloat(endOdoVal) < parseFloat(startOdoVal)
+                       ? "bg-rose-50 border-rose-100 text-rose-700"
+                       : "bg-blue-50/50 border-blue-100/60 text-blue-700"
+                  )}>
+                    <p className="mt-1 text-sm font-black">
+                      {parseFloat(endOdoVal) >= parseFloat(startOdoVal)
+                        ? `Calculated Distance: ${(parseFloat(endOdoVal) - parseFloat(startOdoVal)).toFixed(1)} km`
+                        : "Warning: End Odometer is less than Start Odometer"}
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-8 px-3 text-xs font-bold text-slate-500 hover:bg-slate-100"
+                    onClick={handleCancel}
+                    disabled={isSaving}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    className="h-8 px-4 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={handleSaveOdometer}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? "Saving..." : "Save Readings"}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4 shadow-sm grid grid-cols-3 gap-6">
+                <div className="flex flex-col justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Start Odometer</p>
+                    <p className="mt-1 text-sm font-bold text-slate-800">
+                      {record.startOdometer != null ? `${record.startOdometer} km` : "No reading"}
+                    </p>
+                  </div>
+                  <div className="mt-2">
+                    <Button 
+                      variant="link" 
+                      size="sm" 
+                      className="p-0 h-auto text-[10px] font-bold text-blue-600 hover:underline"
+                      onClick={() => setIsEditingOdo(true)}
+                    >
+                      Edit
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex flex-col justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">End Odometer</p>
+                    <p className="mt-1 text-sm font-bold text-slate-800">
+                      {record.endOdometer != null ? `${record.endOdometer} km` : "No reading"}
+                    </p>
+                  </div>
+                  <div className="mt-2">
+                    <Button 
+                      variant="link" 
+                      size="sm" 
+                      className="p-0 h-auto text-[10px] font-bold text-blue-600 hover:underline"
+                      onClick={() => setIsEditingOdo(true)}
+                    >
+                      Edit
+                    </Button>
+                  </div>
+                </div>
+                <div className={cn(
+                   "rounded-xl p-3 border flex flex-col justify-center",
+                   record.startOdometer != null && record.endOdometer != null && record.endOdometer < record.startOdometer
+                     ? "bg-rose-50 border-rose-100 text-rose-700"
+                     : "bg-blue-50/50 border-blue-100/60 text-blue-700"
+                )}>
+                  <p className={cn(
+                     "text-[10px] font-black uppercase tracking-wider",
+                     record.startOdometer != null && record.endOdometer != null && record.endOdometer < record.startOdometer
+                       ? "text-rose-500"
+                       : "text-blue-500"
+                  )}>Odometer Distance</p>
+                  <p className="mt-1 text-lg font-black">
+                    {record.startOdometer != null && record.endOdometer != null
+                      ? record.endOdometer >= record.startOdometer
+                        ? `${(record.endOdometer - record.startOdometer).toFixed(1)} km`
+                        : "Error: End < Start"
+                      : "--"}
                   </p>
                 </div>
               </div>
-              <div className="flex flex-col justify-between">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">End Odometer</p>
-                  <p className="mt-1 text-sm font-bold text-slate-800">
-                    {record.endOdometer != null ? `${record.endOdometer} km` : "No reading"}
-                  </p>
-                </div>
-              </div>
-              <div className="rounded-xl bg-blue-50/50 p-3 border border-blue-100/60 flex flex-col justify-center">
-                <p className="text-[10px] font-black uppercase tracking-wider text-blue-500">Odometer Distance</p>
-                <p className="mt-1 text-lg font-black text-blue-700">
-                  {record.startOdometer != null && record.endOdometer != null && record.endOdometer >= record.startOdometer
-                    ? `${(record.endOdometer - record.startOdometer).toFixed(1)} km`
-                    : "--"}
-                </p>
-              </div>
-            </div>
+            )}
           </div>
         )}
 

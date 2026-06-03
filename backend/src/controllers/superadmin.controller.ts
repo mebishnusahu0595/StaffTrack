@@ -59,37 +59,90 @@ export async function getAttendanceLogs(req: Request, res: Response): Promise<vo
 }
 
 export async function updateAttendance(req: Request, res: Response): Promise<void> {
-  const { id } = req.params; // Note: id might be a dummy or real id
-  const { userId, date, status, checkInTime, checkOutTime } = req.body;
+  const { id } = req.params;
+  const { userId, date, status, checkInTime, checkOutTime, startOdometer, endOdometer } = req.body;
 
-  const targetDate = new Date(date);
-  targetDate.setHours(0, 0, 0, 0);
+  let existing = null;
+  if (id && id !== "new" && id !== "undefined") {
+    existing = await prisma.attendance.findUnique({
+      where: { id }
+    });
+  }
 
-  const existing = await prisma.attendance.findFirst({
-    where: { 
-      userId: userId as string, 
-      date: targetDate 
-    } 
-  });
+  if (!existing && userId && date) {
+    const targetDate = new Date(date);
+    targetDate.setHours(0, 0, 0, 0);
+    existing = await prisma.attendance.findFirst({
+      where: { 
+        userId: userId as string, 
+        date: targetDate 
+      } 
+    });
+  }
 
   let updated;
+  const startOdo = startOdometer !== undefined ? (startOdometer !== null ? Number(startOdometer) : null) : undefined;
+  const endOdo = endOdometer !== undefined ? (endOdometer !== null ? Number(endOdometer) : null) : undefined;
+
   if (existing) {
     updated = await prisma.attendance.update({
       where: { id: existing.id },
       data: {
         status: status as AttendanceStatus,
         checkInTime: checkInTime ? new Date(checkInTime) : undefined,
-        checkOutTime: checkOutTime ? new Date(checkOutTime) : undefined
+        checkOutTime: checkOutTime ? new Date(checkOutTime) : undefined,
+        startOdometer: startOdo,
+        endOdometer: endOdo
       }
     });
   } else {
+    const targetDate = new Date(date);
+    targetDate.setHours(0, 0, 0, 0);
     updated = await prisma.attendance.create({
       data: {
         userId: userId as string,
         date: targetDate,
         status: status as AttendanceStatus,
         checkInTime: checkInTime ? new Date(checkInTime) : undefined,
-        checkOutTime: checkOutTime ? new Date(checkOutTime) : undefined
+        checkOutTime: checkOutTime ? new Date(checkOutTime) : undefined,
+        startOdometer: startOdo,
+        endOdometer: endOdo
+      }
+    });
+  }
+
+  // Recalculate kmTravelled for DayEndReport if needed
+  if (updated.startOdometer !== null || updated.endOdometer !== null) {
+    let kmTravelled = 0;
+    if (updated.startOdometer !== null && updated.endOdometer !== null && updated.endOdometer >= updated.startOdometer) {
+      kmTravelled = updated.endOdometer - updated.startOdometer;
+    }
+
+    const targetDate = new Date(updated.date);
+    targetDate.setHours(0, 0, 0, 0);
+
+    await prisma.dayEndReport.upsert({
+      where: {
+        userId_date: {
+          userId: updated.userId,
+          date: targetDate
+        }
+      },
+      update: {
+        startOdometer: updated.startOdometer,
+        endOdometer: updated.endOdometer,
+        kmTravelled: Number(kmTravelled.toFixed(2))
+      },
+      create: {
+        userId: updated.userId,
+        date: targetDate,
+        visitsSummary: "Auto-updated via admin console",
+        ordersTaken: 0,
+        ordersCancelled: 0,
+        kmTravelled: Number(kmTravelled.toFixed(2)),
+        startOdometer: updated.startOdometer,
+        endOdometer: updated.endOdometer,
+        remarks: "Auto-updated via admin console"
       }
     });
   }

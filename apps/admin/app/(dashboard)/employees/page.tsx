@@ -192,6 +192,16 @@ export default function EmployeesPage() {
   }, [locationQuery.data]);
 
   const distanceKm = useMemo(() => calculateDistanceKm(locationQuery.data ?? []), [locationQuery.data]);
+
+  const monthlyOdoTotal = useMemo(() => {
+    const sessions = attendanceQuery.data ?? [];
+    return sessions.reduce((sum, session) => {
+      if (session.startOdometer != null && session.endOdometer != null && session.endOdometer >= session.startOdometer) {
+        return sum + (session.endOdometer - session.startOdometer);
+      }
+      return sum;
+    }, 0);
+  }, [attendanceQuery.data]);
  
   const tasksQuery = useQuery({
     queryKey: ["tasks"],
@@ -579,29 +589,46 @@ export default function EmployeesPage() {
                                              )}
                                           </div>
  
-                                             <div className="mt-8 grid grid-cols-2 gap-4">
-                                             <div className="p-3 rounded-xl bg-slate-50/50 border border-slate-100">
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Attendance Sessions</p>
-                                                <div className="flex items-end gap-1 mb-1">
-                                                   <span className="text-lg font-black text-slate-900 leading-none">{selectedDateSessions.length}</span>
-                                                   <span className="text-[10px] font-bold text-slate-400 uppercase leading-none">sessions</span>
+                                              <div className={cn(
+                                                "mt-8 grid gap-4",
+                                                isFieldEmployee ? "grid-cols-3" : "grid-cols-2"
+                                              )}>
+                                              <div className="p-3 rounded-xl bg-slate-50/50 border border-slate-100">
+                                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Attendance Sessions</p>
+                                                 <div className="flex items-end gap-1 mb-1">
+                                                    <span className="text-lg font-black text-slate-900 leading-none">{selectedDateSessions.length}</span>
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase leading-none">sessions</span>
+                                                 </div>
+                                                 <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                                    <div className={cn("h-full rounded-full", selectedDateSessions.length > 0 ? "w-full bg-blue-600" : "w-0 bg-blue-600")} />
+                                                 </div>
+                                              </div>
+                                              <div className="p-3 rounded-xl bg-slate-50/50 border border-slate-100">
+                                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">{isFieldEmployee ? "Distance (Today)" : "Punch Mode"}</p>
+                                                 <div className="flex items-end gap-1 mb-1">
+                                                    <span className="text-lg font-black text-slate-900 leading-none">{isFieldEmployee ? distanceKm.toFixed(1) : latestAttendance?.punchType ?? user.workMode}</span>
+                                                    {isFieldEmployee ? <span className="text-[10px] font-bold text-slate-400 uppercase leading-none">km</span> : null}
+                                                 </div>
+                                                 <div className={cn("flex items-center gap-1.5", isFieldEmployee ? "text-emerald-600" : "text-indigo-600")}>
+                                                    <div className={cn("h-1 w-1 rounded-full", isFieldEmployee ? "bg-emerald-500" : "bg-indigo-500")} />
+                                                    <span className="text-[10px] font-black uppercase tracking-wider">{isFieldEmployee ? "On Track" : "No KM Tracking"}</span>
+                                                 </div>
+                                              </div>
+                                              {isFieldEmployee && (
+                                                <div className="p-3 rounded-xl bg-slate-50/50 border border-slate-100 flex flex-col justify-between">
+                                                   <div>
+                                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Monthly Odo Total</p>
+                                                      <div className="flex items-end gap-1 mb-1">
+                                                         <span className="text-lg font-black text-slate-900 leading-none">{monthlyOdoTotal.toFixed(1)}</span>
+                                                         <span className="text-[10px] font-bold text-slate-400 uppercase leading-none">km</span>
+                                                      </div>
+                                                   </div>
+                                                   <div className="text-[9px] font-black uppercase text-blue-600 mt-1">
+                                                      {dayjs(selectedMapDate).format("MMMM YYYY")}
+                                                   </div>
                                                 </div>
-                                                <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                                                   <div className={cn("h-full rounded-full", selectedDateSessions.length > 0 ? "w-full bg-blue-600" : "w-0 bg-blue-600")} />
-                                                </div>
-                                             </div>
-                                             <div className="p-3 rounded-xl bg-slate-50/50 border border-slate-100">
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">{isFieldEmployee ? "Distance" : "Punch Mode"}</p>
-                                                <div className="flex items-end gap-1 mb-1">
-                                                   <span className="text-lg font-black text-slate-900 leading-none">{isFieldEmployee ? distanceKm.toFixed(1) : latestAttendance?.punchType ?? user.workMode}</span>
-                                                   {isFieldEmployee ? <span className="text-[10px] font-bold text-slate-400 uppercase leading-none">km</span> : null}
-                                                </div>
-                                                <div className={cn("flex items-center gap-1.5", isFieldEmployee ? "text-emerald-600" : "text-indigo-600")}>
-                                                   <div className={cn("h-1 w-1 rounded-full", isFieldEmployee ? "bg-emerald-500" : "bg-indigo-500")} />
-                                                   <span className="text-[10px] font-black uppercase tracking-wider">{isFieldEmployee ? "On Track" : "No KM Tracking"}</span>
-                                                </div>
-                                             </div>
-                                          </div>
+                                              )}
+                                           </div>
                                        </CardContent>
                                     </Card>
                                  </div>
@@ -816,14 +843,26 @@ export default function EmployeesPage() {
                                                                    </a>
                                                                  )}
                                                               </div>
-                                                              <div className="rounded-xl bg-blue-50/50 p-3 border border-blue-100/60 flex flex-col justify-center">
-                                                                 <p className="text-[10px] font-black uppercase tracking-wider text-blue-500">Odo Distance</p>
-                                                                 <p className="mt-1 text-sm font-black text-blue-700">
-                                                                   {session.startOdometer != null && session.endOdometer != null && session.endOdometer >= session.startOdometer
-                                                                     ? `${(session.endOdometer - session.startOdometer).toFixed(1)} km`
-                                                                     : "--"}
-                                                                 </p>
-                                                              </div>
+                                                              <div className={cn(
+                                                                  "rounded-xl p-3 border flex flex-col justify-center",
+                                                                  session.startOdometer != null && session.endOdometer != null && session.endOdometer < session.startOdometer
+                                                                    ? "bg-rose-50 border-rose-100 text-rose-700"
+                                                                    : "bg-blue-50/50 border-blue-100/60 text-blue-700"
+                                                               )}>
+                                                                  <p className={cn(
+                                                                     "text-[10px] font-black uppercase tracking-wider",
+                                                                     session.startOdometer != null && session.endOdometer != null && session.endOdometer < session.startOdometer
+                                                                       ? "text-rose-500"
+                                                                       : "text-blue-500"
+                                                                  )}>Odo Distance</p>
+                                                                  <p className="mt-1 text-sm font-black">
+                                                                    {session.startOdometer != null && session.endOdometer != null
+                                                                      ? session.endOdometer >= session.startOdometer
+                                                                        ? `${(session.endOdometer - session.startOdometer).toFixed(1)} km`
+                                                                        : "Error: End < Start"
+                                                                      : "--"}
+                                                                  </p>
+                                                               </div>
                                                             </div>
                                                           )}
                                                        </div>

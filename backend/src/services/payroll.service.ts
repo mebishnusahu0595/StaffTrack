@@ -168,8 +168,12 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
       };
     });
 
-    const userReports = reports.filter((r: any) => r.userId === user.id);
-    const totalKm = userReports.reduce((sum: number, r: any) => sum + (r.kmTravelled || 0), 0);
+    const totalKm = user.attendances.reduce((sum: number, att: any) => {
+      if (att.startOdometer !== null && att.endOdometer !== null && att.endOdometer >= att.startOdometer) {
+        return sum + (att.endOdometer - att.startOdometer);
+      }
+      return sum;
+    }, 0);
     const travelRate = user.travelRate ?? 5.0;
     const travelAllowance = Math.round(totalKm * travelRate);
 
