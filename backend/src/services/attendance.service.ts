@@ -1181,3 +1181,128 @@ export async function forceCheckout(actor: AuthUser, userId: string) {
 
   return { success: true, data: updated };
 }
+
+export async function autoCheckoutStuckUsers() {
+  const now = new Date();
+  console.log(`[Scheduler] Starting auto-checkout for stuck users at ${now.toISOString()}`);
+
+  const activeRecords = await prisma.attendance.findMany({
+    where: {
+      checkOutTime: null
+    },
+    select: {
+      id: true,
+      userId: true,
+      date: true,
+      checkInTime: true
+    }
+  });
+
+  console.log(`[Scheduler] Found ${activeRecords.length} active sessions to check out.`);
+
+  for (const record of activeRecords) {
+    try {
+      const activeBreak = await prisma.break.findFirst({
+        where: {
+          attendanceId: record.id,
+          endTime: null
+        }
+      });
+
+      if (activeBreak) {
+        await prisma.break.update({
+          where: { id: activeBreak.id },
+          data: { endTime: now }
+        });
+      }
+
+      await prisma.attendance.update({
+        where: { id: record.id },
+        data: {
+          checkOutTime: now,
+          checkOutLat: 0,
+          checkOutLng: 0
+        }
+      });
+
+      await prisma.user.update({
+        where: { id: record.userId },
+        data: { isLocationOn: false }
+      });
+
+      console.log(`[Scheduler] Auto checked out user ${record.userId} for attendance ${record.id}`);
+    } catch (error) {
+      console.error(`[Scheduler] Failed to auto checkout user ${record.userId}:`, error);
+    }
+  }
+}
+
+export async function autoCheckoutOldStuckSessions() {
+  const today = startOfDay(new Date());
+
+  const oldActiveRecords = await prisma.attendance.findMany({
+    where: {
+      checkOutTime: null,
+      date: {
+        lt: today
+      }
+    },
+    select: {
+      id: true,
+      userId: true,
+      date: true,
+      checkInTime: true
+    }
+  });
+
+  if (oldActiveRecords.length === 0) {
+    return;
+  }
+
+  console.log(`[Scheduler] Found ${oldActiveRecords.length} historical stuck sessions to auto-checkout on startup.`);
+
+  for (const record of oldActiveRecords) {
+    try {
+      let checkoutTime = new Date(record.checkInTime || record.date);
+
+      if (record.checkInTime) {
+        checkoutTime.setHours(checkoutTime.getHours() + 9);
+      } else {
+        checkoutTime.setHours(18, 0, 0, 0);
+      }
+
+      const activeBreak = await prisma.break.findFirst({
+        where: {
+          attendanceId: record.id,
+          endTime: null
+        }
+      });
+
+      if (activeBreak) {
+        await prisma.break.update({
+          where: { id: activeBreak.id },
+          data: { endTime: checkoutTime }
+        });
+      }
+
+      await prisma.attendance.update({
+        where: { id: record.id },
+        data: {
+          checkOutTime: checkoutTime,
+          checkOutLat: 0,
+          checkOutLng: 0
+        }
+      });
+
+      await prisma.user.update({
+        where: { id: record.userId },
+        data: { isLocationOn: false }
+      });
+
+      console.log(`[Scheduler] Startup auto-checkout: Closed old session ${record.id} for user ${record.userId}`);
+    } catch (error) {
+      console.error(`[Scheduler] Failed to close old session ${record.id}:`, error);
+    }
+  }
+}
+

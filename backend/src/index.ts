@@ -25,6 +25,7 @@ import leaveRoutes from "./routes/leave.routes";
 import path from "path";
 import { initSocket } from "./lib/socket";
 import { corsOrigin } from "./lib/cors";
+import { startScheduler } from "./lib/scheduler";
 
 dotenv.config();
 
@@ -34,6 +35,9 @@ const port = Number(process.env.PORT ?? 4000);
 
 // Initialize Socket.io
 initSocket(httpServer);
+
+// Start daily/startup auto-checkout scheduler
+startScheduler();
 
 app.use(cors({
   origin: true,
