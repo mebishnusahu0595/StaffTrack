@@ -63,6 +63,8 @@ export type ManagerDrawerParamList = {
   ManagerHome: undefined;
   ManagerTeam: undefined;
   ManagerAttendance: undefined;
+  Attendance: undefined;
+  DayEndReport: undefined;
   ManagerTasks: undefined;
   ManagerReports: undefined;
   ManagerForms: undefined;
@@ -348,10 +350,26 @@ function ManagerDrawer() {
       <ManagerDrawerNavigator.Screen
         component={ManagerAttendanceScreen}
         name="ManagerAttendance"
-        options={{ 
-          title: "Attendance",
-          drawerIcon: ({ color, size }) => <AppIcon color={color} name="calendar-check" size={size} /> 
-        }} 
+        options={{
+          title: "Team Attendance",
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="calendar-check" size={size} />
+        }}
+      />
+      <ManagerDrawerNavigator.Screen
+        component={AttendanceScreen}
+        name="Attendance"
+        options={{
+          title: "My Attendance",
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="calendar-check" size={size} />
+        }}
+      />
+      <ManagerDrawerNavigator.Screen
+        component={DayEndReportScreen}
+        name="DayEndReport"
+        options={{
+          title: "My Day End Report",
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="file-document-edit" size={size} />
+        }}
       />
       <ManagerDrawerNavigator.Screen 
         component={ManagerTasksScreen} 

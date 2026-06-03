@@ -13,7 +13,7 @@ const router = Router();
 
 router.post(
   "/der",
-  roleGuard(UserRole.EMPLOYEE),
+  roleGuard(UserRole.EMPLOYEE, UserRole.MANAGER),
   validate({ body: dayEndReportBodySchema }),
   asyncHandler(reportController.createDayEndReport)
 );

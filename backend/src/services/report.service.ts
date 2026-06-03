@@ -138,18 +138,21 @@ export async function listDayEndReports(actor: AuthUser, userId?: string) {
     }
   };
 
-  if (actor.role === UserRole.MANAGER) {
+  if (actor.role === UserRole.EMPLOYEE) {
+    // Employees can only ever see their own day-end reports.
+    where.userId = actor.id;
+  } else if (actor.role === UserRole.MANAGER) {
     const managerGroupId = await getManagerGroupId(actor.id);
     where.user = {
       companyId: actor.companyId,
       OR: [
+        { id: actor.id },
         { managerId: actor.id },
         ...(managerGroupId ? [{ groupId: managerGroupId }] : [])
       ]
     };
-  }
-
-  if (userId) {
+    if (userId) where.userId = userId;
+  } else if (userId) {
     where.userId = userId;
   }
 

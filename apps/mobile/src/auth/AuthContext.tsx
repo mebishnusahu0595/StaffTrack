@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { login as loginRequest, logout as logoutRequest, updatePushToken, fetchUserProfile, type User } from "../api";
 import { setUnauthorizedHandler } from "../api/client";
@@ -49,6 +50,7 @@ const initialState: AuthState = {
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [state, setState] = useState<AuthState>(initialState);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
 
@@ -81,17 +83,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       await clearAuthStorage();
       setState(initialState);
+      // Wipe all cached queries so the next user never sees the previous
+      // user's tasks / leaves / reports / salary slips.
+      queryClient.clear();
     }
-  }, []);
+  }, [queryClient]);
 
   const signIn = useCallback(
     async (email: string, password: string) => {
+      // Drop any leftover cache from a previous session before the new one loads.
+      queryClient.clear();
       const result = await loginRequest({ email, password });
       await setAuthTokens(result.accessToken, result.refreshToken);
       await storeUser(result.user);
       applySession(result.user, result.accessToken);
     },
-    [applySession]
+    [applySession, queryClient]
   );
 
   useEffect(() => {
