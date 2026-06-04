@@ -12,6 +12,7 @@ import * as Notifications from "expo-notifications";
 
 import { appIconSource, AppIcon } from "../components/AppIcon";
 import { useAuth } from "../auth/AuthContext";
+import { useLocalNotifications } from "../hooks/useLocalNotifications";
 import { LoginScreen } from "../auth/LoginScreen";
 import { AttendanceScreen } from "../screens/AttendanceScreen";
 import { DayEndReportScreen } from "../screens/DayEndReportScreen";
@@ -82,6 +83,9 @@ export const navigationRef = createNavigationContainerRef<any>();
 
 export function AppNavigator() {
   const { isAuthenticated, isBootstrapping, user } = useAuth();
+
+  // Firebase-free notifications: poll backend + raise native local notifications.
+  useLocalNotifications();
 
   useEffect(() => {
     if (!isAuthenticated) return;

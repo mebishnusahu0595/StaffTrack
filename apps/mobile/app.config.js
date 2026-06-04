@@ -1,11 +1,3 @@
-import fs from "fs";
-
-// Auto-wire FCM creds for Android push when you add google-services.json.
-// Kept optional so prebuild / gradle build don't fail before the file exists.
-const googleServicesFile = fs.existsSync("./google-services.json")
-  ? "./google-services.json"
-  : undefined;
-
 export default ({ config }) => ({
   ...config,
   name: "StaffTrack",
@@ -66,7 +58,6 @@ export default ({ config }) => ({
   },
   android: {
     package: "com.vanikicrop.stafftrack",
-    ...(googleServicesFile ? { googleServicesFile } : {}),
     permissions: [
       "ACCESS_COARSE_LOCATION",
       "ACCESS_FINE_LOCATION",
