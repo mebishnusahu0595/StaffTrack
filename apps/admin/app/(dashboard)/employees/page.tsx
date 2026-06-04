@@ -80,6 +80,7 @@ export default function EmployeesPage() {
   const [search, setSearch] = useState("");
   const [workModeFilter, setWorkModeFilter] = useState<"ALL" | "FIELD" | "OFFICE">("ALL");
   const [roleFilter, setRoleFilter] = useState<"ALL" | "MANAGER" | "EMPLOYEE">("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<User | null>(null);
@@ -136,14 +137,22 @@ export default function EmployeesPage() {
   });
  
   const filteredUsers = useMemo(() => {
-    const items = usersQuery.data?.items ?? [];
+    let items = usersQuery.data?.items ?? [];
 
-    if (workModeFilter === "ALL") {
-      return items;
+    if (workModeFilter !== "ALL") {
+      items = items.filter((user) => resolveDisplayedWorkMode(user.workMode, latestTodayAttendanceByUser.get(user.id)) === workModeFilter);
     }
 
-    return items.filter((user) => resolveDisplayedWorkMode(user.workMode, latestTodayAttendanceByUser.get(user.id)) === workModeFilter);
-  }, [latestTodayAttendanceByUser, usersQuery.data?.items, workModeFilter]);
+    if (statusFilter !== "ALL") {
+      items = items.filter((user) => {
+        const latestUserAttendance = latestTodayAttendanceByUser.get(user.id);
+        const isActive = Boolean(latestUserAttendance && latestUserAttendance.checkInTime && !latestUserAttendance.checkOutTime);
+        return statusFilter === "ACTIVE" ? isActive : !isActive;
+      });
+    }
+
+    return items;
+  }, [latestTodayAttendanceByUser, usersQuery.data?.items, workModeFilter, statusFilter]);
 
   const managers = useMemo(() => managersQuery.data?.items ?? [], [managersQuery.data?.items]);
 
@@ -302,6 +311,19 @@ export default function EmployeesPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="flex items-center gap-2 mr-4">
+              <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
+                <SelectTrigger className="h-10 rounded-xl border-slate-200 text-xs font-bold text-slate-600 bg-white shadow-sm w-[140px]">
+                  <CheckCircle className="h-4 w-4 mr-2 text-slate-400" />
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All Statuses</SelectItem>
+                  <SelectItem value="ACTIVE">Active (Punch In)</SelectItem>
+                  <SelectItem value="INACTIVE">Inactive (Punch Out)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <Button 
               variant="outline" 
               className="border-slate-200 bg-white rounded-xl px-4 h-10 font-bold text-slate-600 shadow-sm gap-2 text-xs mr-2 hover:bg-slate-50 transition-all"
@@ -388,6 +410,7 @@ export default function EmployeesPage() {
                 const isExpanded = expandedId === user.id;
                 const latestUserAttendance = latestTodayAttendanceByUser.get(user.id);
                 const displayedWorkMode = resolveDisplayedWorkMode(user.workMode, latestUserAttendance);
+                const isPunchedIn = Boolean(latestUserAttendance && latestUserAttendance.checkInTime && !latestUserAttendance.checkOutTime);
                 return (
                   <Fragment key={user.id}>
                     <tr className={cn(
@@ -406,8 +429,17 @@ export default function EmployeesPage() {
                             )}
                           </Avatar>
                           <div className="flex flex-col">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-bold text-slate-900 text-sm leading-tight">{user.name}</span>
+                              {isPunchedIn ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/50 shadow-sm">
+                                  Active
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200/50 shadow-sm">
+                                  Inactive
+                                </span>
+                              )}
                               {user.batteryLevel !== undefined && user.batteryLevel !== null && (
                                 <div className="flex items-center gap-0.5 text-[9px] font-black text-slate-500 bg-slate-100/80 px-1.5 py-0.5 rounded-md border border-slate-200/50">
                                   <Battery className="h-2.5 w-2.5 text-slate-500" />
