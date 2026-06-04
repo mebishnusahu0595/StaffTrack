@@ -31,9 +31,11 @@ export interface User {
     name: string;
   } | null;
   baseSalary: number;
+  travelRate?: number;
   batteryLevel?: number | null;
   isLocationOn?: boolean;
   createdAt: string;
+  company?: { name: string } | null;
 }
 
 export interface UserListResponse {

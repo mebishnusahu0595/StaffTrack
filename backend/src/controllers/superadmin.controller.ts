@@ -11,11 +11,20 @@ export async function getAllUsers(req: Request, res: Response): Promise<void> {
       email: true,
       phone: true,
       role: true,
+      workMode: true,
+      designation: true,
       shiftStart: true,
       shiftEnd: true,
+      baseSalary: true,
+      travelRate: true,
+      avatarUrl: true,
       managerId: true,
+      groupId: true,
       companyId: true,
-      createdAt: true
+      isLocationOn: true,
+      createdAt: true,
+      company: { select: { name: true } },
+      group: { select: { id: true, name: true } }
     },
     orderBy: { createdAt: "desc" }
   });
@@ -24,16 +33,37 @@ export async function getAllUsers(req: Request, res: Response): Promise<void> {
 
 export async function updateUser(req: Request, res: Response): Promise<void> {
   const { id } = req.params;
-  const { shiftStart, shiftEnd, managerId, role } = req.body;
+  const {
+    name,
+    email,
+    phone,
+    designation,
+    workMode,
+    baseSalary,
+    travelRate,
+    shiftStart,
+    shiftEnd,
+    managerId,
+    role
+  } = req.body;
+
+  // Only update fields that were actually provided so partial edits never wipe data.
+  const data: Record<string, unknown> = {};
+  if (name !== undefined) data.name = name;
+  if (email !== undefined) data.email = email;
+  if (phone !== undefined) data.phone = phone;
+  if (designation !== undefined) data.designation = designation;
+  if (workMode !== undefined) data.workMode = workMode;
+  if (baseSalary !== undefined && baseSalary !== null && baseSalary !== "") data.baseSalary = Number(baseSalary);
+  if (travelRate !== undefined && travelRate !== null && travelRate !== "") data.travelRate = Number(travelRate);
+  if (shiftStart !== undefined) data.shiftStart = shiftStart;
+  if (shiftEnd !== undefined) data.shiftEnd = shiftEnd;
+  if (managerId !== undefined) data.managerId = managerId || null;
+  if (role !== undefined) data.role = role as UserRole;
 
   const updatedUser = await prisma.user.update({
     where: { id },
-    data: {
-      shiftStart,
-      shiftEnd,
-      managerId,
-      role: role as UserRole
-    }
+    data
   });
 
   sendSuccess(res, updatedUser, "User updated successfully");
@@ -52,7 +82,8 @@ export async function getAttendanceLogs(req: Request, res: Response): Promise<vo
         select: { name: true, email: true }
       }
     },
-    orderBy: { date: "desc" }
+    orderBy: { date: "desc" },
+    take: 300
   });
 
   sendSuccess(res, logs);
@@ -60,7 +91,20 @@ export async function getAttendanceLogs(req: Request, res: Response): Promise<vo
 
 export async function updateAttendance(req: Request, res: Response): Promise<void> {
   const { id } = req.params;
-  const { userId, date, status, checkInTime, checkOutTime, startOdometer, endOdometer } = req.body;
+  const {
+    userId,
+    date,
+    status,
+    punchType,
+    checkInTime,
+    checkOutTime,
+    startOdometer,
+    endOdometer,
+    checkInPhotoUrl,
+    checkOutPhotoUrl,
+    startOdometerPhotoUrl,
+    endOdometerPhotoUrl
+  } = req.body;
 
   let existing = null;
   if (id && id !== "new" && id !== "undefined") {
@@ -73,27 +117,34 @@ export async function updateAttendance(req: Request, res: Response): Promise<voi
     const targetDate = new Date(date);
     targetDate.setHours(0, 0, 0, 0);
     existing = await prisma.attendance.findFirst({
-      where: { 
-        userId: userId as string, 
-        date: targetDate 
-      } 
+      where: {
+        userId: userId as string,
+        date: targetDate
+      }
     });
   }
 
-  let updated;
-  const startOdo = startOdometer !== undefined ? (startOdometer !== null ? Number(startOdometer) : null) : undefined;
-  const endOdo = endOdometer !== undefined ? (endOdometer !== null ? Number(endOdometer) : null) : undefined;
+  const startOdo = startOdometer !== undefined ? (startOdometer !== null && startOdometer !== "" ? Number(startOdometer) : null) : undefined;
+  const endOdo = endOdometer !== undefined ? (endOdometer !== null && endOdometer !== "" ? Number(endOdometer) : null) : undefined;
 
+  // Build a data object that only touches fields the superadmin actually sent.
+  const data: Record<string, unknown> = {};
+  if (status !== undefined) data.status = status as AttendanceStatus;
+  if (punchType !== undefined) data.punchType = punchType || null;
+  if (checkInTime !== undefined) data.checkInTime = checkInTime ? new Date(checkInTime) : null;
+  if (checkOutTime !== undefined) data.checkOutTime = checkOutTime ? new Date(checkOutTime) : null;
+  if (startOdo !== undefined) data.startOdometer = startOdo;
+  if (endOdo !== undefined) data.endOdometer = endOdo;
+  if (checkInPhotoUrl !== undefined) data.checkInPhotoUrl = checkInPhotoUrl || null;
+  if (checkOutPhotoUrl !== undefined) data.checkOutPhotoUrl = checkOutPhotoUrl || null;
+  if (startOdometerPhotoUrl !== undefined) data.startOdometerPhotoUrl = startOdometerPhotoUrl || null;
+  if (endOdometerPhotoUrl !== undefined) data.endOdometerPhotoUrl = endOdometerPhotoUrl || null;
+
+  let updated;
   if (existing) {
     updated = await prisma.attendance.update({
       where: { id: existing.id },
-      data: {
-        status: status as AttendanceStatus,
-        checkInTime: checkInTime ? new Date(checkInTime) : undefined,
-        checkOutTime: checkOutTime ? new Date(checkOutTime) : undefined,
-        startOdometer: startOdo,
-        endOdometer: endOdo
-      }
+      data
     });
   } else {
     const targetDate = new Date(date);
@@ -102,17 +153,14 @@ export async function updateAttendance(req: Request, res: Response): Promise<voi
       data: {
         userId: userId as string,
         date: targetDate,
-        status: status as AttendanceStatus,
-        checkInTime: checkInTime ? new Date(checkInTime) : undefined,
-        checkOutTime: checkOutTime ? new Date(checkOutTime) : undefined,
-        startOdometer: startOdo,
-        endOdometer: endOdo
+        ...data,
+        status: (status as AttendanceStatus) ?? AttendanceStatus.PRESENT
       }
     });
   }
 
-  // Recalculate kmTravelled for DayEndReport if needed
-  if (updated.startOdometer !== null || updated.endOdometer !== null) {
+  // Recalculate kmTravelled + sync odometer photos onto the DayEndReport if any odometer data is present.
+  if (updated.startOdometer !== null || updated.endOdometer !== null || updated.startOdometerPhotoUrl || updated.endOdometerPhotoUrl) {
     let kmTravelled = 0;
     if (updated.startOdometer !== null && updated.endOdometer !== null && updated.endOdometer >= updated.startOdometer) {
       kmTravelled = updated.endOdometer - updated.startOdometer;
@@ -131,7 +179,9 @@ export async function updateAttendance(req: Request, res: Response): Promise<voi
       update: {
         startOdometer: updated.startOdometer,
         endOdometer: updated.endOdometer,
-        kmTravelled: Number(kmTravelled.toFixed(2))
+        kmTravelled: Number(kmTravelled.toFixed(2)),
+        startOdometerPhotoUrl: updated.startOdometerPhotoUrl,
+        kmPhotoUrl: updated.endOdometerPhotoUrl
       },
       create: {
         userId: updated.userId,
@@ -142,6 +192,8 @@ export async function updateAttendance(req: Request, res: Response): Promise<voi
         kmTravelled: Number(kmTravelled.toFixed(2)),
         startOdometer: updated.startOdometer,
         endOdometer: updated.endOdometer,
+        startOdometerPhotoUrl: updated.startOdometerPhotoUrl,
+        kmPhotoUrl: updated.endOdometerPhotoUrl,
         remarks: "Auto-updated via admin console"
       }
     });
