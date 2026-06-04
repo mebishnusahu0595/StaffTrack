@@ -34,6 +34,13 @@ export default ({ config }) => ({
         cameraPermission: "StaffTrack uses the camera to capture expense receipts."
       }
     ],
+    [
+      "expo-notifications",
+      {
+        icon: "./assets/icon.png",
+        color: "#10B981"
+      }
+    ],
     "expo-asset"
   ],
   ios: {

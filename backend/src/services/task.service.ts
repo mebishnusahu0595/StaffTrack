@@ -94,7 +94,7 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
   // If subtasks are provided, create them linked to the parent task
   if (input.subtasks && input.subtasks.length > 0) {
     for (const sub of input.subtasks) {
-      await prisma.task.create({
+      const createdSub = await prisma.task.create({
         data: {
           title: sub.title || sub.name || "",
           description: sub.description || "",
@@ -118,6 +118,21 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
           reminder: sub.reminder || null
         }
       });
+
+      // Notify the subtask assignee. Skip if it's the parent assignee — they are
+      // already notified about the main task below (avoids duplicate alerts).
+      if (createdSub.assignedToId && createdSub.assignedToId !== task.assignedToId) {
+        try {
+          await notificationService.createNotification(
+            createdSub.assignedToId,
+            "New Subtask Assigned",
+            `You have been assigned a subtask: ${createdSub.title} (part of "${task.title}"). Due on ${createdSub.dueDate.toLocaleDateString()}`,
+            "TASK_ASSIGNED"
+          );
+        } catch (err) {
+          console.error("[Task Service] Failed to send subtask assignment notification:", err);
+        }
+      }
     }
   }
 
@@ -126,13 +141,17 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
     await preGenerateTasksForSeries(task, actor.companyId);
   }
 
-  // Notify employee
-  await notificationService.createNotification(
-    task.assignedToId,
-    "New Task Assigned",
-    `You have been assigned a new task: ${task.title}. Due on ${input.dueDate.toLocaleDateString()}`,
-    "TASK_ASSIGNED"
-  );
+  // Notify the task assignee (don't let a notification failure fail task creation)
+  try {
+    await notificationService.createNotification(
+      task.assignedToId,
+      "New Task Assigned",
+      `You have been assigned a new task: ${task.title}. Due on ${input.dueDate.toLocaleDateString()}`,
+      "TASK_ASSIGNED"
+    );
+  } catch (err) {
+    console.error("[Task Service] Failed to send task assignment notification:", err);
+  }
 
   return task;
 }
