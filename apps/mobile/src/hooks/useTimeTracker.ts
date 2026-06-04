@@ -19,6 +19,9 @@ export function useTimeTracker(todaySessions: Attendance[], currentTime: dayjs.D
 
     todaySessions.forEach((session) => {
       if (!session.checkInTime) return;
+      // A late check-in that is still awaiting approval must NOT accrue work time.
+      // The timer only starts once a manager/admin approves it.
+      if (session.isCheckInPending) return;
       const start = dayjs(session.checkInTime);
       const end = session.checkOutTime ? dayjs(session.checkOutTime) : currentTime;
       const sessionDurationMs = end.diff(start, "millisecond");

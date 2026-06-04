@@ -13,6 +13,8 @@ import {
   Filter,
   Trash2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   MoreVertical,
   Eye
@@ -40,8 +42,25 @@ export default function ApprovalRequestsPage() {
   const [filterType, setFilterType] = useState("ALL");
   const [appliedName, setAppliedName] = useState("");
   const [appliedType, setAppliedType] = useState("ALL");
+  // Shared date filter (empty = all dates). Used by both tabs with day-step arrows.
+  const [dateFilter, setDateFilter] = useState("");
 
   const queryClient = useQueryClient();
+
+  const sameDay = (iso: string, ymd: string) => {
+    if (!ymd) return true;
+    const d = new Date(iso);
+    const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return local === ymd;
+  };
+
+  const stepDate = (days: number) => {
+    const base = dateFilter ? new Date(`${dateFilter}T00:00:00`) : new Date();
+    base.setDate(base.getDate() + days);
+    setDateFilter(
+      `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}-${String(base.getDate()).padStart(2, "0")}`
+    );
+  };
 
   const { data = [], isLoading } = useQuery({
     queryKey: ["attendanceRequests", activeTab],
@@ -100,14 +119,18 @@ export default function ApprovalRequestsPage() {
 
   // Client-side search and filters
   const filteredData = data.filter((item: any) => {
-    const matchesName = appliedName === "" || 
+    const matchesName = appliedName === "" ||
       item.name.toLowerCase().includes(appliedName.toLowerCase()) ||
       item.employeeId.toLowerCase().includes(appliedName.toLowerCase());
 
     const matchesType = appliedType === "ALL" || item.type === appliedType;
 
-    return matchesName && matchesType;
+    const matchesDate = sameDay(item.date, dateFilter);
+
+    return matchesName && matchesType && matchesDate;
   });
+
+  const filteredLateCheckIns = lateCheckIns.filter((item: any) => sameDay(item.date, dateFilter));
 
   const handleSearch = () => {
     setAppliedName(searchName);
@@ -166,6 +189,48 @@ export default function ApprovalRequestsPage() {
         </button>
       </div>
 
+      {/* Shared date-wise filter with day-step arrows */}
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Filter by date</span>
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => stepDate(-1)}
+            className="h-9 w-9 rounded-xl border-slate-200 text-slate-500 hover:bg-slate-50"
+            title="Previous day"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Input
+            type="date"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="h-9 w-[170px] rounded-xl border-slate-200 text-xs font-bold text-slate-700"
+          />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => stepDate(1)}
+            className="h-9 w-9 rounded-xl border-slate-200 text-slate-500 hover:bg-slate-50"
+            title="Next day"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+        {dateFilter ? (
+          <Button
+            variant="ghost"
+            onClick={() => setDateFilter("")}
+            className="h-9 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-50 px-3"
+          >
+            All dates
+          </Button>
+        ) : (
+          <span className="text-xs font-bold text-slate-400">Showing all dates</span>
+        )}
+      </div>
+
       {mainTab === "LATE_CHECKINS" ? (
         <Card className="border-none shadow-sm shadow-slate-200/60 ring-1 ring-slate-200/50 overflow-hidden bg-white">
           <Table>
@@ -187,7 +252,7 @@ export default function ApprovalRequestsPage() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ) : lateCheckIns.length === 0 ? (
+              ) : filteredLateCheckIns.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="h-48 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-slate-300">
@@ -197,23 +262,19 @@ export default function ApprovalRequestsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                lateCheckIns.map((item: any) => (
+                filteredLateCheckIns.map((item: any) => (
                   <TableRow key={item.id} className="hover:bg-slate-50/50 border-slate-50 transition-colors">
                     <TableCell className="py-5 px-6">
                       <div className="flex items-center gap-2.5">
                         <Avatar className="h-8 w-8 shadow-sm">
-                          {item.user?.avatarUrl ? (
-                            <img src={item.user.avatarUrl} alt={item.user.name} className="h-full w-full object-cover rounded-full" />
-                          ) : (
-                            <AvatarFallback className="bg-blue-50 text-blue-600 font-bold text-xs">
-                              {(item.user?.name || "??").slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          )}
+                          <AvatarFallback className="bg-blue-50 text-blue-600 font-bold text-xs">
+                            {(item.name || "??").slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
                         </Avatar>
                         <div className="flex flex-col">
-                          <span className="font-bold text-slate-900 text-sm leading-tight">{item.user?.name}</span>
+                          <span className="font-bold text-slate-900 text-sm leading-tight">{item.name}</span>
                           <span className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
-                            {item.user?.email} / {item.user?.designation || "Staff"}
+                            {item.email} / {item.designation || "Staff"}
                           </span>
                         </div>
                       </div>
@@ -222,7 +283,7 @@ export default function ApprovalRequestsPage() {
                     <TableCell className="py-5 px-6">
                       <div className="flex items-center gap-1.5 font-bold text-xs text-slate-600">
                         <Clock className="h-3.5 w-3.5 text-slate-400" />
-                        <span>{item.user?.shiftStart || "09:30 AM"}</span>
+                        <span>{item.shiftStart || "09:30 AM"}</span>
                       </div>
                     </TableCell>
 
@@ -286,7 +347,7 @@ export default function ApprovalRequestsPage() {
                 {tab.label}
                 {activeTab === tab.id && (
                   <Badge className="bg-blue-50 text-blue-600 hover:bg-blue-50 border-none font-bold text-xs rounded-full">
-                    {data.length}
+                    {filteredData.length}
                   </Badge>
                 )}
               </button>

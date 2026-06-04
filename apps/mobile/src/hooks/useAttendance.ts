@@ -24,7 +24,10 @@ export function useAttendance(month = dayjs().month() + 1, year = dayjs().year()
   const attendanceQuery = useQuery({
     queryKey: attendanceQueryKey,
     enabled: Boolean(user?.id),
-    queryFn: () => fetchMonthlyAttendance(user!.id, month, year)
+    queryFn: () => fetchMonthlyAttendance(user!.id, month, year),
+    // Fallback so a late check-in approval reflects (timer starts) without manual
+    // refresh even if the websocket message is missed.
+    refetchInterval: 30_000
   });
 
   const holidayQuery = useQuery({

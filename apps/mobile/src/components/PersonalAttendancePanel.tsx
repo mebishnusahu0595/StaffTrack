@@ -208,16 +208,23 @@ export function PersonalAttendancePanel({ onNavigateDayEnd }: { onNavigateDayEnd
             <View style={styles.statusColumn}>
               <Text style={styles.mutedLabel}>CURRENT STATUS</Text>
               <View style={styles.statusIndicatorRow}>
-                <View style={[styles.statusDot, { backgroundColor: isCheckedIn && !isCheckedOut ? "#A4262C" : "#17633A" }]} />
+                <View style={[styles.statusDot, { backgroundColor: activeAttendance?.isCheckInPending ? "#F59E0B" : isCheckedIn && !isCheckedOut ? "#A4262C" : "#17633A" }]} />
                 <Text style={styles.statusText}>{currentStatusLabel}</Text>
               </View>
             </View>
             <View style={styles.timeColumn}>
               {isCheckedIn ? (
-                <>
-                  <Text style={styles.timeText}>{activeBreak ? breakTime : activeAttendance?.punchType === "OFFICE" ? officeTime : fieldTime}</Text>
-                  <Text style={styles.amPmText}>{activeBreak ? "BRK" : "HRS"}</Text>
-                </>
+                activeAttendance?.isCheckInPending ? (
+                  <>
+                    <Text style={[styles.timeText, { color: "#B45309" }]}>--:--:--</Text>
+                    <Text style={[styles.amPmText, { color: "#B45309" }]}>PENDING</Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.timeText}>{activeBreak ? breakTime : activeAttendance?.punchType === "OFFICE" ? officeTime : fieldTime}</Text>
+                    <Text style={styles.amPmText}>{activeBreak ? "BRK" : "HRS"}</Text>
+                  </>
+                )
               ) : (
                 <>
                   <Text style={styles.timeText}>{currentTime.format("hh:mm:ss")}</Text>

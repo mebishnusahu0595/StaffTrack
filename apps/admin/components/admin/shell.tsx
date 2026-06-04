@@ -31,11 +31,18 @@ import {
   Fingerprint,
   CheckSquare
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth-provider";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import {
+  fetchPendingLateCheckIns,
+  fetchAttendanceRequests,
+  fetchLeaves,
+  fetchExpenses
+} from "@/lib/api";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -109,6 +116,41 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     setIsMobileMenuOpen(false);
   }, [pathname]);
 
+  // Live "needs attention" counts for sidebar badges. Polled lightly so a new
+  // request shows up within ~45s without a manual refresh.
+  const enabledBadges = Boolean(user);
+  const { data: lateCheckIns = [] } = useQuery({
+    queryKey: ["pendingLateCheckIns"],
+    queryFn: fetchPendingLateCheckIns,
+    enabled: enabledBadges,
+    refetchInterval: 45_000
+  });
+  const { data: pendingAdjustments = [] } = useQuery({
+    queryKey: ["attendanceRequests", "PENDING"],
+    queryFn: () => fetchAttendanceRequests("PENDING"),
+    enabled: enabledBadges,
+    refetchInterval: 45_000
+  });
+  const { data: pendingLeaves = [] } = useQuery({
+    queryKey: ["leaves", "PENDING"],
+    queryFn: () => fetchLeaves({ status: "PENDING" }),
+    enabled: enabledBadges,
+    refetchInterval: 45_000
+  });
+  const { data: allExpenses = [] } = useQuery({
+    queryKey: ["expenses", "sidebar"],
+    queryFn: () => fetchExpenses(),
+    enabled: enabledBadges,
+    refetchInterval: 60_000
+  });
+
+  const pendingExpenses = (allExpenses as any[]).filter((e) => !e.approved).length;
+  const badgeCounts: Record<string, number> = {
+    "/payroll/approval-requests": (lateCheckIns as any[]).length + (pendingAdjustments as any[]).length,
+    "/leaves": (pendingLeaves as any[]).length,
+    "/expenses": pendingExpenses
+  };
+
   return (
     <div className="flex min-h-screen bg-slate-50">
       {/* Mobile Drawer Overlay */}
@@ -146,6 +188,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             .filter((item) => !item.roles || (user?.role && item.roles.includes(user.role as Role)))
             .map((item) => {
             const isActive = pathname === item.href;
+            const badge = badgeCounts[item.href] ?? 0;
             return (
               <Link
                 key={item.href}
@@ -158,7 +201,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 )}
               >
                 <item.icon className={cn("h-5 w-5", isActive ? "text-white" : "text-slate-400")} />
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {badge > 0 && (
+                  <span className={cn(
+                    "ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-black",
+                    isActive ? "bg-white text-blue-600" : "bg-rose-500 text-white"
+                  )}>
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
               </Link>
             );
           })}

@@ -6,6 +6,7 @@ import { prisma } from "../lib/prisma";
 import { ensureCanAccessUser, ensureManagerCanUseEmployee, getManagerGroupId } from "./access.service";
 import { createDayEndReport } from "./report.service";
 import * as notificationService from "./notification.service";
+import { getIO, SOCKET_EVENTS } from "../lib/socket";
 
 interface CheckInInput {
   lat: number;
@@ -1131,6 +1132,18 @@ export async function approveLateCheckIn(actor: AuthUser, id: string) {
     }
   });
 
+  // Push a real-time update so the employee's app starts the work timer immediately
+  // (and any open manager/admin dashboards drop the pending row) without a manual refresh.
+  try {
+    getIO().to(`company:${attendance.user.companyId}`).emit(SOCKET_EVENTS.ATTENDANCE_UPDATE, {
+      type: "LATE_CHECK_IN_APPROVED",
+      userId: attendance.userId,
+      attendanceId: id
+    });
+  } catch (err) {
+    console.error("[Attendance Service] Failed to emit approval socket event:", err);
+  }
+
   try {
     await notificationService.createNotification(
       attendance.userId,
@@ -1170,6 +1183,16 @@ export async function rejectLateCheckIn(actor: AuthUser, id: string) {
   await prisma.attendance.delete({
     where: { id }
   });
+
+  try {
+    getIO().to(`company:${attendance.user.companyId}`).emit(SOCKET_EVENTS.ATTENDANCE_UPDATE, {
+      type: "LATE_CHECK_IN_REJECTED",
+      userId: attendance.userId,
+      attendanceId: id
+    });
+  } catch (err) {
+    console.error("[Attendance Service] Failed to emit rejection socket event:", err);
+  }
 
   try {
     await notificationService.createNotification(
