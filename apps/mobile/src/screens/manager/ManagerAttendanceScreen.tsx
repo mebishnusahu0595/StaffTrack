@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View, RefreshControl, Dimensions, Image, TouchableOpacity, Modal, Linking } from "react-native";
 import { Text, Card, Avatar, ActivityIndicator, IconButton } from "react-native-paper";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
-import { fetchAttendanceByDate, fetchTodayLocationLogs } from "../../api";
+import { fetchAttendanceByDate, fetchTodayLocationLogs, fetchPendingLateCheckIns, approveLateCheckIn, rejectLateCheckIn } from "../../api";
 import { AppIcon } from "../../components/AppIcon";
 import { API_ORIGIN_URL } from "../../config/env";
 
@@ -26,14 +26,40 @@ export function ManagerAttendanceScreen() {
   // Image zoom modal state
   const [zoomImage, setZoomImage] = useState<string | null>(null);
 
+  const queryClient = useQueryClient();
+
   const attendanceQuery = useQuery({
     queryKey: ["managerAttendanceByDate", dateStr],
     queryFn: () => fetchAttendanceByDate(dateStr)
   });
 
+  const pendingQuery = useQuery({
+    queryKey: ["managerPendingLateCheckIns"],
+    queryFn: fetchPendingLateCheckIns
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: approveLateCheckIn,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["managerPendingLateCheckIns"] });
+      void queryClient.invalidateQueries({ queryKey: ["managerAttendanceByDate"] });
+    }
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: rejectLateCheckIn,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["managerPendingLateCheckIns"] });
+      void queryClient.invalidateQueries({ queryKey: ["managerAttendanceByDate"] });
+    }
+  });
+
+  const pendingList = pendingQuery.data || [];
+  const isMutating = approveMutation.isPending || rejectMutation.isPending;
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await attendanceQuery.refetch();
+    await Promise.all([attendanceQuery.refetch(), pendingQuery.refetch()]);
     setRefreshing(false);
   };
 
@@ -92,6 +118,48 @@ export function ManagerAttendanceScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#10B981"]} />
         }
       >
+        {/* Pending Late Check-In Approvals */}
+        {pendingList.length > 0 && (
+          <Card style={styles.pendingCard} elevation={1}>
+            <Card.Content>
+              <View style={styles.pendingHeader}>
+                <AppIcon name="clock-alert-outline" size={18} color="#B45309" />
+                <Text style={styles.pendingTitle}>Pending Late Check-Ins ({pendingList.length})</Text>
+              </View>
+              <Text style={styles.pendingSubtitle}>
+                These staff punched in more than 15 min late. Attendance won&apos;t count until you approve.
+              </Text>
+              {pendingList.map((item: any) => (
+                <View key={item.id} style={styles.pendingRow}>
+                  <View style={styles.pendingInfo}>
+                    <Text style={styles.pendingName}>{item.name}</Text>
+                    <Text style={styles.pendingMeta}>
+                      {item.department} • In: {item.checkInTime ? dayjs(item.checkInTime).format("hh:mm A") : "--"} (Shift {item.shiftStart})
+                    </Text>
+                    <Text style={styles.pendingDate}>{dayjs(item.date).format("DD MMM YYYY")}</Text>
+                  </View>
+                  <View style={styles.pendingActions}>
+                    <TouchableOpacity
+                      style={[styles.pendingBtn, styles.rejectBtn]}
+                      disabled={isMutating}
+                      onPress={() => rejectMutation.mutate(item.id)}
+                    >
+                      <AppIcon name="close" size={16} color="#DC2626" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.pendingBtn, styles.approveBtn]}
+                      disabled={isMutating}
+                      onPress={() => approveMutation.mutate(item.id)}
+                    >
+                      <AppIcon name="check" size={16} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </Card.Content>
+          </Card>
+        )}
+
         {attendanceQuery.isLoading ? (
           <ActivityIndicator color="#1A202C" style={{ marginTop: 40 }} />
         ) : list.length === 0 ? (
@@ -114,7 +182,11 @@ export function ManagerAttendanceScreen() {
             let statusColor = "#EF4444";
             let statusBg = "#FEF2F2";
 
-            if (record.status === "ON_LEAVE") {
+            if (record.isCheckInPending) {
+              statusText = "Pending Approval";
+              statusColor = "#B45309";
+              statusBg = "#FEF3C7";
+            } else if (record.status === "ON_LEAVE") {
               statusText = "On Leave";
               statusColor = "#F59E0B";
               statusBg = "#FEF3C7";
@@ -415,6 +487,78 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
     marginTop: 6,
     textAlign: "center"
+  },
+  pendingCard: {
+    backgroundColor: "#FFFBEB",
+    borderRadius: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#FDE68A"
+  },
+  pendingHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6
+  },
+  pendingTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#92400E"
+  },
+  pendingSubtitle: {
+    fontSize: 11,
+    color: "#B45309",
+    fontWeight: "600",
+    marginTop: 4,
+    marginBottom: 8
+  },
+  pendingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderColor: "#FDE68A"
+  },
+  pendingInfo: {
+    flex: 1,
+    paddingRight: 8
+  },
+  pendingName: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#1A202C"
+  },
+  pendingMeta: {
+    fontSize: 11,
+    color: "#92400E",
+    fontWeight: "600",
+    marginTop: 2
+  },
+  pendingDate: {
+    fontSize: 10,
+    color: "#B45309",
+    fontWeight: "600",
+    marginTop: 1
+  },
+  pendingActions: {
+    flexDirection: "row",
+    gap: 8
+  },
+  pendingBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  approveBtn: {
+    backgroundColor: "#10B981"
+  },
+  rejectBtn: {
+    backgroundColor: "#FEE2E2",
+    borderWidth: 1,
+    borderColor: "#FCA5A5"
   },
   recordCard: {
     backgroundColor: "#FFFFFF",

@@ -660,6 +660,19 @@ export async function fetchAttendanceByDate(date: string): Promise<any[]> {
   return unwrap(await api.get<ApiEnvelope<any[]>>("/attendance/by-date", { params: { date } }));
 }
 
+// Late check-in approvals (manager / admin)
+export async function fetchPendingLateCheckIns(): Promise<any[]> {
+  return unwrap(await api.get<ApiEnvelope<any[]>>("/attendance/late-checkins/pending"));
+}
+
+export async function approveLateCheckIn(id: string): Promise<any> {
+  return unwrap(await api.post<ApiEnvelope<any>>(`/attendance/late-checkins/${id}/approve`));
+}
+
+export async function rejectLateCheckIn(id: string): Promise<any> {
+  return unwrap(await api.post<ApiEnvelope<any>>(`/attendance/late-checkins/${id}/reject`));
+}
+
 // Team overview (manager / admin)
 export async function fetchTeamMembers(): Promise<any[]> {
   return unwrap(await api.get<ApiEnvelope<any[]>>("/team/members"));

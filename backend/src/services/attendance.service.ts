@@ -3,7 +3,7 @@ import type { AuthUser } from "../types/auth";
 import { conflict, notFound } from "../lib/errors";
 import { monthRange, startOfDay } from "../lib/date";
 import { prisma } from "../lib/prisma";
-import { ensureCanAccessUser, getManagerGroupId } from "./access.service";
+import { ensureCanAccessUser, ensureManagerCanUseEmployee, getManagerGroupId } from "./access.service";
 import { createDayEndReport } from "./report.service";
 import * as notificationService from "./notification.service";
 
@@ -1041,12 +1041,30 @@ export async function getPendingLateCheckIns(actor: AuthUser) {
   if (actor.role === UserRole.EMPLOYEE) {
     throw new Error("Unauthorized");
   }
-  
+
   const companyId = actor.companyId;
+
+  // A manager may only review their own team's EMPLOYEE late check-ins.
+  // A manager's own (or another manager's) late check-in is only approvable by an admin.
+  const managerGroupId =
+    actor.role === UserRole.MANAGER ? await getManagerGroupId(actor.id) : null;
+
+  const userWhere =
+    actor.role === UserRole.MANAGER
+      ? {
+          companyId,
+          role: UserRole.EMPLOYEE,
+          OR: [
+            { managerId: actor.id },
+            ...(managerGroupId ? [{ groupId: managerGroupId }] : [])
+          ]
+        }
+      : { companyId };
+
   const pendingList = await prisma.attendance.findMany({
     where: {
       isCheckInPending: true,
-      user: { companyId }
+      user: userWhere
     },
     include: {
       user: {
@@ -1093,6 +1111,16 @@ export async function approveLateCheckIn(actor: AuthUser, id: string) {
     throw new Error("Attendance record not found");
   }
 
+  if (attendance.user.companyId !== actor.companyId) {
+    throw new Error("Unauthorized");
+  }
+
+  // Managers can only approve their own team's EMPLOYEE check-ins.
+  // This forbids a manager approving another manager's (or their own) late check-in — admin only.
+  if (actor.role === UserRole.MANAGER) {
+    await ensureManagerCanUseEmployee(actor, attendance.userId);
+  }
+
   const result = await prisma.attendance.update({
     where: { id },
     data: {
@@ -1123,11 +1151,20 @@ export async function rejectLateCheckIn(actor: AuthUser, id: string) {
   }
 
   const attendance = await prisma.attendance.findUnique({
-    where: { id }
+    where: { id },
+    include: { user: true }
   });
 
   if (!attendance) {
     throw new Error("Attendance record not found");
+  }
+
+  if (attendance.user.companyId !== actor.companyId) {
+    throw new Error("Unauthorized");
+  }
+
+  if (actor.role === UserRole.MANAGER) {
+    await ensureManagerCanUseEmployee(actor, attendance.userId);
   }
 
   await prisma.attendance.delete({

@@ -436,10 +436,18 @@ function toDateKey(date: Date | string) {
   return new Date(date).toISOString().slice(0, 10);
 }
 
-function resolveDayStatus(rows: Array<{ status: string }>) {
-  if (rows.some((row) => row.status === "PRESENT")) return "PRESENT";
+function resolveDayStatus(
+  rows: Array<{ status: string; checkInApproved?: boolean; isCheckInPending?: boolean }>
+) {
+  // A late check-in awaiting manager/admin approval must NOT count as present yet.
+  const isApprovedPresent = (row: { status: string; checkInApproved?: boolean }) =>
+    row.status === "PRESENT" && row.checkInApproved !== false;
+
+  if (rows.some(isApprovedPresent)) return "PRESENT";
   if (rows.some((row) => row.status === "HALF_DAY")) return "HALF_DAY";
   if (rows.some((row) => row.status === "ON_LEAVE")) return "ON_LEAVE";
+  // Only an unapproved (pending) check-in remains for this day → show as PENDING, count neither present nor absent.
+  if (rows.some((row) => row.status === "PRESENT")) return "PENDING";
   if (rows.some((row) => row.status === "ABSENT")) return "ABSENT";
   return rows[0]?.status ?? "ABSENT";
 }

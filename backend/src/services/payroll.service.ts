@@ -123,7 +123,10 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
           status = "PAID_LEAVE";
         }
       } else if (attendance) {
-        if (attendance.status === "PRESENT") {
+        if (attendance.status === "PRESENT" && attendance.checkInApproved === false) {
+          // Late check-in awaiting approval — does not count as present/payable yet.
+          status = "PENDING";
+        } else if (attendance.status === "PRESENT") {
           presentDays++;
           totalPayableDays++;
           payable = true;
@@ -323,7 +326,8 @@ export async function calculateMusterReport(companyId: string, month: number, ye
 
       const attendance = user.attendances.find((row: any) => isSameDay(new Date(row.date), day));
       if (attendance) {
-        if (attendance.status === "PRESENT") status = "P";
+        if (attendance.status === "PRESENT" && attendance.checkInApproved === false) status = "PEN";
+        else if (attendance.status === "PRESENT") status = "P";
         else if (attendance.status === "HALF_DAY") status = "HD";
         else if (attendance.status === "ON_LEAVE") status = "L";
       }
