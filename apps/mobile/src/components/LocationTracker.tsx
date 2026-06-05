@@ -59,61 +59,9 @@ async function syncOfflineQueue() {
   }
 }
 
-async function checkLocationStatus() {
-  try {
-    const enabled = await Location.hasServicesEnabledAsync();
-    const permission = await Location.getForegroundPermissionsAsync();
-    const locationIsOn = enabled && permission.status === "granted";
-    
-    if (locationIsOn) {
-      isAlertOpen = false;
-    }
-
-    if (lastLocationState === null) {
-      lastLocationState = locationIsOn;
-      if (!locationIsOn && !isAlertOpen) {
-        isAlertOpen = true;
-        Alert.alert(
-          "Location Required!",
-          "Your location services are disabled. Your working hours are paused and auto-break has started. Please turn on location services immediately to resume work.",
-          [{ text: "OK", onPress: () => { isAlertOpen = false; } }],
-          { cancelable: false }
-        );
-      }
-      return;
-    }
-
-    if (locationIsOn !== lastLocationState) {
-      console.log(`[LocationTracker] Location state changed. Was: ${lastLocationState}, Now: ${locationIsOn}`);
-      lastLocationState = locationIsOn;
-
-      const level = await Battery.getBatteryLevelAsync();
-      const batteryLevel = level >= 0 ? Math.round(level * 100) : undefined;
-
-      // Report to backend
-      await updateLocationStatus({ isLocationOn: locationIsOn, batteryLevel }).catch((err) => {
-        console.warn("[LocationTracker] Failed to update location status on backend:", err);
-      });
-    }
-
-    // Always alert the employee if location is turned off and no alert is currently open
-    if (!locationIsOn && !isAlertOpen) {
-      isAlertOpen = true;
-      Alert.alert(
-        "Location Required!",
-        "Your location services are disabled. Your working hours are paused and auto-break has started. Please turn on location services immediately to resume work.",
-        [{ text: "OK", onPress: () => { isAlertOpen = false; } }],
-        { cancelable: false }
-      );
-    }
-  } catch (err) {
-    console.warn("[LocationTracker] Error checking location status:", err);
-  }
-}
-
 export function LocationTracker() {
   const { isAuthenticated } = useAuth();
-  const { activeAttendance } = useAttendance();
+  const { activeAttendance, activeBreak, startBreak } = useAttendance();
   const isCheckedIn = Boolean(activeAttendance);
   const isCheckedOut = false; // By definition, if activeAttendance exists, it's not checked out
   const isFieldPunch = activeAttendance?.punchType === "FIELD";
@@ -121,6 +69,68 @@ export function LocationTracker() {
   useEffect(() => {
     let mounted = true;
     let webInterval: any = null;
+
+    async function checkLocationAndAutoBreak() {
+      try {
+        const enabled = await Location.hasServicesEnabledAsync();
+        const permission = await Location.getForegroundPermissionsAsync();
+        const locationIsOn = enabled && permission.status === "granted";
+
+        if (locationIsOn) {
+          isAlertOpen = false;
+        }
+
+        // If location is OFF, and they are checked in and NOT on break, trigger auto break!
+        if (!locationIsOn && isCheckedIn && !activeBreak && isFieldPunch) {
+          console.log("[LocationTracker] Location turned off during field check-in. Triggering auto-break!");
+          try {
+            await startBreak();
+          } catch (breakErr) {
+            console.warn("[LocationTracker] Failed to start auto-break:", breakErr);
+          }
+        }
+
+        if (lastLocationState === null) {
+          lastLocationState = locationIsOn;
+          if (!locationIsOn && !isAlertOpen && isCheckedIn && isFieldPunch) {
+            isAlertOpen = true;
+            Alert.alert(
+              "Location Required!",
+              "Your location services are disabled. Your working hours are paused and auto-break has started. Please turn on location services immediately to resume work.",
+              [{ text: "OK", onPress: () => { isAlertOpen = false; } }],
+              { cancelable: false }
+            );
+          }
+          return;
+        }
+
+        if (locationIsOn !== lastLocationState) {
+          console.log(`[LocationTracker] Location state changed. Was: ${lastLocationState}, Now: ${locationIsOn}`);
+          lastLocationState = locationIsOn;
+
+          const level = await Battery.getBatteryLevelAsync();
+          const batteryLevel = level >= 0 ? Math.round(level * 100) : undefined;
+
+          // Report to backend
+          await updateLocationStatus({ isLocationOn: locationIsOn, batteryLevel }).catch((err) => {
+            console.warn("[LocationTracker] Failed to update location status on backend:", err);
+          });
+        }
+
+        // Always alert the employee if location is turned off and no alert is currently open
+        if (!locationIsOn && !isAlertOpen && isCheckedIn && isFieldPunch) {
+          isAlertOpen = true;
+          Alert.alert(
+            "Location Required!",
+            "Your location services are disabled. Your working hours are paused and auto-break has started. Please turn on location services immediately to resume work.",
+            [{ text: "OK", onPress: () => { isAlertOpen = false; } }],
+            { cancelable: false }
+          );
+        }
+      } catch (err) {
+        console.warn("[LocationTracker] Error checking location status:", err);
+      }
+    }
 
     async function syncTracking() {
       if (!mounted) {
@@ -178,22 +188,22 @@ export function LocationTracker() {
         // Sync cached locations if any
         void syncOfflineQueue();
 
-        // Monitor location provider toggle
-        void checkLocationStatus();
+        // Monitor location provider toggle and trigger auto-break
+        void checkLocationAndAutoBreak();
       }
     }
 
     void syncTracking();
     const interval = setInterval(() => {
       void syncTracking();
-    }, 60 * 1000);
+    }, 20 * 1000);
 
     return () => {
       mounted = false;
       if (webInterval) clearInterval(webInterval);
       clearInterval(interval);
     };
-  }, [isAuthenticated, isCheckedIn, isCheckedOut, isFieldPunch]);
+  }, [isAuthenticated, isCheckedIn, isCheckedOut, isFieldPunch, activeBreak, startBreak]);
 
   return null;
 }

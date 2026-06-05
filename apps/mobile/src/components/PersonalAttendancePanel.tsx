@@ -143,6 +143,44 @@ export function PersonalAttendancePanel({ onNavigateDayEnd }: { onNavigateDayEnd
 
   async function handleCheckIn(type: PunchType) {
     try {
+      // 1. Enforce Location services enabled (GPS toggle is ON)
+      const servicesEnabled = await Location.hasServicesEnabledAsync();
+      if (!servicesEnabled) {
+        Alert.alert(
+          "Location Required",
+          "Please turn ON your phone's location services (GPS) in the quick settings/settings to punch in."
+        );
+        return;
+      }
+
+      // 2. Enforce Foreground Permission
+      const foreground = await Location.getForegroundPermissionsAsync();
+      if (foreground.status !== Location.PermissionStatus.GRANTED) {
+        const req = await Location.requestForegroundPermissionsAsync();
+        if (req.status !== Location.PermissionStatus.GRANTED) {
+          Alert.alert(
+            "Location Permission Required",
+            "This app requires foreground location permission to punch in. Please enable it in your phone settings."
+          );
+          return;
+        }
+      }
+
+      // 3. Enforce Background Permission if FIELD work
+      if (type === "FIELD") {
+        const background = await Location.getBackgroundPermissionsAsync();
+        if (background.status !== Location.PermissionStatus.GRANTED) {
+          const reqBg = await Location.requestBackgroundPermissionsAsync();
+          if (reqBg.status !== Location.PermissionStatus.GRANTED) {
+            Alert.alert(
+              "Background Location Required",
+              "FIELD work requires background location tracking (Access 'All the time'). Please enable it in your phone settings."
+            );
+            return;
+          }
+        }
+      }
+
       const asset = await pickVerificationImage({ quality: 0.3 });
       if (!asset) return;
 
