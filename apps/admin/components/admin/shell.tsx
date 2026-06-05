@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import {
   Bell,
   ClipboardList,
@@ -157,9 +157,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   // Live Location Warnings and Today's Attendance Query
   const todayDate = dayjs().format("YYYY-MM-DD");
+  const [readWarningIds, setReadWarningIds] = useState<Set<string>>(new Set());
+  const [notifDateFilter, setNotifDateFilter] = useState(todayDate);
+
   const todayAttendanceQuery = useQuery({
-    queryKey: ["attendance", "overview", todayDate],
-    queryFn: () => fetchAllAttendance(todayDate),
+    queryKey: ["attendance", "overview", notifDateFilter],
+    queryFn: () => fetchAllAttendance(notifDateFilter),
     enabled: enabledBadges,
     refetchInterval: 15_000
   });
@@ -174,6 +177,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const locationWarnings = useMemo(() => {
     if (!usersQuery.data?.items || !todayAttendanceQuery.data) return [];
 
+    // Only care about users who are ACTIVELY punched in (checkIn but no checkOut)
     const activeAttendanceMap = new Map();
     for (const record of todayAttendanceQuery.data) {
       if (record.checkInTime && !record.checkOutTime) {
@@ -191,7 +195,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       batteryLevel: number | null;
       isLocationOn: boolean;
       isFieldPunched: boolean;
-      type: "FIELD_PUNCH_LOCATION_OFF" | "LOCATION_OFF";
+      punchType: string;
+      type: "FIELD_PUNCH_LOCATION_OFF" | "ACTIVE_PUNCH_LOCATION_OFF";
       message: string;
       timestamp: string;
     }[] = [];
@@ -200,40 +205,47 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       if (u.role !== "EMPLOYEE" && u.role !== "MANAGER") continue;
 
       const activePunch = activeAttendanceMap.get(u.id);
-      const isFieldPunched = activePunch?.punchType === "FIELD";
-      const isLocationOn = Boolean(u.isLocationOn);
+      // ONLY warn if user is actively punched in right now
+      if (!activePunch) continue;
 
-      if (!isLocationOn) {
-        if (isFieldPunched) {
-          warnings.push({
-            userId: u.id,
-            name: u.name,
-            role: u.role,
-            batteryLevel: u.batteryLevel ?? null,
-            isLocationOn,
-            isFieldPunched,
-            type: "FIELD_PUNCH_LOCATION_OFF",
-            message: `${u.name} checked in to FIELD but location is turned OFF.`,
-            timestamp: activePunch.checkInTime || new Date().toISOString()
-          });
-        } else {
-          warnings.push({
-            userId: u.id,
-            name: u.name,
-            role: u.role,
-            batteryLevel: u.batteryLevel ?? null,
-            isLocationOn,
-            isFieldPunched,
-            type: "LOCATION_OFF",
-            message: `${u.name} location is turned OFF.`,
-            timestamp: new Date().toISOString()
-          });
-        }
-      }
+      const isLocationOn = Boolean(u.isLocationOn);
+      if (isLocationOn) continue; // location is on, no warning needed
+
+      const isFieldPunched = activePunch.punchType === "FIELD";
+      const punchType = activePunch.punchType ?? "OFFICE";
+
+      warnings.push({
+        userId: u.id,
+        name: u.name,
+        role: u.role,
+        batteryLevel: u.batteryLevel ?? null,
+        isLocationOn,
+        isFieldPunched,
+        punchType,
+        type: isFieldPunched ? "FIELD_PUNCH_LOCATION_OFF" : "ACTIVE_PUNCH_LOCATION_OFF",
+        message: isFieldPunched
+          ? `${u.name} checked in to FIELD but location is OFF.`
+          : `${u.name} is punched in (${punchType}) but location is OFF.`,
+        timestamp: activePunch.checkInTime || new Date().toISOString()
+      });
     }
 
-    return warnings;
+    // Sort: FIELD warnings first, then by name
+    return warnings.sort((a, b) => {
+      if (a.type === "FIELD_PUNCH_LOCATION_OFF" && b.type !== "FIELD_PUNCH_LOCATION_OFF") return -1;
+      if (b.type === "FIELD_PUNCH_LOCATION_OFF" && a.type !== "FIELD_PUNCH_LOCATION_OFF") return 1;
+      return a.name.localeCompare(b.name);
+    });
   }, [usersQuery.data?.items, todayAttendanceQuery.data]);
+
+  const unreadWarnings = useMemo(() =>
+    locationWarnings.filter(w => !readWarningIds.has(w.userId)),
+    [locationWarnings, readWarningIds]
+  );
+
+  const markAllRead = useCallback(() => {
+    setReadWarningIds(new Set(locationWarnings.map(w => w.userId)));
+  }, [locationWarnings]);
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -383,62 +395,115 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-10 w-10 text-slate-500 hover:bg-slate-50 rounded-xl relative">
                     <Bell className="h-5 w-5" />
-                    {locationWarnings.length > 0 && (
+                    {unreadWarnings.length > 0 && (
                       <span className="absolute top-1.5 right-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white ring-2 ring-white">
-                        {locationWarnings.length}
+                        {unreadWarnings.length}
                       </span>
                     )}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80 rounded-2xl shadow-xl border border-slate-200 p-2 max-h-[400px] overflow-y-auto z-50">
-                  <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-900 uppercase tracking-wider">Live Location Alerts</span>
-                    <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{locationWarnings.length} Warnings</span>
-                  </div>
-                  {locationWarnings.length === 0 ? (
-                    <div className="px-4 py-8 text-center text-xs text-slate-400">
-                      <CheckSquare className="h-8 w-8 text-emerald-500 mx-auto mb-2 opacity-60" />
-                      All systems operational.<br />No location alerts.
-                    </div>
-                  ) : (
-                    <div className="p-1 space-y-1 mt-1.5">
-                      {locationWarnings.map((warning) => (
-                        <DropdownMenuItem 
-                          key={warning.userId} 
-                          className={cn(
-                            "flex flex-col items-start gap-1 p-3 rounded-xl border transition-all cursor-pointer text-left focus:bg-slate-50 focus:text-slate-800",
-                            warning.type === "FIELD_PUNCH_LOCATION_OFF" 
-                              ? "bg-rose-50/50 border-rose-100/50 text-slate-800 focus:bg-rose-50 focus:text-slate-900" 
-                              : "bg-slate-50/50 border-slate-100 text-slate-700"
-                          )}
-                          onSelect={() => {
-                            window.location.href = `/employees?search=${encodeURIComponent(warning.name)}`;
-                          }}
+                <DropdownMenuContent align="end" className="w-[340px] rounded-2xl shadow-xl border border-slate-200 p-0 z-50" style={{ maxHeight: "480px", display: "flex", flexDirection: "column" }}>
+                  {/* Header */}
+                  <div className="px-4 pt-3 pb-2 border-b border-slate-100 flex items-center justify-between shrink-0">
+                    <span className="text-xs font-black text-slate-900 uppercase tracking-wider">Location Alerts</span>
+                    <div className="flex items-center gap-2">
+                      <span className={cn(
+                        "text-[10px] font-black px-2 py-0.5 rounded-full",
+                        locationWarnings.length > 0 ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-400"
+                      )}>{locationWarnings.length} Active</span>
+                      {locationWarnings.length > 0 && (
+                        <button
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); markAllRead(); }}
+                          className="text-[10px] font-black text-blue-600 hover:text-blue-800 uppercase tracking-wider"
                         >
-                          <div className="flex items-center gap-2 w-full justify-between">
-                            <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
-                              {warning.type === "FIELD_PUNCH_LOCATION_OFF" ? (
-                                <AlertTriangle className="h-3.5 w-3.5 text-rose-500 animate-pulse" />
-                              ) : (
-                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                              )}
-                              {warning.name}
-                            </span>
-                            <span className="text-[9px] font-black uppercase text-slate-500 bg-white border border-slate-200/60 px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-sm shrink-0">
-                              <Battery className="h-2.5 w-2.5 text-slate-500" />
-                              {warning.batteryLevel != null ? `${warning.batteryLevel}%` : "N/A"}
-                            </span>
-                          </div>
-                          <p className="text-[11px] font-semibold leading-relaxed mt-1 text-slate-600">
-                            {warning.message}
-                          </p>
-                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 mt-1">
-                            {warning.type === "FIELD_PUNCH_LOCATION_OFF" ? "FIELD ACTIVE • WARNING" : "LOCATION DISCONNECTED"}
-                          </span>
-                        </DropdownMenuItem>
-                      ))}
+                          Mark all read
+                        </button>
+                      )}
                     </div>
-                  )}
+                  </div>
+                  {/* Date filter */}
+                  <div className="px-4 py-2 border-b border-slate-100 shrink-0">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                      <input
+                        type="date"
+                        value={notifDateFilter}
+                        max={todayDate}
+                        onChange={(e) => { setNotifDateFilter(e.target.value); setReadWarningIds(new Set()); }}
+                        className="flex-1 text-[11px] font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                      {notifDateFilter !== todayDate && (
+                        <button
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setNotifDateFilter(todayDate); setReadWarningIds(new Set()); }}
+                          className="text-[10px] font-black text-slate-400 hover:text-slate-600 uppercase"
+                        >
+                          Today
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {/* Warnings list */}
+                  <div className="overflow-y-auto flex-1 p-2">
+                    {locationWarnings.length === 0 ? (
+                      <div className="px-4 py-8 text-center text-xs text-slate-400">
+                        <CheckSquare className="h-8 w-8 text-emerald-500 mx-auto mb-2 opacity-60" />
+                        <p className="font-bold">All clear!</p>
+                        <p className="mt-1">No active punched-in users with location off{notifDateFilter !== todayDate ? ` on ${dayjs(notifDateFilter).format("DD MMM")}` : " today"}.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 mt-1">
+                        {locationWarnings.map((warning) => {
+                          const isRead = readWarningIds.has(warning.userId);
+                          return (
+                            <DropdownMenuItem
+                              key={warning.userId}
+                              className={cn(
+                                "flex flex-col items-start gap-1 p-3 rounded-xl border transition-all cursor-pointer text-left focus:outline-none",
+                                isRead && "opacity-50",
+                                warning.type === "FIELD_PUNCH_LOCATION_OFF"
+                                  ? "bg-rose-50/60 border-rose-100 hover:bg-rose-50"
+                                  : "bg-amber-50/40 border-amber-100/60 hover:bg-amber-50/60"
+                              )}
+                              onSelect={() => {
+                                setReadWarningIds(prev => new Set([...prev, warning.userId]));
+                                window.location.href = `/employees?search=${encodeURIComponent(warning.name)}`;
+                              }}
+                            >
+                              <div className="flex items-center gap-2 w-full justify-between">
+                                <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                                  {warning.type === "FIELD_PUNCH_LOCATION_OFF" ? (
+                                    <AlertTriangle className="h-3.5 w-3.5 text-rose-500 animate-pulse shrink-0" />
+                                  ) : (
+                                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                                  )}
+                                  {warning.name}
+                                  {!isRead && <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0" />}
+                                </span>
+                                <span className="text-[9px] font-black uppercase text-slate-500 bg-white border border-slate-200/60 px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-sm shrink-0">
+                                  <Battery className="h-2.5 w-2.5 text-slate-500" />
+                                  {warning.batteryLevel != null ? `${warning.batteryLevel}%` : "N/A"}
+                                </span>
+                              </div>
+                              <p className="text-[11px] font-semibold leading-relaxed text-slate-600">
+                                {warning.message}
+                              </p>
+                              <div className="flex items-center gap-3 mt-0.5">
+                                <span className={cn(
+                                  "text-[9px] font-black uppercase tracking-wider",
+                                  warning.type === "FIELD_PUNCH_LOCATION_OFF" ? "text-rose-500" : "text-amber-600"
+                                )}>
+                                  {warning.punchType} ACTIVE • LOCATION OFF
+                                </span>
+                                <span className="text-[9px] font-bold text-slate-400">
+                                  Since {dayjs(warning.timestamp).format("hh:mm A")}
+                                </span>
+                              </div>
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </DropdownMenuContent>
               </DropdownMenu>
 

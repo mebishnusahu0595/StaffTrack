@@ -901,66 +901,6 @@ export default function EmployeesPage() {
                                                                 </p>
                                                              </div>
                                                           </div>
-                                                          {session.punchType === "FIELD" && (session.startOdometer != null || session.endOdometer != null) && (
-                                                            <div className="mt-3 grid grid-cols-3 gap-3">
-                                                              <div className="rounded-xl bg-white p-3 border border-slate-100 flex flex-col justify-between">
-                                                                 <div>
-                                                                   <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Start Odometer</p>
-                                                                   <p className="mt-1 text-xs font-bold text-slate-700">
-                                                                     {session.startOdometer != null ? `${session.startOdometer} km` : "No reading"}
-                                                                   </p>
-                                                                 </div>
-                                                                 {session.startOdometerPhotoUrl && (
-                                                                   <a 
-                                                                     href={session.startOdometerPhotoUrl} 
-                                                                     target="_blank" 
-                                                                     rel="noopener noreferrer"
-                                                                     className="mt-2 text-[9px] font-black uppercase text-blue-600 hover:underline"
-                                                                   >
-                                                                     View Photo
-                                                                   </a>
-                                                                 )}
-                                                              </div>
-                                                              <div className="rounded-xl bg-white p-3 border border-slate-100 flex flex-col justify-between">
-                                                                 <div>
-                                                                   <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">End Odometer</p>
-                                                                   <p className="mt-1 text-xs font-bold text-slate-700">
-                                                                     {session.endOdometer != null ? `${session.endOdometer} km` : "No reading"}
-                                                                   </p>
-                                                                 </div>
-                                                                 {session.endOdometerPhotoUrl && (
-                                                                   <a 
-                                                                     href={session.endOdometerPhotoUrl} 
-                                                                     target="_blank" 
-                                                                     rel="noopener noreferrer"
-                                                                     className="mt-2 text-[9px] font-black uppercase text-blue-600 hover:underline"
-                                                                   >
-                                                                     View Photo
-                                                                   </a>
-                                                                 )}
-                                                              </div>
-                                                              <div className={cn(
-                                                                  "rounded-xl p-3 border flex flex-col justify-center",
-                                                                  session.startOdometer != null && session.endOdometer != null && session.endOdometer < session.startOdometer
-                                                                    ? "bg-rose-50 border-rose-100 text-rose-700"
-                                                                    : "bg-blue-50/50 border-blue-100/60 text-blue-700"
-                                                               )}>
-                                                                  <p className={cn(
-                                                                     "text-[10px] font-black uppercase tracking-wider",
-                                                                     session.startOdometer != null && session.endOdometer != null && session.endOdometer < session.startOdometer
-                                                                       ? "text-rose-500"
-                                                                       : "text-blue-500"
-                                                                  )}>Odo Distance</p>
-                                                                  <p className="mt-1 text-sm font-black">
-                                                                    {session.startOdometer != null && session.endOdometer != null
-                                                                      ? session.endOdometer >= session.startOdometer
-                                                                        ? `${(session.endOdometer - session.startOdometer).toFixed(1)} km`
-                                                                        : "Error: End < Start"
-                                                                      : "--"}
-                                                                  </p>
-                                                               </div>
-                                                            </div>
-                                                          )}
                                                        </div>
                                                      ))
                                                    )}
