@@ -18,6 +18,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { fetchSalaryMatrix, markAttendanceStatus, clearAttendanceStatus } from "@/lib/api";
 import { SalarySlipModal } from "@/components/admin/salary-slip-modal";
+import { SalarySlipCustomizerModal } from "@/components/admin/salary-slip-customizer-modal";
+import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -44,6 +46,7 @@ export default function SalaryMatrixPage() {
   const [selectedMonth, setSelectedMonth] = useState(dayjs());
   const [search, setSearch] = useState("");
   const [slipEmployee, setSlipEmployee] = useState<any>(null);
+  const [customizingEmployee, setCustomizingEmployee] = useState<any>(null);
   const queryClient = useQueryClient();
 
   const salaryQuery = useQuery({
@@ -167,6 +170,7 @@ export default function SalaryMatrixPage() {
                            employee={emp} 
                            selectedMonth={selectedMonth} 
                            setSlipEmployee={setSlipEmployee}
+                           setCustomizingEmployee={setCustomizingEmployee}
                            onUpdate={() => queryClient.invalidateQueries({ queryKey: ["salary-matrix"] })}
                          />
                        ))}
@@ -185,11 +189,22 @@ export default function SalaryMatrixPage() {
         data={slipEmployee} 
         month={selectedMonth} 
       />
+
+      <Dialog open={!!customizingEmployee} onOpenChange={(open) => { if (!open) setCustomizingEmployee(null); }}>
+         {customizingEmployee && (
+            <SalarySlipCustomizerModal 
+              report={customizingEmployee} 
+              month={selectedMonth} 
+              onClose={() => setCustomizingEmployee(null)}
+              onSuccess={() => queryClient.invalidateQueries({ queryKey: ["salary-matrix"] })}
+            />
+         )}
+      </Dialog>
     </div>
   );
 }
 
-function EmployeeSalaryCard({ employee, selectedMonth, setSlipEmployee, onUpdate }: any) {
+function EmployeeSalaryCard({ employee, selectedMonth, setSlipEmployee, setCustomizingEmployee, onUpdate }: any) {
   const mutationMark = useMutation({
     mutationFn: markAttendanceStatus,
     onSuccess: onUpdate
@@ -253,13 +268,23 @@ function EmployeeSalaryCard({ employee, selectedMonth, setSlipEmployee, onUpdate
                 <div>
                    <h4 className="text-lg font-black text-slate-900">{employee.userName}</h4>
                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">{employee.designation || 'Staff'}</p>
-                   <Button 
-                       variant="link" 
-                       className="p-0 h-auto text-blue-600 font-black text-[10px] uppercase tracking-widest mt-1 gap-1"
-                       onClick={() => setSlipEmployee(employee)}
-                    >
-                       <FileText className="h-3 w-3" /> Salary Slip
-                    </Button>
+                   <div className="flex items-center gap-2">
+                     <Button 
+                         variant="link" 
+                         className="p-0 h-auto text-blue-600 font-black text-[10px] uppercase tracking-widest mt-1 gap-1"
+                         onClick={() => setSlipEmployee(employee)}
+                      >
+                         <FileText className="h-3 w-3" /> Salary Slip
+                      </Button>
+                      <span className="text-slate-300 text-[10px] uppercase tracking-widest mt-1">|</span>
+                      <Button 
+                         variant="link" 
+                         className="p-0 h-auto text-blue-600 font-black text-[10px] uppercase tracking-widest mt-1 gap-1"
+                         onClick={() => setCustomizingEmployee(employee)}
+                      >
+                         <FileText className="h-3 w-3" /> Customize Slip
+                      </Button>
+                   </div>
                 </div>
              </div>
 

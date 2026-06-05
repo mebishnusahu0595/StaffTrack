@@ -1,4 +1,4 @@
-import { TaskStatus } from "@prisma/client";
+import { TaskStatus, UserRole } from "@prisma/client";
 import { eachDayOfInterval, endOfMonth, format, isSameDay, isWeekend, startOfMonth } from "date-fns";
 import { prisma } from "../lib/prisma";
 
@@ -7,9 +7,9 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
   const end = endOfMonth(start);
   const daysInMonth = eachDayOfInterval({ start, end });
 
-  const [users, holidays, approvedExpenses, reports, completedTasks] = await Promise.all([
+  const [users, holidays, approvedExpenses, reports, completedTasks, company, savedSlips] = await Promise.all([
     prisma.user.findMany({
-      where: { companyId },
+      where: { companyId, role: { in: [UserRole.EMPLOYEE, UserRole.MANAGER] } },
       include: {
         group: true,
         attendances: {
@@ -77,12 +77,20 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
         dueDate: true,
         points: true
       }
+    }),
+    prisma.company.findUnique({
+      where: { id: companyId },
+      select: { name: true }
+    }),
+    prisma.salarySlip.findMany({
+      where: { companyId, month, year }
     })
   ]);
 
   const expensesByUser = sumAmountsByUser(approvedExpenses);
   const reportsByUserDate = groupReportsByUserDate(reports);
   const taskPointsByUserDate = groupTaskPointsByUserDate(completedTasks);
+  const savedSlipsMap = new Map(savedSlips.map((s) => [s.userId, s]));
 
   return users.map((user: any) => {
     const effectiveBaseSalary = user.group?.baseSalary || user.baseSalary || 0;
@@ -177,10 +185,12 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
     const deductionAmount = Math.max(0, effectiveBaseSalary - netSalary);
     const totalPayout = netSalary + approvedExpensesTotal + travelAllowance;
 
-    return {
+    const result: any = {
       userId: user.id,
       userName: user.name,
       designation: user.designation,
+      avatarUrl: user.avatarUrl || null,
+      joiningDate: user.joiningDate || null,
       departmentName: user.group?.name || null,
       baseSalary: effectiveBaseSalary,
       totalDays: daysInMonth.length,
@@ -198,15 +208,44 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
       totalKm,
       travelAllowance,
       totalPayout,
-      dailyBreakdown
+      dailyBreakdown,
+      companyName: company?.name || "STAFFTRACK"
     };
+
+    const savedSlip = savedSlipsMap.get(user.id);
+    if (savedSlip) {
+      result.orgName = savedSlip.orgName;
+      result.orgSubtitle = savedSlip.orgSubtitle;
+      result.orgCode = savedSlip.orgCode;
+      result.companyCode = savedSlip.companyCode;
+      result.bankName = savedSlip.bankName;
+      result.bankAccountNo = savedSlip.bankAccountNo;
+      result.ifscCode = savedSlip.ifscCode;
+      result.departmentName = savedSlip.departmentName || result.departmentName;
+      result.divisionName = savedSlip.divisionName;
+      result.designation = savedSlip.designation || result.designation;
+      result.traineeType = savedSlip.traineeType;
+      result.aadhaarNumber = savedSlip.aadhaarNumber;
+      result.totalDays = savedSlip.monthDays !== null ? Number(savedSlip.monthDays) : result.totalDays;
+      result.totalPayableDays = savedSlip.payableDays !== null ? Number(savedSlip.payableDays) : result.totalPayableDays;
+      result.earnings = savedSlip.earnings;
+      result.deductions = savedSlip.deductions;
+      result.netSalary = savedSlip.netPay;
+      result.totalPayout = savedSlip.netPay;
+      const deductionsArray = savedSlip.deductions as any;
+      result.deductionAmount = Number(deductionsArray && Array.isArray(deductionsArray) 
+        ? (deductionsArray.find((d: any) => d.label === "Absence Deduction" || d.label === "Absence Deductions")?.calculated ?? 0) 
+        : 0);
+    }
+
+    return result;
   });
 }
 
 export async function calculateSalaryMatrix(companyId: string, month: number, year: number) {
   const reports = await calculateMonthlyPayroll(companyId, month, year);
 
-  return reports.map((report) => {
+  return reports.map((report: any) => {
     const totalDays = report.totalDays;
     const workingDays = Math.max(1, totalDays - report.holidayDays);
     const dailyWage = report.baseSalary / workingDays;
@@ -215,6 +254,8 @@ export async function calculateSalaryMatrix(companyId: string, month: number, ye
       userId: report.userId,
       userName: report.userName,
       designation: report.designation,
+      avatarUrl: report.avatarUrl || null,
+      joiningDate: report.joiningDate || null,
       departmentName: report.departmentName || null,
       baseSalary: report.baseSalary,
       totalDays,
@@ -233,7 +274,22 @@ export async function calculateSalaryMatrix(companyId: string, month: number, ye
       deductionAmount: report.deductionAmount,
       netSalary: report.netSalary,
       totalPayout: report.totalPayout,
-      dailyBreakdown: report.dailyBreakdown
+      dailyBreakdown: report.dailyBreakdown,
+      orgName: report.orgName || null,
+      orgSubtitle: report.orgSubtitle || null,
+      orgCode: report.orgCode || null,
+      companyCode: report.companyCode || null,
+      bankName: report.bankName || null,
+      bankAccountNo: report.bankAccountNo || null,
+      ifscCode: report.ifscCode || null,
+      divisionName: report.divisionName || null,
+      traineeType: report.traineeType || null,
+      aadhaarNumber: report.aadhaarNumber || null,
+      earnings: report.earnings || null,
+      deductions: report.deductions || null,
+      netPayWords: report.netPayWords || null,
+      remarks: report.remarks || null,
+      companyName: report.companyName || null
     };
   });
 }
@@ -245,7 +301,7 @@ export async function calculateMusterReport(companyId: string, month: number, ye
 
   const [users, holidays, reports, completedTasks] = await Promise.all([
     prisma.user.findMany({
-      where: { companyId },
+      where: { companyId, role: { in: [UserRole.EMPLOYEE, UserRole.MANAGER] } },
       include: {
         group: true,
         attendances: {

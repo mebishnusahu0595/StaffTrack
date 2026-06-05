@@ -134,7 +134,8 @@ export async function getDayEndReportHistory(actor: AuthUser, userId: string) {
 export async function listDayEndReports(actor: AuthUser, userId?: string) {
   const where: any = {
     user: {
-      companyId: actor.companyId
+      companyId: actor.companyId,
+      role: { in: [UserRole.EMPLOYEE, UserRole.MANAGER] }
     }
   };
 

@@ -1,8 +1,10 @@
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, View, RefreshControl } from "react-native";
-import { Text, Card, ActivityIndicator, Portal, Modal, IconButton, Divider } from "react-native-paper";
+import { ScrollView, StyleSheet, View, RefreshControl, Alert } from "react-native";
+import { Text, Card, ActivityIndicator, Portal, Modal, IconButton, Divider, Button } from "react-native-paper";
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
 import { fetchSalarySlips } from "../api";
 import { AppIcon } from "../components/AppIcon";
 
@@ -25,6 +27,122 @@ export function SalarySlipScreen() {
   };
 
   const slips: any[] = slipsQuery.data ?? [];
+
+  const handleDownloadPDF = async (s: any) => {
+    try {
+      const monthName = MONTHS[s.month];
+      const earningItems = s.earnings || [];
+      const deductionItems = s.deductions || [];
+      
+      const totalEarn = earningItems.reduce((sum: number, e: any) => sum + Number(e.calculated ?? e.actual ?? 0), 0);
+      const totalActual = earningItems.reduce((sum: number, e: any) => sum + Number(e.actual ?? 0), 0);
+      const totalDed = deductionItems.reduce((sum: number, d: any) => sum + Number(d.calculated ?? 0), 0);
+      const netPay = Math.round(totalEarn - totalDed);
+
+      const detailRow = (l: string, v: string, l2: string, v2: string) =>
+        `<tr><td class="dk">${l}</td><td class="dv">${v || "-"}</td><td class="dk">${l2}</td><td class="dv">${v2 || "-"}</td></tr>`;
+
+      const earnRows = earningItems
+        .map(
+          (e: any) =>
+            `<tr><td>${e.label}</td><td class="amt">${Number(e.actual ?? 0).toLocaleString("en-IN")}</td><td class="amt">${Number(e.calculated ?? e.actual ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>`
+        )
+        .join("");
+      const dedRows = deductionItems.length
+        ? deductionItems
+            .map((d: any) => `<tr><td>${d.label}</td><td class="amt">${Number(d.calculated ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>`)
+            .join("")
+        : `<tr><td>-</td><td class="amt">0.00</td></tr>`;
+
+      const html = `
+        <html>
+          <head>
+            <title>Salary Slip - ${s.user?.name || "Employee"}</title>
+            <style>
+              * { box-sizing: border-box; }
+              body { font-family: Arial, sans-serif; padding: 24px; color: #1e293b; line-height: 1.4; font-size: 11px; }
+              .org { text-align: center; margin-bottom: 4px; }
+              .org h1 { margin: 0; font-size: 16px; font-weight: 800; }
+              .org .sub { font-size: 11px; color: #475569; margin-top: 2px; }
+              .org .period { font-size: 12px; font-weight: 700; margin-top: 6px; }
+              .org .code { font-size: 10px; color: #64748b; margin-top: 2px; }
+              .sheet { border: 1px solid #1e293b; margin-top: 12px; }
+              .details { width: 100%; border-collapse: collapse; }
+              .details td { border: 1px solid #cbd5e1; padding: 5px 8px; font-size: 10px; }
+              .details .dk { background: #f1f5f9; font-weight: 700; width: 18%; text-transform: capitalize; }
+              .details .dv { width: 32%; }
+              .cols { display: flex; border-top: 2px solid #1e293b; }
+              .col { flex: 1; }
+              .col + .col { border-left: 1px solid #1e293b; }
+              .tbl { width: 100%; border-collapse: collapse; }
+              .tbl th { background: #f1f5f9; font-size: 10px; text-transform: uppercase; padding: 5px 8px; border-bottom: 1px solid #cbd5e1; text-align: left; }
+              .tbl th.amt, .tbl td.amt { text-align: right; }
+              .tbl td { padding: 5px 8px; border-bottom: 1px solid #eef2f6; font-size: 11px; }
+              .tbl tr.total td { font-weight: 800; border-top: 2px solid #1e293b; background: #f8fafc; }
+              .net { border-top: 2px solid #1e293b; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; }
+              .net .lbl { font-size: 12px; font-weight: 800; }
+              .net .words { font-size: 10px; color: #475569; font-style: italic; }
+              .sysnote { text-align: center; margin-top: 14px; font-size: 9px; color: #64748b; letter-spacing: 0.5px; }
+            </style>
+          </head>
+          <body>
+            <div class="org">
+              <h1>${s.orgName || s.company?.name || "Company"}</h1>
+              ${s.orgSubtitle ? `<div class="sub">${s.orgSubtitle}</div>` : ""}
+              <div class="period">Salary slip for the month of ${monthName} ${s.year}</div>
+              ${s.orgCode ? `<div class="code">${s.orgCode}</div>` : ""}
+            </div>
+
+            <div class="sheet">
+              <table class="details">
+                ${detailRow("Company Code", s.companyCode, "Bank Name", s.bankName)}
+                ${detailRow("Employee Name", s.user?.name || "Employee", "Bank A/C No", s.bankAccountNo)}
+                ${detailRow("Department Name", s.departmentName, "IFSC Code", s.ifscCode)}
+                ${detailRow("Designation", s.designation, "Month Days", s.monthDays != null ? String(s.monthDays) : "")}
+                ${detailRow("Division Name", s.divisionName, "Payable Days", s.payableDays != null ? String(s.payableDays) : "")}
+                ${detailRow("Trainee Type", s.traineeType, "Aadhaar Number", s.aadhaarNumber)}
+              </table>
+
+              <div class="cols">
+                <div class="col">
+                  <table class="tbl">
+                    <thead><tr><th>Earnings</th><th class="amt">Actual</th><th class="amt">Calculated</th></tr></thead>
+                    <tbody>
+                      ${earnRows}
+                      <tr class="total"><td>Total</td><td class="amt">${totalActual.toLocaleString("en-IN")}</td><td class="amt">${totalEarn.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="col">
+                  <table class="tbl">
+                    <thead><tr><th>Deduction</th><th class="amt">Calculated</th></tr></thead>
+                    <tbody>
+                      ${dedRows}
+                      <tr class="total"><td>Total</td><td class="amt">${totalDed.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="net">
+                <div>
+                  <div class="lbl">Total Net Pay Rs.${netPay.toLocaleString("en-IN")}/-</div>
+                  ${s.netPayWords ? `<div class="words">( In Words: ${s.netPayWords} )</div>` : ""}
+                </div>
+              </div>
+            </div>
+
+            <div class="sysnote">THIS IS SYSTEM GENERATED DOCUMENT, HENCE SIGNATURE IS NOT REQUIRED.</div>
+          </body>
+        </html>
+      `;
+
+      const { uri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Download Salary Slip' });
+    } catch (err: any) {
+      Alert.alert("Error", "Failed to generate PDF: " + err.message);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -125,6 +243,15 @@ export function SalarySlipScreen() {
               {selected.netPayWords ? <Text style={styles.words}>( In Words: {selected.netPayWords} )</Text> : null}
 
               <Text style={styles.sysNote}>THIS IS SYSTEM GENERATED DOCUMENT, HENCE SIGNATURE IS NOT REQUIRED.</Text>
+
+              <Button
+                mode="contained"
+                onPress={() => handleDownloadPDF(selected)}
+                style={styles.downloadButton}
+                labelStyle={styles.downloadLabel}
+              >
+                Download PDF
+              </Button>
             </ScrollView>
           )}
         </Modal>
@@ -179,5 +306,19 @@ const styles = StyleSheet.create({
   netBoxLabel: { fontSize: 12, fontWeight: "800", color: "#CBD5E1", textTransform: "uppercase" },
   netBoxVal: { fontSize: 18, fontWeight: "900", color: "#FFFFFF" },
   words: { fontSize: 11, color: "#475569", fontStyle: "italic", marginTop: 8, textAlign: "right" },
-  sysNote: { fontSize: 9, color: "#94A3B8", textAlign: "center", marginTop: 16, letterSpacing: 0.5 }
+  sysNote: { fontSize: 9, color: "#94A3B8", textAlign: "center", marginTop: 16, letterSpacing: 0.5 },
+  downloadButton: {
+    marginTop: 20,
+    backgroundColor: "#10B981",
+    borderRadius: 12,
+    paddingVertical: 4,
+    marginBottom: 10,
+  },
+  downloadLabel: {
+    fontWeight: "800",
+    color: "#FFFFFF",
+    fontSize: 14,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
 });

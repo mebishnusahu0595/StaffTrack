@@ -39,6 +39,19 @@ export function SalarySlipModal({ isOpen, onClose, data, month }: SalarySlipModa
 
   if (!data) return null;
 
+  const earningItems = data.earnings || [
+    { label: "Basic Salary", actual: data.baseSalary, calculated: data.netSalary },
+    ...(data.travelAllowance > 0 ? [{ label: "Travel Allowance", actual: data.travelAllowance, calculated: data.travelAllowance }] : []),
+    ...(data.approvedExpensesTotal > 0 ? [{ label: "Reimbursed Expenses", actual: data.approvedExpensesTotal, calculated: data.approvedExpensesTotal }] : [])
+  ];
+  const totalEarnings = earningItems.reduce((sum: number, item: any) => sum + Number(item.calculated ?? item.actual ?? 0), 0);
+
+  const deductionItems = data.deductions || [
+    ...(data.deductionAmount > 0 ? [{ label: "Absence Deduction", calculated: data.deductionAmount }] : [])
+  ];
+  const totalDeductions = deductionItems.reduce((sum: number, item: any) => sum + Number(item.calculated ?? 0), 0);
+  const netPayout = Math.round(totalEarnings - totalDeductions);
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-4xl p-0 overflow-hidden bg-slate-100 rounded-[32px] border-none">
@@ -69,12 +82,18 @@ export function SalarySlipModal({ isOpen, onClose, data, month }: SalarySlipModa
                        <div className="h-10 w-10 bg-blue-600 rounded-xl flex items-center justify-center text-white">
                           <Building2 className="h-6 w-6" />
                        </div>
-                       <h2 className="text-2xl font-black tracking-tight text-slate-900">STAFFTRACK</h2>
+                       <h2 className="text-2xl font-black tracking-tight text-slate-900">
+                          {data.orgName || data.companyName || "STAFFTRACK"}
+                       </h2>
                     </div>
-                    <p className="text-xs font-bold text-slate-500 max-w-[200px]">
-                       123 Business Avenue, Suite 500<br />
-                       Tech Park, City - 400001
-                    </p>
+                     {data.orgSubtitle ? (
+                        <p className="text-xs font-bold text-slate-500 max-w-[250px]">
+                           {data.orgSubtitle}
+                           {data.orgCode ? <><br />{data.orgCode}</> : null}
+                        </p>
+                     ) : data.orgCode ? (
+                        <p className="text-xs font-bold text-slate-500 max-w-[250px]">{data.orgCode}</p>
+                     ) : null}
                  </div>
                  <div className="text-right">
                     <h3 className="text-3xl font-black text-slate-300 uppercase tracking-tighter">Payslip</h3>
@@ -90,11 +109,17 @@ export function SalarySlipModal({ isOpen, onClose, data, month }: SalarySlipModa
                     <DetailRow icon={<User />} label="Employee Name" value={data.userName} />
                     <DetailRow icon={<Briefcase />} label="Designation" value={data.designation || "Staff"} />
                     <DetailRow icon={<CreditCard />} label="Employee ID" value={data.userId.slice(-6).toUpperCase()} />
+                    {data.traineeType ? <DetailRow icon={<Briefcase />} label="Trainee Type" value={data.traineeType} /> : null}
+                    {data.aadhaarNumber ? <DetailRow icon={<CreditCard />} label="Aadhaar Number" value={data.aadhaarNumber} /> : null}
                  </div>
                  <div className="space-y-4">
-                    <DetailRow icon={<Calendar />} label="Joining Date" value={dayjs(data.joiningDate).format("DD MMM, YYYY")} />
+                    <DetailRow icon={<Calendar />} label="Joining Date" value={data.joiningDate ? dayjs(data.joiningDate).format("DD MMM, YYYY") : "-"} />
                     <DetailRow icon={<CreditCard />} label="Payment Mode" value="Bank Transfer" />
-                    <DetailRow icon={<CreditCard />} label="Bank A/C No" value="XXXX-XXXX-1234" />
+                    <DetailRow icon={<CreditCard />} label="Bank Name" value={data.bankName || "Not set"} />
+                    <DetailRow icon={<CreditCard />} label="Bank A/C No" value={data.bankAccountNo || "Not set"} />
+                    {data.ifscCode ? <DetailRow icon={<CreditCard />} label="IFSC Code" value={data.ifscCode} /> : null}
+                    {data.companyCode ? <DetailRow icon={<Building2 />} label="Company Code" value={data.companyCode} /> : null}
+                    {data.divisionName ? <DetailRow icon={<Building2 />} label="Division Name" value={data.divisionName} /> : null}
                  </div>
               </div>
 
@@ -102,7 +127,7 @@ export function SalarySlipModal({ isOpen, onClose, data, month }: SalarySlipModa
                <div className="mb-12 text-left">
                   <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4 ml-2">Attendance Summary</h4>
                   <div className="grid grid-cols-5 gap-4">
-                     <StatBox label="Working Days" value={data.workingDays} />
+                     <StatBox label="Working Days" value={data.monthDays || data.workingDays} />
                      <StatBox label="Present Days" value={data.presentDays} />
                      <StatBox label="Paid Leaves" value={data.paidLeaveDays} />
                      <StatBox label="Net Payable" value={data.payableDays} highlight />
@@ -118,13 +143,12 @@ export function SalarySlipModal({ isOpen, onClose, data, month }: SalarySlipModa
                         <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Earnings</p>
                      </div>
                      <div className="p-6 space-y-4">
-                        <AmountRow label="Basic Salary" amount={data.baseSalary} />
-                        <AmountRow label="Daily Wage Rate" amount={data.dailyWage} isInfo />
-                        <AmountRow label="Travel Allowance" amount={data.travelAllowance || 0} />
-                        <AmountRow label="Allowances" amount={0} />
+                        {earningItems.map((earn: any, idx: number) => (
+                           <AmountRow key={idx} label={earn.label} amount={earn.calculated ?? earn.actual ?? 0} />
+                        ))}
                         <div className="pt-8 mt-8 border-t border-slate-100 flex justify-between items-center">
                            <p className="font-black text-slate-900">Total Earnings</p>
-                           <p className="font-black text-slate-900">₹{(data.baseSalary + (data.travelAllowance || 0)).toLocaleString()}</p>
+                           <p className="font-black text-slate-900">₹{totalEarnings.toLocaleString()}</p>
                         </div>
                      </div>
                   </div>
@@ -135,12 +159,12 @@ export function SalarySlipModal({ isOpen, onClose, data, month }: SalarySlipModa
                         <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Deductions</p>
                      </div>
                      <div className="p-6 space-y-4">
-                        <AmountRow label="Absence Deductions" amount={data.deductionAmount || 0} isNegative />
-                        <AmountRow label="Professional Tax" amount={0} />
-                        <AmountRow label="TDS" amount={0} />
+                        {deductionItems.map((ded: any, idx: number) => (
+                           <AmountRow key={idx} label={ded.label} amount={ded.calculated ?? 0} isNegative />
+                        ))}
                         <div className="pt-8 mt-8 border-t border-slate-100 flex justify-between items-center">
                            <p className="font-black text-slate-900">Total Deductions</p>
-                           <p className="font-black text-rose-600">₹{(data.deductionAmount || 0).toLocaleString()}</p>
+                           <p className="font-black text-rose-600">₹{totalDeductions.toLocaleString()}</p>
                         </div>
                      </div>
                   </div>
@@ -150,10 +174,12 @@ export function SalarySlipModal({ isOpen, onClose, data, month }: SalarySlipModa
               <div className="bg-slate-900 rounded-[32px] p-8 flex justify-between items-center text-white shadow-xl shadow-slate-200">
                  <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-50 mb-1">Total Net Payout</p>
-                    <p className="text-sm font-bold opacity-80">Rupees {numberToWords(data.totalPayout || data.netSalary)} Only</p>
+                    <p className="text-sm font-bold opacity-80">
+                       Rupees {data.netPayWords || numberToWords(netPayout)}
+                    </p>
                  </div>
                  <div className="text-right">
-                    <p className="text-4xl font-black tracking-tight">₹{(data.totalPayout || data.netSalary).toLocaleString()}</p>
+                    <p className="text-4xl font-black tracking-tight">₹{netPayout.toLocaleString()}</p>
                  </div>
               </div>
 

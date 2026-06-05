@@ -1175,6 +1175,8 @@ function EmployeeDialog({
   const [managerId, setManagerId] = useState(user?.managerId ?? "none");
   const [groupId, setGroupId] = useState(user?.groupId ?? "none");
   const [baseSalary, setBaseSalary] = useState(user?.baseSalary?.toString() ?? "0");
+  const [shiftStart, setShiftStart] = useState(user?.shiftStart ?? "09:00");
+  const [shiftEnd, setShiftEnd] = useState(user?.shiftEnd ?? "18:00");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -1212,13 +1214,15 @@ function EmployeeDialog({
           name, email, password, phone, role: staffRole as any, workMode,
           designation: finalDesignation, joiningDate: new Date(joiningDate),
           companyId: currentUser?.companyId, managerId: managerId === "none" ? undefined : managerId,
-          groupId: groupId === "none" ? undefined : groupId, avatarUrl, baseSalary: parseFloat(baseSalary || "0")
+          groupId: groupId === "none" ? undefined : groupId, avatarUrl, baseSalary: parseFloat(baseSalary || "0"),
+          shiftStart, shiftEnd
         });
       } else if (user) {
         const updatePayload: any = {
           name, email, phone, workMode, designation: finalDesignation, joiningDate: new Date(joiningDate),
           avatarUrl, managerId: managerId === "none" ? null : managerId,
-          groupId: groupId === "none" ? null : groupId, baseSalary: parseFloat(baseSalary || "0")
+          groupId: groupId === "none" ? null : groupId, baseSalary: parseFloat(baseSalary || "0"),
+          shiftStart, shiftEnd
         };
         if (password.trim()) {
           updatePayload.password = password;
@@ -1340,6 +1344,8 @@ function EmployeeDialog({
                 </div>
               )}
               <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Base Salary</Label><Input type="number" value={baseSalary} onChange={(e) => setBaseSalary(e.target.value)} className="h-11 rounded-xl" /></div>
+              <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Shift Start *</Label><Input type="time" value={shiftStart} onChange={(e) => setShiftStart(e.target.value)} required className="h-11 rounded-xl" /></div>
+              <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Shift End *</Label><Input type="time" value={shiftEnd} onChange={(e) => setShiftEnd(e.target.value)} required className="h-11 rounded-xl" /></div>
             </div>
 
             <Button type="submit" disabled={isSubmitting} className="w-full h-12 bg-blue-600 rounded-xl font-bold shadow-xl shadow-blue-100">

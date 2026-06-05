@@ -453,10 +453,8 @@ export async function getAttendanceByDate(actor: AuthUser, date: string) {
         ]
       }
     : {
-        // ADMIN / SUPERADMIN: include EMPLOYEE + MANAGER + ADMIN so their own
-        // punch-ins are visible in the live attendance map.
         companyId: actor.companyId,
-        role: { in: [UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.ADMIN] }
+        role: { in: [UserRole.EMPLOYEE, UserRole.MANAGER] }
       };
 
   console.log(`[DEBUG] getAttendanceByDate: actor=${actor.email}, date=${date}, targetDate=${targetDate.toISOString()}`);
