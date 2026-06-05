@@ -30,7 +30,8 @@ import {
   X,
   Fingerprint,
   CheckSquare,
-  Battery
+  Battery,
+  Clock
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth-provider";
@@ -70,6 +71,7 @@ const navItems: { href: string; label: string; icon: any; roles?: Role[] }[] = [
   { href: "/templates", label: "Template Library", icon: Library },
   { href: "/reports", label: "Reports", icon: FileText },
   { href: "/reports/muster", label: "Muster Report", icon: FileSpreadsheet },
+  { href: "/attendance", label: "Attendance Log", icon: Clock },
   { href: "/employees", label: "User Management", icon: Users },
   { href: "/groups", label: "Departments", icon: Users },
   { href: "/payroll", label: "Payroll Console", icon: Zap },
