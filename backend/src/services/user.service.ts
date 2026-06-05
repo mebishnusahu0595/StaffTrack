@@ -28,6 +28,8 @@ const publicUserSelect = {
   designation: true,
   joiningDate: true,
   baseSalary: true,
+  batteryLevel: true,
+  isLocationOn: true,
   createdAt: true
 } satisfies Prisma.UserSelect;
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   Bell,
   ClipboardList,
@@ -29,7 +29,8 @@ import {
   Menu,
   X,
   Fingerprint,
-  CheckSquare
+  CheckSquare,
+  Battery
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth-provider";
@@ -37,11 +38,14 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import dayjs from "dayjs";
 import {
   fetchPendingLateCheckIns,
   fetchAttendanceRequests,
   fetchLeaves,
-  fetchExpenses
+  fetchExpenses,
+  fetchAllAttendance,
+  fetchUsers
 } from "@/lib/api";
 import {
   DropdownMenu,
@@ -150,6 +154,86 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     "/leaves": (pendingLeaves as any[]).length,
     "/expenses": pendingExpenses
   };
+
+  // Live Location Warnings and Today's Attendance Query
+  const todayDate = dayjs().format("YYYY-MM-DD");
+  const todayAttendanceQuery = useQuery({
+    queryKey: ["attendance", "overview", todayDate],
+    queryFn: () => fetchAllAttendance(todayDate),
+    enabled: enabledBadges,
+    refetchInterval: 15_000
+  });
+
+  const usersQuery = useQuery({
+    queryKey: ["users", "all-list"],
+    queryFn: () => fetchUsers({ page: 1, pageSize: 100 }),
+    enabled: enabledBadges,
+    refetchInterval: 15_000
+  });
+
+  const locationWarnings = useMemo(() => {
+    if (!usersQuery.data?.items || !todayAttendanceQuery.data) return [];
+
+    const activeAttendanceMap = new Map();
+    for (const record of todayAttendanceQuery.data) {
+      if (record.checkInTime && !record.checkOutTime) {
+        const existing = activeAttendanceMap.get(record.userId);
+        if (!existing || new Date(record.checkInTime) > new Date(existing.checkInTime)) {
+          activeAttendanceMap.set(record.userId, record);
+        }
+      }
+    }
+
+    const warnings: {
+      userId: string;
+      name: string;
+      role: string;
+      batteryLevel: number | null;
+      isLocationOn: boolean;
+      isFieldPunched: boolean;
+      type: "FIELD_PUNCH_LOCATION_OFF" | "LOCATION_OFF";
+      message: string;
+      timestamp: string;
+    }[] = [];
+
+    for (const u of usersQuery.data.items) {
+      if (u.role !== "EMPLOYEE" && u.role !== "MANAGER") continue;
+
+      const activePunch = activeAttendanceMap.get(u.id);
+      const isFieldPunched = activePunch?.punchType === "FIELD";
+      const isLocationOn = Boolean(u.isLocationOn);
+
+      if (!isLocationOn) {
+        if (isFieldPunched) {
+          warnings.push({
+            userId: u.id,
+            name: u.name,
+            role: u.role,
+            batteryLevel: u.batteryLevel ?? null,
+            isLocationOn,
+            isFieldPunched,
+            type: "FIELD_PUNCH_LOCATION_OFF",
+            message: `${u.name} checked in to FIELD but location is turned OFF.`,
+            timestamp: activePunch.checkInTime || new Date().toISOString()
+          });
+        } else {
+          warnings.push({
+            userId: u.id,
+            name: u.name,
+            role: u.role,
+            batteryLevel: u.batteryLevel ?? null,
+            isLocationOn,
+            isFieldPunched,
+            type: "LOCATION_OFF",
+            message: `${u.name} location is turned OFF.`,
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+    }
+
+    return warnings;
+  }, [usersQuery.data?.items, todayAttendanceQuery.data]);
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -294,7 +378,70 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <div className="flex items-center gap-1 border-r border-slate-100 pr-4">
+            <div className="flex items-center gap-1.5 border-r border-slate-100 pr-4">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-10 w-10 text-slate-500 hover:bg-slate-50 rounded-xl relative">
+                    <Bell className="h-5 w-5" />
+                    {locationWarnings.length > 0 && (
+                      <span className="absolute top-1.5 right-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white ring-2 ring-white">
+                        {locationWarnings.length}
+                      </span>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80 rounded-2xl shadow-xl border border-slate-200 p-2 max-h-[400px] overflow-y-auto z-50">
+                  <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-900 uppercase tracking-wider">Live Location Alerts</span>
+                    <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{locationWarnings.length} Warnings</span>
+                  </div>
+                  {locationWarnings.length === 0 ? (
+                    <div className="px-4 py-8 text-center text-xs text-slate-400">
+                      <CheckSquare className="h-8 w-8 text-emerald-500 mx-auto mb-2 opacity-60" />
+                      All systems operational.<br />No location alerts.
+                    </div>
+                  ) : (
+                    <div className="p-1 space-y-1 mt-1.5">
+                      {locationWarnings.map((warning) => (
+                        <DropdownMenuItem 
+                          key={warning.userId} 
+                          className={cn(
+                            "flex flex-col items-start gap-1 p-3 rounded-xl border transition-all cursor-pointer text-left focus:bg-slate-50 focus:text-slate-800",
+                            warning.type === "FIELD_PUNCH_LOCATION_OFF" 
+                              ? "bg-rose-50/50 border-rose-100/50 text-slate-800 focus:bg-rose-50 focus:text-slate-900" 
+                              : "bg-slate-50/50 border-slate-100 text-slate-700"
+                          )}
+                          onSelect={() => {
+                            window.location.href = `/employees?search=${encodeURIComponent(warning.name)}`;
+                          }}
+                        >
+                          <div className="flex items-center gap-2 w-full justify-between">
+                            <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                              {warning.type === "FIELD_PUNCH_LOCATION_OFF" ? (
+                                <AlertTriangle className="h-3.5 w-3.5 text-rose-500 animate-pulse" />
+                              ) : (
+                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                              )}
+                              {warning.name}
+                            </span>
+                            <span className="text-[9px] font-black uppercase text-slate-500 bg-white border border-slate-200/60 px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-sm shrink-0">
+                              <Battery className="h-2.5 w-2.5 text-slate-500" />
+                              {warning.batteryLevel != null ? `${warning.batteryLevel}%` : "N/A"}
+                            </span>
+                          </div>
+                          <p className="text-[11px] font-semibold leading-relaxed mt-1 text-slate-600">
+                            {warning.message}
+                          </p>
+                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 mt-1">
+                            {warning.type === "FIELD_PUNCH_LOCATION_OFF" ? "FIELD ACTIVE • WARNING" : "LOCATION DISCONNECTED"}
+                          </span>
+                        </DropdownMenuItem>
+                      ))}
+                    </div>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
               <Link href="/settings" passHref legacyBehavior>
                 <Button variant="ghost" size="icon" className="h-10 w-10 text-slate-500 hover:bg-slate-50 rounded-xl">
                   <Settings className="h-5 w-5" />

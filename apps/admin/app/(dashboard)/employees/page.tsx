@@ -661,6 +661,70 @@ export default function EmployeesPage() {
                                                 </div>
                                               )}
                                            </div>
+
+                                           {isFieldEmployee && latestAttendance && (latestAttendance.startOdometer != null || latestAttendance.endOdometer != null) && (
+                                              <div className="mt-6 pt-6 border-t border-slate-100 space-y-4">
+                                                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Odometer Readings</p>
+                                                 <div className="grid grid-cols-3 gap-3">
+                                                    <div className="rounded-xl bg-slate-50/50 p-3 border border-slate-100 flex flex-col justify-between">
+                                                       <div>
+                                                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-none mb-1">Start Odo</p>
+                                                          <p className="text-xs font-bold text-slate-700">
+                                                             {latestAttendance.startOdometer != null ? `${latestAttendance.startOdometer} km` : "No reading"}
+                                                          </p>
+                                                       </div>
+                                                       {latestAttendance.startOdometerPhotoUrl && (
+                                                          <a
+                                                             href={latestAttendance.startOdometerPhotoUrl}
+                                                             target="_blank"
+                                                             rel="noopener noreferrer"
+                                                             className="mt-2 text-[9px] font-black uppercase text-blue-600 hover:underline"
+                                                          >
+                                                             View Photo
+                                                          </a>
+                                                       )}
+                                                    </div>
+                                                    <div className="rounded-xl bg-slate-50/50 p-3 border border-slate-100 flex flex-col justify-between">
+                                                       <div>
+                                                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-none mb-1">End Odo</p>
+                                                          <p className="text-xs font-bold text-slate-700">
+                                                             {latestAttendance.endOdometer != null ? `${latestAttendance.endOdometer} km` : "No reading"}
+                                                          </p>
+                                                       </div>
+                                                       {latestAttendance.endOdometerPhotoUrl && (
+                                                          <a
+                                                             href={latestAttendance.endOdometerPhotoUrl}
+                                                             target="_blank"
+                                                             rel="noopener noreferrer"
+                                                             className="mt-2 text-[9px] font-black uppercase text-blue-600 hover:underline"
+                                                          >
+                                                             View Photo
+                                                          </a>
+                                                       )}
+                                                    </div>
+                                                    <div className={cn(
+                                                       "rounded-xl p-3 border flex flex-col justify-center",
+                                                       latestAttendance.startOdometer != null && latestAttendance.endOdometer != null && latestAttendance.endOdometer < latestAttendance.startOdometer
+                                                          ? "bg-rose-50 border-rose-100 text-rose-700"
+                                                          : "bg-blue-50/50 border-blue-100/60 text-blue-700"
+                                                    )}>
+                                                       <p className={cn(
+                                                          "text-[9px] font-bold uppercase tracking-wider leading-none mb-1",
+                                                          latestAttendance.startOdometer != null && latestAttendance.endOdometer != null && latestAttendance.endOdometer < latestAttendance.startOdometer
+                                                             ? "text-rose-500"
+                                                             : "text-blue-500"
+                                                       )}>Distance</p>
+                                                       <p className="text-xs font-black">
+                                                          {latestAttendance.startOdometer != null && latestAttendance.endOdometer != null
+                                                             ? latestAttendance.endOdometer >= latestAttendance.startOdometer
+                                                                ? `${(latestAttendance.endOdometer - latestAttendance.startOdometer).toFixed(1)} km`
+                                                                : "Error"
+                                                             : "--"}
+                                                       </p>
+                                                    </div>
+                                                 </div>
+                                              </div>
+                                            )}
                                        </CardContent>
                                     </Card>
                                  </div>
@@ -1344,6 +1408,20 @@ function toRadians(value: number) {
 
 function resolveDisplayedWorkMode(defaultWorkMode: WorkMode, latestAttendance?: AttendanceRecord) {
   return latestAttendance?.punchType ?? defaultWorkMode;
+}
+
+function formatDuration(ms: number) {
+  if (ms < 0) ms = 0;
+  const totalSecs = Math.floor(ms / 1000);
+  const hrs = Math.floor(totalSecs / 3600);
+  const mins = Math.floor((totalSecs % 3600) / 60);
+  const secs = totalSecs % 60;
+
+  const parts = [];
+  if (hrs > 0) parts.push(`${hrs}h`);
+  if (mins > 0 || hrs > 0) parts.push(`${mins}m`);
+  parts.push(`${secs}s`);
+  return parts.join(" ");
 }
 
 function getAttendanceSessionsForDate(records: AttendanceRecord[], dateStr: string) {
