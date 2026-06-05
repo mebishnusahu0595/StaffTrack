@@ -1,4 +1,5 @@
 import { autoCheckoutStuckUsers, autoCheckoutOldStuckSessions } from "../services/attendance.service";
+import { checkStaleLocations } from "../services/location.service";
 
 export function startScheduler() {
   // 1. Immediately clean up any old stuck sessions from previous days on startup
@@ -42,4 +43,13 @@ export function startScheduler() {
   }
 
   scheduleNextRun();
+
+  // 3. Schedule periodic stale location checks every 2 minutes
+  setInterval(async () => {
+    try {
+      await checkStaleLocations();
+    } catch (error) {
+      console.error("[Scheduler] Error in periodic stale location check:", error);
+    }
+  }, 2 * 60 * 1000);
 }

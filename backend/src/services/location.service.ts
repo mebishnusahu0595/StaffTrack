@@ -200,3 +200,82 @@ export async function getTodayLocationLogs(actor: AuthUser, userId: string, date
     orderBy: { timestamp: "asc" }
   });
 }
+
+export async function checkStaleLocations() {
+  const now = new Date();
+  const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+
+  try {
+    const activeUsers = await prisma.user.findMany({
+      where: {
+        isLocationOn: true,
+        role: { in: [UserRole.EMPLOYEE, UserRole.MANAGER] },
+        attendances: {
+          some: {
+            checkOutTime: null,
+            punchType: "FIELD",
+            breaks: {
+              none: {
+                endTime: null
+              }
+            }
+          }
+        }
+      },
+      select: {
+        id: true,
+        name: true,
+        companyId: true,
+        managerId: true,
+        role: true,
+        email: true
+      }
+    });
+
+    for (const user of activeUsers) {
+      // Find the active attendance record
+      const activeAttendance = await prisma.attendance.findFirst({
+        where: {
+          userId: user.id,
+          checkOutTime: null,
+          punchType: "FIELD"
+        },
+        orderBy: { checkInTime: "desc" }
+      });
+
+      if (!activeAttendance) continue;
+
+      // Find the latest location log for this user today
+      const latestLog = await prisma.locationLog.findFirst({
+        where: { userId: user.id },
+        orderBy: { timestamp: "desc" }
+      });
+
+      let lastPingTime = activeAttendance.checkInTime ? new Date(activeAttendance.checkInTime) : null;
+      if (latestLog) {
+        lastPingTime = new Date(latestLog.timestamp);
+      }
+
+      if (!lastPingTime) continue;
+
+      const diffMs = now.getTime() - lastPingTime.getTime();
+
+      if (diffMs > STALE_THRESHOLD_MS) {
+        console.log(`[Scheduler] User ${user.name} (${user.id}) location ping is stale by ${(diffMs / 1000 / 60).toFixed(1)} mins. Marking location OFF.`);
+        
+        const actor: AuthUser = {
+          id: user.id,
+          name: user.name,
+          companyId: user.companyId,
+          managerId: user.managerId,
+          role: user.role,
+          email: user.email
+        };
+
+        await updateLocationStatus(actor, { isLocationOn: false });
+      }
+    }
+  } catch (error) {
+    console.error("[Scheduler] Error in checkStaleLocations:", error);
+  }
+}

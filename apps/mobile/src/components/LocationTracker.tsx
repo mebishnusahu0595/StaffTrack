@@ -68,7 +68,7 @@ export function LocationTracker() {
 
   useEffect(() => {
     let mounted = true;
-    let webInterval: any = null;
+    let foregroundInterval: any = null;
 
     async function checkLocationAndAutoBreak() {
       try {
@@ -142,7 +142,10 @@ export function LocationTracker() {
         await stopBackgroundLocationTracking().catch((error) => {
           console.warn("[LocationTracker] Failed to stop tracking", error);
         });
-        if (webInterval) clearInterval(webInterval);
+        if (foregroundInterval) {
+          clearInterval(foregroundInterval);
+          foregroundInterval = null;
+        }
         return;
       }
 
@@ -175,8 +178,8 @@ export function LocationTracker() {
         };
 
         trackWeb();
-        if (!webInterval) {
-          webInterval = setInterval(trackWeb, TRACKING_INTERVAL);
+        if (!foregroundInterval) {
+          foregroundInterval = setInterval(trackWeb, TRACKING_INTERVAL);
         }
       } else {
         console.log("[LocationTracker] Starting mobile background tracking...");
@@ -190,6 +193,42 @@ export function LocationTracker() {
 
         // Monitor location provider toggle and trigger auto-break
         void checkLocationAndAutoBreak();
+
+        // Mobile foreground location tracking logic (active pinging while app is in foreground)
+        const trackMobileForeground = async () => {
+          try {
+            const enabled = await Location.hasServicesEnabledAsync();
+            const permission = await Location.getForegroundPermissionsAsync();
+            if (enabled && permission.status === "granted") {
+              console.log("[LocationTracker] [Mobile Foreground] Fetching position...");
+              const position = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.Balanced,
+              });
+
+              const level = await Battery.getBatteryLevelAsync().catch(() => -1);
+              const batteryLevel = level >= 0 ? Math.round(level * 100) : undefined;
+
+              const logs: LocationPing[] = [{
+                lat: position.coords.latitude,
+                lng: position.coords.longitude,
+                accuracy: position.coords.accuracy ?? 0,
+                timestamp: new Date(position.timestamp).toISOString(),
+                batteryLevel
+              }];
+              console.log("[LocationTracker] [Mobile Foreground] Sending ping to server:", logs[0]);
+              await sendLocationLogs(logs);
+            }
+          } catch (err) {
+            console.warn("[LocationTracker] [Mobile Foreground] Failed to get/send position:", err);
+          }
+        };
+
+        void trackMobileForeground();
+        if (!foregroundInterval) {
+          foregroundInterval = setInterval(() => {
+            void trackMobileForeground();
+          }, TRACKING_INTERVAL);
+        }
       }
     }
 
@@ -200,7 +239,7 @@ export function LocationTracker() {
 
     return () => {
       mounted = false;
-      if (webInterval) clearInterval(webInterval);
+      if (foregroundInterval) clearInterval(foregroundInterval);
       clearInterval(interval);
     };
   }, [isAuthenticated, isCheckedIn, isCheckedOut, isFieldPunch, activeBreak, startBreak]);
@@ -244,7 +283,7 @@ export async function startBackgroundLocationTracking(): Promise<boolean> {
         notificationBody: "Live location tracking is active.",
         notificationColor: "#1A202C"
       },
-      pausesUpdatesAutomatically: true,
+      pausesUpdatesAutomatically: false,
       showsBackgroundLocationIndicator: true,
       timeInterval: TRACKING_INTERVAL
     });
