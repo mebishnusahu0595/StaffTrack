@@ -1,23 +1,23 @@
 import type { AttendanceRecord } from "./types";
 
-export function calculateDurations(records: AttendanceRecord[]) {
+export function calculateDurations(records: AttendanceRecord[], now?: number) {
   let officeTimeMs = 0;
   let fieldTimeMs = 0;
   let breakTimeMs = 0;
   
-  const now = new Date().getTime();
+  const nowMs = now ?? new Date().getTime();
 
   records.forEach((session) => {
     if (!session.checkInTime) return;
     const start = new Date(session.checkInTime).getTime();
-    const end = session.checkOutTime ? new Date(session.checkOutTime).getTime() : now;
+    const end = session.checkOutTime ? new Date(session.checkOutTime).getTime() : nowMs;
     const sessionDurationMs = end - start;
 
     let sessionBreakMs = 0;
     session.breaks?.forEach((b) => {
       if (!b.startTime) return;
       const bStart = new Date(b.startTime).getTime();
-      const bEnd = b.endTime ? new Date(b.endTime).getTime() : now;
+      const bEnd = b.endTime ? new Date(b.endTime).getTime() : nowMs;
       sessionBreakMs += bEnd - bStart;
     });
 

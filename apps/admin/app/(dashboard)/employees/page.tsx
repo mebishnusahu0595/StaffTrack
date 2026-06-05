@@ -1,6 +1,6 @@
 "use client";
  
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { 
@@ -91,7 +91,14 @@ export default function EmployeesPage() {
   const todayDate = dayjs().format("YYYY-MM-DD");
   const selectedMapMonth = dayjs(selectedMapDate).month() + 1;
   const selectedMapYear = dayjs(selectedMapDate).year();
-  
+  const [liveNow, setLiveNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    // Tick every second so open breaks show live duration
+    const t = setInterval(() => setLiveNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth(); // Get current user for companyId
  
@@ -183,8 +190,9 @@ export default function EmployeesPage() {
   const latestAttendance = selectedDateSessions[0];
 
   const selectedDateBreakMs = useMemo(
-    () => calculateDurations(selectedDateSessions).breakTimeMs,
-    [selectedDateSessions]
+    () => calculateDurations(selectedDateSessions, liveNow).breakTimeMs,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedDateSessions, liveNow]
   );
 
   // Fetch details for the expanded employee
@@ -671,10 +679,7 @@ export default function EmployeesPage() {
                                              )}
                                           </div>
  
-                                              <div className={cn(
-                                               "mt-8 grid gap-4",
-                                               isFieldEmployee ? "grid-cols-4" : "grid-cols-3"
-                                             )}>
+                                              <div className="mt-8 grid grid-cols-2 gap-4">
                                               <div className="p-3 rounded-xl bg-slate-50/50 border border-slate-100">
                                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Attendance Sessions</p>
                                                  <div className="flex items-end gap-1 mb-1">
