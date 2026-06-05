@@ -9,6 +9,7 @@ export function middleware(request: NextRequest) {
   const isSuperAdminPort = host.includes(":3002");
 
   // Separate Admin and Super Admin dashboards by port to prevent cookie/session overlap
+  const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
   if (isSuperAdminPort) {
     if (
       !pathname.startsWith("/superadmin") &&
@@ -20,7 +21,7 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/superadmin", request.url));
     }
   } else {
-    if (pathname.startsWith("/superadmin") || pathname.startsWith("/super-dashboard")) {
+    if (isLocalhost && (pathname.startsWith("/superadmin") || pathname.startsWith("/super-dashboard"))) {
       return NextResponse.redirect(new URL("/login", request.url));
     }
   }
