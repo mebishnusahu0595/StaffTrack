@@ -25,6 +25,7 @@ import {
   uploadFile
 } from "@/lib/api";
 import type { User, AttendanceRecord, Role } from "@/lib/types";
+import { calculateDurations, formatDurationLabel } from "@/lib/timeTracking";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -381,6 +382,7 @@ export default function SuperDashboardPage() {
                       <TableHead>Date</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Punch</TableHead>
+                      <TableHead>Break Time</TableHead>
                       <TableHead>Odometer</TableHead>
                       <TableHead className="text-right">Action</TableHead>
                     </TableRow>
@@ -397,10 +399,10 @@ export default function SuperDashboardPage() {
                           <Badge
                             className={
                               a.status === "PRESENT"
-                                ? "bg-emerald-500 hover:bg-emerald-600"
-                                : a.status === "ABSENT"
-                                ? "bg-rose-500 hover:bg-rose-600"
-                                : "bg-amber-500 hover:bg-amber-600"
+                                 ? "bg-emerald-500 hover:bg-emerald-600"
+                                 : a.status === "ABSENT"
+                                 ? "bg-rose-500 hover:bg-rose-600"
+                                 : "bg-amber-500 hover:bg-amber-600"
                             }
                           >
                             {a.isCheckInPending ? "PENDING" : a.status}
@@ -409,6 +411,9 @@ export default function SuperDashboardPage() {
                         <TableCell className="text-xs font-mono text-slate-500">
                           {a.checkInTime ? format(new Date(a.checkInTime), "HH:mm") : "--:--"} |{" "}
                           {a.checkOutTime ? format(new Date(a.checkOutTime), "HH:mm") : "--:--"}
+                        </TableCell>
+                        <TableCell className="text-xs font-semibold text-amber-600">
+                          {formatDurationLabel(calculateDurations([a]).breakTimeMs)}
                         </TableCell>
                         <TableCell className="text-xs text-slate-600">
                           {a.startOdometer ?? "—"} → {a.endOdometer ?? "—"}

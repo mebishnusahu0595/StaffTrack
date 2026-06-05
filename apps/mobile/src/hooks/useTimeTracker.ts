@@ -11,6 +11,20 @@ function formatDuration(ms: number) {
   return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 }
 
+export function formatFriendlyDuration(ms: number) {
+  if (ms <= 0) return "0s";
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  const parts = [];
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0 || hours > 0) parts.push(`${minutes}m`);
+  if (seconds > 0 || (hours === 0 && minutes === 0)) parts.push(`${seconds}s`);
+  return parts.join(" ");
+}
+
 export function useTimeTracker(todaySessions: Attendance[], currentTime: dayjs.Dayjs) {
   return useMemo(() => {
     let officeTimeMs = 0;
@@ -49,6 +63,7 @@ export function useTimeTracker(todaySessions: Attendance[], currentTime: dayjs.D
       officeTime: formatDuration(officeTimeMs),
       fieldTime: formatDuration(fieldTimeMs),
       breakTime: formatDuration(breakTimeMs),
+      friendlyBreakTime: formatFriendlyDuration(breakTimeMs),
       raw: { officeTimeMs, fieldTimeMs, breakTimeMs }
     };
   }, [todaySessions, currentTime]);

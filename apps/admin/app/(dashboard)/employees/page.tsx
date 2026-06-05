@@ -71,6 +71,7 @@ import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { AttendanceRecord, WorkMode, User } from "@/lib/types";
 import dayjs from "dayjs";
+import { calculateDurations, formatDurationLabel } from "@/lib/timeTracking";
  
 export default function EmployeesPage() {
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -180,6 +181,11 @@ export default function EmployeesPage() {
   );
 
   const latestAttendance = selectedDateSessions[0];
+
+  const selectedDateBreakMs = useMemo(
+    () => calculateDurations(selectedDateSessions).breakTimeMs,
+    [selectedDateSessions]
+  );
 
   // Fetch details for the expanded employee
   const locationQuery = useQuery({
@@ -402,6 +408,7 @@ export default function EmployeesPage() {
                 <th className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Designation</th>
                 <th className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Department</th>
                 <th className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Manager</th>
+                <th className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Shift Timing</th>
                 <th className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400 text-center">Work Mode</th>
                 <th className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Last Seen</th>
                 <th className="py-4 px-8 text-[11px] font-black uppercase tracking-wider text-slate-400 text-right">Actions</th>
@@ -413,6 +420,7 @@ export default function EmployeesPage() {
                 const latestUserAttendance = latestTodayAttendanceByUser.get(user.id);
                 const displayedWorkMode = resolveDisplayedWorkMode(user.workMode, latestUserAttendance);
                 const isPunchedIn = Boolean(latestUserAttendance && latestUserAttendance.checkInTime && !latestUserAttendance.checkOutTime);
+                const todayBreakMs = latestUserAttendance ? calculateDurations([latestUserAttendance]).breakTimeMs : 0;
                 return (
                   <Fragment key={user.id}>
                     <tr className={cn(
@@ -440,6 +448,11 @@ export default function EmployeesPage() {
                               ) : (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200/50 shadow-sm">
                                   Inactive
+                                </span>
+                              )}
+                              {latestUserAttendance && todayBreakMs > 0 && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200/50 shadow-sm ml-2">
+                                  Break: {formatDurationLabel(todayBreakMs)}
                                 </span>
                               )}
                               {user.batteryLevel !== undefined && user.batteryLevel !== null && (
@@ -492,6 +505,9 @@ export default function EmployeesPage() {
                           : user.managerId 
                           ? managersById.get(user.managerId)?.name ?? "Unknown manager" 
                           : "Unassigned"}
+                      </td>
+                      <td className="py-5 px-6 text-xs font-semibold text-slate-600 font-mono">
+                        {user.shiftStart} - {user.shiftEnd}
                       </td>
                       <td className="py-5 px-6 text-center">
                          <div className={cn(
@@ -580,7 +596,7 @@ export default function EmployeesPage() {
                     </tr>
                     {isExpanded && (
                       <tr>
-                        <td colSpan={8} className="p-0 border-none bg-slate-50/80">
+                        <td colSpan={9} className="p-0 border-none bg-slate-50/80">
                            <div className="px-8 py-8 animate-in slide-in-from-top-4 duration-300">
                               <div className="grid grid-cols-12 gap-8">
                                  {/* Left: Profile & Quick Stats */}
@@ -656,9 +672,9 @@ export default function EmployeesPage() {
                                           </div>
  
                                               <div className={cn(
-                                                "mt-8 grid gap-4",
-                                                isFieldEmployee ? "grid-cols-3" : "grid-cols-2"
-                                              )}>
+                                               "mt-8 grid gap-4",
+                                               isFieldEmployee ? "grid-cols-4" : "grid-cols-3"
+                                             )}>
                                               <div className="p-3 rounded-xl bg-slate-50/50 border border-slate-100">
                                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Attendance Sessions</p>
                                                  <div className="flex items-end gap-1 mb-1">
@@ -694,6 +710,18 @@ export default function EmployeesPage() {
                                                    </div>
                                                 </div>
                                               )}
+                                              <div className="p-3 rounded-xl bg-slate-50/50 border border-slate-100 flex flex-col justify-between">
+                                                 <div>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Total Break Time</p>
+                                                    <div className="flex items-end gap-1 mb-1">
+                                                       <span className="text-lg font-black text-slate-900 leading-none">{formatDurationLabel(selectedDateBreakMs)}</span>
+                                                    </div>
+                                                 </div>
+                                                 <div className="flex items-center gap-1.5 text-amber-600 mt-1">
+                                                    <div className="h-1 w-1 rounded-full bg-amber-500" />
+                                                    <span className="text-[10px] font-black uppercase tracking-wider">Break Duration</span>
+                                                 </div>
+                                              </div>
                                            </div>
 
                                            {isFieldEmployee && latestAttendance && (latestAttendance.startOdometer != null || latestAttendance.endOdometer != null) && (
@@ -933,9 +961,15 @@ export default function EmployeesPage() {
                                                                     ? `${session.checkOutLat.toFixed(4)}, ${session.checkOutLng.toFixed(4)}`
                                                                     : "Not checked out"}
                                                                 </p>
+                                                              </div>
+                                                           </div>
+                                                           {calculateDurations([session]).breakTimeMs > 0 && (
+                                                             <div className="mt-3 text-[11px] font-bold text-slate-500 bg-amber-50/50 p-2.5 rounded-xl border border-amber-100/50 flex justify-between items-center">
+                                                               <span className="uppercase text-[9px] tracking-wider text-slate-400">Session Break Time</span>
+                                                               <span className="text-amber-700 font-extrabold">{formatDurationLabel(calculateDurations([session]).breakTimeMs)}</span>
                                                              </div>
-                                                          </div>
-                                                       </div>
+                                                           )}
+                                                        </div>
                                                      ))
                                                    )}
                                                    <div className="flex items-start gap-4">

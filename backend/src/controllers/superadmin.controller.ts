@@ -80,7 +80,8 @@ export async function getAttendanceLogs(req: Request, res: Response): Promise<vo
     include: {
       user: {
         select: { name: true, email: true }
-      }
+      },
+      breaks: true
     },
     orderBy: { date: "desc" },
     take: 300

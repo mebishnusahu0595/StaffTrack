@@ -24,6 +24,7 @@ import {
   superFetchManagers 
 } from "@/lib/api";
 import type { User, AttendanceRecord, Role } from "@/lib/types";
+import { calculateDurations, formatDurationLabel } from "@/lib/timeTracking";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -254,6 +255,7 @@ export default function SuperDashboardPage() {
                       <TableHead>Date</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Punch Times</TableHead>
+                      <TableHead>Break Time</TableHead>
                       <TableHead className="text-right">Manual Override</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -280,6 +282,9 @@ export default function SuperDashboardPage() {
                           {a.checkInTime ? format(new Date(a.checkInTime), "HH:mm") : '--:--'} | 
                           {a.checkOutTime ? format(new Date(a.checkOutTime), "HH:mm") : '--:--'}
                         </TableCell>
+                        <TableCell className="text-xs font-semibold text-amber-600">
+                          {formatDurationLabel(calculateDurations([a]).breakTimeMs)}
+                        </TableCell>
                         <TableCell className="text-right flex justify-end gap-2">
                           {a.status === 'ABSENT' && (
                             <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 gap-1 h-8 px-3" onClick={() => handleUpdateAttendance(a, 'PRESENT')}>
@@ -298,7 +303,7 @@ export default function SuperDashboardPage() {
                     ))}
                     {attendance.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-slate-400 font-medium">
+                        <TableCell colSpan={6} className="text-center py-8 text-slate-400 font-medium">
                           No recent attendance logs found.
                         </TableCell>
                       </TableRow>

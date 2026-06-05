@@ -7,6 +7,17 @@ import type { Attendance, AttendanceStatus, Holiday } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useAttendance } from "../hooks/useAttendance";
 import { AppIcon, appIconSource } from "../components/AppIcon";
+import { formatFriendlyDuration } from "../hooks/useTimeTracker";
+
+function calculateRecordBreakMs(breaks?: any[]) {
+  if (!breaks) return 0;
+  return breaks.reduce((sum, b) => {
+    if (!b.startTime) return sum;
+    const start = new Date(b.startTime).getTime();
+    const end = b.endTime ? new Date(b.endTime).getTime() : Date.now();
+    return sum + (end - start);
+  }, 0);
+}
 
 const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -196,6 +207,7 @@ export function AttendanceScreen() {
                     <Text style={styles.recordDate}>{dayjs(toDateKey(record.date)).format("DD MMM, dddd")}</Text>
                     <Text style={styles.recordTimes}>
                       In: {formatMaybeTime(record.checkInTime)} | Out: {formatMaybeTime(record.checkOutTime)}
+                      {record.checkInTime && ` | Break: ${formatFriendlyDuration(calculateRecordBreakMs(record.breaks))}`}
                     </Text>
                   </View>
                   <View style={[styles.statusPill, { backgroundColor: display.bg }]}>

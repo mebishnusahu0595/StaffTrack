@@ -25,7 +25,7 @@ export function PersonalAttendancePanel({ onNavigateDayEnd }: { onNavigateDayEnd
   const { checkIn, checkOut, startBreak, endBreak, isCheckingIn, isCheckingOut, isStartingBreak, isEndingBreak, todayAttendance, activeAttendance, todaySessions, activeBreak } = useAttendance();
   const { getCurrentCoordinates, isLoading: isLocationLoading } = useLocation();
   const [currentTime, setCurrentTime] = useState(dayjs());
-  const { officeTime, fieldTime, breakTime } = useTimeTracker(todaySessions, currentTime);
+  const { officeTime, fieldTime, breakTime, friendlyBreakTime } = useTimeTracker(todaySessions, currentTime);
   const [isTakingPhoto] = useState(false);
   const [liveLocation, setLiveLocation] = useState<Location.LocationObject | null>(null);
 
@@ -332,25 +332,35 @@ export function PersonalAttendancePanel({ onNavigateDayEnd }: { onNavigateDayEnd
       </Card>
 
       {/* Time summary */}
-      <View style={styles.summaryRow}>
-        <Card mode="contained" style={styles.summaryCard}>
-          <Card.Content style={styles.summaryContent}>
-            <View style={styles.summaryIconRow}><AppIcon color="#4A6583" name="office-building" size={20} /><Text style={styles.mutedSummaryLabel}>OFFICE TIME</Text></View>
-            <Text style={[styles.summaryValue, { fontSize: 16 }]}>{officeTime}</Text>
-          </Card.Content>
-        </Card>
-        <Card mode="contained" style={styles.summaryCard}>
-          <Card.Content style={styles.summaryContent}>
-            <View style={styles.summaryIconRow}><AppIcon color="#4A6583" name="map-marker-outline" size={20} /><Text style={styles.mutedSummaryLabel}>FIELD TIME</Text></View>
-            <Text style={[styles.summaryValue, { fontSize: 16 }]}>{fieldTime}</Text>
-          </Card.Content>
-        </Card>
-        <Card mode="contained" style={styles.summaryCard}>
-          <Card.Content style={styles.summaryContent}>
-            <View style={styles.summaryIconRow}><AppIcon color="#4A6583" name="map-marker-distance" size={20} /><Text style={styles.mutedSummaryLabel}>KM TODAY</Text></View>
-            <Text style={[styles.summaryValue, { fontSize: 16 }]}>{distanceKm.toFixed(1)}</Text>
-          </Card.Content>
-        </Card>
+      <View style={{ gap: 8 }}>
+        <View style={styles.summaryRow}>
+          <Card mode="contained" style={styles.summaryCard}>
+            <Card.Content style={styles.summaryContent}>
+              <View style={styles.summaryIconRow}><AppIcon color="#4A6583" name="office-building" size={20} /><Text style={styles.mutedSummaryLabel}>OFFICE TIME</Text></View>
+              <Text style={[styles.summaryValue, { fontSize: 16 }]}>{officeTime}</Text>
+            </Card.Content>
+          </Card>
+          <Card mode="contained" style={styles.summaryCard}>
+            <Card.Content style={styles.summaryContent}>
+              <View style={styles.summaryIconRow}><AppIcon color="#4A6583" name="map-marker-outline" size={20} /><Text style={styles.mutedSummaryLabel}>FIELD TIME</Text></View>
+              <Text style={[styles.summaryValue, { fontSize: 16 }]}>{fieldTime}</Text>
+            </Card.Content>
+          </Card>
+        </View>
+        <View style={styles.summaryRow}>
+          <Card mode="contained" style={styles.summaryCard}>
+            <Card.Content style={styles.summaryContent}>
+              <View style={styles.summaryIconRow}><AppIcon color="#F39C12" name="coffee" size={20} /><Text style={styles.mutedSummaryLabel}>TOTAL BREAK</Text></View>
+              <Text style={[styles.summaryValue, { fontSize: 16 }]}>{friendlyBreakTime}</Text>
+            </Card.Content>
+          </Card>
+          <Card mode="contained" style={styles.summaryCard}>
+            <Card.Content style={styles.summaryContent}>
+              <View style={styles.summaryIconRow}><AppIcon color="#4A6583" name="map-marker-distance" size={20} /><Text style={styles.mutedSummaryLabel}>KM TODAY</Text></View>
+              <Text style={[styles.summaryValue, { fontSize: 16 }]}>{distanceKm.toFixed(1)}</Text>
+            </Card.Content>
+          </Card>
+        </View>
       </View>
 
       {/* Live tracking */}
