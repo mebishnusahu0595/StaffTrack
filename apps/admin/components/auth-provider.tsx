@@ -54,11 +54,17 @@ export function AuthProvider({
       return;
     }
 
-    if (canAccessDashboard(user) && (pathname === "/login" || pathname === "/superadmin")) {
-      if (user?.role === "SUPERADMIN") {
-        router.replace("/superadmin/dashboard");
-      } else {
-        router.replace("/");
+    if (canAccessDashboard(user)) {
+      if (pathname === "/login") {
+        if (user?.role === "SUPERADMIN") {
+          router.replace("/superadmin/dashboard");
+        } else {
+          router.replace("/");
+        }
+      } else if (pathname === "/superadmin") {
+        if (user?.role === "SUPERADMIN") {
+          router.replace("/superadmin/dashboard");
+        }
       }
     }
   }, [isBootstrapping, pathname, router, user]);
