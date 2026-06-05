@@ -168,13 +168,22 @@ export async function getTeamOverview(
         memberExpenses.map((e) => ({ date: e.date, value: e.amount }))
       );
 
-      // Pull km per day straight from the day-end reports.
+      // Pull km per day from day-end reports, preferring odometer readings over GPS kmTravelled.
       const memberReports = await prisma.dayEndReport.findMany({
         where: { userId: member.id, date: { gte: start, lt: end } },
-        select: { date: true, kmTravelled: true }
+        select: { date: true, kmTravelled: true, startOdometer: true, endOdometer: true }
       });
       const kmPerDay = aggregateByDay(
-        memberReports.map((r) => ({ date: r.date, value: r.kmTravelled }))
+        memberReports.map((r) => {
+          // Prefer odometer distance if both readings exist and end >= start
+          const odoKm =
+            r.endOdometer !== null &&
+            r.startOdometer !== null &&
+            r.endOdometer >= r.startOdometer
+              ? r.endOdometer - r.startOdometer
+              : null;
+          return { date: r.date, value: odoKm ?? r.kmTravelled };
+        })
       );
 
       const completed = completedByUser.get(member.id) ?? [];
