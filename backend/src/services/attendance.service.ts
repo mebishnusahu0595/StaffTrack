@@ -443,18 +443,21 @@ export async function getAttendanceByDate(actor: AuthUser, date: string) {
 
   const managerGroupId = actor.role === UserRole.MANAGER ? await getManagerGroupId(actor.id) : null;
 
-  const userWhere = {
-    companyId: actor.companyId,
-    role: UserRole.EMPLOYEE,
-    ...(actor.role === UserRole.MANAGER 
-      ? {
-          OR: [
-            { managerId: actor.id },
-            ...(managerGroupId ? [{ groupId: managerGroupId }] : [])
-          ]
-        }
-      : {})
-  };
+  const userWhere = actor.role === UserRole.MANAGER
+    ? {
+        companyId: actor.companyId,
+        role: UserRole.EMPLOYEE,
+        OR: [
+          { managerId: actor.id },
+          ...(managerGroupId ? [{ groupId: managerGroupId }] : [])
+        ]
+      }
+    : {
+        // ADMIN / SUPERADMIN: include EMPLOYEE + MANAGER + ADMIN so their own
+        // punch-ins are visible in the live attendance map.
+        companyId: actor.companyId,
+        role: { in: [UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.ADMIN] }
+      };
 
   console.log(`[DEBUG] getAttendanceByDate: actor=${actor.email}, date=${date}, targetDate=${targetDate.toISOString()}`);
 

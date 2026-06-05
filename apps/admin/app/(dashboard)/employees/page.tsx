@@ -441,9 +441,19 @@ export default function EmployeesPage() {
                                 </span>
                               )}
                               {user.batteryLevel !== undefined && user.batteryLevel !== null && (
-                                <div className="flex items-center gap-0.5 text-[9px] font-black text-slate-500 bg-slate-100/80 px-1.5 py-0.5 rounded-md border border-slate-200/50">
-                                  <Battery className="h-2.5 w-2.5 text-slate-500" />
-                                  <span>{user.batteryLevel}%</span>
+                                <div className={cn(
+                                  "flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded-md border",
+                                  user.batteryLevel >= 50 ? "text-emerald-700 bg-emerald-50 border-emerald-200/50"
+                                  : user.batteryLevel >= 20 ? "text-amber-700 bg-amber-50 border-amber-200/50"
+                                  : "text-rose-700 bg-rose-50 border-rose-200/50"
+                                )}>
+                                  <Battery className={cn(
+                                    "h-2.5 w-2.5",
+                                    user.batteryLevel >= 50 ? "text-emerald-500"
+                                    : user.batteryLevel >= 20 ? "text-amber-500"
+                                    : "text-rose-500"
+                                  )} />
+                                  <span>{Math.round(user.batteryLevel)}%</span>
                                 </div>
                               )}
                               {user.isLocationOn !== undefined && (
@@ -608,14 +618,36 @@ export default function EmployeesPage() {
                                              
                                              {(user.batteryLevel !== undefined && user.batteryLevel !== null) && (
                                                <div className="flex items-center gap-3 text-slate-500">
-                                                  <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center">
-                                                     <Battery className="h-4 w-4 text-slate-400" />
+                                                  <div className={cn(
+                                                    "h-8 w-8 rounded-lg flex items-center justify-center",
+                                                    user.batteryLevel >= 50 ? "bg-emerald-50" : user.batteryLevel >= 20 ? "bg-amber-50" : "bg-rose-50"
+                                                  )}>
+                                                     <Battery className={cn(
+                                                       "h-4 w-4",
+                                                       user.batteryLevel >= 50 ? "text-emerald-500" : user.batteryLevel >= 20 ? "text-amber-500" : "text-rose-500"
+                                                     )} />
                                                   </div>
                                                   <div className="flex-1">
                                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none mb-1">Device Battery</p>
-                                                     <p className="text-xs font-bold text-slate-700">
-                                                       {user.batteryLevel}% • Status: {user.isLocationOn ? "Online / On" : "Location Off / Off"}
-                                                     </p>
+                                                     <div className="flex items-center gap-2">
+                                                       <p className={cn(
+                                                         "text-xs font-black",
+                                                         user.batteryLevel >= 50 ? "text-emerald-700" : user.batteryLevel >= 20 ? "text-amber-700" : "text-rose-700"
+                                                       )}>{Math.round(user.batteryLevel)}%</p>
+                                                       {/* Visual battery bar */}
+                                                       <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden max-w-[80px]">
+                                                         <div
+                                                           className={cn(
+                                                             "h-full rounded-full transition-all",
+                                                             user.batteryLevel >= 50 ? "bg-emerald-500" : user.batteryLevel >= 20 ? "bg-amber-500" : "bg-rose-500"
+                                                           )}
+                                                           style={{ width: `${Math.min(100, Math.max(0, Math.round(user.batteryLevel)))}%` }}
+                                                         />
+                                                       </div>
+                                                       <p className="text-[10px] font-bold text-slate-400">
+                                                         {user.isLocationOn ? "📡 Online" : "📵 Location Off"}
+                                                       </p>
+                                                     </div>
                                                   </div>
                                                </div>
                                              )}
