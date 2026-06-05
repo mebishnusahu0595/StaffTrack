@@ -137,7 +137,9 @@ export default function EmployeesPage() {
   });
  
   const filteredUsers = useMemo(() => {
-    let items = usersQuery.data?.items ?? [];
+    let items = (usersQuery.data?.items ?? []).filter(
+      (user) => user.role !== "ADMIN" && user.role !== "SUPERADMIN"
+    );
 
     if (workModeFilter !== "ALL") {
       items = items.filter((user) => resolveDisplayedWorkMode(user.workMode, latestTodayAttendanceByUser.get(user.id)) === workModeFilter);

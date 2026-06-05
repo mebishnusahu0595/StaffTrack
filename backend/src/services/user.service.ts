@@ -81,7 +81,7 @@ export async function listUsers(
   const roleFilter = role && role !== "ALL" ? role : undefined;
   const where: Prisma.UserWhereInput = {
     companyId: actor.companyId,
-    ...(roleFilter && { role: roleFilter }),
+    role: roleFilter ? roleFilter : { in: [UserRole.EMPLOYEE, UserRole.MANAGER] },
     ...(search && {
       OR: [
         { name: { contains: search, mode: "insensitive" } },
