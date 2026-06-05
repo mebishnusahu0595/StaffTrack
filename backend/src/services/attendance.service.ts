@@ -245,7 +245,7 @@ export async function checkOut(actor: AuthUser, input: CheckOutInput) {
       }
       points.push({ lat: input.lat, lng: input.lng });
 
-      // 3. Compute total distance (use odometer if available, otherwise fallback to GPS)
+      // 3. Compute total distance (use odometer if available, otherwise 0 per user request)
       let kmTravelled = 0;
       if (
         attendance.startOdometer !== null &&
@@ -257,15 +257,8 @@ export async function checkOut(actor: AuthUser, input: CheckOutInput) {
         kmTravelled = input.endOdometer - attendance.startOdometer;
         console.log(`[Odometer Calculation] kmTravelled calculated via Odometer: ${kmTravelled} (Start: ${attendance.startOdometer}, End: ${input.endOdometer})`);
       } else {
-        for (let i = 0; i < points.length - 1; i++) {
-          kmTravelled += calculateHaversineDistance(
-            points[i].lat,
-            points[i].lng,
-            points[i + 1].lat,
-            points[i + 1].lng
-          );
-        }
-        console.log(`[GPS Calculation] kmTravelled calculated via GPS points: ${kmTravelled}`);
+        kmTravelled = 0;
+        console.log(`[GPS Calculation Ignored] Odometer data missing, setting kmTravelled to 0`);
       }
 
       // 4. Count completed tasks for today

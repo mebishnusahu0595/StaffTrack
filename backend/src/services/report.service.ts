@@ -320,7 +320,12 @@ export async function getMonthlyPerformanceReport(actor: AuthUser, userId: strin
     }
   }
 
-  const totalKm = reports.reduce((sum, report) => sum + report.kmTravelled, 0);
+  const totalKm = reports.reduce((sum, report) => {
+    if (report.endOdometer !== null && report.startOdometer !== null && report.endOdometer >= report.startOdometer) {
+      return sum + (report.endOdometer - report.startOdometer);
+    }
+    return sum + report.kmTravelled;
+  }, 0);
   const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
   const monthlyPoints = dailyLogs.reduce((sum, log) => sum + log.points, 0);
 
@@ -358,7 +363,17 @@ export async function getMonthlyPerformanceReport(actor: AuthUser, userId: strin
   };
 }
 
-async function calculatePerformanceMetrics(userId: string, date: Date, report: Pick<DayEndReportInput, "ordersTaken" | "ordersCancelled" | "kmTravelled">) {
+async function calculatePerformanceMetrics(
+  userId: string,
+  date: Date,
+  report: {
+    ordersTaken: number;
+    ordersCancelled: number;
+    kmTravelled: number;
+    startOdometer?: number | null;
+    endOdometer?: number | null;
+  }
+) {
   const dayStart = startOfDay(date);
   const dayEnd = new Date(dayStart);
   dayEnd.setDate(dayEnd.getDate() + 1);
@@ -398,14 +413,33 @@ async function calculatePerformanceMetrics(userId: string, date: Date, report: P
 }
 
 function calculatePoints(
-  report: Pick<DayEndReportInput, "ordersTaken" | "ordersCancelled" | "kmTravelled"> | undefined,
+  report:
+    | {
+        ordersTaken: number;
+        ordersCancelled: number;
+        kmTravelled: number;
+        startOdometer?: number | null;
+        endOdometer?: number | null;
+      }
+    | undefined,
   completedTasks: Array<{ points: number | null }>,
   pendingTasksCount: number
 ): PerformanceMetrics {
   const taskPoints = completedTasks.reduce((sum, task) => sum + Number(task.points ?? 0), 0);
   const orderPoints = Number(report?.ordersTaken ?? 0) * 2;
   const cancellationPenalty = Number(report?.ordersCancelled ?? 0);
-  const kmPoints = Math.floor(Number(report?.kmTravelled ?? 0) / 10);
+  
+  let kmVal = Number(report?.kmTravelled ?? 0);
+  if (
+    report?.endOdometer !== null &&
+    report?.endOdometer !== undefined &&
+    report?.startOdometer !== null &&
+    report?.startOdometer !== undefined &&
+    report.endOdometer >= report.startOdometer
+  ) {
+    kmVal = report.endOdometer - report.startOdometer;
+  }
+  const kmPoints = Math.floor(kmVal / 10);
   const totalPoints = Math.max(0, taskPoints + orderPoints + kmPoints - cancellationPenalty);
 
   return {
