@@ -34,6 +34,7 @@ export interface User {
   travelRate?: number;
   batteryLevel?: number | null;
   isLocationOn?: boolean;
+  locationOffAt?: string | null;
   createdAt: string;
   company?: { name: string } | null;
 }
