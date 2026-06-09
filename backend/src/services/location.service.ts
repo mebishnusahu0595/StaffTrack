@@ -67,6 +67,7 @@ export async function updateLocationStatus(
     where: { id: actor.id },
     data: {
       isLocationOn: input.isLocationOn,
+      locationOffAt: input.isLocationOn ? null : new Date(),
       ...(input.batteryLevel !== undefined && { batteryLevel: input.batteryLevel })
     }
   });

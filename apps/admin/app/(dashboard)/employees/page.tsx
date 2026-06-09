@@ -853,7 +853,7 @@ export default function EmployeesPage() {
                                                           <p className="mt-2 text-xs font-bold text-slate-500">Pings will appear here as soon as the staff device uploads coordinates.</p>
                                                         </div>
                                                       ) : (
-                                                        locationQuery.data!.map((log: any, idx: number) => (
+                                                        [...locationQuery.data!].sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((log: any, idx: number) => (
                                                           <div key={log.id || idx} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100/80 shadow-sm">
                                                             <div className="flex items-center gap-3">
                                                               <div className="h-8 w-8 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-bold text-xs">{idx + 1}</div>

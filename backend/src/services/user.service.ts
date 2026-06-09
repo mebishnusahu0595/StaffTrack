@@ -30,6 +30,7 @@ const publicUserSelect = {
   baseSalary: true,
   batteryLevel: true,
   isLocationOn: true,
+  locationOffAt: true,
   createdAt: true
 } satisfies Prisma.UserSelect;
 

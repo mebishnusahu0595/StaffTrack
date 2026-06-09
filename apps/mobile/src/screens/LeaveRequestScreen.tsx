@@ -49,6 +49,14 @@ export function LeaveRequestScreen() {
     });
   }
 
+  const getStatusStyle = (status: string) => {
+    switch (status) {
+      case "APPROVED": return { bg: "#C6F6D5", text: "#22543D" };
+      case "REJECTED": return { bg: "#FED7D7", text: "#822727" };
+      default: return { bg: "#FEEBC8", text: "#7B341E" };
+    }
+  };
+
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -59,27 +67,25 @@ export function LeaveRequestScreen() {
         ) : leaves.length === 0 ? (
           <Text style={styles.emptyText}>No leave requests yet.</Text>
         ) : (
-          leaves.map((leave) => (
-            <Card key={leave.id} style={styles.card}>
-              <Card.Content>
-                <View style={styles.header}>
-                  <Text style={styles.dateRange}>
-                    {dayjs(leave.startDate).format("DD MMM")} - {dayjs(leave.endDate).format("DD MMM YYYY")}
-                  </Text>
-                  <View
-                    style={[
-                      styles.statusChip,
-                      { backgroundColor: leave.status === "PENDING" ? "#FEEBC8" : leave.status === "APPROVED" ? "#C6F6D5" : "#FED7D7" }
-                    ]}
-                  >
-                    <Text style={styles.statusText}>{leave.status}</Text>
+          leaves.map((leave) => {
+            const statusStyle = getStatusStyle(leave.status);
+            return (
+              <Card key={leave.id} style={styles.card}>
+                <Card.Content>
+                  <View style={styles.header}>
+                    <Text style={styles.dateRange}>
+                      {dayjs(leave.startDate).format("DD MMM")} - {dayjs(leave.endDate).format("DD MMM YYYY")}
+                    </Text>
+                    <View style={[styles.statusChip, { backgroundColor: statusStyle.bg }]}>
+                      <Text style={[styles.statusText, { color: statusStyle.text }]}>{leave.status}</Text>
+                    </View>
                   </View>
-                </View>
-                <Text style={styles.reason}>{leave.reason}</Text>
-                <Text style={styles.meta}>Applied on {dayjs(leave.createdAt).format("DD MMM, YYYY")}</Text>
-              </Card.Content>
-            </Card>
-          ))
+                  <Text style={styles.reason}>{leave.reason}</Text>
+                  <Text style={styles.meta}>Applied on {dayjs(leave.createdAt).format("DD MMM, YYYY")}</Text>
+                </Card.Content>
+              </Card>
+            );
+          })
         )}
       </ScrollView>
 
@@ -87,12 +93,39 @@ export function LeaveRequestScreen() {
         <Dialog visible={isDialogVisible} onDismiss={() => setIsDialogVisible(false)} style={styles.dialog}>
           <Dialog.Title>Apply for Leave</Dialog.Title>
           <Dialog.Content>
-            <View style={styles.dateButtons}>
-              <Button mode="outlined" onPress={() => setShowPicker("start")} style={styles.dateBtn}>
-                From: {dayjs(startDate).format("DD/MM/YYYY")}
+            {/* Today quick-select */}
+            <View style={styles.quickSelectRow}>
+              <Button
+                mode="contained-tonal"
+                compact
+                onPress={() => { const t = new Date(); setStartDate(t); setEndDate(t); }}
+                style={styles.todayBtn}
+              >
+                Today
               </Button>
-              <Button mode="outlined" onPress={() => setShowPicker("end")} style={styles.dateBtn}>
-                To: {dayjs(endDate).format("DD/MM/YYYY")}
+            </View>
+
+            {/* From Date row */}
+            <View style={styles.dateRow}>
+              <Text style={styles.dateLabel}>From Date</Text>
+              <Button
+                mode="outlined"
+                onPress={() => setShowPicker("start")}
+                style={styles.dateBtn}
+              >
+                {dayjs(startDate).format("DD / MM / YYYY")}
+              </Button>
+            </View>
+
+            {/* To Date row */}
+            <View style={styles.dateRow}>
+              <Text style={styles.dateLabel}>To Date</Text>
+              <Button
+                mode="outlined"
+                onPress={() => setShowPicker("end")}
+                style={styles.dateBtn}
+              >
+                {dayjs(endDate).format("DD / MM / YYYY")}
               </Button>
             </View>
 
@@ -104,8 +137,12 @@ export function LeaveRequestScreen() {
                 onChange={(event, date) => {
                   setShowPicker(null);
                   if (date) {
-                    if (showPicker === "start") setStartDate(date);
-                    else setEndDate(date);
+                    if (showPicker === "start") {
+                      setStartDate(date);
+                      if (date > endDate) setEndDate(date);
+                    } else {
+                      setEndDate(date);
+                    }
                   }
                 }}
               />
@@ -212,15 +249,31 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderRadius: 20
   },
-  dateButtons: {
+  quickSelectRow: {
     flexDirection: "row",
-    gap: 8,
-    marginBottom: 16
+    justifyContent: "flex-end",
+    marginBottom: 8
+  },
+  todayBtn: {
+    borderRadius: 8
+  },
+  dateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+    gap: 12
+  },
+  dateLabel: {
+    width: 76,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#4A5568"
   },
   dateBtn: {
     flex: 1
   },
   input: {
-    backgroundColor: "white"
+    backgroundColor: "white",
+    marginTop: 4
   }
 });

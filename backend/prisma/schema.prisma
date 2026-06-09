@@ -121,6 +121,7 @@ model User {
   expoPushToken      String?
   batteryLevel       Int?
   isLocationOn       Boolean        @default(true)
+  locationOffAt      DateTime?
   salarySlips        SalarySlip[]   @relation("UserSalarySlips")
 
   @@index([companyId])

@@ -228,7 +228,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         message: isFieldPunched
           ? `${u.name} checked in to FIELD but location is OFF.`
           : `${u.name} is punched in (${punchType}) but location is OFF.`,
-        timestamp: activePunch.checkInTime || new Date().toISOString()
+        timestamp: u.locationOffAt ? u.locationOffAt.toString() : (activePunch.checkInTime || new Date().toISOString())
       });
     }
 
@@ -497,7 +497,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                                   {warning.punchType} ACTIVE • LOCATION OFF
                                 </span>
                                 <span className="text-[9px] font-bold text-slate-400">
-                                  Since {dayjs(warning.timestamp).format("hh:mm A")}
+                                  Since {dayjs(warning.timestamp).format("hh:mm A, DD MMM")}
                                 </span>
                               </div>
                             </DropdownMenuItem>

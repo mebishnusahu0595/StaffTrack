@@ -145,6 +145,25 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
     }
   })();
 
+  // Auto-cancel any PENDING or APPROVED leave covering today
+  // (if employee shows up, their leave is automatically voided)
+  try {
+    const todayStart = startOfDay(now);
+    const todayEnd = new Date(todayStart);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    await prisma.leaveRequest.deleteMany({
+      where: {
+        userId: actor.id,
+        status: { in: ["PENDING", "APPROVED"] },
+        startDate: { lte: todayEnd },
+        endDate: { gte: todayStart }
+      }
+    });
+  } catch (err) {
+    console.error("[Attendance Service] Failed to auto-cancel leave on check-in:", err);
+  }
+
   // Send Push Notification to Manager
   try {
     if (user?.managerId) {
