@@ -157,7 +157,7 @@ export async function forgotPasswordSendOtp(identifier: string) {
     console.error("[Message Central] Missing customerId or authToken config!");
   }
   
-  const url = `${baseUrl}/verification/v2/verification/send?countryCode=${countryCode}&customerId=${customerId}&flowType=SMS&mobileNumber=${phone}&otpLength=4`;
+  const url = `${baseUrl}/verification/v3/send?customerId=${customerId}&countryCode=${countryCode}&flowType=SMS&mobileNumber=${phone}&otpLength=4`;
   console.log(`[Message Central] Sending OTP to ${countryCode}${phone}... Url: ${url}`);
   
   try {
@@ -238,8 +238,9 @@ export async function forgotPasswordReset(
   const authToken = process.env.MESSAGECENTRAL_AUTH_TOKEN;
   const baseUrl = process.env.MESSAGECENTRAL_BASE_URL || "https://cpaas.messagecentral.com";
   
-  const url = `${baseUrl}/verification/v3/validateOtp?countryCode=${countryCode}&mobileNumber=${phone}&verificationId=${verificationId}&customerId=${customerId}&code=${code}`;
+  const url = `${baseUrl}/verification/v3/validateOtp?verificationId=${verificationId}&code=${code}`;
   console.log(`[Message Central] Validating OTP for ${countryCode}${phone}. Url: ${url}`);
+
   
   try {
     const response = await fetch(url, {
