@@ -198,7 +198,7 @@ export async function getTodayLocationLogs(actor: AuthUser, userId: string, date
         lt: nextDay(dayStart)
       }
     },
-    orderBy: { timestamp: "asc" }
+    orderBy: { timestamp: "desc" }
   });
 }
 

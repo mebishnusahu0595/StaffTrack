@@ -44,3 +44,18 @@ export async function logout(_req: Request, res: Response): Promise<void> {
 
   sendMessage(res, "Logged out");
 }
+
+export async function forgotPasswordSendOtp(req: Request, res: Response): Promise<void> {
+  const result = await authService.forgotPasswordSendOtp(req.body.identifier);
+  sendSuccess(res, result, "OTP sent successfully");
+}
+
+export async function forgotPasswordReset(req: Request, res: Response): Promise<void> {
+  const result = await authService.forgotPasswordReset(
+    req.body.identifier,
+    req.body.verificationId,
+    req.body.code,
+    req.body.newPassword
+  );
+  sendSuccess(res, result, "Password reset successfully");
+}

@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { useState } from "react";
-import { Alert, ScrollView, StyleSheet, View } from "react-native";
-import { Button, Card, Dialog, FAB, Portal, Text, TextInput } from "react-native-paper";
+import * as RN from "react-native";
+import { Button, Card, Dialog, FAB, Portal, TextInput } from "react-native-paper";
+
+const { Alert, ScrollView, StyleSheet, View } = RN;
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { submitLeaveRequest, fetchMyLeaves } from "../api";
@@ -60,12 +62,12 @@ export function LeaveRequestScreen() {
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.sectionTitle}>My Leave Requests</Text>
+        <RN.Text style={styles.sectionTitle}>My Leave Requests</RN.Text>
         
         {leavesQuery.isLoading ? (
-          <Text style={styles.emptyText}>Loading...</Text>
+          <RN.Text style={styles.emptyText}>Loading...</RN.Text>
         ) : leaves.length === 0 ? (
-          <Text style={styles.emptyText}>No leave requests yet.</Text>
+          <RN.Text style={styles.emptyText}>No leave requests yet.</RN.Text>
         ) : (
           leaves.map((leave) => {
             const statusStyle = getStatusStyle(leave.status);
@@ -73,15 +75,15 @@ export function LeaveRequestScreen() {
               <Card key={leave.id} style={styles.card}>
                 <Card.Content>
                   <View style={styles.header}>
-                    <Text style={styles.dateRange}>
+                    <RN.Text style={styles.dateRange}>
                       {dayjs(leave.startDate).format("DD MMM")} - {dayjs(leave.endDate).format("DD MMM YYYY")}
-                    </Text>
+                    </RN.Text>
                     <View style={[styles.statusChip, { backgroundColor: statusStyle.bg }]}>
-                      <Text style={[styles.statusText, { color: statusStyle.text }]}>{leave.status}</Text>
+                      <RN.Text style={[styles.statusText, { color: statusStyle.text }]}>{leave.status}</RN.Text>
                     </View>
                   </View>
-                  <Text style={styles.reason}>{leave.reason}</Text>
-                  <Text style={styles.meta}>Applied on {dayjs(leave.createdAt).format("DD MMM, YYYY")}</Text>
+                  <RN.Text style={styles.reason}>{leave.reason}</RN.Text>
+                  <RN.Text style={styles.meta}>Applied on {dayjs(leave.createdAt).format("DD MMM, YYYY")}</RN.Text>
                 </Card.Content>
               </Card>
             );
@@ -89,7 +91,6 @@ export function LeaveRequestScreen() {
         )}
       </ScrollView>
 
-      <Portal>
         <Dialog visible={isDialogVisible} onDismiss={() => setIsDialogVisible(false)} style={styles.dialog}>
           <Dialog.Title>Apply for Leave</Dialog.Title>
           <Dialog.Content>
@@ -107,46 +108,25 @@ export function LeaveRequestScreen() {
 
             {/* From Date row */}
             <View style={styles.dateRow}>
-              <Text style={styles.dateLabel}>From Date</Text>
-              <Button
-                mode="outlined"
+              <RN.Text style={styles.dateLabel}>Start Date</RN.Text>
+              <RN.TouchableOpacity
                 onPress={() => setShowPicker("start")}
                 style={styles.dateBtn}
               >
-                {dayjs(startDate).format("DD / MM / YYYY")}
-              </Button>
+                <RN.Text style={styles.dateBtnText}>From: {dayjs(startDate).format("DD/MM/YYYY")}</RN.Text>
+              </RN.TouchableOpacity>
             </View>
 
             {/* To Date row */}
             <View style={styles.dateRow}>
-              <Text style={styles.dateLabel}>To Date</Text>
-              <Button
-                mode="outlined"
+              <RN.Text style={styles.dateLabel}>End Date</RN.Text>
+              <RN.TouchableOpacity
                 onPress={() => setShowPicker("end")}
                 style={styles.dateBtn}
               >
-                {dayjs(endDate).format("DD / MM / YYYY")}
-              </Button>
+                <RN.Text style={styles.dateBtnText}>To: {dayjs(endDate).format("DD/MM/YYYY")}</RN.Text>
+              </RN.TouchableOpacity>
             </View>
-
-            {showPicker && (
-              <DateTimePicker
-                value={showPicker === "start" ? startDate : endDate}
-                mode="date"
-                display="default"
-                onChange={(event, date) => {
-                  setShowPicker(null);
-                  if (date) {
-                    if (showPicker === "start") {
-                      setStartDate(date);
-                      if (date > endDate) setEndDate(date);
-                    } else {
-                      setEndDate(date);
-                    }
-                  }
-                }}
-              />
-            )}
 
             <TextInput
               label="Reason for leave"
@@ -163,7 +143,6 @@ export function LeaveRequestScreen() {
             <Button loading={mutation.isPending} onPress={handleSubmit}>Submit</Button>
           </Dialog.Actions>
         </Dialog>
-      </Portal>
 
       <FAB
         icon={appIconSource("plus")}
@@ -172,6 +151,26 @@ export function LeaveRequestScreen() {
         onPress={() => setIsDialogVisible(true)}
         color="#FFFFFF"
       />
+
+      {showPicker && (
+        <DateTimePicker
+          testID="date-time-picker"
+          value={showPicker === "start" ? startDate : endDate}
+          mode="date"
+          display="default"
+          onChange={(event, date) => {
+            setShowPicker(null);
+            if (date) {
+              if (showPicker === "start") {
+                setStartDate(date);
+                if (date > endDate) setEndDate(date);
+              } else {
+                setEndDate(date);
+              }
+            }
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -270,7 +269,20 @@ const styles = StyleSheet.create({
     color: "#4A5568"
   },
   dateBtn: {
-    flex: 1
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#79747E",
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent"
+  },
+  dateBtnText: {
+    color: "#49454F",
+    fontSize: 14,
+    fontWeight: "500"
   },
   input: {
     backgroundColor: "white",

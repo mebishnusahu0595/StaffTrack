@@ -707,3 +707,11 @@ export async function updateLocationStatus(payload: { isLocationOn: boolean; bat
   return unwrap(await api.post<ApiEnvelope<any>>("/location/status", payload));
 }
 
+export async function sendForgotPasswordOtp(payload: { identifier: string }): Promise<{ verificationId: string; mobileNumber: string }> {
+  return unwrap(await api.post<ApiEnvelope<{ verificationId: string; mobileNumber: string }>>("/auth/forgot-password/send-otp", payload));
+}
+
+export async function resetPassword(payload: { identifier: string; verificationId: string; code: string; newPassword: string }): Promise<{ success: boolean; message: string }> {
+  return unwrap(await api.post<ApiEnvelope<{ success: boolean; message: string }>>("/auth/forgot-password/reset", payload));
+}
+

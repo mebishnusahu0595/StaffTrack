@@ -50,7 +50,8 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
   const active = await prisma.attendance.findFirst({
     where: {
       userId: actor.id,
-      checkOutTime: null
+      checkOutTime: null,
+      status: { not: AttendanceStatus.ON_LEAVE }
     }
   });
 
@@ -78,49 +79,19 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
     }
   }
 
+  // Check if there is an existing ON_LEAVE record for today
+  const existingLeaveRecord = await prisma.attendance.findFirst({
+    where: {
+      userId: actor.id,
+      date,
+      status: AttendanceStatus.ON_LEAVE
+    }
+  });
+
   const result = await (async () => {
-    try {
-      return await prisma.$transaction(async (tx) => {
-        return tx.attendance.create({
-          data: {
-            userId: actor.id,
-            date,
-            checkInTime: now,
-            checkInLat: input.lat,
-            checkInLng: input.lng,
-            punchType: input.punchType,
-            checkInPhotoUrl: input.photoUrl,
-            startOdometerPhotoUrl: input.punchType === PunchType.FIELD ? input.startOdometerPhotoUrl : undefined,
-            startOdometer: input.punchType === PunchType.FIELD ? input.startOdometer : undefined,
-            status: AttendanceStatus.PRESENT,
-            isCheckInPending,
-            checkInApproved
-          }
-        });
-      });
-    } catch (error) {
-      if (!isUniqueConstraintError(error)) {
-        throw error;
-      }
-
-      const existing = await prisma.attendance.findFirst({
-        where: {
-          userId: actor.id,
-          date
-        },
-        orderBy: { checkInTime: "desc" }
-      });
-
-      if (!existing) {
-        throw error;
-      }
-
-      if (existing.checkInTime && !existing.checkOutTime) {
-        conflict("Already checked in. Please check out first.");
-      }
-
+    if (existingLeaveRecord) {
       return prisma.attendance.update({
-        where: { id: existing.id },
+        where: { id: existingLeaveRecord.id },
         data: {
           checkInTime: now,
           checkInLat: input.lat,
@@ -142,17 +113,33 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
           checkInApprovedAt: null
         }
       });
+    } else {
+      return prisma.attendance.create({
+        data: {
+          userId: actor.id,
+          date,
+          checkInTime: now,
+          checkInLat: input.lat,
+          checkInLng: input.lng,
+          punchType: input.punchType,
+          checkInPhotoUrl: input.photoUrl,
+          startOdometerPhotoUrl: input.punchType === PunchType.FIELD ? input.startOdometerPhotoUrl : undefined,
+          startOdometer: input.punchType === PunchType.FIELD ? input.startOdometer : undefined,
+          status: AttendanceStatus.PRESENT,
+          isCheckInPending,
+          checkInApproved
+        }
+      });
     }
   })();
 
-  // Auto-cancel any PENDING or APPROVED leave covering today
-  // (if employee shows up, their leave is automatically voided)
+  // Auto-cancel/adjust any PENDING or APPROVED leave covering today
   try {
     const todayStart = startOfDay(now);
     const todayEnd = new Date(todayStart);
     todayEnd.setHours(23, 59, 59, 999);
 
-    await prisma.leaveRequest.deleteMany({
+    const overlappingLeaves = await prisma.leaveRequest.findMany({
       where: {
         userId: actor.id,
         status: { in: ["PENDING", "APPROVED"] },
@@ -160,8 +147,62 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
         endDate: { gte: todayStart }
       }
     });
+
+    for (const leave of overlappingLeaves) {
+      const start = new Date(leave.startDate);
+      const end = new Date(leave.endDate);
+
+      // If it's a single day leave (today), delete it
+      if (startOfDay(start).getTime() === startOfDay(todayStart).getTime() && startOfDay(end).getTime() === startOfDay(todayStart).getTime()) {
+        await prisma.leaveRequest.delete({
+          where: { id: leave.id }
+        });
+      }
+      // If it starts today, shift start to tomorrow
+      else if (startOfDay(start).getTime() === startOfDay(todayStart).getTime()) {
+        const tomorrow = new Date(todayStart);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        await prisma.leaveRequest.update({
+          where: { id: leave.id },
+          data: { startDate: tomorrow }
+        });
+      }
+      // If it ends today, shift end to yesterday
+      else if (startOfDay(end).getTime() === startOfDay(todayStart).getTime()) {
+        const yesterday = new Date(todayStart);
+        yesterday.setDate(yesterday.getDate() - 1);
+        await prisma.leaveRequest.update({
+          where: { id: leave.id },
+          data: { endDate: yesterday }
+        });
+      }
+      // If today is in the middle, split it into two leaves
+      else {
+        const yesterday = new Date(todayStart);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const tomorrow = new Date(todayStart);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        await prisma.leaveRequest.update({
+          where: { id: leave.id },
+          data: { endDate: yesterday }
+        });
+
+        await prisma.leaveRequest.create({
+          data: {
+            userId: leave.userId,
+            companyId: leave.companyId,
+            startDate: tomorrow,
+            endDate: end,
+            reason: leave.reason + " (Split due to check-in)",
+            status: leave.status,
+            approvedById: leave.approvedById
+          }
+        });
+      }
+    }
   } catch (err) {
-    console.error("[Attendance Service] Failed to auto-cancel leave on check-in:", err);
+    console.error("[Attendance Service] Failed to auto-cancel/adjust leave on check-in:", err);
   }
 
   // Send Push Notification to Manager
@@ -1230,33 +1271,34 @@ export async function forceCheckout(actor: AuthUser, userId: string) {
     data: { isLocationOn: false }
   });
 
-  const active = await prisma.attendance.findFirst({
+  const activeAttendances = await prisma.attendance.findMany({
     where: {
       userId,
       checkOutTime: null
-    }
+    },
+    select: { id: true }
   });
 
-  if (!active) {
+  if (activeAttendances.length === 0) {
     return { success: true, message: "No active check-in found for this user." };
   }
 
-  const activeBreak = await prisma.break.findFirst({
+  const activeIds = activeAttendances.map(a => a.id);
+
+  // Close active breaks
+  await prisma.break.updateMany({
     where: {
-      attendanceId: active.id,
+      attendanceId: { in: activeIds },
       endTime: null
-    }
+    },
+    data: { endTime: new Date() }
   });
 
-  if (activeBreak) {
-    await prisma.break.update({
-      where: { id: activeBreak.id },
-      data: { endTime: new Date() }
-    });
-  }
-
-  const updated = await prisma.attendance.update({
-    where: { id: active.id },
+  // Close all active attendances
+  await prisma.attendance.updateMany({
+    where: {
+      id: { in: activeIds }
+    },
     data: {
       checkOutTime: new Date(),
       checkOutLat: 0,
@@ -1264,7 +1306,7 @@ export async function forceCheckout(actor: AuthUser, userId: string) {
     }
   });
 
-  return { success: true, data: updated };
+  return { success: true, message: "Force checkout completed successfully." };
 }
 
 export async function autoCheckoutStuckUsers() {
