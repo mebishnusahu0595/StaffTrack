@@ -57,7 +57,7 @@ export default ({ config }) => ({
     }
   },
   android: {
-    package: "com.vanikicrop.stafftrack",
+    package: "com.stafftrack.staff",
     permissions: [
       "ACCESS_COARSE_LOCATION",
       "ACCESS_FINE_LOCATION",

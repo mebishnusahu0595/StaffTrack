@@ -111,7 +111,7 @@ android {
 
     namespace 'com.vanikicrop.stafftrack'
     defaultConfig {
-        applicationId 'com.vanikicrop.stafftrack'
+        applicationId 'com.stafftrack.staff'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 2
