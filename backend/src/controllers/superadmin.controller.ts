@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { sendSuccess, sendMessage } from "../lib/response";
-import { AttendanceStatus, UserRole } from "@prisma/client";
+import { AttendanceStatus, UserRole, ExpenseCategory, LeaveStatus, TaskStatus } from "@prisma/client";
 
 export async function getAllUsers(req: Request, res: Response): Promise<void> {
   const users = await prisma.user.findMany({
@@ -216,3 +216,172 @@ export async function getManagers(req: Request, res: Response): Promise<void> {
   });
   sendSuccess(res, managers);
 }
+
+// --- EXPENSES ---
+
+export async function getAllExpenses(req: Request, res: Response): Promise<void> {
+  const expenses = await prisma.expense.findMany({
+    include: {
+      user: {
+        select: { name: true, email: true }
+      },
+      approvedBy: {
+        select: { name: true }
+      }
+    },
+    orderBy: { date: "desc" }
+  });
+  sendSuccess(res, expenses);
+}
+
+export async function updateExpense(req: Request, res: Response): Promise<void> {
+  const { id } = req.params;
+  const {
+    category,
+    amount,
+    description,
+    receiptUrl,
+    date,
+    approved
+  } = req.body;
+
+  const data: Record<string, unknown> = {};
+  if (category !== undefined) data.category = category as ExpenseCategory;
+  if (amount !== undefined && amount !== null && amount !== "") data.amount = Number(amount);
+  if (description !== undefined) data.description = description;
+  if (receiptUrl !== undefined) data.receiptUrl = receiptUrl || null;
+  if (date !== undefined) data.date = date ? new Date(date) : undefined;
+  if (approved !== undefined) {
+    data.approved = Boolean(approved);
+    if (approved) {
+      data.approvedById = (req as any).user?.id || null;
+    } else {
+      data.approvedById = null;
+    }
+  }
+
+  const updatedExpense = await prisma.expense.update({
+    where: { id },
+    data
+  });
+
+  sendSuccess(res, updatedExpense, "Expense updated successfully");
+}
+
+export async function deleteExpense(req: Request, res: Response): Promise<void> {
+  const { id } = req.params;
+  await prisma.expense.delete({
+    where: { id }
+  });
+  sendMessage(res, "Expense deleted successfully");
+}
+
+// --- LEAVES ---
+
+export async function getAllLeaves(req: Request, res: Response): Promise<void> {
+  const leaves = await prisma.leaveRequest.findMany({
+    include: {
+      user: {
+        select: { name: true, email: true }
+      },
+      approvedBy: {
+        select: { name: true }
+      }
+    },
+    orderBy: { createdAt: "desc" }
+  });
+  sendSuccess(res, leaves);
+}
+
+export async function updateLeave(req: Request, res: Response): Promise<void> {
+  const { id } = req.params;
+  const {
+    startDate,
+    endDate,
+    reason,
+    status
+  } = req.body;
+
+  const data: Record<string, unknown> = {};
+  if (startDate !== undefined) data.startDate = startDate ? new Date(startDate) : undefined;
+  if (endDate !== undefined) data.endDate = endDate ? new Date(endDate) : undefined;
+  if (reason !== undefined) data.reason = reason;
+  if (status !== undefined) {
+    data.status = status as LeaveStatus;
+    if (status === LeaveStatus.APPROVED) {
+      data.approvedById = (req as any).user?.id || null;
+    } else {
+      data.approvedById = null;
+    }
+  }
+
+  const updatedLeave = await prisma.leaveRequest.update({
+    where: { id },
+    data
+  });
+
+  sendSuccess(res, updatedLeave, "Leave request updated successfully");
+}
+
+export async function deleteLeave(req: Request, res: Response): Promise<void> {
+  const { id } = req.params;
+  await prisma.leaveRequest.delete({
+    where: { id }
+  });
+  sendMessage(res, "Leave request deleted successfully");
+}
+
+// --- TASKS ---
+
+export async function getAllTasks(req: Request, res: Response): Promise<void> {
+  const tasks = await prisma.task.findMany({
+    include: {
+      assignedTo: {
+        select: { name: true, email: true }
+      },
+      assignedBy: {
+        select: { name: true, email: true }
+      }
+    },
+    orderBy: { createdAt: "desc" }
+  });
+  sendSuccess(res, tasks);
+}
+
+export async function updateTask(req: Request, res: Response): Promise<void> {
+  const { id } = req.params;
+  const {
+    title,
+    description,
+    status,
+    priority,
+    points,
+    dueDate,
+    assignedToId
+  } = req.body;
+
+  const data: Record<string, unknown> = {};
+  if (title !== undefined) data.title = title;
+  if (description !== undefined) data.description = description || null;
+  if (status !== undefined) data.status = status as TaskStatus;
+  if (priority !== undefined) data.priority = priority;
+  if (points !== undefined && points !== null && points !== "") data.points = Number(points);
+  if (dueDate !== undefined) data.dueDate = dueDate ? new Date(dueDate) : undefined;
+  if (assignedToId !== undefined) data.assignedToId = assignedToId;
+
+  const updatedTask = await prisma.task.update({
+    where: { id },
+    data
+  });
+
+  sendSuccess(res, updatedTask, "Task updated successfully");
+}
+
+export async function deleteTask(req: Request, res: Response): Promise<void> {
+  const { id } = req.params;
+  await prisma.task.delete({
+    where: { id }
+  });
+  sendMessage(res, "Task deleted successfully");
+}
+

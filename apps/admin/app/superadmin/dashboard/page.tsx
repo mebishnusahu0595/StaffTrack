@@ -14,7 +14,10 @@ import {
   Upload,
   Trash2,
   ImageIcon,
-  Loader2
+  Loader2,
+  Receipt,
+  Calendar,
+  CheckSquare
 } from "lucide-react";
 import {
   superFetchUsers,
@@ -22,7 +25,16 @@ import {
   superFetchAttendance,
   superUpdateAttendance,
   superFetchManagers,
-  uploadFile
+  uploadFile,
+  superFetchExpenses,
+  superUpdateExpense,
+  superDeleteExpense,
+  superFetchLeaves,
+  superUpdateLeave,
+  superDeleteLeave,
+  superFetchTasks,
+  superUpdateTask,
+  superDeleteTask
 } from "@/lib/api";
 import type { User, AttendanceRecord, Role } from "@/lib/types";
 import { calculateDurations, formatDurationLabel } from "@/lib/timeTracking";
@@ -126,12 +138,18 @@ export default function SuperDashboardPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [managers, setManagers] = useState<ManagerLite[]>([]);
   const [attendance, setAttendance] = useState<AttRow[]>([]);
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [leaves, setLeaves] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
   // Edit dialog state
   const [editUser, setEditUser] = useState<User | null>(null);
   const [editAtt, setEditAtt] = useState<AttRow | null>(null);
+  const [editExpense, setEditExpense] = useState<any | null>(null);
+  const [editLeave, setEditLeave] = useState<any | null>(null);
+  const [editTask, setEditTask] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -141,10 +159,20 @@ export default function SuperDashboardPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const [u, m, a] = await Promise.all([superFetchUsers(), superFetchManagers(), superFetchAttendance()]);
+      const [u, m, a, exp, lvs, tks] = await Promise.all([
+        superFetchUsers(),
+        superFetchManagers(),
+        superFetchAttendance(),
+        superFetchExpenses(),
+        superFetchLeaves(),
+        superFetchTasks()
+      ]);
       setUsers(u);
       setManagers(m);
       setAttendance(a);
+      setExpenses(exp);
+      setLeaves(lvs);
+      setTasks(tks);
     } catch (err) {
       console.error("Failed to load superadmin data", err);
     } finally {
@@ -224,6 +252,99 @@ export default function SuperDashboardPage() {
     }
   };
 
+  const saveExpense = async () => {
+    if (!editExpense) return;
+    setSaving(true);
+    try {
+      await superUpdateExpense(editExpense.id, {
+        category: editExpense.category,
+        amount: Number(editExpense.amount),
+        description: editExpense.description,
+        date: editExpense.date,
+        approved: editExpense.approved,
+        receiptUrl: editExpense.receiptUrl
+      });
+      setEditExpense(null);
+      await loadData();
+    } catch {
+      alert("Failed to update expense");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteExpense = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this expense?")) return;
+    try {
+      await superDeleteExpense(id);
+      await loadData();
+    } catch {
+      alert("Failed to delete expense");
+    }
+  };
+
+  const saveLeave = async () => {
+    if (!editLeave) return;
+    setSaving(true);
+    try {
+      await superUpdateLeave(editLeave.id, {
+        startDate: editLeave.startDate,
+        endDate: editLeave.endDate,
+        reason: editLeave.reason,
+        status: editLeave.status
+      });
+      setEditLeave(null);
+      await loadData();
+    } catch {
+      alert("Failed to update leave request");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteLeave = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this leave request?")) return;
+    try {
+      await superDeleteLeave(id);
+      await loadData();
+    } catch {
+      alert("Failed to delete leave request");
+    }
+  };
+
+  const saveTask = async () => {
+    if (!editTask) return;
+    setSaving(true);
+    try {
+      await superUpdateTask(editTask.id, {
+        title: editTask.title,
+        description: editTask.description,
+        status: editTask.status,
+        priority: editTask.priority,
+        points: Number(editTask.points),
+        dueDate: editTask.dueDate,
+        assignedToId: editTask.assignedToId
+      });
+      setEditTask(null);
+      await loadData();
+    } catch {
+      alert("Failed to update task");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteTask = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this task?")) return;
+    try {
+      await superDeleteTask(id);
+      await loadData();
+    } catch {
+      alert("Failed to delete task");
+    }
+  };
+
+
   if (currentUser?.role !== "SUPERADMIN" && currentUser?.role !== "ADMIN") {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-950 text-white">
@@ -286,6 +407,18 @@ export default function SuperDashboardPage() {
             <TabsTrigger value="attendance" className="rounded-lg gap-2 px-6">
               <Clock className="w-4 h-4" />
               Attendance &amp; Odometer
+            </TabsTrigger>
+            <TabsTrigger value="expenses" className="rounded-lg gap-2 px-6">
+              <Receipt className="w-4 h-4" />
+              Expenses
+            </TabsTrigger>
+            <TabsTrigger value="leaves" className="rounded-lg gap-2 px-6">
+              <Calendar className="w-4 h-4" />
+              Leaves
+            </TabsTrigger>
+            <TabsTrigger value="tasks" className="rounded-lg gap-2 px-6">
+              <CheckSquare className="w-4 h-4" />
+              Tasks
             </TabsTrigger>
           </TabsList>
 
@@ -465,7 +598,252 @@ export default function SuperDashboardPage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* EXPENSES */}
+          <TabsContent value="expenses">
+            <Card className="border-none shadow-xl shadow-slate-200/50">
+              <CardHeader>
+                <CardTitle>Expense Management</CardTitle>
+                <CardDescription>Edit expense categories, amounts, dates, status, or delete records</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {expenses.map((e) => (
+                      <TableRow key={e.id}>
+                        <TableCell>
+                          <div className="font-bold text-slate-900">{e.user?.name || "—"}</div>
+                          <div className="text-xs text-slate-500">{e.user?.email || "—"}</div>
+                        </TableCell>
+                        <TableCell className="font-semibold text-slate-700 capitalize">{e.category?.toLowerCase()}</TableCell>
+                        <TableCell className="font-bold text-slate-900">₹{e.amount}</TableCell>
+                        <TableCell className="text-sm text-slate-600">
+                          {e.date ? format(new Date(e.date), "dd MMM yyyy") : "—"}
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate text-xs text-slate-500">{e.description}</TableCell>
+                        <TableCell>
+                          <Badge className={e.approved ? "bg-emerald-500 hover:bg-emerald-600" : "bg-amber-500 hover:bg-amber-600"}>
+                            {e.approved ? "APPROVED" : "PENDING"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-blue-600 font-bold hover:text-blue-700 gap-1 h-8 px-3"
+                              onClick={() => setEditExpense({ ...e })}
+                            >
+                              <Pencil className="w-3 h-3" /> Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-rose-600 font-bold hover:text-rose-700 gap-1 h-8 px-3"
+                              onClick={() => deleteExpense(e.id)}
+                            >
+                              <Trash2 className="w-3 h-3" /> Delete
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {expenses.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-slate-400 font-medium">
+                          No expense records found.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* LEAVES */}
+          <TabsContent value="leaves">
+            <Card className="border-none shadow-xl shadow-slate-200/50">
+              <CardHeader>
+                <CardTitle>Leave Correction</CardTitle>
+                <CardDescription>Adjust leave dates, reasons, approval status, or delete leave requests</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Start Date</TableHead>
+                      <TableHead>End Date</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {leaves.map((l) => (
+                      <TableRow key={l.id}>
+                        <TableCell>
+                          <div className="font-bold text-slate-900">{l.user?.name || "—"}</div>
+                          <div className="text-xs text-slate-500">{l.user?.email || "—"}</div>
+                        </TableCell>
+                        <TableCell className="text-sm font-medium">
+                          {l.startDate ? format(new Date(l.startDate), "dd MMM yyyy") : "—"}
+                        </TableCell>
+                        <TableCell className="text-sm font-medium">
+                          {l.endDate ? format(new Date(l.endDate), "dd MMM yyyy") : "—"}
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate text-xs text-slate-500">{l.reason}</TableCell>
+                        <TableCell>
+                          <Badge
+                            className={
+                              l.status === "APPROVED"
+                                ? "bg-emerald-500 hover:bg-emerald-600"
+                                : l.status === "REJECTED"
+                                ? "bg-rose-500 hover:bg-rose-600"
+                                : "bg-amber-500 hover:bg-amber-600"
+                            }
+                          >
+                            {l.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-blue-600 font-bold hover:text-blue-700 gap-1 h-8 px-3"
+                              onClick={() => setEditLeave({ ...l })}
+                            >
+                              <Pencil className="w-3 h-3" /> Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-rose-600 font-bold hover:text-rose-700 gap-1 h-8 px-3"
+                              onClick={() => deleteLeave(l.id)}
+                            >
+                              <Trash2 className="w-3 h-3" /> Delete
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {leaves.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-slate-400 font-medium">
+                          No leave requests found.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* TASKS */}
+          <TabsContent value="tasks">
+            <Card className="border-none shadow-xl shadow-slate-200/50">
+              <CardHeader>
+                <CardTitle>Task &amp; Point Overrides</CardTitle>
+                <CardDescription>Edit tasks, override task points, change status, or delete tasks</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead>Task Title</TableHead>
+                      <TableHead>Assigned To</TableHead>
+                      <TableHead>Points</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Priority</TableHead>
+                      <TableHead>Due Date</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {tasks.map((t) => (
+                      <TableRow key={t.id}>
+                        <TableCell>
+                          <div className="font-bold text-slate-900">{t.title}</div>
+                          <div className="text-xs text-slate-500 max-w-xs truncate">{t.description || "No description"}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm font-semibold text-slate-700">{t.assignedTo?.name || "—"}</div>
+                          <div className="text-[10px] text-slate-500">{t.assignedTo?.email || "—"}</div>
+                        </TableCell>
+                        <TableCell className="font-black text-blue-600">{t.points} pts</TableCell>
+                        <TableCell>
+                          <Badge
+                            className={
+                              t.status === "COMPLETED"
+                                ? "bg-emerald-500 hover:bg-emerald-600"
+                                : t.status === "CANCELLED"
+                                ? "bg-slate-500 hover:bg-slate-600"
+                                : t.status === "IN_PROGRESS"
+                                ? "bg-blue-500 hover:bg-blue-600"
+                                : "bg-amber-500 hover:bg-amber-600"
+                            }
+                          >
+                            {t.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-bold border-slate-200">
+                            {t.priority}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-600">
+                          {t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy HH:mm") : "—"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-blue-600 font-bold hover:text-blue-700 gap-1 h-8 px-3"
+                              onClick={() => setEditTask({ ...t })}
+                            >
+                              <Pencil className="w-3 h-3" /> Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-rose-600 font-bold hover:text-rose-700 gap-1 h-8 px-3"
+                              onClick={() => deleteTask(t.id)}
+                            >
+                              <Trash2 className="w-3 h-3" /> Delete
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {tasks.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-slate-400 font-medium">
+                          No tasks found.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
+
       </main>
 
       {/* EDIT USER DIALOG */}
@@ -716,6 +1094,266 @@ export default function SuperDashboardPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* EDIT EXPENSE DIALOG */}
+      <Dialog open={Boolean(editExpense)} onOpenChange={(o) => !o && setEditExpense(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Expense</DialogTitle>
+            <DialogDescription>Modify expense category, amount, description, or approval status</DialogDescription>
+          </DialogHeader>
+          {editExpense && (
+            <div className="grid grid-cols-2 gap-4 py-2">
+              <div>
+                <Label className="text-xs font-bold uppercase text-slate-500">Category</Label>
+                <Select
+                  value={editExpense.category}
+                  onValueChange={(v) => setEditExpense({ ...editExpense, category: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TRAVEL">TRAVEL</SelectItem>
+                    <SelectItem value="FOOD">FOOD</SelectItem>
+                    <SelectItem value="ACCOMMODATION">ACCOMMODATION</SelectItem>
+                    <SelectItem value="OTHER">OTHER</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs font-bold uppercase text-slate-500">Amount (₹)</Label>
+                <Input
+                  type="number"
+                  value={editExpense.amount}
+                  onChange={(e) => setEditExpense({ ...editExpense, amount: Number(e.target.value) })}
+                />
+              </div>
+              <div className="col-span-2">
+                <Label className="text-xs font-bold uppercase text-slate-500">Description</Label>
+                <Input
+                  value={editExpense.description}
+                  onChange={(e) => setEditExpense({ ...editExpense, description: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-bold uppercase text-slate-500">Date</Label>
+                <Input
+                  type="date"
+                  value={editExpense.date ? format(new Date(editExpense.date), "yyyy-MM-dd") : ""}
+                  onChange={(e) =>
+                    setEditExpense({ ...editExpense, date: e.target.value ? new Date(e.target.value).toISOString() : "" })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-bold uppercase text-slate-500">Approval Status</Label>
+                <Select
+                  value={editExpense.approved ? "true" : "false"}
+                  onValueChange={(v) => setEditExpense({ ...editExpense, approved: v === "true" })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="false">PENDING</SelectItem>
+                    <SelectItem value="true">APPROVED</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2 border-t pt-4">
+                <ImageField
+                  label="Receipt Image"
+                  value={editExpense.receiptUrl}
+                  onChange={(url) => setEditExpense({ ...editExpense, receiptUrl: url })}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditExpense(null)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={saveExpense} disabled={saving} className="bg-blue-600 hover:bg-blue-700 gap-2">
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* EDIT LEAVE DIALOG */}
+      <Dialog open={Boolean(editLeave)} onOpenChange={(o) => !o && setEditLeave(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Leave Request</DialogTitle>
+            <DialogDescription>Modify leave dates, reason, or status</DialogDescription>
+          </DialogHeader>
+          {editLeave && (
+            <div className="grid grid-cols-2 gap-4 py-2">
+              <div>
+                <Label className="text-xs font-bold uppercase text-slate-500">Start Date</Label>
+                <Input
+                  type="date"
+                  value={editLeave.startDate ? format(new Date(editLeave.startDate), "yyyy-MM-dd") : ""}
+                  onChange={(e) =>
+                    setEditLeave({ ...editLeave, startDate: e.target.value ? new Date(e.target.value).toISOString() : "" })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-bold uppercase text-slate-500">End Date</Label>
+                <Input
+                  type="date"
+                  value={editLeave.endDate ? format(new Date(editLeave.endDate), "yyyy-MM-dd") : ""}
+                  onChange={(e) =>
+                    setEditLeave({ ...editLeave, endDate: e.target.value ? new Date(e.target.value).toISOString() : "" })
+                  }
+                />
+              </div>
+              <div className="col-span-2">
+                <Label className="text-xs font-bold uppercase text-slate-500">Reason</Label>
+                <Input
+                  value={editLeave.reason}
+                  onChange={(e) => setEditLeave({ ...editLeave, reason: e.target.value })}
+                />
+              </div>
+              <div className="col-span-2">
+                <Label className="text-xs font-bold uppercase text-slate-500">Status</Label>
+                <Select
+                  value={editLeave.status}
+                  onValueChange={(v) => setEditLeave({ ...editLeave, status: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PENDING">PENDING</SelectItem>
+                    <SelectItem value="APPROVED">APPROVED</SelectItem>
+                    <SelectItem value="REJECTED">REJECTED</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditLeave(null)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={saveLeave} disabled={saving} className="bg-blue-600 hover:bg-blue-700 gap-2">
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* EDIT TASK DIALOG */}
+      <Dialog open={Boolean(editTask)} onOpenChange={(o) => !o && setEditTask(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Task &amp; Points</DialogTitle>
+            <DialogDescription>Modify task details, assignee, points, or status</DialogDescription>
+          </DialogHeader>
+          {editTask && (
+            <div className="grid grid-cols-2 gap-4 py-2">
+              <div className="col-span-2">
+                <Label className="text-xs font-bold uppercase text-slate-500">Title</Label>
+                <Input
+                  value={editTask.title}
+                  onChange={(e) => setEditTask({ ...editTask, title: e.target.value })}
+                />
+              </div>
+              <div className="col-span-2">
+                <Label className="text-xs font-bold uppercase text-slate-500">Description</Label>
+                <Input
+                  value={editTask.description || ""}
+                  onChange={(e) => setEditTask({ ...editTask, description: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-bold uppercase text-slate-500">Points</Label>
+                <Input
+                  type="number"
+                  value={editTask.points}
+                  onChange={(e) => setEditTask({ ...editTask, points: Number(e.target.value) })}
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-bold uppercase text-slate-500">Priority</Label>
+                <Select
+                  value={editTask.priority}
+                  onValueChange={(v) => setEditTask({ ...editTask, priority: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="High">High</SelectItem>
+                    <SelectItem value="Medium">Medium</SelectItem>
+                    <SelectItem value="Low">Low</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs font-bold uppercase text-slate-500">Status</Label>
+                <Select
+                  value={editTask.status}
+                  onValueChange={(v) => setEditTask({ ...editTask, status: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PENDING">PENDING</SelectItem>
+                    <SelectItem value="IN_PROGRESS">IN_PROGRESS</SelectItem>
+                    <SelectItem value="COMPLETED">COMPLETED</SelectItem>
+                    <SelectItem value="CANCELLED">CANCELLED</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs font-bold uppercase text-slate-500">Due Date</Label>
+                <Input
+                  type="datetime-local"
+                  value={toLocalInput(editTask.dueDate)}
+                  onChange={(e) =>
+                    setEditTask({ ...editTask, dueDate: e.target.value ? new Date(e.target.value).toISOString() : "" })
+                  }
+                />
+              </div>
+              <div className="col-span-2">
+                <Label className="text-xs font-bold uppercase text-slate-500">Assignee</Label>
+                <Select
+                  value={editTask.assignedToId}
+                  onValueChange={(v) => setEditTask({ ...editTask, assignedToId: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {users.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.name} ({u.role})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTask(null)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={saveTask} disabled={saving} className="bg-blue-600 hover:bg-blue-700 gap-2">
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+

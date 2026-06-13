@@ -16,4 +16,17 @@ router.get("/managers", asyncHandler(superadminController.getManagers));
 router.get("/attendance", asyncHandler(superadminController.getAttendanceLogs));
 router.patch("/attendance/:id", asyncHandler(superadminController.updateAttendance));
 
+router.get("/expenses", asyncHandler(superadminController.getAllExpenses));
+router.patch("/expenses/:id", asyncHandler(superadminController.updateExpense));
+router.delete("/expenses/:id", asyncHandler(superadminController.deleteExpense));
+
+router.get("/leaves", asyncHandler(superadminController.getAllLeaves));
+router.patch("/leaves/:id", asyncHandler(superadminController.updateLeave));
+router.delete("/leaves/:id", asyncHandler(superadminController.deleteLeave));
+
+router.get("/tasks", asyncHandler(superadminController.getAllTasks));
+router.patch("/tasks/:id", asyncHandler(superadminController.updateTask));
+router.delete("/tasks/:id", asyncHandler(superadminController.deleteTask));
+
 export default router;
+

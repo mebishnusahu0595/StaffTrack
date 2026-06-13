@@ -454,6 +454,55 @@ export async function superUpdateAttendance(id: string, input: Partial<Attendanc
   return response.data.data;
 }
 
+// SuperAdmin Expenses
+export async function superFetchExpenses() {
+  const response = await api.get<{ data: any[] }>("/superadmin/expenses");
+  return response.data.data;
+}
+
+export async function superUpdateExpense(id: string, input: any) {
+  const response = await api.patch<{ data: any }>(`/superadmin/expenses/${id}`, input);
+  return response.data.data;
+}
+
+export async function superDeleteExpense(id: string) {
+  const response = await api.delete(`/superadmin/expenses/${id}`);
+  return response.data;
+}
+
+// SuperAdmin Leaves
+export async function superFetchLeaves() {
+  const response = await api.get<{ data: any[] }>("/superadmin/leaves");
+  return response.data.data;
+}
+
+export async function superUpdateLeave(id: string, input: any) {
+  const response = await api.patch<{ data: any }>(`/superadmin/leaves/${id}`, input);
+  return response.data.data;
+}
+
+export async function superDeleteLeave(id: string) {
+  const response = await api.delete(`/superadmin/leaves/${id}`);
+  return response.data;
+}
+
+// SuperAdmin Tasks
+export async function superFetchTasks() {
+  const response = await api.get<{ data: any[] }>("/superadmin/tasks");
+  return response.data.data;
+}
+
+export async function superUpdateTask(id: string, input: any) {
+  const response = await api.patch<{ data: any }>(`/superadmin/tasks/${id}`, input);
+  return response.data.data;
+}
+
+export async function superDeleteTask(id: string) {
+  const response = await api.delete(`/superadmin/tasks/${id}`);
+  return response.data;
+}
+
+
 // Leaves
 export async function fetchLeaves(params?: { status?: string; userId?: string }) {
   const response = await api.get<{ data: any[] }>("/leaves", { params });
