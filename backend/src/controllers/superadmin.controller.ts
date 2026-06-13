@@ -445,7 +445,8 @@ export async function bulkMarkAttendance(req: Request, res: Response): Promise<v
     status,
     punchType,
     checkInTime,
-    checkOutTime
+    checkOutTime,
+    timezoneOffset
   } = req.body;
 
   if (!userId || !startDate || !endDate || !status) {
@@ -471,16 +472,20 @@ export async function bulkMarkAttendance(req: Request, res: Response): Promise<v
     let checkIn: Date | null = null;
     let checkOut: Date | null = null;
 
+    const tzOffset = timezoneOffset !== undefined ? Number(timezoneOffset) : -330; // default to IST
+
     if (status === AttendanceStatus.PRESENT || status === AttendanceStatus.HALF_DAY) {
       if (checkInTime) {
         const [h, m] = checkInTime.split(":").map(Number);
         checkIn = new Date(targetDate);
-        checkIn.setHours(h, m, 0, 0);
+        checkIn.setUTCHours(h, m, 0, 0);
+        checkIn.setUTCMinutes(checkIn.getUTCMinutes() + tzOffset);
       }
       if (checkOutTime) {
         const [h, m] = checkOutTime.split(":").map(Number);
         checkOut = new Date(targetDate);
-        checkOut.setHours(h, m, 0, 0);
+        checkOut.setUTCHours(h, m, 0, 0);
+        checkOut.setUTCMinutes(checkOut.getUTCMinutes() + tzOffset);
       }
     }
 

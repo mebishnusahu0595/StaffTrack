@@ -387,7 +387,8 @@ export default function SuperDashboardPage() {
         status: bulkData.status,
         punchType: bulkData.punchType === "none" ? null : bulkData.punchType,
         checkInTime: bulkData.checkInTime || null,
-        checkOutTime: bulkData.checkOutTime || null
+        checkOutTime: bulkData.checkOutTime || null,
+        timezoneOffset: new Date().getTimezoneOffset()
       });
       setBulkOpen(false);
       await loadAttendance(attendanceDate);
