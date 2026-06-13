@@ -52,6 +52,11 @@ coverage/
 *.mobileprovision
 *.apk
 
+# Firebase - sensitive credentials (keep locally, DO NOT commit)
+google-services.json
+google-services*.json
+GoogleService-Info.plist
+
 # Database
 prisma/dev.db
 prisma/dev.db-journal
