@@ -502,6 +502,12 @@ export async function superDeleteTask(id: string) {
   return response.data;
 }
 
+export async function superBulkMarkAttendance(input: any) {
+  const response = await api.post("/superadmin/attendance/bulk", input);
+  return response.data;
+}
+
+
 
 // Leaves
 export async function fetchLeaves(params?: { status?: string; userId?: string }) {

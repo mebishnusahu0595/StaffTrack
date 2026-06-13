@@ -34,7 +34,8 @@ import {
   superDeleteLeave,
   superFetchTasks,
   superUpdateTask,
-  superDeleteTask
+  superDeleteTask,
+  superBulkMarkAttendance
 } from "@/lib/api";
 import type { User, AttendanceRecord, Role } from "@/lib/types";
 import { calculateDurations, formatDurationLabel } from "@/lib/timeTracking";
@@ -144,6 +145,21 @@ export default function SuperDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
+  // Attendance date filter
+  const [attendanceDate, setAttendanceDate] = useState(format(new Date(), "yyyy-MM-dd"));
+
+  // Bulk marking dialog state
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkData, setBulkData] = useState({
+    userId: "",
+    startDate: format(new Date(), "yyyy-MM-dd"),
+    endDate: format(new Date(), "yyyy-MM-dd"),
+    status: "PRESENT",
+    punchType: "OFFICE",
+    checkInTime: "09:00",
+    checkOutTime: "18:00"
+  });
+
   // Edit dialog state
   const [editUser, setEditUser] = useState<User | null>(null);
   const [editAtt, setEditAtt] = useState<AttRow | null>(null);
@@ -156,29 +172,42 @@ export default function SuperDashboardPage() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    loadAttendance(attendanceDate);
+  }, [attendanceDate]);
+
+  async function loadAttendance(dateStr: string) {
+    try {
+      const a = await superFetchAttendance(undefined, dateStr);
+      setAttendance(a);
+    } catch (err) {
+      console.error("Failed to load attendance logs", err);
+    }
+  }
+
   async function loadData() {
     setLoading(true);
     try {
-      const [u, m, a, exp, lvs, tks] = await Promise.all([
+      const [u, m, exp, lvs, tks] = await Promise.all([
         superFetchUsers(),
         superFetchManagers(),
-        superFetchAttendance(),
         superFetchExpenses(),
         superFetchLeaves(),
         superFetchTasks()
       ]);
       setUsers(u);
       setManagers(m);
-      setAttendance(a);
       setExpenses(exp);
       setLeaves(lvs);
       setTasks(tks);
+      await loadAttendance(attendanceDate);
     } catch (err) {
       console.error("Failed to load superadmin data", err);
     } finally {
       setLoading(false);
     }
   }
+
 
   const filteredUsers = users.filter(
     (u) =>
@@ -344,6 +373,33 @@ export default function SuperDashboardPage() {
     }
   };
 
+  const submitBulkAttendance = async () => {
+    if (!bulkData.userId) {
+      alert("Please select an employee");
+      return;
+    }
+    setSaving(true);
+    try {
+      await superBulkMarkAttendance({
+        userId: bulkData.userId,
+        startDate: bulkData.startDate,
+        endDate: bulkData.endDate,
+        status: bulkData.status,
+        punchType: bulkData.punchType === "none" ? null : bulkData.punchType,
+        checkInTime: bulkData.checkInTime || null,
+        checkOutTime: bulkData.checkOutTime || null
+      });
+      setBulkOpen(false);
+      await loadAttendance(attendanceDate);
+      alert("Bulk attendance updated successfully!");
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to update bulk attendance");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+
 
   if (currentUser?.role !== "SUPERADMIN" && currentUser?.role !== "ADMIN") {
     return (
@@ -502,10 +558,33 @@ export default function SuperDashboardPage() {
           <TabsContent value="attendance">
             <Card className="border-none shadow-xl shadow-slate-200/50">
               <CardHeader>
-                <CardTitle>Attendance &amp; Odometer Correction</CardTitle>
-                <CardDescription>
-                  Fix status, punch times, odometer readings and replace odometer / selfie images
-                </CardDescription>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <CardTitle>Attendance &amp; Odometer Correction</CardTitle>
+                    <CardDescription>
+                      Fix status, punch times, odometer readings and replace odometer / selfie images
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="att-date" className="text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0">Date:</Label>
+                      <Input
+                        id="att-date"
+                        type="date"
+                        className="rounded-lg h-9 w-40"
+                        value={attendanceDate}
+                        onChange={(e) => setAttendanceDate(e.target.value)}
+                      />
+                    </div>
+                    <Button
+                      onClick={() => setBulkOpen(true)}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold h-9 gap-1 rounded-lg px-4"
+                    >
+                      <Clock className="w-4 h-4" />
+                      Bulk Mark
+                    </Button>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -1349,6 +1428,114 @@ export default function SuperDashboardPage() {
             <Button onClick={saveTask} disabled={saving} className="bg-blue-600 hover:bg-blue-700 gap-2">
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* BULK MARK ATTENDANCE DIALOG */}
+      <Dialog open={bulkOpen} onOpenChange={(o) => !o && setBulkOpen(false)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Bulk Mark Attendance</DialogTitle>
+            <DialogDescription>Apply standard status and timings across multiple dates</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 py-2">
+            <div className="col-span-2">
+              <Label className="text-xs font-bold uppercase text-slate-500">Employee</Label>
+              <Select
+                value={bulkData.userId}
+                onValueChange={(v) => setBulkData({ ...bulkData, userId: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.name} ({u.role})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs font-bold uppercase text-slate-500">Start Date</Label>
+              <Input
+                type="date"
+                value={bulkData.startDate}
+                onChange={(e) => setBulkData({ ...bulkData, startDate: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-bold uppercase text-slate-500">End Date</Label>
+              <Input
+                type="date"
+                value={bulkData.endDate}
+                onChange={(e) => setBulkData({ ...bulkData, endDate: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-bold uppercase text-slate-500">Status</Label>
+              <Select
+                value={bulkData.status}
+                onValueChange={(v) => setBulkData({ ...bulkData, status: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PRESENT">PRESENT</SelectItem>
+                  <SelectItem value="ABSENT">ABSENT</SelectItem>
+                  <SelectItem value="HALF_DAY">HALF_DAY</SelectItem>
+                  <SelectItem value="ON_LEAVE">ON_LEAVE</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs font-bold uppercase text-slate-500">Punch Type</Label>
+              <Select
+                value={bulkData.punchType}
+                onValueChange={(v) => setBulkData({ ...bulkData, punchType: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="OFFICE">OFFICE</SelectItem>
+                  <SelectItem value="FIELD">FIELD</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {(bulkData.status === "PRESENT" || bulkData.status === "HALF_DAY") && (
+              <>
+                <div>
+                  <Label className="text-xs font-bold uppercase text-slate-500">Check In Time</Label>
+                  <Input
+                    type="time"
+                    value={bulkData.checkInTime}
+                    onChange={(e) => setBulkData({ ...bulkData, checkInTime: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-bold uppercase text-slate-500">Check Out Time</Label>
+                  <Input
+                    type="time"
+                    value={bulkData.checkOutTime}
+                    onChange={(e) => setBulkData({ ...bulkData, checkOutTime: e.target.value })}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={submitBulkAttendance} disabled={saving} className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2">
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Submit Bulk
             </Button>
           </DialogFooter>
         </DialogContent>

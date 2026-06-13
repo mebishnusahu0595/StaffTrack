@@ -15,6 +15,8 @@ router.get("/managers", asyncHandler(superadminController.getManagers));
 
 router.get("/attendance", asyncHandler(superadminController.getAttendanceLogs));
 router.patch("/attendance/:id", asyncHandler(superadminController.updateAttendance));
+router.post("/attendance/bulk", asyncHandler(superadminController.bulkMarkAttendance));
+
 
 router.get("/expenses", asyncHandler(superadminController.getAllExpenses));
 router.patch("/expenses/:id", asyncHandler(superadminController.updateExpense));

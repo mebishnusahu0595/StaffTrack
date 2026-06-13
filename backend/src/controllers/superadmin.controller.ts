@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { sendSuccess, sendMessage } from "../lib/response";
-import { AttendanceStatus, UserRole, ExpenseCategory, LeaveStatus, TaskStatus } from "@prisma/client";
+import { AttendanceStatus, UserRole, ExpenseCategory, LeaveStatus, TaskStatus, PunchType } from "@prisma/client";
 
 export async function getAllUsers(req: Request, res: Response): Promise<void> {
   const users = await prisma.user.findMany({
@@ -72,22 +72,74 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
 export async function getAttendanceLogs(req: Request, res: Response): Promise<void> {
   const { userId, date } = req.query;
   
+  const targetDate = date ? new Date(date as string) : new Date();
+  targetDate.setHours(0, 0, 0, 0);
+
+  // 1. Fetch active users (employees & managers)
+  const users = await prisma.user.findMany({
+    where: {
+      id: userId as string || undefined,
+      role: { in: [UserRole.EMPLOYEE, UserRole.MANAGER] }
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true
+    }
+  });
+
+  // 2. Fetch attendance logs for the target date
   const logs = await prisma.attendance.findMany({
     where: {
       userId: userId as string || undefined,
-      date: date ? new Date(date as string) : undefined
+      date: targetDate
     },
     include: {
       user: {
         select: { name: true, email: true }
       },
       breaks: true
-    },
-    orderBy: { date: "desc" },
-    take: 300
+    }
   });
 
-  sendSuccess(res, logs);
+  // 3. Map users to attendance logs or generate virtual absent logs
+  const mergedLogs = users.map((u) => {
+    const existingLog = logs.find((l) => l.userId === u.id);
+    if (existingLog) {
+      return existingLog;
+    }
+    return {
+      id: `virtual-${u.id}-${targetDate.toISOString()}`,
+      userId: u.id,
+      date: targetDate,
+      punchType: null,
+      checkInTime: null,
+      checkInLat: null,
+      checkInLng: null,
+      checkInPhotoUrl: null,
+      startOdometerPhotoUrl: null,
+      startOdometer: null,
+      checkOutTime: null,
+      checkOutLat: null,
+      checkOutLng: null,
+      checkOutPhotoUrl: null,
+      endOdometerPhotoUrl: null,
+      endOdometer: null,
+      status: AttendanceStatus.ABSENT,
+      isCheckInPending: false,
+      checkInApproved: false,
+      checkInApprovedBy: null,
+      checkInApprovedAt: null,
+      user: {
+        name: u.name,
+        email: u.email
+      },
+      breaks: [],
+      isVirtual: true
+    };
+  });
+
+  sendSuccess(res, mergedLogs);
 }
 
 export async function updateAttendance(req: Request, res: Response): Promise<void> {
@@ -108,7 +160,7 @@ export async function updateAttendance(req: Request, res: Response): Promise<voi
   } = req.body;
 
   let existing = null;
-  if (id && id !== "new" && id !== "undefined") {
+  if (id && id !== "new" && id !== "undefined" && !id.startsWith("virtual-")) {
     existing = await prisma.attendance.findUnique({
       where: { id }
     });
@@ -384,4 +436,130 @@ export async function deleteTask(req: Request, res: Response): Promise<void> {
   });
   sendMessage(res, "Task deleted successfully");
 }
+
+export async function bulkMarkAttendance(req: Request, res: Response): Promise<void> {
+  const {
+    userId,
+    startDate,
+    endDate,
+    status,
+    punchType,
+    checkInTime,
+    checkOutTime
+  } = req.body;
+
+  if (!userId || !startDate || !endDate || !status) {
+    res.status(400).json({ success: false, message: "Missing required fields" });
+    return;
+  }
+
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  
+  if (end < start) {
+    res.status(400).json({ success: false, message: "End date cannot be before start date" });
+    return;
+  }
+
+  const results = [];
+  const currentDate = new Date(start);
+
+  while (currentDate <= end) {
+    const targetDate = new Date(currentDate);
+    targetDate.setHours(0, 0, 0, 0);
+
+    let checkIn: Date | null = null;
+    let checkOut: Date | null = null;
+
+    if (status === AttendanceStatus.PRESENT || status === AttendanceStatus.HALF_DAY) {
+      if (checkInTime) {
+        const [h, m] = checkInTime.split(":").map(Number);
+        checkIn = new Date(targetDate);
+        checkIn.setHours(h, m, 0, 0);
+      }
+      if (checkOutTime) {
+        const [h, m] = checkOutTime.split(":").map(Number);
+        checkOut = new Date(targetDate);
+        checkOut.setHours(h, m, 0, 0);
+      }
+    }
+
+    // Find existing
+    const existing = await prisma.attendance.findFirst({
+      where: {
+        userId,
+        date: targetDate
+      }
+    });
+
+    const data: any = {
+      status: status as AttendanceStatus,
+      punchType: punchType ? (punchType as PunchType) : null,
+      checkInTime: checkIn,
+      checkOutTime: checkOut,
+      isCheckInPending: false,
+      checkInApproved: true
+    };
+
+    let record;
+    if (existing) {
+      record = await prisma.attendance.update({
+        where: { id: existing.id },
+        data
+      });
+    } else {
+      record = await prisma.attendance.create({
+        data: {
+          userId,
+          date: targetDate,
+          ...data
+        }
+      });
+    }
+    results.push(record);
+
+    // Recalculate kmTravelled + sync odometer photos onto the DayEndReport if any odometer data is present.
+    if (record.startOdometer !== null || record.endOdometer !== null || record.startOdometerPhotoUrl || record.endOdometerPhotoUrl) {
+      let kmTravelled = 0;
+      if (record.startOdometer !== null && record.endOdometer !== null && record.endOdometer >= record.startOdometer) {
+        kmTravelled = record.endOdometer - record.startOdometer;
+      }
+
+      await prisma.dayEndReport.upsert({
+        where: {
+          userId_date: {
+            userId: record.userId,
+            date: targetDate
+          }
+        },
+        update: {
+          startOdometer: record.startOdometer,
+          endOdometer: record.endOdometer,
+          kmTravelled: Number(kmTravelled.toFixed(2)),
+          startOdometerPhotoUrl: record.startOdometerPhotoUrl,
+          kmPhotoUrl: record.endOdometerPhotoUrl
+        },
+        create: {
+          userId: record.userId,
+          date: targetDate,
+          visitsSummary: "Auto-updated via admin console",
+          ordersTaken: 0,
+          ordersCancelled: 0,
+          kmTravelled: Number(kmTravelled.toFixed(2)),
+          startOdometer: record.startOdometer,
+          endOdometer: record.endOdometer,
+          startOdometerPhotoUrl: record.startOdometerPhotoUrl,
+          kmPhotoUrl: record.endOdometerPhotoUrl,
+          remarks: "Auto-updated via admin console"
+        }
+      });
+    }
+
+    // Advance to next day
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  sendSuccess(res, results, `Bulk attendance updated for ${results.length} days`);
+}
+
 
