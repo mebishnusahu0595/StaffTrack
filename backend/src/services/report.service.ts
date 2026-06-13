@@ -275,50 +275,55 @@ export async function getMonthlyPerformanceReport(actor: AuthUser, userId: strin
   let onLeave = 0;
   let absentDays = 0;
   const paidHolidays = holidayDates.size;
-  const dailyLogs = [...attendanceByDate.entries()].map(([date, rows]) => {
-    const status = resolveDayStatus(rows);
+  const dailyLogs = [];
+
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const yyyy = year;
+    const mm = String(month).padStart(2, "0");
+    const dd = String(day).padStart(2, "0");
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    const dayDate = new Date(yyyy, month - 1, day, 0, 0, 0, 0);
+
+    const rows = attendanceByDate.get(dateStr) ?? [];
+    let status = "ABSENT";
+
+    const dayOfWeek = dayDate.getDay(); // 0 = Sunday, 6 = Saturday
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+    if (rows.length > 0) {
+      status = resolveDayStatus(rows);
+    } else if (holidayDates.has(dateStr)) {
+      status = "HOLIDAY";
+    } else if (isWeekend) {
+      status = "WEEKEND";
+    } else if (dayDate > today) {
+      status = "UPCOMING";
+    }
 
     if (status === "PRESENT") presentDays++;
     else if (status === "HALF_DAY") halfDays++;
     else if (status === "ON_LEAVE") onLeave++;
-    else if (status === "ABSENT" && !holidayDates.has(date)) absentDays++;
+    else if (status === "ABSENT") absentDays++;
 
-    const report = reportByDate.get(date);
-    const completedTaskRows = completedTasksByDate.get(date) ?? [];
-    const pendingCount = pendingTasksByDate.get(date)?.length ?? 0;
+    const report = reportByDate.get(dateStr);
+    const completedTaskRows = completedTasksByDate.get(dateStr) ?? [];
+    const pendingCount = pendingTasksByDate.get(dateStr)?.length ?? 0;
     const dailyPoints = calculatePoints(report, completedTaskRows, pendingCount);
 
-    return {
-      date,
+    dailyLogs.push({
+      date: dateStr,
       status,
       sessionCount: rows.filter((row) => row.checkInTime).length,
       punchTypes: Array.from(new Set(rows.map((row) => row.punchType).filter(Boolean))),
-      checkInTime: rows.find((row) => row.checkInTime)?.checkInTime,
-      checkOutTime: rows.slice().reverse().find((row) => row.checkOutTime)?.checkOutTime,
+      checkInTime: rows.find((row) => row.checkInTime)?.checkInTime ?? null,
+      checkOutTime: rows.slice().reverse().find((row) => row.checkOutTime)?.checkOutTime ?? null,
       completedTasksCount: completedTaskRows.length,
       pendingTasksCount: pendingCount,
       points: dailyPoints.totalPoints
-    };
-  });
-
-  for (const holidayDate of holidayDates) {
-    if (!attendanceByDate.has(holidayDate)) {
-      dailyLogs.push({
-        date: holidayDate,
-        status: "HOLIDAY",
-        sessionCount: 0,
-        punchTypes: [],
-        checkInTime: null,
-        checkOutTime: null,
-        completedTasksCount: completedTasksByDate.get(holidayDate)?.length ?? 0,
-        pendingTasksCount: pendingTasksByDate.get(holidayDate)?.length ?? 0,
-        points: calculatePoints(
-          reportByDate.get(holidayDate),
-          completedTasksByDate.get(holidayDate) ?? [],
-          pendingTasksByDate.get(holidayDate)?.length ?? 0
-        ).totalPoints
-      });
-    }
+    });
   }
 
   const totalKm = reports.reduce((sum, report) => {

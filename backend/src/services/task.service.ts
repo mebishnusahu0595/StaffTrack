@@ -188,8 +188,7 @@ export async function listTasks(actor: AuthUser) {
         }
       },
       data: {
-        dueDate: todayStart,
-        points: 0
+        dueDate: todayStart
       }
     });
   }
