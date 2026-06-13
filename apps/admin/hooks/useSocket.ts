@@ -51,8 +51,12 @@ export function useSocket(companyId?: string) {
 
     socket.on("location-update", (data) => {
       console.log("WS Location Update:", data);
-      // Optimistically update location if we had a live map
+      // Refresh the live map pings for this user...
       void queryClient.invalidateQueries({ queryKey: ["location", data.userId] });
+      // ...and the employee list itself, since each ping also updates the
+      // user's isLocationOn flag and batteryLevel on the backend. Without this
+      // the online dot and battery % stay frozen at whatever they were on load.
+      void queryClient.invalidateQueries({ queryKey: ["users"] });
     });
 
     socket.on("LOCATION_OFF_EVENT", (data) => {

@@ -102,14 +102,19 @@ export default function EmployeesPage() {
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth(); // Get current user for companyId
  
-  const usersQuery = useQuery({ 
-    queryKey: ["users", search, roleFilter], 
-    queryFn: () => fetchUsers({ 
-      page: 1, 
-      pageSize: 100, 
-      search, 
+  const usersQuery = useQuery({
+    queryKey: ["users", search, roleFilter],
+    queryFn: () => fetchUsers({
+      page: 1,
+      pageSize: 100,
+      search,
       role: roleFilter === "ALL" ? undefined : roleFilter
-    }) 
+    }),
+    // Live location status (isLocationOn) and batteryLevel ride on the user
+    // record and change with every device ping. Poll so the online dot and
+    // battery % stay current even if the socket connection drops.
+    refetchInterval: 20_000,
+    refetchOnWindowFocus: true
   });
 
   const todayAttendanceQuery = useQuery({
