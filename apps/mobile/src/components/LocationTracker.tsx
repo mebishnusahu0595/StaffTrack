@@ -43,20 +43,51 @@ if (Platform.OS !== "web") {
   }
 }
 
-async function syncOfflineQueue() {
+const LOCATION_QUEUE_KEY = "@location_sync_queue";
+const LOCATION_QUEUE_MAX = 1000;
+
+async function readQueue(): Promise<LocationPing[]> {
   try {
-    const stored = await AsyncStorage.getItem("@location_sync_queue");
-    if (!stored) return;
-    const queue = JSON.parse(stored);
-    if (queue.length === 0) return;
-    
-    console.log(`[LocationTracker] [Periodic] Syncing ${queue.length} cached logs...`);
-    await sendLocationLogs(queue);
-    await AsyncStorage.removeItem("@location_sync_queue");
-    console.log("[LocationTracker] [Periodic] Cached logs synced and cleared.");
-  } catch (error) {
-    console.log("[LocationTracker] [Periodic] Cached logs sync failed (offline).");
+    const stored = await AsyncStorage.getItem(LOCATION_QUEUE_KEY);
+    return stored ? (JSON.parse(stored) as LocationPing[]) : [];
+  } catch (err) {
+    console.warn("[LocationTracker] Failed to read location queue:", err);
+    return [];
   }
+}
+
+// Single entry point for persisting pings: append the new logs to whatever is
+// already queued, then attempt to flush the whole queue. If the device is
+// offline the send throws, so we keep the pings on disk and retry on the next
+// tick. This is what makes location survive an internet outage — nothing is
+// dropped, it just syncs once connectivity returns.
+async function enqueueLocationLogs(newLogs: LocationPing[]) {
+  let queue = await readQueue();
+  queue.push(...newLogs);
+  if (queue.length > LOCATION_QUEUE_MAX) {
+    queue = queue.slice(-LOCATION_QUEUE_MAX);
+  }
+
+  if (queue.length === 0) return;
+
+  try {
+    console.log(`[LocationTracker] Syncing ${queue.length} cached coordinate(s)...`);
+    await sendLocationLogs(queue);
+    await AsyncStorage.removeItem(LOCATION_QUEUE_KEY);
+    console.log("[LocationTracker] Synced successfully. Queue cleared.");
+  } catch (error) {
+    console.log("[LocationTracker] Offline — keeping pings queued for later sync.");
+    try {
+      await AsyncStorage.setItem(LOCATION_QUEUE_KEY, JSON.stringify(queue));
+    } catch (saveErr) {
+      console.error("[LocationTracker] Failed to save queue:", saveErr);
+    }
+  }
+}
+
+async function syncOfflineQueue() {
+  // Flush whatever is queued without adding new pings.
+  await enqueueLocationLogs([]);
 }
 
 export function LocationTracker() {
@@ -168,8 +199,8 @@ export function LocationTracker() {
                   timestamp: new Date().toISOString(),
                   batteryLevel: undefined // Battery API not standard on web
                 }];
-                console.log("[LocationTracker] [Web] Sending ping to server:", logs[0]);
-                await sendLocationLogs(logs);
+                console.log("[LocationTracker] [Web] Queuing ping:", logs[0]);
+                await enqueueLocationLogs(logs);
               },
               (err) => console.error("Web Geolocation Error:", err),
               { enableHighAccuracy: true }
@@ -215,8 +246,10 @@ export function LocationTracker() {
                 timestamp: new Date(position.timestamp).toISOString(),
                 batteryLevel
               }];
-              console.log("[LocationTracker] [Mobile Foreground] Sending ping to server:", logs[0]);
-              await sendLocationLogs(logs);
+              console.log("[LocationTracker] [Mobile Foreground] Queuing ping:", logs[0]);
+              // Route through the offline queue so a dropped connection while the
+              // app is open doesn't lose the ping — it syncs when back online.
+              await enqueueLocationLogs(logs);
             }
           } catch (err) {
             console.warn("[LocationTracker] [Mobile Foreground] Failed to get/send position:", err);
@@ -338,39 +371,7 @@ async function handleBackgroundLocations(data: unknown) {
     batteryLevel
   }));
 
-  // Fetch current queue from storage
-  let queue: LocationPing[] = [];
-  try {
-    const stored = await AsyncStorage.getItem("@location_sync_queue");
-    if (stored) {
-      queue = JSON.parse(stored);
-    }
-  } catch (err) {
-    console.warn("[LocationTracker] Failed to read location queue:", err);
-  }
-
-  // Append new logs to queue
-  queue.push(...newLogs);
-
-  // Limit queue size to avoid memory overflow (e.g. max 1000 items)
-  if (queue.length > 1000) {
-    queue = queue.slice(-1000);
-  }
-
-  try {
-    console.log(`[LocationTracker] Attempting to sync ${queue.length} coordinates...`);
-    await sendLocationLogs(queue);
-    // Success! Clear queue
-    await AsyncStorage.removeItem("@location_sync_queue");
-    console.log("[LocationTracker] Synced successfully. Queue cleared.");
-  } catch (error) {
-    console.warn("[LocationTracker] Offline. Saving pings locally.", error);
-    try {
-      await AsyncStorage.setItem("@location_sync_queue", JSON.stringify(queue));
-    } catch (saveErr) {
-      console.error("[LocationTracker] Failed to save queue:", saveErr);
-    }
-  }
+  await enqueueLocationLogs(newLogs);
 }
 
 async function getBatteryPercentage(): Promise<number | undefined> {
