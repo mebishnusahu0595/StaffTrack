@@ -34,7 +34,9 @@ import {
   updateLeaveStatus, 
   fetchLeaveTypes, 
   createLeaveType,
-  fetchHolidays
+  fetchHolidays,
+  createHoliday,
+  fetchEmployees
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -89,6 +91,73 @@ export default function LeaveManagementPage() {
   const [carryForwardCount, setCarryForwardCount] = useState("0");
   const [carryForwardFreq, setCarryForwardFreq] = useState("END_OF_MONTH"); // END_OF_MONTH, END_OF_YEAR
   const [encashment, setEncashment] = useState(false);
+
+  // New Drawer State
+  const [drawerTab, setDrawerTab] = useState<"assign" | "rules">("rules");
+  const [assignType, setAssignType] = useState<"HOLIDAY" | "PAID_LEAVE" | "FESTIVAL">("HOLIDAY");
+  const [assignName, setAssignName] = useState("");
+  const [assignStartDate, setAssignStartDate] = useState(dayjs().format("YYYY-MM-DD"));
+  const [assignEndDate, setAssignEndDate] = useState(dayjs().format("YYYY-MM-DD"));
+  const [assignWeekdays, setAssignWeekdays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
+  const [assignSelectedUsers, setAssignSelectedUsers] = useState<string[]>([]);
+  const [assignCycle, setAssignCycle] = useState<"ONCE" | "WEEKLY" | "MONTHLY">("ONCE");
+
+  // Fetch employees
+  const employeesQuery = useQuery({
+    queryKey: ["employees"],
+    queryFn: () => fetchEmployees()
+  });
+  const employees = employeesQuery.data || [];
+
+  const handleAssignLeaveHoliday = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assignName) {
+      alert("Please enter a name.");
+      return;
+    }
+
+    try {
+      let start = dayjs(assignStartDate);
+      const end = dayjs(assignEndDate);
+      const dates: string[] = [];
+
+      while (start.isBefore(end) || start.isSame(end, "day")) {
+        const dayOfWeek = start.day();
+        if (assignWeekdays.includes(dayOfWeek)) {
+          dates.push(start.format("YYYY-MM-DD"));
+        }
+        start = start.add(1, "day");
+      }
+
+      if (dates.length === 0) {
+        alert("No dates match the selected weekdays in the range.");
+        return;
+      }
+
+      const targetUserIds = assignSelectedUsers.length > 0 ? assignSelectedUsers : undefined;
+
+      for (const d of dates) {
+        await createHoliday({
+          date: new Date(d),
+          name: assignName,
+          type: assignType,
+          userIds: targetUserIds
+        });
+      }
+
+      alert("Leaves/Holidays assigned successfully!");
+      setIsCreateDrawerOpen(false);
+      
+      // Reset assign form
+      setAssignName("");
+      setAssignSelectedUsers([]);
+      
+      void queryClient.invalidateQueries({ queryKey: ["holidays"] });
+    } catch (err) {
+      console.error(err);
+      alert("Failed to assign leaves/holidays");
+    }
+  };
 
   // Queries
   const leavesQuery = useQuery({
@@ -834,154 +903,307 @@ export default function LeaveManagementPage() {
                           <SheetTitle className="text-2xl font-black text-slate-900">Create New Leave</SheetTitle>
                         </SheetHeader>
 
-                        <form onSubmit={handleCreateLeaveType} className="space-y-6">
-                          
-                          {/* Leave Name */}
-                          <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Leave Name *</Label>
-                            <Input 
-                              placeholder="e.g. Sick Leave" 
-                              required
-                              value={leaveName}
-                              onChange={e => setLeaveName(e.target.value)}
-                              className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-                            />
-                          </div>
+                        <Tabs value={drawerTab} onValueChange={(v: any) => setDrawerTab(v)} className="w-full">
+                           <TabsList className="grid grid-cols-2 bg-slate-100 p-1 rounded-xl mb-4">
+                              <TabsTrigger value="rules" className="rounded-lg font-bold text-xs">Define Rules</TabsTrigger>
+                              <TabsTrigger value="assign" className="rounded-lg font-bold text-xs">Assign Leave/Holiday</TabsTrigger>
+                           </TabsList>
 
-                          {/* Alias */}
-                          <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Alias *</Label>
-                            <Input 
-                              placeholder="e.g. SL" 
-                              required
-                              value={leaveAlias}
-                              onChange={e => setLeaveAlias(e.target.value)}
-                              className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-                            />
-                          </div>
+                           <TabsContent value="rules" className="space-y-6 outline-none">
+                             <form onSubmit={handleCreateLeaveType} className="space-y-6">
+                               {/* Leave Name */}
+                               <div className="space-y-2">
+                                 <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Leave Name *</Label>
+                                 <Input 
+                                   placeholder="e.g. Sick Leave" 
+                                   required
+                                   value={leaveName}
+                                   onChange={e => setLeaveName(e.target.value)}
+                                   className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+                                 />
+                               </div>
 
-                          {/* Description */}
-                          <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Description</Label>
-                            <Input 
-                              placeholder="Short description..." 
-                              value={leaveDescription}
-                              onChange={e => setLeaveDescription(e.target.value)}
-                              className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-                            />
-                          </div>
+                               {/* Alias */}
+                               <div className="space-y-2">
+                                 <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Alias *</Label>
+                                 <Input 
+                                   placeholder="e.g. SL" 
+                                   required
+                                   value={leaveAlias}
+                                   onChange={e => setLeaveAlias(e.target.value)}
+                                   className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+                                 />
+                               </div>
 
-                          {/* Number of Auto Allocation Leaves */}
-                          <div className="space-y-4">
-                            <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Number Of Auto Allocation Leaves *</Label>
-                            <Input 
-                              type="number"
-                              required
-                              value={autoAllocCount}
-                              onChange={e => setAutoAllocCount(e.target.value)}
-                              className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-                            />
-                            
-                            {/* Every Month vs Every Calendar Year radios */}
-                            <div className="flex items-center gap-6">
-                              <label className="flex items-center gap-2.5 cursor-pointer">
-                                <input 
-                                  type="radio" 
-                                  name="autoAllocFreq" 
-                                  checked={autoAllocFreq === "MONTHLY"}
-                                  onChange={() => setAutoAllocFreq("MONTHLY")}
-                                  className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                                />
-                                <span className="text-xs font-bold text-slate-600">Every Month</span>
-                              </label>
-                              <label className="flex items-center gap-2.5 cursor-pointer">
-                                <input 
-                                  type="radio" 
-                                  name="autoAllocFreq" 
-                                  checked={autoAllocFreq === "YEARLY"}
-                                  onChange={() => setAutoAllocFreq("YEARLY")}
-                                  className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                                />
-                                <span className="text-xs font-bold text-slate-600">Every Calendar Year</span>
-                              </label>
-                            </div>
-                          </div>
+                               {/* Description */}
+                               <div className="space-y-2">
+                                 <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Description</Label>
+                                 <Input 
+                                   placeholder="Short description..." 
+                                   value={leaveDescription}
+                                   onChange={e => setLeaveDescription(e.target.value)}
+                                   className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+                                 />
+                               </div>
 
-                          {/* Carry Forward */}
-                          <div className="space-y-4">
-                            <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Carry Forward *</Label>
-                            <Input 
-                              type="number"
-                              required
-                              value={carryForwardCount}
-                              onChange={e => setCarryForwardCount(e.target.value)}
-                              className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-                            />
-                            
-                            {/* End of month vs calendar year */}
-                            <div className="flex items-center gap-6">
-                              <label className="flex items-center gap-2.5 cursor-pointer">
-                                <input 
-                                  type="radio" 
-                                  name="carryForwardFreq" 
-                                  checked={carryForwardFreq === "END_OF_MONTH"}
-                                  onChange={() => setCarryForwardFreq("END_OF_MONTH")}
-                                  className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                                />
-                                <span className="text-xs font-bold text-slate-600">End Of Every Month</span>
-                              </label>
-                              <label className="flex items-center gap-2.5 cursor-pointer">
-                                <input 
-                                  type="radio" 
-                                  name="carryForwardFreq" 
-                                  checked={carryForwardFreq === "END_OF_YEAR"}
-                                  onChange={() => setCarryForwardFreq("END_OF_YEAR")}
-                                  className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                                />
-                                <span className="text-xs font-bold text-slate-600">End Of Every Calendar Year</span>
-                              </label>
-                            </div>
-                          </div>
+                               {/* Number of Auto Allocation Leaves */}
+                               <div className="space-y-4">
+                                 <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Number Of Auto Allocation Leaves *</Label>
+                                 <Input 
+                                   type="number"
+                                   required
+                                   value={autoAllocCount}
+                                   onChange={e => setAutoAllocCount(e.target.value)}
+                                   className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+                                 />
+                                 
+                                 {/* Every Month vs Every Calendar Year radios */}
+                                 <div className="flex items-center gap-6">
+                                   <label className="flex items-center gap-2.5 cursor-pointer">
+                                     <input 
+                                       type="radio" 
+                                       name="autoAllocFreq" 
+                                       checked={autoAllocFreq === "MONTHLY"}
+                                       onChange={() => setAutoAllocFreq("MONTHLY")}
+                                       className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
+                                     />
+                                     <span className="text-xs font-bold text-slate-600">Every Month</span>
+                                   </label>
+                                   <label className="flex items-center gap-2.5 cursor-pointer">
+                                     <input 
+                                       type="radio" 
+                                       name="autoAllocFreq" 
+                                       checked={autoAllocFreq === "YEARLY"}
+                                       onChange={() => setAutoAllocFreq("YEARLY")}
+                                       className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
+                                     />
+                                     <span className="text-xs font-bold text-slate-600">Every Calendar Year</span>
+                                   </label>
+                                 </div>
+                               </div>
 
-                          {/* Encashment */}
-                          <div className="space-y-2.5">
-                            <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400 font-extrabold">Encashment Of Leave</Label>
-                            <div className="flex items-center gap-6">
-                              <label className="flex items-center gap-2.5 cursor-pointer">
-                                <input 
-                                  type="radio" 
-                                  name="encashment" 
-                                  checked={!encashment}
-                                  onChange={() => setEncashment(false)}
-                                  className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                                />
-                                <span className="text-xs font-bold text-slate-600">Off</span>
-                              </label>
-                              <label className="flex items-center gap-2.5 cursor-pointer">
-                                <input 
-                                  type="radio" 
-                                  name="encashment" 
-                                  checked={encashment}
-                                  onChange={() => setEncashment(true)}
-                                  className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                                />
-                                <span className="text-xs font-bold text-slate-600">On</span>
-                              </label>
-                            </div>
-                          </div>
+                               {/* Carry Forward */}
+                               <div className="space-y-4">
+                                 <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Carry Forward *</Label>
+                                 <Input 
+                                   type="number"
+                                   required
+                                   value={carryForwardCount}
+                                   onChange={e => setCarryForwardCount(e.target.value)}
+                                   className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+                                 />
+                                 
+                                 {/* End of month vs calendar year */}
+                                 <div className="flex items-center gap-6">
+                                   <label className="flex items-center gap-2.5 cursor-pointer">
+                                     <input 
+                                       type="radio" 
+                                       name="carryForwardFreq" 
+                                       checked={carryForwardFreq === "END_OF_MONTH"}
+                                       onChange={() => setCarryForwardFreq("END_OF_MONTH")}
+                                       className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
+                                     />
+                                     <span className="text-xs font-bold text-slate-600">End Of Every Month</span>
+                                   </label>
+                                   <label className="flex items-center gap-2.5 cursor-pointer">
+                                     <input 
+                                       type="radio" 
+                                       name="carryForwardFreq" 
+                                       checked={carryForwardFreq === "END_OF_YEAR"}
+                                       onChange={() => setCarryForwardFreq("END_OF_YEAR")}
+                                       className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
+                                     />
+                                     <span className="text-xs font-bold text-slate-600">End Of Every Calendar Year</span>
+                                   </label>
+                                 </div>
+                               </div>
 
-                        </form>
+                               {/* Encashment */}
+                               <div className="space-y-2.5">
+                                 <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400 font-extrabold">Encashment Of Leave</Label>
+                                 <div className="flex items-center gap-6">
+                                   <label className="flex items-center gap-2.5 cursor-pointer">
+                                     <input 
+                                       type="radio" 
+                                       name="encashment" 
+                                       checked={!encashment}
+                                       onChange={() => setEncashment(false)}
+                                       className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
+                                     />
+                                     <span className="text-xs font-bold text-slate-600">Off</span>
+                                   </label>
+                                   <label className="flex items-center gap-2.5 cursor-pointer">
+                                     <input 
+                                       type="radio" 
+                                       name="encashment" 
+                                       checked={encashment}
+                                       onChange={() => setEncashment(true)}
+                                       className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
+                                     />
+                                     <span className="text-xs font-bold text-slate-600">On</span>
+                                   </label>
+                                 </div>
+                               </div>
+
+                               <Button 
+                                 type="submit"
+                                 disabled={createLeaveTypeMutation.isPending}
+                                 className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] mt-6"
+                               >
+                                 {createLeaveTypeMutation.isPending ? "Creating..." : "Create Rule"}
+                               </Button>
+                             </form>
+                           </TabsContent>
+
+                           <TabsContent value="assign" className="space-y-6 outline-none">
+                             <form onSubmit={handleAssignLeaveHoliday} className="space-y-6">
+                               {/* Assign Leave/Holiday Form */}
+                               <div className="space-y-2">
+                                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Type *</Label>
+                                  <select 
+                                     value={assignType}
+                                     onChange={(e: any) => setAssignType(e.target.value)}
+                                     className="w-full h-12 px-4 rounded-2xl bg-slate-50 border border-slate-200/60 focus:bg-white transition-all font-bold text-xs outline-none"
+                                  >
+                                     <option value="HOLIDAY">Holiday</option>
+                                     <option value="PAID_LEAVE">Paid Leave</option>
+                                     <option value="FESTIVAL">Festival / Special Day</option>
+                                  </select>
+                               </div>
+
+                               <div className="space-y-2">
+                                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Title / Name *</Label>
+                                  <Input 
+                                     placeholder="e.g. Diwali Festival, General Off" 
+                                     required
+                                     value={assignName}
+                                     onChange={e => setAssignName(e.target.value)}
+                                     className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+                                  />
+                               </div>
+
+                               <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                     <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Start Date</Label>
+                                     <Input 
+                                        type="date"
+                                        value={assignStartDate}
+                                        onChange={e => setAssignStartDate(e.target.value)}
+                                        className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+                                     />
+                                  </div>
+                                  <div className="space-y-2">
+                                     <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">End Date</Label>
+                                     <Input 
+                                        type="date"
+                                        value={assignEndDate}
+                                        onChange={e => setAssignEndDate(e.target.value)}
+                                        className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+                                     />
+                                  </div>
+                               </div>
+
+                               {/* Weekday Selection */}
+                               <div className="space-y-2">
+                                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Select Weekdays</Label>
+                                  <div className="flex flex-wrap gap-1.5">
+                                     {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, idx) => {
+                                        const isSelected = assignWeekdays.includes(idx);
+                                        return (
+                                           <button
+                                              type="button"
+                                              key={day}
+                                              onClick={() => {
+                                                 if (isSelected) {
+                                                    setAssignWeekdays(assignWeekdays.filter(d => d !== idx));
+                                                 } else {
+                                                    setAssignWeekdays([...assignWeekdays, idx]);
+                                                 }
+                                              }}
+                                              className={cn(
+                                                 "px-3 py-1.5 text-[10px] font-black rounded-lg border uppercase transition-all",
+                                                 isSelected 
+                                                    ? "bg-blue-600 border-blue-600 text-white shadow-sm"
+                                                    : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                                              )}
+                                           >
+                                              {day}
+                                           </button>
+                                        );
+                                     })}
+                                  </div>
+                               </div>
+
+                               {/* Staff Selection Dropdown / Checklist */}
+                               <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                     <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Assign To Staff</Label>
+                                     <button
+                                        type="button"
+                                        onClick={() => {
+                                           if (assignSelectedUsers.length === employees.length) {
+                                              setAssignSelectedUsers([]);
+                                           } else {
+                                              setAssignSelectedUsers(employees.map(emp => emp.id));
+                                           }
+                                        }}
+                                        className="text-[10px] font-black text-blue-600 hover:underline"
+                                     >
+                                        {assignSelectedUsers.length === employees.length ? "Deselect All" : "Select All"}
+                                     </button>
+                                  </div>
+                                  <div className="max-h-40 overflow-y-auto border border-slate-200/60 rounded-2xl p-3 bg-slate-50 space-y-2">
+                                     {employees.length === 0 ? (
+                                        <p className="text-[10px] font-bold text-slate-400">No employees found.</p>
+                                     ) : (
+                                        employees.map((emp) => {
+                                           const isChecked = assignSelectedUsers.includes(emp.id);
+                                           return (
+                                              <label key={emp.id} className="flex items-center gap-2.5 cursor-pointer">
+                                                 <input
+                                                    type="checkbox"
+                                                    checked={isChecked}
+                                                    onChange={() => {
+                                                       if (isChecked) {
+                                                          setAssignSelectedUsers(assignSelectedUsers.filter(id => id !== emp.id));
+                                                       } else {
+                                                          setAssignSelectedUsers([...assignSelectedUsers, emp.id]);
+                                                       }
+                                                    }}
+                                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                 />
+                                                 <span className="text-xs font-bold text-slate-700">{emp.name}</span>
+                                              </label>
+                                           );
+                                        })
+                                     )}
+                                  </div>
+                               </div>
+
+                               {/* Cycle Selection */}
+                               <div className="space-y-2">
+                                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Cycle Frequency</Label>
+                                  <select 
+                                     value={assignCycle}
+                                     onChange={(e: any) => setAssignCycle(e.target.value)}
+                                     className="w-full h-12 px-4 rounded-2xl bg-slate-50 border border-slate-200/60 focus:bg-white transition-all font-bold text-xs outline-none"
+                                  >
+                                     <option value="ONCE">Once (Single Range)</option>
+                                     <option value="WEEKLY">Weekly Recurring</option>
+                                     <option value="MONTHLY">Monthly Recurring</option>
+                                   </select>
+                               </div>
+
+                               <Button 
+                                  type="submit" 
+                                  className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] mt-6"
+                               >
+                                  Confirm & Assign
+                               </Button>
+                             </form>
+                           </TabsContent>
+                        </Tabs>
                       </div>
-
-                      <SheetFooter className="pt-8">
-                        <Button 
-                          onClick={handleCreateLeaveType}
-                          disabled={createLeaveTypeMutation.isPending}
-                          className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest text-[10px]"
-                        >
-                          {createLeaveTypeMutation.isPending ? "Creating..." : "Create"}
-                        </Button>
-                      </SheetFooter>
                     </SheetContent>
                   </Sheet>
                 </div>

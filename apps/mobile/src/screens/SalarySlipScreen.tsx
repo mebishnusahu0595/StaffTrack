@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, View, RefreshControl, Alert } from "react-native";
+import { ScrollView, StyleSheet, View, RefreshControl, Alert, Image } from "react-native";
 import { Text, Card, ActivityIndicator, Portal, Modal, IconButton, Divider, Button } from "react-native-paper";
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
@@ -61,7 +61,8 @@ export function SalarySlipScreen() {
             <style>
               * { box-sizing: border-box; }
               body { font-family: Arial, sans-serif; padding: 24px; color: #1e293b; line-height: 1.4; font-size: 11px; }
-              .org { text-align: center; margin-bottom: 4px; }
+              .org { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 20px; text-align: left; }
+              .org-logo { max-height: 48px; max-width: 96px; object-fit: contain; }
               .org h1 { margin: 0; font-size: 16px; font-weight: 800; }
               .org .sub { font-size: 11px; color: #475569; margin-top: 2px; }
               .org .period { font-size: 12px; font-weight: 700; margin-top: 6px; }
@@ -87,10 +88,13 @@ export function SalarySlipScreen() {
           </head>
           <body>
             <div class="org">
-              <h1>${s.orgName || s.company?.name || "Company"}</h1>
-              ${s.orgSubtitle ? `<div class="sub">${s.orgSubtitle}</div>` : ""}
-              <div class="period">Salary slip for the month of ${monthName} ${s.year}</div>
-              ${s.orgCode ? `<div class="code">${s.orgCode}</div>` : ""}
+              ${s.logoUrl ? `<img class="org-logo" src="${s.logoUrl}" alt="Logo" />` : ""}
+              <div>
+                <h1>${s.orgName || s.company?.name || "Company"}</h1>
+                ${s.orgSubtitle ? `<div class="sub">${s.orgSubtitle}</div>` : ""}
+                <div class="period">Salary slip for the month of ${monthName} ${s.year}</div>
+                ${s.orgCode ? `<div class="code">${s.orgCode}</div>` : ""}
+              </div>
             </div>
 
             <div class="sheet">
@@ -185,6 +189,9 @@ export function SalarySlipScreen() {
           {selected && (
             <ScrollView contentContainerStyle={styles.modalContent}>
               <View style={styles.modalHeader}>
+                {selected.logoUrl ? (
+                  <Image source={{ uri: selected.logoUrl }} style={{ width: 45, height: 45, borderRadius: 8, marginRight: 12, resizeMode: "contain" }} />
+                ) : null}
                 <View style={{ flex: 1 }}>
                   <Text style={styles.orgName}>{selected.orgName || selected.company?.name}</Text>
                   {selected.orgSubtitle ? <Text style={styles.orgSub}>{selected.orgSubtitle}</Text> : null}

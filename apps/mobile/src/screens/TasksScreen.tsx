@@ -168,7 +168,7 @@ export function TasksScreen() {
     const isSelectedToday = selectedDateString === dayjs().format("YYYY-MM-DD");
 
     result = result.filter((t) => {
-      const taskDateString = t.dueDate.split("T")[0];
+      const taskDateString = dayjs(t.dueDate).format("YYYY-MM-DD");
       if (isSelectedToday) {
         return (
           taskDateString === selectedDateString ||
@@ -206,11 +206,7 @@ export function TasksScreen() {
   }
 
   async function submitCompletion() {
-    const hasExistingPhoto = !!selectedTask?.completionPhotoUrl;
-    if (!selectedTask || (!completionPhoto && !hasExistingPhoto) || !completionRemarks.trim()) {
-      Alert.alert("Missing Details", "Photo and remarks are required to complete this task.");
-      return;
-    }
+    if (!selectedTask) return;
     if (!isChecklistComplete) {
       Alert.alert("Incomplete Checklist", "Please complete all required checklist items first.");
       return;
@@ -473,7 +469,7 @@ export function TasksScreen() {
             <Text style={styles.statNumber}>
               {
                 tasks.filter((t) => {
-                  const taskDateString = t.dueDate.split("T")[0];
+                  const taskDateString = dayjs(t.dueDate).format("YYYY-MM-DD");
                   const selectedDateString = selectedDate.format("YYYY-MM-DD");
                   const isSelectedToday = selectedDateString === dayjs().format("YYYY-MM-DD");
                   const matchesDate = isSelectedToday
@@ -491,7 +487,7 @@ export function TasksScreen() {
             <Text style={styles.statNumber}>
               {
                 tasks.filter((t) => {
-                  const taskDateString = t.dueDate.split("T")[0];
+                  const taskDateString = dayjs(t.dueDate).format("YYYY-MM-DD");
                   const selectedDateString = selectedDate.format("YYYY-MM-DD");
                   return t.status === "COMPLETED" && taskDateString === selectedDateString;
                 }).length
@@ -799,8 +795,6 @@ export function TasksScreen() {
               loading={isSubmittingCompletion}
               disabled={
                 isSubmittingCompletion ||
-                (!completionPhoto && !selectedTask?.completionPhotoUrl) ||
-                !completionRemarks.trim() ||
                 !isChecklistComplete
               }
             >

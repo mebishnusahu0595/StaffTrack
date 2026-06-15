@@ -37,6 +37,7 @@ export interface SalarySlipInput {
   earnings?: EarningItem[];
   deductions?: DeductionItem[];
   remarks?: string;
+  logoUrl?: string;
 }
 
 const slipInclude = {
@@ -77,6 +78,7 @@ export async function upsertSalarySlip(actor: AuthUser, input: SalarySlipInput) 
     orgName: input.orgName,
     orgSubtitle: input.orgSubtitle,
     orgCode: input.orgCode,
+    logoUrl: input.logoUrl,
     companyCode: input.companyCode,
     bankName: input.bankName,
     bankAccountNo: input.bankAccountNo,

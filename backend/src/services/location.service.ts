@@ -61,7 +61,7 @@ export async function createLocationLogs(
 
 export async function updateLocationStatus(
   actor: AuthUser,
-  input: { isLocationOn: boolean; batteryLevel?: number }
+  input: { isLocationOn: boolean; batteryLevel?: number; isStale?: boolean }
 ) {
   const user = await prisma.user.update({
     where: { id: actor.id },
@@ -73,7 +73,7 @@ export async function updateLocationStatus(
   });
 
   // If location is turned off:
-  if (!input.isLocationOn) {
+  if (!input.isLocationOn && !input.isStale) {
     // 1. Pause working hours by auto-starting break if punched in on FIELD
     const activeAttendance = await prisma.attendance.findFirst({
       where: {
@@ -273,7 +273,7 @@ export async function checkStaleLocations() {
           email: user.email
         };
 
-        await updateLocationStatus(actor, { isLocationOn: false });
+        await updateLocationStatus(actor, { isLocationOn: false, isStale: true });
       }
     }
   } catch (error) {

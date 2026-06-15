@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { 
   Dialog, 
   DialogContent, 
@@ -22,6 +22,7 @@ import {
 import dayjs from "dayjs";
 import { useReactToPrint } from "react-to-print";
 import { cn } from "@/lib/utils";
+import { uploadFile } from "@/lib/api";
 
 interface SalarySlipModalProps {
   isOpen: boolean;
@@ -32,6 +33,15 @@ interface SalarySlipModalProps {
 
 export function SalarySlipModal({ isOpen, onClose, data, month }: SalarySlipModalProps) {
   const printRef = useRef<HTMLDivElement>(null);
+  const [localLogo, setLocalLogo] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setLocalLogo(localStorage.getItem("payslip_logo"));
+    }
+  }, [isOpen]);
+
+  const logoToShow = data?.logoUrl || localLogo;
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -63,6 +73,37 @@ export function SalarySlipModal({ isOpen, onClose, data, month }: SalarySlipModa
             </DialogDescription>
           </div>
           <div className="flex items-center gap-3">
+             <input
+                type="file"
+                accept="image/*"
+                id="payslip-logo-upload"
+                className="hidden"
+                onChange={async (e) => {
+                   const file = e.target.files?.[0];
+                   if (file) {
+                      try {
+                         const url = await uploadFile(file);
+                         localStorage.setItem("payslip_logo", url);
+                         setLocalLogo(url);
+                      } catch (err) {
+                         alert("Failed to upload logo");
+                      }
+                   }
+                }}
+             />
+             <Button variant="outline" size="sm" asChild className="rounded-xl font-bold cursor-pointer">
+                <label htmlFor="payslip-logo-upload">
+                   Upload Logo
+                </label>
+             </Button>
+             {localLogo && (
+                <Button variant="ghost" size="sm" onClick={() => {
+                   localStorage.removeItem("payslip_logo");
+                   setLocalLogo(null);
+                }} className="rounded-xl font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50">
+                   Clear Logo
+                </Button>
+             )}
              <Button variant="outline" size="sm" onClick={handlePrint} className="rounded-xl font-bold gap-2">
                 <Printer className="h-4 w-4" /> Print
              </Button>
@@ -79,8 +120,12 @@ export function SalarySlipModal({ isOpen, onClose, data, month }: SalarySlipModa
               <div className="flex justify-between items-start mb-12">
                  <div className="space-y-2">
                     <div className="flex items-center gap-3">
-                       <div className="h-10 w-10 bg-blue-600 rounded-xl flex items-center justify-center text-white">
-                          <Building2 className="h-6 w-6" />
+                       <div className="h-10 w-10 bg-blue-600 rounded-xl flex items-center justify-center text-white overflow-hidden shrink-0">
+                          {logoToShow ? (
+                             <img src={logoToShow} alt="Logo" className="h-full w-full object-contain" />
+                          ) : (
+                             <Building2 className="h-6 w-6" />
+                          )}
                        </div>
                        <h2 className="text-2xl font-black tracking-tight text-slate-900">
                           {data.orgName || data.companyName || "STAFFTRACK"}

@@ -800,6 +800,11 @@ export default function TasksPage() {
                                    <div>
                                       <p className="text-sm font-bold text-slate-700 leading-tight flex items-center gap-2">
                                          {task.title}
+                                         {task.subtasks && task.subtasks.length > 0 && (
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-500 border border-slate-200/50 uppercase tracking-tighter">
+                                               📋 {task.subtasks.filter((s: any) => s.status === 'COMPLETED').length}/{task.subtasks.length} Subtasks
+                                            </span>
+                                         )}
                                       </p>
                                    </div>
                                 </div>
@@ -921,6 +926,11 @@ export default function TasksPage() {
                            <div>
                               <p className="text-sm font-bold text-slate-700 leading-tight flex items-center gap-2">
                                  {task.title}
+                                 {task.subtasks && task.subtasks.length > 0 && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-500 border border-slate-200/50 uppercase tracking-tighter">
+                                       📋 {task.subtasks.filter((s: any) => s.status === 'COMPLETED').length}/{task.subtasks.length} Subtasks
+                                    </span>
+                                 )}
                               </p>
                            </div>
                         </div>
@@ -1106,6 +1116,12 @@ export default function TasksPage() {
 
                         {/* Title */}
                         <h5 className="font-bold text-sm text-slate-800 leading-tight">{task.title}</h5>
+
+                        {task.subtasks && task.subtasks.length > 0 && (
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400">
+                             <span>📋 {task.subtasks.filter((s: any) => s.status === 'COMPLETED').length}/{task.subtasks.length} subtasks</span>
+                          </div>
+                        )}
 
                         {/* Assignee & Meta */}
                         <div className="flex items-center justify-between pt-2 border-t border-slate-50">
@@ -3529,10 +3545,42 @@ function ViewTaskDetailsDialog({ task }: any) {
                         </div>
                      ))}
                   </div>
-               </div>
-            )}
-         </div>
-      </div>
+                </div>
+             )}
+          </div>
+
+          {task.subtasks && task.subtasks.length > 0 && (
+             <div className="md:col-span-2 pt-6 border-t border-slate-100 space-y-4">
+                <Label className="text-[10px] font-black uppercase text-slate-400">Subtasks ({task.subtasks.length})</Label>
+                <div className="space-y-3">
+                   {task.subtasks.map((sub: any) => (
+                      <div key={sub.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-slate-50 border border-slate-200/50 rounded-2xl gap-3">
+                         <div className="flex items-center gap-3">
+                            <StatusBadge status={sub.status} dueDate={sub.dueDate} />
+                            <div>
+                               <p className="text-sm font-bold text-slate-800">{sub.title}</p>
+                               {sub.description && <p className="text-xs font-medium text-slate-500 mt-0.5">{sub.description}</p>}
+                            </div>
+                         </div>
+                         <div className="flex items-center gap-4 self-end sm:self-auto">
+                            <div className="flex items-center gap-2">
+                               <Avatar className="h-6 w-6">
+                                  <AvatarImage src={sub.assignedTo?.avatarUrl} />
+                                  <AvatarFallback className="bg-blue-600 text-white text-[8px] font-black">{sub.assignedTo?.name?.slice(0, 1)}</AvatarFallback>
+                               </Avatar>
+                               <span className="text-xs font-bold text-slate-700">{sub.assignedTo?.name}</span>
+                            </div>
+                            <div className="text-right shrink-0">
+                               <p className="text-xs font-black text-slate-700">{sub.points} pts</p>
+                               <p className="text-[10px] font-bold text-slate-400 mt-0.5">{format(new Date(sub.dueDate), 'dd MMM yyyy')}</p>
+                            </div>
+                         </div>
+                      </div>
+                   ))}
+                </div>
+             </div>
+          )}
+       </div>
     </DialogContent>
   );
 }

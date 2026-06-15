@@ -70,7 +70,7 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
       lat,
       lng,
       priority: input.priority || "Medium",
-      points: input.points || 0,
+      points: input.points !== undefined ? input.points : 10,
       isRepeating: input.isRepeating || false,
       repeatFrequency: input.repeatFrequency,
       repeatDays: input.repeatDays,
@@ -106,7 +106,7 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
           lat: sub.lat || null,
           lng: sub.lng || null,
           priority: sub.priority || "Medium",
-          points: sub.points || 0,
+          points: sub.points !== undefined ? sub.points : 10,
           isRepeating: false,
           isSubtask: true,
           parentTaskId: task.id,
@@ -157,41 +157,8 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
 }
 
 export async function listTasks(actor: AuthUser) {
-  // Automatically rollover overdue pending / in_progress tasks to today's date for this user's company
-  const todayStart = new Date();
-  todayStart.setUTCHours(0, 0, 0, 0);
-
-  const rolloverWhere: Prisma.TaskWhereInput = {
-    status: {
-      in: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS]
-    },
-    dueDate: {
-      lt: todayStart
-    }
-  };
-
-  if (actor.role !== UserRole.SUPERADMIN) {
-    rolloverWhere.assignedTo = {
-      companyId: actor.companyId
-    };
-  }
-
-  const overdueTasks = await prisma.task.findMany({
-    where: rolloverWhere
-  });
-
-  if (overdueTasks.length > 0) {
-    await prisma.task.updateMany({
-      where: {
-        id: {
-          in: overdueTasks.map(t => t.id)
-        }
-      },
-      data: {
-        dueDate: todayStart
-      }
-    });
-  }
+  // Automatically rollover overdue pending / in_progress tasks
+  await rolloverOverdueTasks();
 
   const tasks = await prisma.task.findMany({
     where: await taskAccessWhere(actor),
@@ -652,7 +619,7 @@ async function preGenerateTasksForSeries(baseTask: any, companyId: string) {
       repeatDates: baseTask.repeatDates,
       skipHolidays: baseTask.skipHolidays,
       priority: baseTask.priority,
-      points: baseTask.points,
+      points: baseTask.points === 0 ? 10 : baseTask.points,
       parentTaskId: baseTask.id,
       attachmentUrl: baseTask.attachmentUrl,
       attachmentName: baseTask.attachmentName
@@ -784,3 +751,40 @@ const taskInclude = {
     }
   }
 } satisfies Prisma.TaskInclude;
+
+export function getStartOfDayIST(date: Date = new Date()): Date {
+  const offset = 5.5 * 60 * 60 * 1000;
+  const indiaTime = new Date(date.getTime() + offset);
+  indiaTime.setUTCHours(0, 0, 0, 0);
+  return new Date(indiaTime.getTime() - offset);
+}
+
+export async function rolloverOverdueTasks() {
+  const todayStart = getStartOfDayIST();
+
+  const overdueTasks = await prisma.task.findMany({
+    where: {
+      status: {
+        in: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS]
+      },
+      dueDate: {
+        lt: todayStart
+      }
+    }
+  });
+
+  if (overdueTasks.length > 0) {
+    console.log(`[Task Rollover] Found \${overdueTasks.length} overdue tasks. Rolling over to \${todayStart.toISOString()} and resetting points to 0.`);
+    await prisma.task.updateMany({
+      where: {
+        id: {
+          in: overdueTasks.map(t => t.id)
+        }
+      },
+      data: {
+        dueDate: todayStart,
+        points: 0
+      }
+    });
+  }
+}

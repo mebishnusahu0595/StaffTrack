@@ -208,6 +208,7 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
     setSaving(true);
     setSaveMsg(null);
     try {
+      const localLogo = typeof window !== "undefined" ? localStorage.getItem("payslip_logo") : null;
       await saveSalarySlip({
         userId: report.userId,
         month: month.month() + 1,
@@ -216,6 +217,7 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
         orgName,
         orgSubtitle,
         orgCode,
+        logoUrl: report.logoUrl || localLogo || undefined,
         companyCode,
         bankName,
         bankAccountNo,
@@ -242,6 +244,9 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
   const handlePrint = () => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
+
+    const localLogo = typeof window !== "undefined" ? localStorage.getItem("payslip_logo") : null;
+    const logoUrl = report.logoUrl || localLogo;
 
     const monthName = month.format("MMMM YYYY");
     const earningItems = buildEarnings();
@@ -272,7 +277,8 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
           <style>
             * { box-sizing: border-box; }
             body { font-family: Arial, 'Inter', sans-serif; padding: 32px; color: #1e293b; line-height: 1.45; font-size: 12px; }
-            .org { text-align: center; margin-bottom: 4px; }
+            .org { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 24px; text-align: left; }
+            .org-logo { max-height: 50px; max-width: 100px; object-fit: contain; }
             .org h1 { margin: 0; font-size: 18px; font-weight: 800; }
             .org .sub { font-size: 12px; color: #475569; margin-top: 2px; }
             .org .period { font-size: 13px; font-weight: 700; margin-top: 8px; }
@@ -298,10 +304,13 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
         </head>
         <body>
           <div class="org">
-            <h1>${orgName || "Company"}</h1>
-            ${orgSubtitle ? `<div class="sub">${orgSubtitle}</div>` : ""}
-            <div class="period">Salary slip for the month of ${monthName}</div>
-            ${orgCode ? `<div class="code">${orgCode}</div>` : ""}
+            ${logoUrl ? `<img class="org-logo" src="${logoUrl}" alt="Logo" />` : ""}
+            <div>
+              <h1>${orgName || "Company"}</h1>
+              ${orgSubtitle ? `<div class="sub">${orgSubtitle}</div>` : ""}
+              <div class="period">Salary slip for the month of ${monthName}</div>
+              ${orgCode ? `<div class="code">${orgCode}</div>` : ""}
+            </div>
           </div>
 
           <div class="sheet">

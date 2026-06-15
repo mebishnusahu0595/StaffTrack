@@ -215,7 +215,7 @@ export default function AttendancePage() {
           <div className="flex items-center gap-2 px-3 border-x border-slate-100">
              <Calendar className="h-4 w-4 text-blue-600" />
              <span className="font-bold text-slate-700 text-sm">
-                {new Date(selectedDate).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                {new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })}
              </span>
           </div>
           <Button

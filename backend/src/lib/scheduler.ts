@@ -1,11 +1,17 @@
 import { autoCheckoutStuckUsers, autoCheckoutOldStuckSessions } from "../services/attendance.service";
 import { checkStaleLocations } from "../services/location.service";
+import { rolloverOverdueTasks } from "../services/task.service";
 
 export function startScheduler() {
   // 1. Immediately clean up any old stuck sessions from previous days on startup
   autoCheckoutOldStuckSessions()
     .then(() => console.log("[Scheduler] Initial old sessions cleanup completed."))
     .catch((err) => console.error("[Scheduler] Initial old sessions cleanup failed:", err));
+
+  // 1b. Automatically rollover overdue tasks on startup
+  rolloverOverdueTasks()
+    .then(() => console.log("[Scheduler] Initial task rollover completed."))
+    .catch((err) => console.error("[Scheduler] Initial task rollover failed:", err));
 
   // 2. Schedule the daily auto-checkout to run at midnight in Indian Standard Time (IST)
   function scheduleNextRun() {
@@ -36,6 +42,12 @@ export function startScheduler() {
         await autoCheckoutStuckUsers();
       } catch (error) {
         console.error("[Scheduler] Error in scheduled auto-checkout job:", error);
+      }
+      try {
+        await rolloverOverdueTasks();
+        console.log("[Scheduler] Scheduled daily task rollover completed.");
+      } catch (error) {
+        console.error("[Scheduler] Error in scheduled daily task rollover:", error);
       }
       // Recursively schedule the next day's run
       scheduleNextRun();

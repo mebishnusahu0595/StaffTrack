@@ -373,6 +373,8 @@ function PayrollDetailModal({ report, month, onCustomize }: { report: any, month
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
     
+    const localLogo = typeof window !== "undefined" ? localStorage.getItem("payslip_logo") : null;
+    const logoUrl = report.logoUrl || localLogo;
     const monthName = month.format("MMMM YYYY");
     const html = `
       <html>
@@ -381,7 +383,8 @@ function PayrollDetailModal({ report, month, onCustomize }: { report: any, month
           <style>
             body { font-family: 'Inter', sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
             .header { border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
-            .logo { font-size: 24px; font-weight: 800; color: #2563eb; }
+            .logo { display: flex; align-items: center; gap: 12px; font-size: 24px; font-weight: 800; color: #2563eb; }
+            .logo-img { max-height: 40px; max-width: 100px; object-fit: contain; }
             .title { font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #475569; }
             .meta-grid { display: grid; grid-template-cols: 2fr 1fr; gap: 40px; margin-bottom: 40px; }
             .meta-block h3 { margin: 0 0 8px 0; font-size: 11px; text-transform: uppercase; color: #94a3b8; letter-spacing: 1px; }
@@ -399,7 +402,10 @@ function PayrollDetailModal({ report, month, onCustomize }: { report: any, month
         </head>
         <body>
           <div class="header">
-            <div class="logo">Demo Corp</div>
+            <div class="logo">
+              ${logoUrl ? `<img class="logo-img" src="${logoUrl}" alt="Logo" />` : ""}
+              <span>${report.orgName || report.companyName || "STAFFTRACK"}</span>
+            </div>
             <div class="title">Salary Slip</div>
           </div>
           
