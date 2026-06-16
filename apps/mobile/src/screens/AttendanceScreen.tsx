@@ -1,6 +1,9 @@
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
 import { useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+
+dayjs.extend(utc);
 import { Card, IconButton, Text } from "react-native-paper";
 
 import type { Attendance, AttendanceStatus, Holiday } from "../api";
@@ -284,7 +287,7 @@ function resolveDayStatus(records: Attendance[]) {
 }
 
 function formatMaybeTime(value?: string | null) {
-  return value ? dayjs(value).format("hh:mm A") : "--";
+  return value ? dayjs.utc(value).local().format("hh:mm A") : "--";
 }
 
 function toDateKey(value: string) {
@@ -300,8 +303,8 @@ function getAttendanceDisplay(record: Attendance, shiftStart = "09:00", shiftEnd
 
   const [startHour, startMinute] = shiftStart.split(":").map(Number);
   const [endHour, endMinute] = shiftEnd.split(":").map(Number);
-  const checkIn = record.checkInTime ? dayjs(record.checkInTime) : null;
-  const checkOut = record.checkOutTime ? dayjs(record.checkOutTime) : null;
+  const checkIn = record.checkInTime ? dayjs.utc(record.checkInTime).local() : null;
+  const checkOut = record.checkOutTime ? dayjs.utc(record.checkOutTime).local() : null;
   const isLate =
     Boolean(checkIn) &&
     (checkIn!.hour() > startHour || (checkIn!.hour() === startHour && checkIn!.minute() > startMinute));

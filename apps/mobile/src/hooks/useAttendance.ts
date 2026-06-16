@@ -73,7 +73,7 @@ export function useAttendance(month = dayjs().month() + 1, year = dayjs().year()
 
   const todaySessions = attendanceRows.filter((record) =>
     Boolean(record.checkInTime) &&
-    (dayjs(record.date).format("YYYY-MM-DD") === dayjs().format("YYYY-MM-DD") || record.id === activeAttendance?.id)
+    (record.date.substring(0, 10) === dayjs().format("YYYY-MM-DD") || record.id === activeAttendance?.id)
   );
   
   const todayAttendance = activeAttendance || todaySessions[todaySessions.length - 1];
@@ -100,5 +100,5 @@ export function useAttendance(month = dayjs().month() + 1, year = dayjs().year()
 }
 
 export function findAttendanceForDay(records: Attendance[], date: dayjs.Dayjs) {
-  return records.filter((record) => dayjs(record.date).format("YYYY-MM-DD") === date.format("YYYY-MM-DD"));
+  return records.filter((record) => record.date.substring(0, 10) === date.format("YYYY-MM-DD"));
 }

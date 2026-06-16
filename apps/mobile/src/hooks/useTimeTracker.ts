@@ -1,6 +1,9 @@
 import { useMemo } from "react";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
 import type { Attendance } from "../api";
+
+dayjs.extend(utc);
 
 function formatDuration(ms: number) {
   if (ms < 0) ms = 0;
@@ -36,15 +39,15 @@ export function useTimeTracker(todaySessions: Attendance[], currentTime: dayjs.D
       // A late check-in that is still awaiting approval must NOT accrue work time.
       // The timer only starts once a manager/admin approves it.
       if (session.isCheckInPending) return;
-      const start = dayjs(session.checkInTime);
-      const end = session.checkOutTime ? dayjs(session.checkOutTime) : currentTime;
+      const start = dayjs.utc(session.checkInTime).local();
+      const end = session.checkOutTime ? dayjs.utc(session.checkOutTime).local() : currentTime;
       const sessionDurationMs = end.diff(start, "millisecond");
 
       let sessionBreakMs = 0;
       session.breaks?.forEach((b) => {
         if (!b.startTime) return;
-        const bStart = dayjs(b.startTime);
-        const bEnd = b.endTime ? dayjs(b.endTime) : currentTime;
+        const bStart = dayjs.utc(b.startTime).local();
+        const bEnd = b.endTime ? dayjs.utc(b.endTime).local() : currentTime;
         sessionBreakMs += bEnd.diff(bStart, "millisecond");
       });
 
@@ -68,3 +71,4 @@ export function useTimeTracker(todaySessions: Attendance[], currentTime: dayjs.D
     };
   }, [todaySessions, currentTime]);
 }
+
