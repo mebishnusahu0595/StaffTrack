@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { sendSuccess, sendMessage } from "../lib/response";
 import { AttendanceStatus, UserRole, ExpenseCategory, LeaveStatus, TaskStatus, PunchType } from "@prisma/client";
+import { getIO, SOCKET_EVENTS } from "../lib/socket";
 
 export async function getAllUsers(req: Request, res: Response): Promise<void> {
   const users = await prisma.user.findMany({
@@ -177,6 +178,17 @@ export async function updateAttendance(req: Request, res: Response): Promise<voi
     });
   }
 
+  const targetUserId = (userId as string) || existing?.userId;
+  if (!targetUserId) {
+    res.status(400).json({ success: false, message: "Missing userId" });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    select: { workMode: true, companyId: true }
+  });
+
   const startOdo = startOdometer !== undefined ? (startOdometer !== null && startOdometer !== "" ? Number(startOdometer) : null) : undefined;
   const endOdo = endOdometer !== undefined ? (endOdometer !== null && endOdometer !== "" ? Number(endOdometer) : null) : undefined;
 
@@ -193,6 +205,18 @@ export async function updateAttendance(req: Request, res: Response): Promise<voi
   if (startOdometerPhotoUrl !== undefined) data.startOdometerPhotoUrl = startOdometerPhotoUrl || null;
   if (endOdometerPhotoUrl !== undefined) data.endOdometerPhotoUrl = endOdometerPhotoUrl || null;
 
+  const finalCheckInTime = data.checkInTime !== undefined ? data.checkInTime : (existing ? existing.checkInTime : null);
+  const finalPunchType = data.punchType !== undefined ? data.punchType : (existing ? existing.punchType : null);
+
+  if (finalCheckInTime) {
+    data.isCheckInPending = false;
+    data.checkInApproved = true;
+    if (!finalPunchType) {
+      const defaultPunchType = user?.workMode === "FIELD" ? "FIELD" : "OFFICE";
+      data.punchType = defaultPunchType;
+    }
+  }
+
   let updated;
   if (existing) {
     updated = await prisma.attendance.update({
@@ -204,7 +228,7 @@ export async function updateAttendance(req: Request, res: Response): Promise<voi
     targetDate.setHours(0, 0, 0, 0);
     updated = await prisma.attendance.create({
       data: {
-        userId: userId as string,
+        userId: targetUserId,
         date: targetDate,
         ...data,
         status: (status as AttendanceStatus) ?? AttendanceStatus.PRESENT
@@ -252,7 +276,22 @@ export async function updateAttendance(req: Request, res: Response): Promise<voi
     });
   }
 
+  // Emit WebSocket event to refresh UI
+  try {
+    const companyId = user?.companyId || (req as any).user?.companyId;
+    if (companyId) {
+      getIO().to(`company:${companyId}`).emit(SOCKET_EVENTS.ATTENDANCE_UPDATE, {
+        userId: updated.userId,
+        type: "manual-status",
+        data: updated
+      });
+    }
+  } catch (err) {
+    console.error("Failed to emit socket event in updateAttendance:", err);
+  }
+
   sendSuccess(res, updated, "Attendance record updated");
+
 }
 
 export async function getManagers(req: Request, res: Response): Promise<void> {
@@ -462,6 +501,13 @@ export async function bulkMarkAttendance(req: Request, res: Response): Promise<v
     return;
   }
 
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { workMode: true, companyId: true }
+  });
+
+  const defaultPunchType = user?.workMode === "FIELD" ? "FIELD" : "OFFICE";
+
   const results = [];
   const currentDate = new Date(start);
 
@@ -505,6 +551,10 @@ export async function bulkMarkAttendance(req: Request, res: Response): Promise<v
       isCheckInPending: false,
       checkInApproved: true
     };
+
+    if (checkIn && !data.punchType) {
+      data.punchType = defaultPunchType;
+    }
 
     let record;
     if (existing) {
@@ -562,6 +612,20 @@ export async function bulkMarkAttendance(req: Request, res: Response): Promise<v
 
     // Advance to next day
     currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  // Emit WebSocket event to refresh UI
+  try {
+    const companyId = user?.companyId || (req as any).user?.companyId;
+    if (companyId) {
+      getIO().to(`company:${companyId}`).emit(SOCKET_EVENTS.ATTENDANCE_UPDATE, {
+        userId: userId,
+        type: "manual-status",
+        data: { userId }
+      });
+    }
+  } catch (err) {
+    console.error("Failed to emit socket event in bulkMarkAttendance:", err);
   }
 
   sendSuccess(res, results, `Bulk attendance updated for ${results.length} days`);
