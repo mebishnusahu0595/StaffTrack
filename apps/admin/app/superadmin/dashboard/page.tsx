@@ -1108,7 +1108,27 @@ export default function SuperDashboardPage() {
                   />
                 </div>
                 <div>
-                  <Label className="text-xs font-bold uppercase text-slate-500">Check Out</Label>
+                  <div className="flex justify-between items-center mb-1">
+                    <Label className="text-xs font-bold uppercase text-slate-500">Check Out</Label>
+                    {editAtt.checkOutTime && (
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="h-auto p-0 text-xs font-bold text-red-600 hover:text-red-700"
+                        onClick={() =>
+                          setEditAtt({
+                            ...editAtt,
+                            checkOutTime: null,
+                            checkOutPhotoUrl: null,
+                            endOdometer: null,
+                            endOdometerPhotoUrl: null
+                          })
+                        }
+                      >
+                        Remove Check-Out
+                      </Button>
+                    )}
+                  </div>
                   <Input
                     type="datetime-local"
                     value={toLocalInput(editAtt.checkOutTime)}

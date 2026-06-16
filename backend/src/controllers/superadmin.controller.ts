@@ -197,7 +197,16 @@ export async function updateAttendance(req: Request, res: Response): Promise<voi
   if (status !== undefined) data.status = status as AttendanceStatus;
   if (punchType !== undefined) data.punchType = punchType || null;
   if (checkInTime !== undefined) data.checkInTime = checkInTime ? new Date(checkInTime) : null;
-  if (checkOutTime !== undefined) data.checkOutTime = checkOutTime ? new Date(checkOutTime) : null;
+  if (checkOutTime !== undefined) {
+    data.checkOutTime = checkOutTime ? new Date(checkOutTime) : null;
+    if (checkOutTime === null) {
+      data.checkOutLat = null;
+      data.checkOutLng = null;
+      data.checkOutPhotoUrl = null;
+      data.endOdometer = null;
+      data.endOdometerPhotoUrl = null;
+    }
+  }
   if (startOdo !== undefined) data.startOdometer = startOdo;
   if (endOdo !== undefined) data.endOdometer = endOdo;
   if (checkInPhotoUrl !== undefined) data.checkInPhotoUrl = checkInPhotoUrl || null;
@@ -554,6 +563,14 @@ export async function bulkMarkAttendance(req: Request, res: Response): Promise<v
 
     if (checkIn && !data.punchType) {
       data.punchType = defaultPunchType;
+    }
+
+    if (checkOut === null) {
+      data.checkOutLat = null;
+      data.checkOutLng = null;
+      data.checkOutPhotoUrl = null;
+      data.endOdometer = null;
+      data.endOdometerPhotoUrl = null;
     }
 
     let record;
