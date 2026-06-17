@@ -84,7 +84,7 @@ import {
 } from "date-fns";
 
 type ViewMode = "LIST" | "BOARD" | "CALENDAR";
-type FilterType = "ALL" | "TODAYS" | "ONGOING" | "OVERDUE" | "MISSED" | "SCHEDULED" | "COMPLETE" | "GROUP" | "REPEAT" | "REVIEW" | "ISSUE" | "TRASHED";
+type FilterType = "ALL" | "ACTIVE" | "INACTIVE" | "TODAYS" | "ONGOING" | "OVERDUE" | "MISSED" | "SCHEDULED" | "COMPLETE" | "GROUP" | "REPEAT" | "REVIEW" | "ISSUE" | "TRASHED";
 
 export default function TasksPage() {
   const queryClient = useQueryClient();
@@ -344,6 +344,12 @@ export default function TasksPage() {
     switch (activeFilter) {
       case "ALL":
         break;
+      case "ACTIVE":
+        filtered = filtered.filter(t => t.status === "PENDING" || t.status === "IN_PROGRESS");
+        break;
+      case "INACTIVE":
+        filtered = filtered.filter(t => t.status === "COMPLETED" || t.status === "CANCELLED");
+        break;
       case "TODAYS":
         filtered = filtered.filter(t => 
           (isSameDay(new Date(t.dueDate), now) || (isBefore(new Date(t.dueDate), now) && t.status !== "COMPLETED"))
@@ -564,6 +570,8 @@ export default function TasksPage() {
         <div className="px-6 border-b border-slate-50 overflow-x-auto">
            <div className="flex items-center gap-8 min-w-max">
               <FilterTab active={activeFilter === "ALL"} onClick={() => setActiveFilter("ALL")} label="All Tasks" />
+              <FilterTab active={activeFilter === "ACTIVE"} onClick={() => setActiveFilter("ACTIVE")} label="Active Tasks" />
+              <FilterTab active={activeFilter === "INACTIVE"} onClick={() => setActiveFilter("INACTIVE")} label="Inactive Tasks" />
               <FilterTab active={activeFilter === "TODAYS"} onClick={() => setActiveFilter("TODAYS")} label="Todays Tasks" />
               <FilterTab active={activeFilter === "ONGOING"} onClick={() => setActiveFilter("ONGOING")} label="Ongoing" />
               <FilterTab active={activeFilter === "OVERDUE"} onClick={() => setActiveFilter("OVERDUE")} label="Overdue" />

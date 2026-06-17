@@ -82,7 +82,7 @@ export async function listUsers(
   const roleFilter = role && role !== "ALL" ? role : undefined;
   const where: Prisma.UserWhereInput = {
     companyId: actor.companyId,
-    role: roleFilter ? roleFilter : { in: [UserRole.EMPLOYEE, UserRole.MANAGER] },
+    role: roleFilter ? roleFilter : { in: [UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.ADMIN] },
     ...(search && {
       OR: [
         { name: { contains: search, mode: "insensitive" } },
@@ -91,28 +91,6 @@ export async function listUsers(
     }),
     ...(workMode && { workMode })
   };
-
-  if (actor.role === UserRole.MANAGER) {
-    // Managers only manage their own direct reports (plus, optionally, their group).
-    const managerGroupId = await getManagerGroupId(actor.id);
-    where.role = UserRole.EMPLOYEE;
-    where.OR = [
-      { managerId: actor.id },
-      ...(managerGroupId ? [{ groupId: managerGroupId }] : [])
-    ];
-    // A search term also uses OR; combine both constraints with AND so the
-    // manager scope is never widened by a search.
-    if (search) {
-      where.AND = [
-        { OR: where.OR },
-        { OR: [
-          { name: { contains: search, mode: "insensitive" } },
-          { email: { contains: search, mode: "insensitive" } }
-        ] }
-      ];
-      delete where.OR;
-    }
-  }
 
   const [items, total] = await prisma.$transaction([
     prisma.user.findMany({

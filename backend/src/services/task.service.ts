@@ -555,26 +555,11 @@ async function taskAccessWhere(actor: AuthUser): Promise<Prisma.TaskWhereInput> 
     return {};
   }
 
-  if (actor.role === UserRole.ADMIN) {
+  if (actor.role === UserRole.ADMIN || actor.role === UserRole.MANAGER) {
     return {
       assignedTo: {
         companyId: actor.companyId
       }
-    };
-  }
-
-  if (actor.role === UserRole.MANAGER) {
-    // Managers see tasks of their direct reports / group members, tasks they
-    // created, and their own tasks — not every employee in the company.
-    const managerGroupId = await getManagerGroupId(actor.id);
-    return {
-      assignedTo: { companyId: actor.companyId },
-      OR: [
-        { assignedTo: { managerId: actor.id } },
-        ...(managerGroupId ? [{ assignedTo: { groupId: managerGroupId } }] : []),
-        { assignedById: actor.id },
-        { assignedToId: actor.id }
-      ]
     };
   }
 
@@ -601,6 +586,10 @@ async function preGenerateTasksForSeries(baseTask: any, companyId: string) {
 
   while (true) {
     const nextDueDate = await calculateNextOccurrence(currentTaskState);
+    if (nextDueDate.getTime() <= currentTaskState.dueDate.getTime()) {
+      console.warn("[Task Service] calculateNextOccurrence did not advance date. Terminating loop to prevent hang. current:", currentTaskState.dueDate, "next:", nextDueDate);
+      break;
+    }
     if (nextDueDate > maxDate) {
       break;
     }
@@ -640,7 +629,7 @@ async function calculateNextOccurrence(task: any) {
   let next = new Date(task.dueDate);
   next.setUTCHours(0, 0, 0, 0);
 
-  const frequency = task.repeatFrequency;
+  const frequency = task.repeatFrequency ? task.repeatFrequency.toUpperCase() : null;
   const days = task.repeatDays;
   const dates = task.repeatDates;
   const skipHolidays = task.skipHolidays;
