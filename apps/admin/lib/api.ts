@@ -188,8 +188,8 @@ export async function createTask(input: {
   skipHolidays?: boolean;
   priority?: string;
   points?: number;
-  startDate?: Date | null;
-  endDate?: Date | null;
+  startDate?: string | null;
+  endDate?: string | null;
   validations?: string[];
   checklist?: any[];
   geofenceLat?: number | null;
@@ -352,6 +352,11 @@ export async function createTemplate(data: any) {
 
 export async function deleteTemplate(id: string) {
   await api.delete(`/templates/${id}`);
+}
+
+export async function updateTemplate(id: string, data: any) {
+  const response = await api.patch<{ data: any }>(`/templates/${id}`, data);
+  return response.data.data;
 }
 
 // Groups

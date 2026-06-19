@@ -202,6 +202,33 @@ export async function listTasks(actor: AuthUser) {
       }
     }
 
+    const startingToday = tasks.filter(t => 
+      t.status === TaskStatus.PENDING && 
+      t.startDate && 
+      t.startDate >= today && 
+      t.startDate < tomorrow
+    );
+
+    for (const task of startingToday) {
+      const existing = await prisma.notification.findFirst({
+        where: {
+          userId: actor.id,
+          type: "TASK_STARTED_TODAY",
+          message: { contains: task.title },
+          createdAt: { gte: today }
+        }
+      });
+
+      if (!existing) {
+        await notificationService.createNotification(
+          actor.id,
+          "New Task Started",
+          `Your task "${task.title}" has started today. Please complete it.`,
+          "TASK_STARTED_TODAY"
+        );
+      }
+    }
+
     const carryForwardTasks = tasks.filter(
       (task) =>
         task.status !== TaskStatus.COMPLETED &&
@@ -565,15 +592,31 @@ async function taskAccessWhere(actor: AuthUser): Promise<Prisma.TaskWhereInput> 
     };
   }
 
+  const now = new Date();
   return {
-    assignedToId: actor.id
+    assignedToId: actor.id,
+    OR: [
+      { startDate: null },
+      { startDate: { lte: now } }
+    ]
   };
 }
 
 async function preGenerateTasksForSeries(baseTask: any, companyId: string) {
   const horizonDays = 180;
-  const maxDate = new Date();
+  let maxDate = new Date();
   maxDate.setDate(maxDate.getDate() + horizonDays);
+
+  if (baseTask.endDate) {
+    const baseEndDate = new Date(baseTask.endDate);
+    if (baseEndDate < maxDate) {
+      maxDate = baseEndDate;
+    }
+  }
+
+  const startDateOffset = baseTask.startDate
+    ? new Date(baseTask.dueDate).getTime() - new Date(baseTask.startDate).getTime()
+    : null;
 
   let currentTaskState = {
     dueDate: new Date(baseTask.dueDate),
@@ -596,12 +639,18 @@ async function preGenerateTasksForSeries(baseTask: any, companyId: string) {
       break;
     }
 
+    const calculatedStartDate = startDateOffset !== null
+      ? new Date(nextDueDate.getTime() - startDateOffset)
+      : null;
+
     tasksToCreate.push({
       title: baseTask.title,
       description: baseTask.description,
       assignedToId: baseTask.assignedToId,
       assignedById: baseTask.assignedById,
       dueDate: new Date(nextDueDate),
+      startDate: calculatedStartDate,
+      endDate: baseTask.endDate ? new Date(baseTask.endDate) : null,
       lat: baseTask.lat,
       lng: baseTask.lng,
       isRepeating: true,

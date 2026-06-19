@@ -33,3 +33,14 @@ export async function deleteTemplate(id: string) {
     where: { id }
   });
 }
+
+export async function updateTemplate(id: string, data: any) {
+  const updateData = { ...data };
+  if (updateData.data !== undefined) {
+    updateData.data = typeof updateData.data === 'string' ? updateData.data : JSON.stringify(updateData.data);
+  }
+  return prisma.template.update({
+    where: { id },
+    data: updateData
+  });
+}

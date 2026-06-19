@@ -18,7 +18,8 @@ import {
   Layers,
   FileText,
   Send,
-  Trash2
+  Trash2,
+  Pencil
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,7 +46,7 @@ import {
 } from "@/components/ui/select";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchTemplates, createTemplate, createTask, fetchUsers, deleteTemplate } from "@/lib/api";
+import { fetchTemplates, createTemplate, createTask, fetchUsers, deleteTemplate, updateTemplate } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 
@@ -56,6 +57,7 @@ export default function TemplatesPage() {
   const [isCopyOpen, setIsCopyOpen] = useState(false);
   const [viewTemplate, setViewTemplate] = useState<any>(null);
   const [assignTemplate, setAssignTemplate] = useState<any>(null);
+  const [editTemplate, setEditTemplate] = useState<any>(null);
   
   // Custom filters
   const [priorityFilter, setPriorityFilter] = useState("All");
@@ -84,6 +86,17 @@ export default function TemplatesPage() {
     },
     onError: (err: any) => {
       alert(err?.response?.data?.message || err?.message || "Failed to delete template");
+    }
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, ...data }: { id: string; [key: string]: any }) => updateTemplate(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["templates"] });
+      setEditTemplate(null);
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message || err?.message || "Failed to update template");
     }
   });
 
@@ -294,6 +307,15 @@ export default function TemplatesPage() {
                                  <Button 
                                    variant="ghost" 
                                    size="icon" 
+                                   className="h-9 w-9 rounded-xl hover:bg-sky-50 text-slate-400 hover:text-sky-600 transition-all"
+                                   onClick={() => setEditTemplate(template)}
+                                   title="Edit Blueprint"
+                                 >
+                                    <Pencil className="h-4 w-4 text-sky-600" />
+                                 </Button>
+                                 <Button 
+                                   variant="ghost" 
+                                   size="icon" 
                                    className="h-9 w-9 rounded-xl hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-all"
                                    onClick={() => {
                                       const confirmDelete = confirm(`Are you sure you want to delete blueprint "${template.name}"? This will delete all live tasks spawned from this blueprint from everyone's mobile app.`);
@@ -341,6 +363,14 @@ export default function TemplatesPage() {
         open={!!assignTemplate}
         onOpenChange={(open) => !open && setAssignTemplate(null)}
       />
+
+      <Dialog open={!!editTemplate} onOpenChange={(open) => !open && setEditTemplate(null)}>
+         <EditTemplateDialog 
+            template={editTemplate}
+            onSubmit={(data: any) => updateMutation.mutate({ id: editTemplate.id, ...data })}
+            isSubmitting={updateMutation.isPending}
+         />
+      </Dialog>
     </div>
   );
 }
@@ -628,9 +658,21 @@ function ViewTemplateDialog({ template, open, onOpenChange }: { template: any; o
 
 function AssignTemplateDialog({ template, open, onOpenChange }: { template: any; open: boolean; onOpenChange: (open: boolean) => void }) {
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [startDate, setStartDate] = useState(dayjs().format("YYYY-MM-DD"));
   const [dueDate, setDueDate] = useState(dayjs().add(1, "day").format("YYYY-MM-DD"));
+  const [endDate, setEndDate] = useState("");
+  const [recurrence, setRecurrence] = useState("None");
   const [searchQuery, setSearchQuery] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  React.useEffect(() => {
+    if (template) {
+      setRecurrence(template.recurrence || "None");
+      setStartDate(dayjs().format("YYYY-MM-DD"));
+      setDueDate(dayjs().add(1, "day").format("YYYY-MM-DD"));
+      setEndDate("");
+    }
+  }, [template]);
 
   const usersQuery = useQuery({
     queryKey: ["users-all-list"],
@@ -640,10 +682,16 @@ function AssignTemplateDialog({ template, open, onOpenChange }: { template: any;
 
   const users = usersQuery.data?.items ?? [];
 
-  const filteredUsers = users.filter(user => 
-    user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const [roleFilter, setRoleFilter] = useState("ALL");
+  const [workModeFilter, setWorkModeFilter] = useState("ALL");
+
+  const filteredUsers = users.filter(user => {
+    const matchSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        user.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchRole = roleFilter === "ALL" || user.role === roleFilter;
+    const matchWorkMode = workModeFilter === "ALL" || user.workMode === workModeFilter;
+    return matchSearch && matchRole && matchWorkMode;
+  });
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -672,9 +720,11 @@ function AssignTemplateDialog({ template, open, onOpenChange }: { template: any;
             description: template.description || template.name,
             assignedToId: userId,
             dueDate: new Date(dueDate).toISOString(),
+            startDate: startDate ? new Date(startDate).toISOString() : undefined,
+            endDate: endDate ? new Date(endDate).toISOString() : undefined,
             priority: template.priority || "Medium",
-            isRepeating: (template.recurrence || "None") !== "None",
-            repeatFrequency: (template.recurrence || "None") !== "None" ? template.recurrence : undefined,
+            isRepeating: recurrence !== "None",
+            repeatFrequency: recurrence !== "None" ? recurrence : undefined,
             templateId: template.id
           })
         )
@@ -706,14 +756,54 @@ function AssignTemplateDialog({ template, open, onOpenChange }: { template: any;
         </DialogHeader>
         <div className="p-8 space-y-6">
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase text-slate-400">Due Date</Label>
-              <Input 
-                type="date"
-                className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
-                value={dueDate}
-                onChange={e => setDueDate(e.target.value)}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-400">Start Date</Label>
+                <Input 
+                  type="date"
+                  className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
+                  value={startDate}
+                  onChange={e => setStartDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-400">Due Date</Label>
+                <Input 
+                  type="date"
+                  className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
+                  value={dueDate}
+                  onChange={e => setDueDate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-400">Recurrence</Label>
+                <Select value={recurrence} onValueChange={setRecurrence}>
+                  <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl bg-white border border-slate-100 shadow-xl">
+                    <SelectItem value="None">None</SelectItem>
+                    <SelectItem value="Daily">Daily</SelectItem>
+                    <SelectItem value="Weekly">Weekly</SelectItem>
+                    <SelectItem value="Monthly">Monthly</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className={cn("text-[10px] font-black uppercase tracking-wider", recurrence === "None" ? "text-slate-300" : "text-slate-400")}>
+                  End Date
+                </Label>
+                <Input 
+                  type="date"
+                  disabled={recurrence === "None"}
+                  className={cn("h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs", recurrence === "None" && "opacity-50")}
+                  value={endDate}
+                  onChange={e => setEndDate(e.target.value)}
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -724,6 +814,36 @@ function AssignTemplateDialog({ template, open, onOpenChange }: { template: any;
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
               />
+
+              <div className="grid grid-cols-2 gap-3 my-2">
+                <div className="space-y-1">
+                  <span className="text-[9px] font-black uppercase text-slate-400">Filter Role</span>
+                  <Select value={roleFilter} onValueChange={setRoleFilter}>
+                    <SelectTrigger className="h-9 rounded-xl bg-slate-50 border-none font-bold text-[10px] text-left">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl bg-white border border-slate-100 shadow-xl">
+                      <SelectItem value="ALL">All Roles</SelectItem>
+                      <SelectItem value="EMPLOYEE">Employees</SelectItem>
+                      <SelectItem value="MANAGER">Managers</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[9px] font-black uppercase text-slate-400">Filter Work Mode</span>
+                  <Select value={workModeFilter} onValueChange={setWorkModeFilter}>
+                    <SelectTrigger className="h-9 rounded-xl bg-slate-50 border-none font-bold text-[10px] text-left">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl bg-white border border-slate-100 shadow-xl">
+                      <SelectItem value="ALL">All Modes</SelectItem>
+                      <SelectItem value="OFFICE">Office</SelectItem>
+                      <SelectItem value="FIELD">Field</SelectItem>
+                      <SelectItem value="BOTH">Both</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               
               <div className="border border-slate-100 rounded-2xl overflow-hidden">
                 <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-100">
@@ -772,3 +892,136 @@ function AssignTemplateDialog({ template, open, onOpenChange }: { template: any;
     </Dialog>
   );
 }
+
+function EditTemplateDialog({ template, onSubmit, isSubmitting }: any) {
+  const [data, setData] = useState({ 
+    name: template?.name || "", 
+    type: template?.type || "Task", 
+    priority: template?.priority || "Medium",
+    recurrence: template?.recurrence || "None",
+    startTime: template?.startTime || "06:00 PM",
+    dueTime: template?.dueTime || "07:30 PM",
+    description: template?.description || ""
+  });
+
+  React.useEffect(() => {
+    if (template) {
+      setData({
+        name: template.name || "",
+        type: template.type || "Task",
+        priority: template.priority || "Medium",
+        recurrence: template.recurrence || "None",
+        startTime: template.startTime || "06:00 PM",
+        dueTime: template.dueTime || "07:30 PM",
+        description: template.description || ""
+      });
+    }
+  }, [template]);
+
+  return (
+    <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] hide-close text-left">
+      <DialogHeader className="p-8 bg-blue-600 text-white relative">
+        <DialogClose className="absolute right-6 top-6 rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
+           <X className="h-4 w-4" />
+        </DialogClose>
+        <DialogTitle className="text-2xl font-black">Edit Template</DialogTitle>
+        <p className="text-blue-100 text-xs font-bold mt-1">Modify the specifications for this blueprint.</p>
+      </DialogHeader>
+      <div className="p-8 space-y-6">
+         <div className="space-y-4">
+            <div className="space-y-2">
+               <Label className="text-[10px] font-black uppercase text-slate-400">Template Name</Label>
+               <Input 
+                 placeholder="e.g. Weekly Site Audit" 
+                 className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
+                 value={data.name}
+                 onChange={e => setData({...data, name: e.target.value})}
+               />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Type</Label>
+                  <Select value={data.type} onValueChange={t => setData({...data, type: t})}>
+                     <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs">
+                        <SelectValue />
+                     </SelectTrigger>
+                     <SelectContent className="rounded-2xl bg-white border border-slate-100 shadow-xl">
+                        <SelectItem value="Task">Task</SelectItem>
+                        <SelectItem value="Project">Project</SelectItem>
+                     </SelectContent>
+                  </Select>
+               </div>
+               <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Priority</Label>
+                  <Select value={data.priority} onValueChange={p => setData({...data, priority: p})}>
+                     <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs">
+                        <SelectValue />
+                     </SelectTrigger>
+                     <SelectContent className="rounded-2xl bg-white border border-slate-100 shadow-xl">
+                        <SelectItem value="Low">Low</SelectItem>
+                        <SelectItem value="Medium">Medium</SelectItem>
+                        <SelectItem value="High">High</SelectItem>
+                     </SelectContent>
+                  </Select>
+               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Start Time</Label>
+                  <Input 
+                    placeholder="e.g. 06:00 PM" 
+                    className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
+                    value={data.startTime}
+                    onChange={e => setData({...data, startTime: e.target.value})}
+                  />
+               </div>
+               <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Due Time</Label>
+                  <Input 
+                    placeholder="e.g. 07:30 PM" 
+                    className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
+                    value={data.dueTime}
+                    onChange={e => setData({...data, dueTime: e.target.value})}
+                  />
+               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Recurrence</Label>
+                  <Select value={data.recurrence} onValueChange={r => setData({...data, recurrence: r})}>
+                     <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs">
+                        <SelectValue />
+                     </SelectTrigger>
+                     <SelectContent className="rounded-2xl bg-white border border-slate-100 shadow-xl">
+                        <SelectItem value="None">None</SelectItem>
+                        <SelectItem value="Daily">Daily</SelectItem>
+                        <SelectItem value="Weekly">Weekly</SelectItem>
+                        <SelectItem value="Monthly">Monthly</SelectItem>
+                     </SelectContent>
+                  </Select>
+               </div>
+               <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Description</Label>
+                  <Input 
+                    placeholder="Description of blueprint..." 
+                    className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
+                    value={data.description}
+                    onChange={e => setData({...data, description: e.target.value})}
+                  />
+               </div>
+            </div>
+         </div>
+         <Button 
+          className="w-full h-14 bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-100 rounded-2xl font-black uppercase tracking-widest text-xs"
+          onClick={() => onSubmit(data)}
+          disabled={isSubmitting || !data.name}
+         >
+            {isSubmitting ? "Saving..." : "Save Changes"}
+         </Button>
+      </div>
+    </DialogContent>
+  );
+}
+

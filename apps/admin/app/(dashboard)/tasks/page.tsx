@@ -91,7 +91,17 @@ export default function TasksPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("LIST");
   const [activeFilter, setActiveFilter] = useState<FilterType>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterDate, setFilterDate] = useState<string>("");
+  const [filterDate, setFilterDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
+  const [centerDate, setCenterDate] = useState<Date>(new Date());
+  
+  const sliderDates = useMemo(() => {
+    const datesList = [];
+    for (let i = -4; i <= 4; i++) {
+      datesList.push(addDays(centerDate, i));
+    }
+    return datesList;
+  }, [centerDate]);
+
   const [page, setPage] = useState(1);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [viewingTask, setViewingTask] = useState<any>(null);
@@ -544,6 +554,104 @@ export default function TasksPage() {
         </div>
       </div>
 
+      {/* Date Slider Strip */}
+      <div className="bg-white rounded-[24px] border border-slate-100 shadow-sm p-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-xl hover:bg-slate-50 border border-slate-100"
+            onClick={() => setCenterDate(prev => addDays(prev, -7))}
+          >
+            <ChevronLeft className="h-4 w-4 text-slate-600" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 px-3 rounded-xl font-extrabold text-[10px] uppercase tracking-wider hover:bg-slate-50 border border-slate-100 text-blue-600"
+            onClick={() => {
+              const today = new Date();
+              setCenterDate(today);
+              setFilterDate(format(today, "yyyy-MM-dd"));
+            }}
+          >
+            Today
+          </Button>
+        </div>
+
+        <div className="flex-1 overflow-x-auto scrollbar-hide py-1">
+          <div className="flex items-center justify-center gap-3 min-w-max">
+            <Button
+              variant="ghost"
+              className={cn(
+                "h-12 px-6 rounded-2xl flex flex-col items-center justify-center border transition-all text-xs font-bold",
+                !filterDate ? "bg-blue-600 border-blue-600 text-white shadow-md" : "bg-slate-50/50 border-slate-100 text-slate-500 hover:bg-slate-50"
+              )}
+              onClick={() => setFilterDate("")}
+            >
+              <span className="text-[9px] uppercase tracking-widest font-black opacity-80">All</span>
+              <span className="text-sm font-black mt-0.5">Tasks</span>
+            </Button>
+
+            {sliderDates.map((dateObj, idx) => {
+              const dateStr = format(dateObj, "yyyy-MM-dd");
+              const isSelected = filterDate === dateStr;
+              const isTodayDate = isSameDay(dateObj, new Date());
+              
+              return (
+                <button
+                  key={idx}
+                  onClick={() => setFilterDate(dateStr)}
+                  className={cn(
+                    "h-14 w-16 rounded-2xl flex flex-col items-center justify-center border transition-all hover:scale-[1.02] active:scale-[0.98]",
+                    isSelected 
+                      ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100" 
+                      : "bg-slate-50/50 border-slate-150 text-slate-600 hover:bg-slate-55/80 hover:border-slate-200",
+                    isTodayDate && !isSelected && "border-blue-300 ring-1 ring-blue-100"
+                  )}
+                >
+                  <span className="text-[9px] uppercase tracking-wider font-extrabold opacity-75">
+                    {format(dateObj, "EEE")}
+                  </span>
+                  <span className="text-sm font-black leading-none mt-0.5">
+                    {format(dateObj, "d")}
+                  </span>
+                  <span className="text-[8px] font-bold opacity-60">
+                    {format(dateObj, "MMM")}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 px-3 py-1 bg-slate-50 rounded-xl border border-slate-100">
+             <CalendarIcon className="h-3.5 w-3.5 text-slate-400" />
+             <input 
+               type="date" 
+               className="bg-transparent border-none text-[10px] font-bold text-slate-600 focus:outline-none"
+               value={filterDate}
+               onChange={e => {
+                 const newD = e.target.value;
+                 setFilterDate(newD);
+                 if (newD) {
+                   setCenterDate(new Date(newD));
+                 }
+               }}
+             />
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-xl hover:bg-slate-50 border border-slate-100"
+            onClick={() => setCenterDate(prev => addDays(prev, 7))}
+          >
+            <ChevronRight className="h-4 w-4 text-slate-600" />
+          </Button>
+        </div>
+      </div>
+
       {/* Main Container */}
       <div className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
         
@@ -588,21 +696,6 @@ export default function TasksPage() {
 
         {/* Table Toolbar */}
          <div className="p-4 flex items-center justify-end gap-3 bg-white border-b border-slate-50">
-            <div className="flex items-center gap-2 px-3 py-1 bg-slate-50 rounded-xl border border-slate-100">
-               <CalendarIcon className="h-3.5 w-3.5 text-slate-400" />
-               <input 
-                 type="date" 
-                 className="bg-transparent border-none text-[10px] font-bold text-slate-600 focus:outline-none"
-                 value={filterDate}
-                 onChange={e => setFilterDate(e.target.value)}
-               />
-               {filterDate && (
-                 <button onClick={() => setFilterDate("")} className="text-slate-400 hover:text-rose-500">
-                    <X className="h-3 w-3" />
-                 </button>
-               )}
-            </div>
-
             {/* Filter Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

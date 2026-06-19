@@ -95,3 +95,8 @@ export async function deleteTemplate(req: Request, res: Response) {
   await templateService.deleteTemplate(req.params.id);
   sendSuccess(res, null, "Template deleted");
 }
+
+export async function updateTemplate(req: Request, res: Response) {
+  const result = await templateService.updateTemplate(req.params.id, req.body);
+  sendSuccess(res, result, "Template updated");
+}
