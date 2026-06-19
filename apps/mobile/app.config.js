@@ -58,6 +58,7 @@ export default ({ config }) => ({
   },
   android: {
     package: "com.stafftrack.staff",
+    googleServicesFile: "./google-services.json",
     permissions: [
       "ACCESS_COARSE_LOCATION",
       "ACCESS_FINE_LOCATION",

@@ -660,7 +660,6 @@ function AssignTemplateDialog({ template, open, onOpenChange }: { template: any;
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [startDate, setStartDate] = useState(dayjs().format("YYYY-MM-DD"));
   const [dueDate, setDueDate] = useState(dayjs().add(1, "day").format("YYYY-MM-DD"));
-  const [endDate, setEndDate] = useState("");
   const [recurrence, setRecurrence] = useState("None");
   const [searchQuery, setSearchQuery] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -671,7 +670,6 @@ function AssignTemplateDialog({ template, open, onOpenChange }: { template: any;
       setRecurrence(template.recurrence || "None");
       setStartDate(dayjs().format("YYYY-MM-DD"));
       setDueDate(dayjs().add(1, "day").format("YYYY-MM-DD"));
-      setEndDate("");
     }
   }, [template]);
 
@@ -721,18 +719,24 @@ function AssignTemplateDialog({ template, open, onOpenChange }: { template: any;
     setIsSubmitting(true);
     try {
       const uniqueSelectedUserIds = Array.from(new Set(selectedUserIds));
+      const isRepeating = recurrence !== "None";
+      // If repeating, the first occurrence is due on startDate, and the series ends on the user-selected dueDate.
+      // If not repeating, the task starts on startDate and is due on dueDate.
+      const taskDueDate = isRepeating ? startDate : dueDate;
+      const taskEndDate = isRepeating ? dueDate : undefined;
+
       await Promise.all(
         uniqueSelectedUserIds.map(userId => 
           createTask({
             title: template.name,
             description: template.description || template.name,
             assignedToId: userId,
-            dueDate: new Date(dueDate).toISOString(),
+            dueDate: new Date(taskDueDate).toISOString(),
             startDate: startDate ? new Date(startDate).toISOString() : undefined,
-            endDate: endDate ? new Date(endDate).toISOString() : undefined,
+            endDate: taskEndDate ? new Date(taskEndDate).toISOString() : undefined,
             priority: template.priority || "Medium",
-            isRepeating: recurrence !== "None",
-            repeatFrequency: recurrence !== "None" ? recurrence : undefined,
+            isRepeating: isRepeating,
+            repeatFrequency: isRepeating ? recurrence : undefined,
             templateId: template.id
           })
         )
@@ -786,33 +790,19 @@ function AssignTemplateDialog({ template, open, onOpenChange }: { template: any;
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-400">Recurrence</Label>
-                <Select value={recurrence} onValueChange={setRecurrence}>
-                  <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-2xl bg-white border border-slate-100 shadow-xl">
-                    <SelectItem value="None">None</SelectItem>
-                    <SelectItem value="Daily">Daily</SelectItem>
-                    <SelectItem value="Weekly">Weekly</SelectItem>
-                    <SelectItem value="Monthly">Monthly</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className={cn("text-[10px] font-black uppercase tracking-wider", recurrence === "None" ? "text-slate-300" : "text-slate-400")}>
-                  End Date
-                </Label>
-                <Input 
-                  type="date"
-                  disabled={recurrence === "None"}
-                  className={cn("h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs", recurrence === "None" && "opacity-50")}
-                  value={endDate}
-                  onChange={e => setEndDate(e.target.value)}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-slate-400">Recurrence</Label>
+              <Select value={recurrence} onValueChange={setRecurrence}>
+                <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl bg-white border border-slate-100 shadow-xl">
+                  <SelectItem value="None">None</SelectItem>
+                  <SelectItem value="Daily">Daily</SelectItem>
+                  <SelectItem value="Weekly">Weekly</SelectItem>
+                  <SelectItem value="Monthly">Monthly</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">

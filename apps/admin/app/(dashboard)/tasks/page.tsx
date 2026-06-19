@@ -110,7 +110,7 @@ export default function TasksPage() {
   const [selectedAssignee, setSelectedAssignee] = useState<string>("ALL");
   const [selectedPriority, setSelectedPriority] = useState<string>("ALL");
   const [selectedFrequency, setSelectedFrequency] = useState<string>("ALL");
-  const [sortBy, setSortBy] = useState<string>("DUE_DATE_ASC"); 
+  const [sortBy, setSortBy] = useState<string>("CREATED_AT_DESC"); 
   const [viewDensity, setViewDensity] = useState<"COMPACT" | "COZY">("COZY");
 
   // Edit Task States
@@ -345,14 +345,23 @@ export default function TasksPage() {
 
     // Date Filter
     if (filterDate) {
-      const selectedDate = startOfDay(parseISO(filterDate));
-      filtered = filtered.filter(t => {
-        const taskDue = startOfDay(new Date(t.dueDate));
-        if (t.startDate) {
-          const taskStart = startOfDay(new Date(t.startDate));
-          return selectedDate >= taskStart && selectedDate <= taskDue;
+      const getLocalDateStr = (d: any) => {
+        if (!d) return "";
+        try {
+          const dateObj = new Date(d);
+          if (isNaN(dateObj.getTime())) return "";
+          return format(dateObj, "yyyy-MM-dd");
+        } catch {
+          return "";
         }
-        return isSameDay(taskDue, selectedDate);
+      };
+      filtered = filtered.filter(t => {
+        const taskDueStr = getLocalDateStr(t.dueDate);
+        if (t.startDate) {
+          const taskStartStr = getLocalDateStr(t.startDate);
+          return filterDate >= taskStartStr && filterDate <= taskDueStr;
+        }
+        return filterDate === taskDueStr;
       });
     }
 
@@ -418,6 +427,12 @@ export default function TasksPage() {
 
     // Sorting
     filtered = [...filtered].sort((a, b) => {
+      if (sortBy === "CREATED_AT_DESC") {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+      if (sortBy === "CREATED_AT_ASC") {
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }
       if (sortBy === "DUE_DATE_ASC") {
         return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
       }
@@ -430,7 +445,7 @@ export default function TasksPage() {
       if (sortBy === "POINTS_DESC") {
         return (b.points || 0) - (a.points || 0);
       }
-      return 0;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
     return filtered;
@@ -592,7 +607,7 @@ export default function TasksPage() {
           </Button>
         </div>
 
-        <div className="flex-1 overflow-x-auto scrollbar-hide py-1">
+        <div className="flex-1 overflow-x-auto py-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           <div className="flex items-center justify-center gap-3 min-w-max">
             <Button
               variant="ghost"
@@ -688,7 +703,7 @@ export default function TasksPage() {
         </div>
 
         {/* Sub Navigation Tabs */}
-        <div className="px-6 border-b border-slate-50 overflow-x-auto">
+        <div className="px-6 border-b border-slate-50 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
            <div className="flex items-center gap-8 min-w-max">
               <FilterTab active={activeFilter === "ALL"} onClick={() => setActiveFilter("ALL")} label="All Tasks" />
               <FilterTab active={activeFilter === "ACTIVE"} onClick={() => setActiveFilter("ACTIVE")} label="Active Tasks" />
@@ -798,6 +813,8 @@ export default function TasksPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
+                      <SelectItem value="CREATED_AT_DESC">Recent: Newest First</SelectItem>
+                      <SelectItem value="CREATED_AT_ASC">Recent: Oldest First</SelectItem>
                       <SelectItem value="DUE_DATE_ASC">Due Date: Ascending</SelectItem>
                       <SelectItem value="DUE_DATE_DESC">Due Date: Descending</SelectItem>
                       <SelectItem value="POINTS_ASC">Points: Low to High</SelectItem>
@@ -843,6 +860,7 @@ export default function TasksPage() {
                   <th className="py-4 px-4 text-center">Points</th>
                   <th className="py-4 px-4 text-center">Priority</th>
                   <th className="py-4 px-4">Created on</th>
+                  <th className="py-4 px-4 min-w-[120px]">Due Date</th>
                   <th className="py-4 px-6 text-right">Actions</th>
                 </tr>
               </thead>
@@ -850,7 +868,7 @@ export default function TasksPage() {
                 {isLoading ? (
                   Array(5).fill(0).map((_, i) => (
                     <tr key={i} className="animate-pulse">
-                      <td colSpan={9} className="p-8"><div className="h-10 bg-slate-100 rounded-xl" /></td>
+                      <td colSpan={10} className="p-8"><div className="h-10 bg-slate-100 rounded-xl" /></td>
                     </tr>
                   ))
                                 ) : (() => {
@@ -873,7 +891,7 @@ export default function TasksPage() {
                       return (
                         <React.Fragment key={userId}>
                           <tr className="bg-slate-50/70 hover:bg-slate-100/50 transition-colors">
-                            <td colSpan={9} className="py-2.5 px-6">
+                            <td colSpan={10} className="py-2.5 px-6">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-black text-slate-800">👤 {group.user.name}</span>
@@ -959,6 +977,9 @@ export default function TasksPage() {
                               </td>
                               <td className="py-2 px-4">
                                 <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.createdAt), 'dd-MM-yyyy')}</span>
+                              </td>
+                              <td className="py-2 px-4">
+                                <span className="text-[10px] font-bold text-slate-600">{format(new Date(task.dueDate), 'dd-MM-yyyy')}</span>
                               </td>
                               <td className="py-2 px-6 text-right">
                                 <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1085,6 +1106,9 @@ export default function TasksPage() {
                       </td>
                       <td className="py-2 px-4">
                         <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.createdAt), 'dd-MM-yyyy')}</span>
+                      </td>
+                      <td className="py-2 px-4">
+                        <span className="text-[10px] font-bold text-slate-600">{format(new Date(task.dueDate), 'dd-MM-yyyy')}</span>
                       </td>
                       <td className="py-2 px-6 text-right">
                         <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
