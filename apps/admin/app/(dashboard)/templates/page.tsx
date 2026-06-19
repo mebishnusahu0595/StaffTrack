@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useMemo } from "react";
 import { 
   Library, 
   Plus, 
@@ -664,6 +664,7 @@ function AssignTemplateDialog({ template, open, onOpenChange }: { template: any;
   const [recurrence, setRecurrence] = useState("None");
   const [searchQuery, setSearchQuery] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   React.useEffect(() => {
     if (template) {
@@ -682,10 +683,15 @@ function AssignTemplateDialog({ template, open, onOpenChange }: { template: any;
 
   const users = usersQuery.data?.items ?? [];
 
+  // Deduplicate users client-side to ensure unique list
+  const uniqueUsers = useMemo(() => {
+    return Array.from(new Map(users.map(u => [u.id, u])).values());
+  }, [users]);
+
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [workModeFilter, setWorkModeFilter] = useState("ALL");
 
-  const filteredUsers = users.filter(user => {
+  const filteredUsers = uniqueUsers.filter(user => {
     const matchSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                         user.email.toLowerCase().includes(searchQuery.toLowerCase());
     const matchRole = roleFilter === "ALL" || user.role === roleFilter;
@@ -710,11 +716,13 @@ function AssignTemplateDialog({ template, open, onOpenChange }: { template: any;
   };
 
   const handleAssign = async () => {
-    if (!template || selectedUserIds.length === 0 || isSubmitting) return;
+    if (!template || selectedUserIds.length === 0 || submittingRef.current || isSubmitting) return;
+    submittingRef.current = true;
     setIsSubmitting(true);
     try {
+      const uniqueSelectedUserIds = Array.from(new Set(selectedUserIds));
       await Promise.all(
-        selectedUserIds.map(userId => 
+        uniqueSelectedUserIds.map(userId => 
           createTask({
             title: template.name,
             description: template.description || template.name,
@@ -736,6 +744,7 @@ function AssignTemplateDialog({ template, open, onOpenChange }: { template: any;
       console.error(err);
       alert(err?.response?.data?.message || err?.message || "Failed to assign tasks from template");
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   };

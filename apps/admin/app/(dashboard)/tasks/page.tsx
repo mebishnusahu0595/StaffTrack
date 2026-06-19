@@ -345,8 +345,15 @@ export default function TasksPage() {
 
     // Date Filter
     if (filterDate) {
-      const selectedDate = parseISO(filterDate);
-      filtered = filtered.filter(t => isSameDay(new Date(t.dueDate), selectedDate));
+      const selectedDate = startOfDay(parseISO(filterDate));
+      filtered = filtered.filter(t => {
+        const taskDue = startOfDay(new Date(t.dueDate));
+        if (t.startDate) {
+          const taskStart = startOfDay(new Date(t.startDate));
+          return selectedDate >= taskStart && selectedDate <= taskDue;
+        }
+        return isSameDay(taskDue, selectedDate);
+      });
     }
 
     // Sub Navigation Filters
@@ -361,9 +368,15 @@ export default function TasksPage() {
         filtered = filtered.filter(t => t.status === "COMPLETED" || t.status === "CANCELLED");
         break;
       case "TODAYS":
-        filtered = filtered.filter(t => 
-          (isSameDay(new Date(t.dueDate), now) || (isBefore(new Date(t.dueDate), now) && t.status !== "COMPLETED"))
-        );
+        filtered = filtered.filter(t => {
+          const taskDue = new Date(t.dueDate);
+          const taskStart = t.startDate ? new Date(t.startDate) : null;
+          return (
+            isSameDay(taskDue, now) ||
+            (taskStart && isSameDay(taskStart, now)) ||
+            (isBefore(taskDue, now) && t.status !== "COMPLETED")
+          );
+        });
         break;
       case "ONGOING":
         filtered = filtered.filter(t => t.status === "IN_PROGRESS");
@@ -1316,7 +1329,14 @@ export default function TasksPage() {
 
               {/* Day Cells */}
               {calendarDays.map((cell, idx) => {
-                const dayTasks = filteredTasks.filter(t => isSameDay(new Date(t.dueDate), cell.date));
+                const dayTasks = filteredTasks.filter(t => {
+                  const taskDue = startOfDay(new Date(t.dueDate));
+                  if (t.startDate) {
+                    const taskStart = startOfDay(new Date(t.startDate));
+                    return cell.date >= taskStart && cell.date <= taskDue;
+                  }
+                  return isSameDay(taskDue, cell.date);
+                });
                 const isToday = isSameDay(cell.date, new Date());
                 
                 return (
