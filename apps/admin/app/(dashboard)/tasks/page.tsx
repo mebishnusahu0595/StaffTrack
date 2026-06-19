@@ -105,13 +105,16 @@ export default function TasksPage() {
   const [page, setPage] = useState(1);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [viewingTask, setViewingTask] = useState<any>(null);
-  
   // Custom Filter & View Options
   const [selectedAssignee, setSelectedAssignee] = useState<string>("ALL");
   const [selectedPriority, setSelectedPriority] = useState<string>("ALL");
   const [selectedFrequency, setSelectedFrequency] = useState<string>("ALL");
   const [sortBy, setSortBy] = useState<string>("CREATED_AT_DESC"); 
   const [viewDensity, setViewDensity] = useState<"COMPACT" | "COZY">("COZY");
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, activeFilter, filterDate, selectedAssignee, selectedPriority, selectedFrequency]);
 
   // Edit Task States
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -339,7 +342,7 @@ export default function TasksPage() {
     if (searchQuery) {
       filtered = filtered.filter(t => 
         t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.assignedTo?.name.toLowerCase().includes(searchQuery.toLowerCase())
+        (t.assignedTo?.name?.toLowerCase() || "").includes(searchQuery.toLowerCase())
       );
     }
 
