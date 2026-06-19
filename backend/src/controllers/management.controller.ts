@@ -90,3 +90,8 @@ export async function createTemplate(req: Request, res: Response) {
   const result = await templateService.createTemplate(req.body);
   sendSuccess(res, result, "Template created", 201);
 }
+
+export async function deleteTemplate(req: Request, res: Response) {
+  await templateService.deleteTemplate(req.params.id);
+  sendSuccess(res, null, "Template deleted");
+}

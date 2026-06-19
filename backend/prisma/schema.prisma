@@ -181,6 +181,7 @@ model Task {
   reminder           Int?       // minutes before due
   attachmentUrl      String?
   attachmentName     String?
+  templateId         String?
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
   assignedTo         User       @relation("AssignedTasks", fields: [assignedToId], references: [id], onDelete: Cascade)
@@ -188,10 +189,12 @@ model Task {
   project            Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
   parentTask         Task?      @relation("SubTasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
   subtasks           Task[]     @relation("SubTasks")
+  template           Template?  @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   @@index([assignedToId])
   @@index([assignedById])
   @@index([status])
+  @@index([templateId])
 }
 
 
@@ -384,6 +387,7 @@ model Template {
   createdById String?
   companyId   String?
   createdAt   DateTime @default(now())
+  tasks       Task[]
 }
 model Notification {
   id        String   @id @default(cuid())

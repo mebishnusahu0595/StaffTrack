@@ -27,3 +27,9 @@ export async function useTemplate(id: string) {
     data: { usageCount: { increment: 1 } }
   });
 }
+
+export async function deleteTemplate(id: string) {
+  return prisma.template.delete({
+    where: { id }
+  });
+}

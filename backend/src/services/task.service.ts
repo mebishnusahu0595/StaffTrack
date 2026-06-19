@@ -37,6 +37,7 @@ interface CreateTaskInput {
   projectId?: string | null;
   attachmentUrl?: string | null;
   attachmentName?: string | null;
+  templateId?: string | null;
 }
 
 export async function createTask(actor: AuthUser, input: CreateTaskInput) {
@@ -86,7 +87,8 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
       reminder: input.reminder,
       projectId: input.projectId || null,
       attachmentUrl: input.attachmentUrl,
-      attachmentName: input.attachmentName
+      attachmentName: input.attachmentName,
+      templateId: input.templateId || null
     },
     include: taskInclude
   });
@@ -611,7 +613,8 @@ async function preGenerateTasksForSeries(baseTask: any, companyId: string) {
       points: baseTask.points === 0 ? 10 : baseTask.points,
       parentTaskId: baseTask.id,
       attachmentUrl: baseTask.attachmentUrl,
-      attachmentName: baseTask.attachmentName
+      attachmentName: baseTask.attachmentName,
+      templateId: baseTask.templateId
     });
 
     // Move state to next occurrence

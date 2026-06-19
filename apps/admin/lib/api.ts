@@ -198,6 +198,7 @@ export async function createTask(input: {
   reminder?: number | null;
   subtasks?: any[];
   projectId?: string | null;
+  templateId?: string | null;
 }) {
   const response = await api.post<{ data: Task }>("/tasks", input);
   return response.data.data;
@@ -347,6 +348,10 @@ export async function fetchTemplates(params?: { type?: string; search?: string }
 export async function createTemplate(data: any) {
   const response = await api.post<{ data: any }>("/templates", data);
   return response.data.data;
+}
+
+export async function deleteTemplate(id: string) {
+  await api.delete(`/templates/${id}`);
 }
 
 // Groups

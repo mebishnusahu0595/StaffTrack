@@ -17,7 +17,8 @@ import {
   Star,
   Layers,
   FileText,
-  Send
+  Send,
+  Trash2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -44,7 +45,7 @@ import {
 } from "@/components/ui/select";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchTemplates, createTemplate, createTask, fetchUsers } from "@/lib/api";
+import { fetchTemplates, createTemplate, createTask, fetchUsers, deleteTemplate } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 
@@ -73,6 +74,16 @@ export default function TemplatesPage() {
       queryClient.invalidateQueries({ queryKey: ["templates"] });
       setIsCreateOpen(false);
       setIsCopyOpen(false);
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteTemplate,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["templates"] });
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message || err?.message || "Failed to delete template");
     }
   });
 
@@ -279,6 +290,20 @@ export default function TemplatesPage() {
                                    title="View Details"
                                  >
                                     <Eye className="h-4 w-4" />
+                                 </Button>
+                                 <Button 
+                                   variant="ghost" 
+                                   size="icon" 
+                                   className="h-9 w-9 rounded-xl hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-all"
+                                   onClick={() => {
+                                      const confirmDelete = confirm(`Are you sure you want to delete blueprint "${template.name}"? This will delete all live tasks spawned from this blueprint from everyone's mobile app.`);
+                                      if (confirmDelete) {
+                                         deleteMutation.mutate(template.id);
+                                      }
+                                    }}
+                                   title="Delete Template"
+                                 >
+                                    <Trash2 className="h-4 w-4 text-rose-600" />
                                  </Button>
                               </div>
                            </td>
@@ -649,7 +674,8 @@ function AssignTemplateDialog({ template, open, onOpenChange }: { template: any;
             dueDate: new Date(dueDate).toISOString(),
             priority: template.priority || "Medium",
             isRepeating: (template.recurrence || "None") !== "None",
-            repeatFrequency: (template.recurrence || "None") !== "None" ? template.recurrence : undefined
+            repeatFrequency: (template.recurrence || "None") !== "None" ? template.recurrence : undefined,
+            templateId: template.id
           })
         )
       );

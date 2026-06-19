@@ -6,5 +6,6 @@ const router = Router();
 
 router.get("/", asyncHandler(managementController.listTemplates));
 router.post("/", asyncHandler(managementController.createTemplate));
+router.delete("/:id", asyncHandler(managementController.deleteTemplate));
 
 export default router;
