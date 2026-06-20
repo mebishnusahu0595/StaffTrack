@@ -451,7 +451,7 @@ export function EmployeeDetailDrawer({
                             labelText = "WEEKEND";
                           }
 
-                          const points = session?.points ?? 0;
+                          const points = (session as any)?.points ?? 0;
                           
                           return (
                             <DropdownMenu key={day.dateStr}>
