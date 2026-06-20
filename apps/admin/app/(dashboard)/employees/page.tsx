@@ -108,7 +108,6 @@ export default function EmployeesPage() {
     queryFn: () => fetchUsers({
       search,
       role: roleFilter === "ALL" ? undefined : roleFilter,
-      status: statusFilter === "ALL" ? undefined : statusFilter,
     }),
     // Live location status (isLocationOn) and batteryLevel ride on the user
     // record and change with every device ping. Poll so the online dot and
