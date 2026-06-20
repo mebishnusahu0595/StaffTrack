@@ -454,7 +454,8 @@ export async function deleteTask(actor: AuthUser, taskId: string) {
     where: {
       parentTaskId: parentId,
       status: TaskStatus.PENDING,
-      dueDate: { gte: new Date() }
+      dueDate: { gte: new Date() },
+      id: { not: taskId }
     }
   });
 
