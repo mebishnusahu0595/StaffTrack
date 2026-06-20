@@ -90,6 +90,7 @@ export default function EmployeesPage() {
   const [selectedMapDate, setSelectedMapDate] = useState(dayjs().format("YYYY-MM-DD"));
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [drawerEmployeeId, setDrawerEmployeeId] = useState<string | null>(null);
+  const [inlineTaskDate, setInlineTaskDate] = useState(dayjs().format("YYYY-MM-DD"));
   const todayDate = dayjs().format("YYYY-MM-DD");
   const selectedMapMonth = dayjs(selectedMapDate).month() + 1;
   const selectedMapYear = dayjs(selectedMapDate).year();
@@ -256,6 +257,14 @@ export default function EmployeesPage() {
     if (!expandedId) return [];
     return (tasksQuery.data ?? []).filter(t => t.assignedToId === expandedId);
   }, [tasksQuery.data, expandedId]);
+
+  const inlineFilteredTasks = useMemo(() => {
+    if (!expandedId) return [];
+    return (tasksQuery.data ?? []).filter(t => 
+      t.assignedToId === expandedId && 
+      dayjs(t.dueDate).format("YYYY-MM-DD") === inlineTaskDate
+    );
+  }, [tasksQuery.data, expandedId, inlineTaskDate]);
  
   const employeeReports = useMemo(() => {
     return reportsQuery.data ?? [];
@@ -1010,15 +1019,24 @@ export default function EmployeesPage() {
                                                       </div>
                                                    </div>
                                                 </TabsContent>
-                                                <TabsContent value="tasks" className="m-0 py-4">
-                                                   {employeeTasks.length === 0 ? (
-                                                     <div className="text-center py-12 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                                                        <ClipboardList className="h-8 w-8 text-slate-300 mx-auto mb-3" />
-                                                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">No tasks assigned yet</p>
-                                                     </div>
-                                                   ) : (
-                                                     <div className="grid grid-cols-1 gap-3">
-                                                        {employeeTasks.map((task) => (
+                                                <TabsContent value="tasks" className="m-0 py-4 space-y-4">
+                                                   <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                                                      <span className="text-xs font-black text-slate-700">Filter Date:</span>
+                                                      <Input 
+                                                        type="date" 
+                                                        value={inlineTaskDate} 
+                                                        onChange={(e) => setInlineTaskDate(e.target.value)} 
+                                                        className="h-9 w-36 rounded-lg text-xs" 
+                                                      />
+                                                   </div>
+                                                   <div className="max-h-[350px] overflow-y-auto pr-1 space-y-3">
+                                                      {inlineFilteredTasks.length === 0 ? (
+                                                        <div className="text-center py-12 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                                                           <ClipboardList className="h-8 w-8 text-slate-300 mx-auto mb-3" />
+                                                           <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">No tasks for this date</p>
+                                                        </div>
+                                                      ) : (
+                                                        inlineFilteredTasks.map((task) => (
                                                           <div key={task.id} className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md transition-all group">
                                                              <div className="flex items-start justify-between">
                                                                 <div className="space-y-1">
@@ -1031,7 +1049,7 @@ export default function EmployeesPage() {
                                                                   task.status === "IN_PROGRESS" ? "bg-blue-50 text-blue-600 border-blue-100" :
                                                                   "bg-amber-50 text-amber-600 border-amber-100"
                                                                 )}>
-                                                                  {task.status.replace("_", " ")}
+                                                                   {task.status.replace("_", " ")}
                                                                 </Badge>
                                                              </div>
                                                              <div className="mt-4 pt-3 border-t border-slate-50 flex items-center gap-4">
@@ -1041,9 +1059,9 @@ export default function EmployeesPage() {
                                                                 </div>
                                                              </div>
                                                           </div>
-                                                        ))}
-                                                     </div>
-                                                   )}
+                                                        ))
+                                                      )}
+                                                   </div>
                                                 </TabsContent>
                                                 <TabsContent value="der" className="m-0 py-4">
                                                    {employeeReports.length === 0 ? (
