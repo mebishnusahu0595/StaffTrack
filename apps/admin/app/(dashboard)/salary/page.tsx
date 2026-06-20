@@ -4,7 +4,6 @@ import React, { useState, useMemo } from "react";
 import { 
   ChevronLeft, 
   ChevronRight, 
-  Download, 
   Search, 
   User as UserIcon,
   CalendarDays,
@@ -12,11 +11,15 @@ import {
   Calendar,
   Wallet,
   Building,
-  TrendingUp
+  TrendingUp,
+  FileText,
+  Download,
+  Settings,
+  Calculator
 } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
-import { fetchSalaryMatrix, markAttendanceStatus, clearAttendanceStatus } from "@/lib/api";
+import { fetchSalaryMatrix } from "@/lib/api";
 import { SalarySlipModal } from "@/components/admin/salary-slip-modal";
 import { SalarySlipCustomizerModal } from "@/components/admin/salary-slip-customizer-modal";
 import { Dialog } from "@/components/ui/dialog";
@@ -34,19 +37,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel
 } from "@/components/ui/dropdown-menu";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import { FileText } from "lucide-react";
+import { EmployeeDetailDrawer } from "@/components/admin/employee-detail-drawer";
 
 export default function SalaryMatrixPage() {
   const [selectedMonth, setSelectedMonth] = useState(dayjs());
   const [search, setSearch] = useState("");
   const [slipEmployee, setSlipEmployee] = useState<any>(null);
   const [customizingEmployee, setCustomizingEmployee] = useState<any>(null);
+  const [drawerEmployeeId, setDrawerEmployeeId] = useState<string | null>(null);
+  
   const queryClient = useQueryClient();
 
   const salaryQuery = useQuery({
@@ -57,25 +56,59 @@ export default function SalaryMatrixPage() {
     })
   });
 
-  const reports = salaryQuery.data ?? [];
-  const filteredReports = reports.filter((r: any) => 
-    r.userName.toLowerCase().includes(search.toLowerCase())
-  );
+  const reports = useMemo(() => salaryQuery.data ?? [], [salaryQuery.data]);
+  
+  const filteredReports = useMemo(() => {
+    return reports.filter((r: any) => 
+      r.userName.toLowerCase().includes(search.toLowerCase())
+    );
+  }, [reports, search]);
 
-  // Group by base salary
-  const groupedReports = useMemo(() => {
-    const groups: Record<number, any[]> = {};
-    filteredReports.forEach((r: any) => {
-      const bs = r.baseSalary || 0;
-      if (!groups[bs]) groups[bs] = [];
-      groups[bs].push(r);
-    });
-    return groups;
-  }, [filteredReports]);
+  const selectedDrawerEmployee = useMemo(() => {
+    return reports.find((r: any) => r.userId === drawerEmployeeId);
+  }, [reports, drawerEmployeeId]);
 
   function changeMonth(delta: number) {
     setSelectedMonth(prev => prev.add(delta, 'month'));
   }
+
+  const exportSalaryCSV = () => {
+    if (filteredReports.length === 0) return;
+    const headers = [
+      "Employee Name", "Designation", "Department", "Base Salary", 
+      "Payable Days", "Absences", "Holidays", "Leaves", "Total KM", 
+      "Travel Payout", "Points", "Net Salary", "Total Payout"
+    ];
+    const rows = filteredReports.map(e => [
+      e.userName || "",
+      e.designation || "Staff",
+      e.departmentName || "Unassigned",
+      e.baseSalary || 0,
+      `${e.payableDays} / ${e.totalDays}`,
+      e.absentDays || 0,
+      e.holidayDays || 0,
+      e.paidLeaveDays || 0,
+      (e.totalKm || 0).toFixed(1),
+      e.travelAllowance || 0,
+      e.monthlyPoints || 0,
+      e.netSalary || 0,
+      e.totalPayout || 0
+    ]);
+    
+    const csvString = [
+      headers.join(","),
+      ...rows.map(row => row.map(val => `"${val.toString().replace(/"/g, '""')}"`).join(","))
+    ].join("\n");
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Salary_Matrix_${selectedMonth.format("MMM_YYYY")}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <div className="p-8 space-y-8 bg-slate-50/50 min-h-screen animate-in fade-in duration-700">
@@ -109,7 +142,8 @@ export default function SalaryMatrixPage() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between bg-white p-4 rounded-3xl border border-slate-200/60 shadow-sm">
+      {/* Filter and Overview Stats Card */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-3xl border border-slate-200/60 shadow-sm">
         <div className="relative w-full max-w-md">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
           <Input 
@@ -119,69 +153,149 @@ export default function SalaryMatrixPage() {
             onChange={e => setSearch(e.target.value)}
           />
         </div>
-        <div className="text-right">
-           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Staff</p>
-           <p className="text-2xl font-black text-slate-900">{filteredReports.length}</p>
+        <div className="flex items-center gap-4">
+          <Button 
+            variant="outline" 
+            onClick={exportSalaryCSV}
+            disabled={filteredReports.length === 0}
+            className="h-12 rounded-2xl font-bold border-slate-200 gap-2 px-5 hover:bg-slate-50 text-slate-700 transition-all"
+          >
+            <Download className="h-4 w-4 text-slate-500" />
+            Export CSV
+          </Button>
+          <div className="text-right border-l border-slate-100 pl-4">
+             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Staff</p>
+             <p className="text-2xl font-black text-slate-900">{filteredReports.length}</p>
+          </div>
         </div>
       </div>
 
-      <div className="space-y-6">
-        {salaryQuery.isLoading ? (
-          <div className="flex justify-center p-12">
-            <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
-          </div>
-        ) : Object.keys(groupedReports).length === 0 ? (
-          <Card className="rounded-[32px] border-none shadow-sm text-center py-24">
-             <CalendarDays className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-             <h3 className="text-lg font-black text-slate-900">No Data Found</h3>
-             <p className="text-slate-500 font-medium">No salary records available for {selectedMonth.format("MMMM YYYY")}</p>
-          </Card>
-        ) : (
-          <Accordion type="multiple" defaultValue={Object.keys(groupedReports)}>
-            {Object.entries(groupedReports).sort((a,b) => Number(b[0]) - Number(a[0])).map(([baseSalary, employees]) => (
-              <AccordionItem key={baseSalary} value={baseSalary} className="border-none mb-6">
-                <Card className="rounded-[32px] border-none shadow-sm ring-1 ring-slate-200/60 overflow-hidden bg-white">
-                  <AccordionTrigger className="px-8 py-6 hover:no-underline hover:bg-slate-50/50 transition-colors">
-                    <div className="flex items-center justify-between w-full pr-8">
-                       <div className="flex items-center gap-4 text-left">
-                         <div className="h-12 w-12 rounded-2xl bg-emerald-50 flex items-center justify-center border border-emerald-100">
-                            <Wallet className="h-5 w-5 text-emerald-600" />
-                         </div>
-                         <div>
-                            <h3 className="text-2xl font-black text-slate-900">₹{Number(baseSalary).toLocaleString()} <span className="text-sm font-bold text-slate-400">/ month</span></h3>
-                            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mt-1">
-                               {employees.length} Employee{employees.length !== 1 && 's'} in this bracket
-                            </p>
-                         </div>
-                       </div>
-                       {employees.length > 0 && (
-                          <div className="text-right">
-                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Per Day Income</p>
-                             <p className="text-lg font-black text-emerald-600">₹{Math.round(employees[0].dailyWage).toLocaleString()}</p>
-                          </div>
-                       )}
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="px-8 pb-8 pt-2">
-                    <div className="space-y-8">
-                       {employees.map(emp => (
-                         <EmployeeSalaryCard 
-                           key={emp.userId} 
-                           employee={emp} 
-                           selectedMonth={selectedMonth} 
-                           setSlipEmployee={setSlipEmployee}
-                           setCustomizingEmployee={setCustomizingEmployee}
-                           onUpdate={() => queryClient.invalidateQueries({ queryKey: ["salary-matrix"] })}
-                         />
-                       ))}
-                    </div>
-                  </AccordionContent>
-                </Card>
-              </AccordionItem>
-            ))}
-          </Accordion>
-        )}
-      </div>
+      {/* Table matrix */}
+      <Card className="border-none shadow-sm shadow-slate-200/60 ring-1 ring-slate-200/50 overflow-hidden rounded-[32px] bg-white">
+        <div className="overflow-x-auto">
+          {salaryQuery.isLoading ? (
+            <div className="flex justify-center p-16">
+              <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+            </div>
+          ) : filteredReports.length === 0 ? (
+            <div className="text-center py-20">
+              <CalendarDays className="h-12 w-12 text-slate-350 mx-auto mb-4" />
+              <h3 className="text-lg font-black text-slate-900">No Payroll Data</h3>
+              <p className="text-slate-500 font-medium mt-1">No calculations available for the selected parameters.</p>
+            </div>
+          ) : (
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-slate-50/50 border-b border-slate-100">
+                <tr>
+                  <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400">Employee Name</th>
+                  <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400">Department</th>
+                  <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400">Base Salary</th>
+                  <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400">Payable Days</th>
+                  <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400 text-center">Abs / Holiday / Lvs</th>
+                  <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400 text-center font-mono">Travel KM</th>
+                  <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400">Travel Payout</th>
+                  <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400 text-center">Points</th>
+                  <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400 text-right">Net Salary</th>
+                  <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400 text-right">Total Payout</th>
+                  <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredReports.map((emp) => (
+                  <tr key={emp.userId} className="group hover:bg-slate-50/50 transition-colors">
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10 border border-slate-100 shadow-sm ring-2 ring-white rounded-xl">
+                          <AvatarImage src={emp.avatarUrl || ''} />
+                          <AvatarFallback className="bg-slate-50 text-slate-450 font-bold">
+                            <UserIcon className="h-5 w-5" />
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <span 
+                            onClick={() => setDrawerEmployeeId(emp.userId)}
+                            className="font-black text-slate-900 text-sm leading-none hover:text-blue-600 hover:underline cursor-pointer"
+                          >
+                            {emp.userName}
+                          </span>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mt-1">{emp.designation || 'Staff'}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-xs font-semibold text-slate-600">
+                      {emp.departmentName || "Unassigned"}
+                    </td>
+                    <td className="py-4 px-6 font-mono text-xs font-black text-slate-800">
+                      ₹{Number(emp.baseSalary || 0).toLocaleString()}
+                    </td>
+                    <td className="py-4 px-6 text-xs font-black text-slate-700">
+                      {emp.payableDays} <span className="text-[10px] font-normal text-slate-400">/ {emp.totalDays}</span>
+                    </td>
+                    <td className="py-4 px-6 text-center">
+                      <div className="flex items-center justify-center gap-2 text-[10px] font-black uppercase">
+                        <Badge className="bg-rose-50 text-rose-700 hover:bg-rose-50 border border-rose-200/50 rounded-md font-bold px-1.5 py-0.5">Abs: {emp.absentDays}</Badge>
+                        <Badge className="bg-blue-50 text-blue-700 hover:bg-blue-50 border border-blue-200/50 rounded-md font-bold px-1.5 py-0.5">Hol: {emp.holidayDays}</Badge>
+                        <Badge className="bg-indigo-50 text-indigo-700 hover:bg-indigo-50 border border-indigo-200/50 rounded-md font-bold px-1.5 py-0.5">Lvs: {emp.paidLeaveDays}</Badge>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-center text-xs font-bold text-slate-600 font-mono">
+                      {(emp.totalKm || 0).toFixed(1)} KM
+                    </td>
+                    <td className="py-4 px-6 font-mono text-xs font-bold text-slate-600">
+                      ₹{Number(emp.travelAllowance || 0).toLocaleString()}
+                    </td>
+                    <td className="py-4 px-6 text-center">
+                      <div className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 px-2 py-0.5 rounded-lg border border-amber-200/40 text-[10px] font-black">
+                        <TrendingUp className="h-3 w-3 text-amber-500" />
+                        <span>{emp.monthlyPoints ?? 0}</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-right font-mono text-xs font-black text-slate-800">
+                      ₹{Number(emp.netSalary || 0).toLocaleString()}
+                    </td>
+                    <td className="py-4 px-6 text-right font-mono text-sm font-black text-emerald-600">
+                      ₹{Number(emp.totalPayout || 0).toLocaleString()}
+                    </td>
+                    <td className="py-4 px-6 text-center">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-600">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48 rounded-xl shadow-xl border border-slate-200 p-1">
+                          <DropdownMenuItem 
+                            onClick={() => setSlipEmployee(emp)} 
+                            className="gap-2.5 py-2 px-3 cursor-pointer text-xs font-bold text-slate-700 focus:bg-blue-50 focus:text-blue-700 rounded-lg"
+                          >
+                            <FileText className="h-4 w-4 text-blue-500" />
+                            View Salary Slip
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => setCustomizingEmployee(emp)} 
+                            className="gap-2.5 py-2 px-3 cursor-pointer text-xs font-bold text-slate-700 focus:bg-blue-50 focus:text-blue-700 rounded-lg"
+                          >
+                            <Settings className="h-4 w-4 text-slate-500" />
+                            Customize Slip
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            onClick={() => setDrawerEmployeeId(emp.userId)}
+                            className="gap-2.5 py-2 px-3 cursor-pointer text-xs font-bold text-slate-700 focus:bg-blue-50 focus:text-blue-700 rounded-lg"
+                          >
+                            <Calculator className="h-4 w-4 text-emerald-555" />
+                            Calculation breakdown
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </Card>
 
       <SalarySlipModal 
         isOpen={Boolean(slipEmployee)} 
@@ -200,199 +314,14 @@ export default function SalaryMatrixPage() {
             />
          )}
       </Dialog>
-    </div>
-  );
-}
 
-function EmployeeSalaryCard({ employee, selectedMonth, setSlipEmployee, setCustomizingEmployee, onUpdate }: any) {
-  const mutationMark = useMutation({
-    mutationFn: markAttendanceStatus,
-    onSuccess: onUpdate
-  });
-
-  const mutationClear = useMutation({
-    mutationFn: clearAttendanceStatus,
-    onSuccess: onUpdate
-  });
-
-  // Build calendar grid
-  const startOfMonth = selectedMonth.startOf('month');
-  const daysInMonth = selectedMonth.daysInMonth();
-  const startDayOfWeek = startOfMonth.day(); // 0 is Sunday
-  
-  const calendarGrid = [];
-  let dayCounter = 1;
-
-  for (let i = 0; i < 6; i++) {
-    const week = [];
-    for (let j = 0; j < 7; j++) {
-      if (i === 0 && j < startDayOfWeek) {
-        week.push(null); // Empty slots before the 1st
-      } else if (dayCounter > daysInMonth) {
-        week.push(null); // Empty slots after the end
-      } else {
-        const currentDateStr = selectedMonth.date(dayCounter).format("YYYY-MM-DD");
-        const dayData = employee.dailyBreakdown.find((d: any) => d.date === currentDateStr);
-        week.push({
-           dayNumber: dayCounter,
-           dateStr: currentDateStr,
-           data: dayData
-        });
-        dayCounter++;
-      }
-    }
-    calendarGrid.push(week);
-    if (dayCounter > daysInMonth) break;
-  }
-
-  const handleStatusChange = async (dateStr: string, status: string) => {
-    if (status === "CLEAR") {
-      await mutationClear.mutateAsync({ userId: employee.userId, date: dateStr });
-    } else {
-      await mutationMark.mutateAsync({ userId: employee.userId, date: dateStr, status: status as any });
-    }
-  };
-
-  return (
-    <div className="border border-slate-100 rounded-3xl p-6 bg-slate-50/30">
-       <div className="flex flex-col xl:flex-row gap-8">
-          {/* Employee Info & Stats */}
-          <div className="xl:w-1/3 space-y-6">
-             <div className="flex items-center gap-4">
-                <Avatar className="h-14 w-14 rounded-2xl border-2 border-white shadow-sm ring-1 ring-slate-200">
-                  <AvatarImage src={employee.avatarUrl || ''} />
-                  <AvatarFallback className="bg-white text-slate-400 font-bold">
-                    <UserIcon className="h-6 w-6" />
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                   <h4 className="text-lg font-black text-slate-900">{employee.userName}</h4>
-                   <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">{employee.designation || 'Staff'}</p>
-                   <div className="flex items-center gap-2">
-                     <Button 
-                         variant="link" 
-                         className="p-0 h-auto text-blue-600 font-black text-[10px] uppercase tracking-widest mt-1 gap-1"
-                         onClick={() => setSlipEmployee(employee)}
-                      >
-                         <FileText className="h-3 w-3" /> Salary Slip
-                      </Button>
-                      <span className="text-slate-300 text-[10px] uppercase tracking-widest mt-1">|</span>
-                      <Button 
-                         variant="link" 
-                         className="p-0 h-auto text-blue-600 font-black text-[10px] uppercase tracking-widest mt-1 gap-1"
-                         onClick={() => setCustomizingEmployee(employee)}
-                      >
-                         <FileText className="h-3 w-3" /> Customize Slip
-                      </Button>
-                   </div>
-                </div>
-             </div>
-
-             <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Payable Days</p>
-                   <p className="text-2xl font-black text-slate-900">{employee.payableDays}</p>
-                   <p className="text-[10px] font-bold text-slate-500 mt-1">out of {employee.workingDays} working days</p>
-                </div>
-                <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 shadow-sm">
-                   <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600/60 mb-1">Net Salary</p>
-                   <p className="text-2xl font-black text-emerald-600">₹{employee.netSalary.toLocaleString()}</p>
-                   <p className="text-[10px] font-bold text-emerald-600/80 mt-1">₹{Math.round(employee.dailyWage).toLocaleString()} / day</p>
-                </div>
-                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Total Travel</p>
-                   <p className="text-2xl font-black text-slate-900">{(employee.totalKm || 0).toFixed(1)} <span className="text-sm font-bold text-slate-400">KM</span></p>
-                   <p className="text-[10px] font-bold text-slate-500 mt-1">Field mileage sum</p>
-                </div>
-                <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 shadow-sm">
-                   <p className="text-[10px] font-black uppercase tracking-widest text-blue-600/60 mb-1">Travel Payout</p>
-                   <p className="text-2xl font-black text-blue-600">₹{(employee.travelAllowance || 0).toLocaleString()}</p>
-                   <p className="text-[10px] font-bold text-blue-600/80 mt-1">Added to payout</p>
-                </div>
-                <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100/60 shadow-sm col-span-2 flex items-center justify-between">
-                   <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-blue-600/60 mb-1">Monthly Points</p>
-                      <p className="text-2xl font-black text-blue-600">{employee.monthlyPoints ?? 0}</p>
-                      <p className="text-[10px] font-bold text-slate-500 mt-1">Points from completed tasks</p>
-                   </div>
-                   <div className="h-10 w-10 bg-blue-100/50 rounded-xl flex items-center justify-center">
-                      <TrendingUp className="h-5 w-5 text-blue-600" />
-                   </div>
-                </div>
-             </div>
-             
-             <div className="flex gap-4 text-[10px] font-black uppercase tracking-widest">
-                <div className="text-rose-500">Absences: {employee.absentDays}</div>
-                <div className="text-blue-500">Holidays: {employee.holidayDays}</div>
-                <div className="text-indigo-500">Leaves: {employee.paidLeaveDays}</div>
-             </div>
-          </div>
-
-          {/* Interactive Calendar */}
-          <div className="xl:w-2/3">
-             <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm overflow-x-auto">
-                <div className="min-w-[600px]">
-                  <div className="grid grid-cols-7 gap-2 mb-2">
-                     {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                        <div key={day} className="text-center text-[10px] font-black uppercase tracking-widest text-slate-400 py-2">
-                           {day}
-                        </div>
-                     ))}
-                  </div>
-                  <div className="space-y-2">
-                     {calendarGrid.map((week, i) => (
-                        <div key={i} className="grid grid-cols-7 gap-2">
-                           {week.map((day, j) => {
-                              if (!day) return <div key={j} className="aspect-square bg-transparent" />;
-                              
-                              const status = day.data?.status;
-                              const isWeekend = status === "WEEKEND";
-                              const isHoliday = status === "HOLIDAY";
-                              
-                              let bgClass = "bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-300";
-                              if (status === "PRESENT") bgClass = "bg-emerald-50 border-emerald-200 text-emerald-700 font-bold shadow-sm";
-                              if (status === "ABSENT") bgClass = "bg-rose-50 border-rose-200 text-rose-700 font-bold shadow-sm";
-                              if (status === "ON_LEAVE" || status === "PAID_LEAVE") bgClass = "bg-indigo-50 border-indigo-200 text-indigo-700 font-bold shadow-sm";
-                              if (isWeekend) bgClass = "bg-slate-100 border-slate-200 text-slate-400 opacity-60";
-                              if (isHoliday) bgClass = "bg-amber-50 border-amber-200 text-amber-700 opacity-80";
-                              
-                              const points = day.data?.points ?? 0;
-                              return (
-                                 <DropdownMenu key={day.dateStr}>
-                                    <DropdownMenuTrigger asChild>
-                                       <button className={cn("aspect-square rounded-xl border flex flex-col items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 p-1", bgClass)}>
-                                          <span className="text-sm leading-none">{day.dayNumber}</span>
-                                          {status && !isWeekend && status !== "UPCOMING" && (
-                                            <span className="text-[8px] mt-0.5 uppercase tracking-tighter opacity-80 font-black leading-none">
-                                              {status === 'PRESENT' ? 'PRS' : status === 'ABSENT' ? 'ABS' : status === 'HOLIDAY' ? 'HOL' : 'LEV'}
-                                            </span>
-                                          )}
-                                          {points > 0 && (
-                                            <span className="text-[9px] font-black text-blue-600 bg-blue-100/50 px-1.5 py-0.5 rounded mt-1 leading-none">
-                                              +{points}
-                                            </span>
-                                          )}
-                                       </button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent className="w-48 rounded-2xl shadow-xl p-2 font-bold">
-                                       <DropdownMenuLabel className="text-xs text-slate-400 uppercase tracking-widest">{day.dateStr}</DropdownMenuLabel>
-                                       <DropdownMenuSeparator />
-                                       <DropdownMenuItem onClick={() => handleStatusChange(day.dateStr, "PRESENT")} className="text-emerald-600 focus:text-emerald-700 focus:bg-emerald-50 cursor-pointer rounded-xl">Mark Present</DropdownMenuItem>
-                                       <DropdownMenuItem onClick={() => handleStatusChange(day.dateStr, "ON_LEAVE")} className="text-indigo-600 focus:text-indigo-700 focus:bg-indigo-50 cursor-pointer rounded-xl">Mark Leave (Paid)</DropdownMenuItem>
-                                       <DropdownMenuItem onClick={() => handleStatusChange(day.dateStr, "ABSENT")} className="text-rose-600 focus:text-rose-700 focus:bg-rose-50 cursor-pointer rounded-xl">Mark Absent (Unpaid)</DropdownMenuItem>
-                                       <DropdownMenuSeparator />
-                                       <DropdownMenuItem onClick={() => handleStatusChange(day.dateStr, "CLEAR")} className="text-slate-600 focus:bg-slate-100 cursor-pointer rounded-xl">Clear Record</DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                 </DropdownMenu>
-                              );
-                           })}
-                        </div>
-                     ))}
-                  </div>
-                </div>
-             </div>
-          </div>
-       </div>
+      {/* Unified Employee Detail Drawer */}
+      <EmployeeDetailDrawer
+        employeeId={drawerEmployeeId}
+        employee={selectedDrawerEmployee}
+        isOpen={!!drawerEmployeeId}
+        onClose={() => setDrawerEmployeeId(null)}
+      />
     </div>
   );
 }

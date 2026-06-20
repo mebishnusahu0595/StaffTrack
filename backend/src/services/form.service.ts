@@ -247,6 +247,19 @@ export async function getFormResponses(user: AuthUser, formId: string) {
   });
 }
 
+export async function getUserFormResponses(user: AuthUser, targetUserId: string) {
+  return prisma.formResponse.findMany({
+    where: {
+      userId: targetUserId,
+      form: { companyId: user.companyId }
+    },
+    include: {
+      form: { select: { name: true, category: true } }
+    },
+    orderBy: { submittedAt: "desc" }
+  });
+}
+
 async function ensureDefaultOperationalForms(user: AuthUser) {
   const names = DEFAULT_OPERATIONAL_FORMS.map((form) => form.name);
   const existingForms = await prisma.form.findMany({

@@ -339,6 +339,11 @@ export async function fetchFormResponses(id: string) {
   return response.data.data;
 }
 
+export async function fetchUserFormResponses(userId: string) {
+  const response = await api.get<{ data: any[] }>(`/forms/responses/user/${userId}`);
+  return response.data.data;
+}
+
 // Templates
 export async function fetchTemplates(params?: { type?: string; search?: string }) {
   const response = await api.get<{ data: any[] }>("/templates", { params });

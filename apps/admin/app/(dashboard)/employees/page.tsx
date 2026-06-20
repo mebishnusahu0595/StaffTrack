@@ -72,6 +72,7 @@ import { cn } from "@/lib/utils";
 import type { AttendanceRecord, WorkMode, User } from "@/lib/types";
 import dayjs from "dayjs";
 import { calculateDurations, formatDurationLabel } from "@/lib/timeTracking";
+import { EmployeeDetailDrawer } from "@/components/admin/employee-detail-drawer";
  
 export default function EmployeesPage() {
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -88,6 +89,7 @@ export default function EmployeesPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedMapDate, setSelectedMapDate] = useState(dayjs().format("YYYY-MM-DD"));
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [drawerEmployeeId, setDrawerEmployeeId] = useState<string | null>(null);
   const todayDate = dayjs().format("YYYY-MM-DD");
   const selectedMapMonth = dayjs(selectedMapDate).month() + 1;
   const selectedMapYear = dayjs(selectedMapDate).year();
@@ -179,6 +181,11 @@ export default function EmployeesPage() {
   const selectedEmployee = useMemo(
     () => filteredUsers.find((user) => user.id === expandedId),
     [expandedId, filteredUsers]
+  );
+
+  const selectedDrawerEmployee = useMemo(
+    () => filteredUsers.find((user) => user.id === drawerEmployeeId),
+    [drawerEmployeeId, filteredUsers]
   );
   const attendanceQuery = useQuery({
     queryKey: ["attendance", expandedId, selectedMapMonth, selectedMapYear],
@@ -453,7 +460,15 @@ export default function EmployeesPage() {
                           </Avatar>
                           <div className="flex flex-col">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-bold text-slate-900 text-sm leading-tight">{user.name}</span>
+                              <span 
+                                className="font-bold text-slate-900 text-sm leading-tight hover:text-blue-600 hover:underline cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDrawerEmployeeId(user.id);
+                                }}
+                              >
+                                {user.name}
+                              </span>
                               {isPunchedIn ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/50 shadow-sm">
                                   Active
@@ -1188,6 +1203,12 @@ export default function EmployeesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <EmployeeDetailDrawer
+        employeeId={drawerEmployeeId}
+        employee={selectedDrawerEmployee}
+        isOpen={!!drawerEmployeeId}
+        onClose={() => setDrawerEmployeeId(null)}
+      />
     </div>
   );
 }

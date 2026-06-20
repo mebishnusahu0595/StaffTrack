@@ -75,6 +75,11 @@ export async function getFormResponses(req: Request, res: Response) {
   sendSuccess(res, result, "Form responses fetched");
 }
 
+export async function getUserFormResponses(req: Request, res: Response) {
+  const result = await formService.getUserFormResponses(req.user!, req.params.userId);
+  sendSuccess(res, result, "User form responses fetched");
+}
+
 export async function submitFormResponse(req: Request, res: Response) {
   const result = await formService.submitFormResponse(req.user!, req.params.id, req.body);
   sendSuccess(res, result, "Response submitted", 201);
