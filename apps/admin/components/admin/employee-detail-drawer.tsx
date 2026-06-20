@@ -699,8 +699,10 @@ export function EmployeeDetailDrawer({
                             <td className="py-3 px-4 text-center">
                               <Badge className={cn(
                                 "font-bold text-[8px] px-1.5 py-0.5 rounded-full border",
-                                exp.approved ? "bg-emerald-50 text-emerald-700 border-emerald-200/50" : "bg-amber-50 text-amber-700 border-amber-200/50"
-                              )}>{exp.approved ? "Approved" : "Pending"}</Badge>
+                                exp.approved ? "bg-emerald-50 text-emerald-700 border-emerald-200/50" : 
+                                exp.approvedById ? "bg-rose-50 text-rose-700 border-rose-200/50" : 
+                                "bg-amber-50 text-amber-700 border-amber-200/50"
+                              )}>{exp.approved ? "Approved" : exp.approvedById ? "Rejected" : "Pending"}</Badge>
                             </td>
                           </tr>
                         ))

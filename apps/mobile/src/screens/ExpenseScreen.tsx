@@ -198,9 +198,9 @@ export function ExpenseScreen() {
                   <Text style={styles.date}>{dayjs(item.date).format("DD MMM YYYY")}</Text>
                   <Text style={styles.amount}>INR {Number(item.amount).toFixed(2)}</Text>
                 </View>
-                <View style={item.approved ? styles.approvedChip : styles.pendingChip}>
-                  <Text style={item.approved ? styles.approvedChipText : styles.pendingChipText}>
-                    {item.approved ? "Approved" : "Pending"}
+                <View style={item.approved ? styles.approvedChip : item.approvedById ? styles.rejectedChip : styles.pendingChip}>
+                  <Text style={item.approved ? styles.approvedChipText : item.approvedById ? styles.rejectedChipText : styles.pendingChipText}>
+                    {item.approved ? "Approved" : item.approvedById ? "Rejected" : "Pending"}
                   </Text>
                 </View>
               </View>
@@ -328,6 +328,22 @@ const styles = StyleSheet.create({
   },
   pendingChipText: {
     color: "#7A4D00",
+    fontSize: 10,
+    fontWeight: "800",
+    lineHeight: 13
+  },
+  rejectedChip: {
+    alignItems: "center",
+    backgroundColor: "#FCE8E6",
+    borderRadius: 8,
+    justifyContent: "center",
+    minHeight: 30,
+    minWidth: 76,
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  rejectedChipText: {
+    color: "#C5221F",
     fontSize: 10,
     fontWeight: "800",
     lineHeight: 13

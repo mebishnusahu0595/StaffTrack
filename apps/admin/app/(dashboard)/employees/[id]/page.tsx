@@ -184,7 +184,15 @@ export default function EmployeeDetailPage() {
                       <TableCell>{formatDate(expense.date)}</TableCell>
                       <TableCell>{expense.category}</TableCell>
                       <TableCell>{formatCurrency(expense.amount)}</TableCell>
-                      <TableCell>{expense.approved ? "Approved" : "Pending"}</TableCell>
+                      <TableCell>
+                        <span className={
+                          expense.approved ? "text-emerald-600 font-bold text-xs" :
+                          expense.approvedById ? "text-rose-600 font-bold text-xs" :
+                          "text-amber-600 font-bold text-xs"
+                        }>
+                          {expense.approved ? "Approved" : expense.approvedById ? "Rejected" : "Pending"}
+                        </span>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

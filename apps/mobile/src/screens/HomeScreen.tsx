@@ -52,7 +52,7 @@ export function HomeScreen() {
   const notifications = notificationsQuery.data ?? [];
   const unreadCount = notifications.filter((n) => !n.isRead).length;
   const expenses = expensesQuery.data ?? [];
-  const pendingExpenseCount = expenses.filter((expense) => !expense.approved).length;
+  const pendingExpenseCount = expenses.filter((expense) => !expense.approved && !expense.approvedById).length;
   const approvedExpenseTotal = expenses
     .filter((expense) => expense.approved)
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);

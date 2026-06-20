@@ -95,7 +95,15 @@ function ExpenseTable({
               </TableCell>
               <TableCell className="text-right px-8">
                 <div className="flex justify-end gap-2">
-                  {!expense.approved ? (
+                  {expense.approved ? (
+                    <Badge className="bg-emerald-50 text-emerald-600 border-emerald-100 font-bold text-[10px] uppercase px-3 py-1">
+                      Approved
+                    </Badge>
+                  ) : expense.approvedById ? (
+                    <Badge className="bg-rose-50 text-rose-600 border-rose-100 font-bold text-[10px] uppercase px-3 py-1">
+                      Rejected
+                    </Badge>
+                  ) : (
                     <>
                       <Button 
                         size="sm" 
@@ -116,10 +124,6 @@ function ExpenseTable({
                         Reject
                       </Button>
                     </>
-                  ) : (
-                    <Badge className="bg-emerald-50 text-emerald-600 border-emerald-100 font-bold text-[10px] uppercase px-3 py-1">
-                      Approved
-                    </Badge>
                   )}
                 </div>
               </TableCell>
@@ -142,12 +146,16 @@ export default function ExpensesPage() {
   const expensesQuery = useQuery({ queryKey: ["expenses"], queryFn: () => fetchExpenses() });
   const mutation = useMutation({
     mutationFn: ({ id, approved }: { id: string; approved: boolean }) => approveExpense(id, approved),
-    onSuccess: async () => {
+    onSuccess: async (_, variables) => {
       await queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      alert(`Expense successfully ${variables.approved ? "approved" : "rejected"}!`);
+    },
+    onError: (error) => {
+      alert(`Failed to update expense: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
  
-  const pending = useMemo(() => (expensesQuery.data ?? []).filter((expense) => !expense.approved), [expensesQuery.data]);
+  const pending = useMemo(() => (expensesQuery.data ?? []).filter((expense) => !expense.approved && !expense.approvedById), [expensesQuery.data]);
   const allExpenses = expensesQuery.data ?? [];
   const totalAmount = useMemo(() => pending.reduce((sum, e) => sum + e.amount, 0), [pending]);
 

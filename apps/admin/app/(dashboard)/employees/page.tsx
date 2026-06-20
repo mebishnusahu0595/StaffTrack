@@ -106,10 +106,9 @@ export default function EmployeesPage() {
   const usersQuery = useQuery({
     queryKey: ["users", search, roleFilter],
     queryFn: () => fetchUsers({
-      page: 1,
-      pageSize: 100,
       search,
-      role: roleFilter === "ALL" ? undefined : roleFilter
+      role: roleFilter === "ALL" ? undefined : roleFilter,
+      status: statusFilter === "ALL" ? undefined : statusFilter,
     }),
     // Live location status (isLocationOn) and batteryLevel ride on the user
     // record and change with every device ping. Poll so the online dot and
@@ -816,7 +815,6 @@ export default function EmployeesPage() {
                                                              : "--"}
                                                        </p>
                                                     </div>
-)}
                                                  </div>
                                               </div>
                                             )}
@@ -825,36 +823,69 @@ export default function EmployeesPage() {
                                  </div>
  
                                  {/* Middle: Assigned Tasks List */}
-                                 <div className="col-span-6">
-                                                            </div>
-                                                            <Button 
-                                                              variant="secondary" 
-                                                              size="sm" 
-                                                              className="rounded-xl font-bold gap-1 text-[10px] uppercase bg-white border border-slate-200/60 hover:bg-slate-50"
-                                                              onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${log.lat},${log.lng}`, "_blank")}
-                                                            >
-                                                              Maps
-                                                            </Button>
+                                  <div className="col-span-6">
+                                     <Card className="border-none shadow-sm ring-1 ring-slate-200/50 h-full bg-white p-6 flex flex-col justify-between">
+                                        <div>
+                                           <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+                                              <div className="flex items-center gap-2">
+                                                 <ClipboardList className="h-5 w-5 text-blue-500" />
+                                                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Assigned Tasks</h3>
+                                                 <Badge className="bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-black px-2.5 py-0.5 rounded-lg shadow-sm">
+                                                    {inlineFilteredTasks.length} task{inlineFilteredTasks.length === 1 ? "" : "s"}
+                                                 </Badge>
+                                              </div>
+                                              <Input 
+                                                 type="date" 
+                                                 value={selectedMapDate} 
+                                                 onChange={(e) => setSelectedMapDate(e.target.value)}
+                                                 className="h-8 text-[11px] font-bold rounded-lg border-slate-200 bg-white shadow-sm w-36"
+                                              />
+                                           </div>
+                                           
+                                           <div className="overflow-y-auto pr-1 space-y-3 max-h-[420px]">
+                                              {inlineFilteredTasks.length === 0 ? (
+                                                 <div className="text-center py-16 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                                                    <ClipboardList className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+                                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">No tasks for this date</p>
+                                                    <p className="text-[10px] text-slate-400 mt-1 font-medium">Tasks assigned to {selectedEmployee?.name} on {dayjs(selectedMapDate).format("DD MMM, YYYY")} will appear here.</p>
+                                                 </div>
+                                              ) : (
+                                                 inlineFilteredTasks.map((task) => (
+                                                    <div key={task.id} className="p-4 rounded-2xl bg-white border border-slate-100/80 shadow-sm hover:shadow-md transition-all group">
+                                                       <div className="flex items-start justify-between">
+                                                          <div className="space-y-1">
+                                                             <h4 className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors">{task.title}</h4>
+                                                             {task.description && (
+                                                                <p className="text-xs text-slate-500 font-medium leading-relaxed">{task.description}</p>
+                                                             )}
                                                           </div>
-                                                        ))
-                                                      )}
+                                                          <div className="flex items-center gap-2">
+                                                             {task.points > 0 && (
+                                                                <Badge className="bg-blue-50 text-blue-700 border border-blue-100 font-bold text-[9px] px-1.5 py-0.5 rounded-md">+{task.points} pts</Badge>
+                                                             )}
+                                                             <Badge className={cn(
+                                                                "text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border shadow-sm",
+                                                                task.status === "COMPLETED" ? "bg-emerald-50 text-emerald-600 border-emerald-100" : 
+                                                                task.status === "IN_PROGRESS" ? "bg-blue-50 text-blue-600 border-blue-100" :
+                                                                "bg-amber-50 text-amber-600 border-amber-100"
+                                                             )}>
+                                                                {task.status.replace("_", " ")}
+                                                             </Badge>
+                                                          </div>
+                                                       </div>
+                                                       <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between">
+                                                          <div className="flex items-center gap-1.5 text-slate-400">
+                                                             <Calendar className="h-3.5 w-3.5" />
+                                                             <span className="text-[10px] font-bold uppercase tracking-wider">Due: {dayjs(task.dueDate).format("MMM DD, YYYY hh:mm A")}</span>
+                                                          </div>
+                                                       </div>
                                                     </div>
-                                                  </DialogContent>
-                                                </Dialog>
-                                             )}
-                                          </div>
-                                       </div>
-
-                                       <div className="absolute bottom-4 right-4 flex flex-col gap-2">
-                                          <Button size="icon" variant="secondary" className="h-10 w-10 rounded-xl bg-white/90 backdrop-blur-sm border-white shadow-xl hover:bg-white">
-                                             <Navigation className="h-5 w-5 text-slate-600" />
-                                          </Button>
-                                          <Button size="icon" variant="secondary" className="h-10 w-10 rounded-xl bg-white/90 backdrop-blur-sm border-white shadow-xl hover:bg-white">
-                                             <Search className="h-5 w-5 text-slate-600" />
-                                          </Button>
-                                       </div>
-                                    </Card>
-                                 </div>
+                                                 ))
+                                              )}
+                                           </div>
+                                        </div>
+                                     </Card>
+                                  </div>
  
                                  {/* Right: Tabbed Activity Hub */}
                                  <div className="col-span-3">

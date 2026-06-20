@@ -150,7 +150,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     refetchInterval: 60_000
   });
 
-  const pendingExpenses = (allExpenses as any[]).filter((e) => !e.approved).length;
+  const pendingExpenses = (allExpenses as any[]).filter((e) => !e.approved && !e.approvedById).length;
   const badgeCounts: Record<string, number> = {
     "/payroll/approval-requests": (lateCheckIns as any[]).length + (pendingAdjustments as any[]).length,
     "/leaves": (pendingLeaves as any[]).length,
