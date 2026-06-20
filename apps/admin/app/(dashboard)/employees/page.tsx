@@ -1258,7 +1258,7 @@ export default function EmployeesPage() {
                                                                           {report.startOdometerPhotoUrl && (
                                                                              <button 
                                                                                 className="mt-1 flex items-center gap-1 text-[9px] font-bold text-blue-600 hover:text-blue-700"
-                                                                                onClick={() => window.open(report.startOdometerPhotoUrl, "_blank")}
+                                                                                onClick={() => window.open(report.startOdometerPhotoUrl || undefined, "_blank")}
                                                                              >
                                                                                 View Photo
                                                                              </button>
@@ -1270,7 +1270,7 @@ export default function EmployeesPage() {
                                                                           {report.kmPhotoUrl && (
                                                                              <button 
                                                                                 className="mt-1 flex items-center gap-1 text-[9px] font-bold text-blue-600 hover:text-blue-700"
-                                                                                onClick={() => window.open(report.kmPhotoUrl, "_blank")}
+                                                                                onClick={() => window.open(report.kmPhotoUrl || undefined, "_blank")}
                                                                              >
                                                                                 View Photo
                                                                              </button>
