@@ -88,9 +88,7 @@ export default function EmployeesPage() {
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<User | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedMapDate, setSelectedMapDate] = useState(dayjs().format("YYYY-MM-DD"));
-  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [drawerEmployeeId, setDrawerEmployeeId] = useState<string | null>(null);
-  const [inlineTaskDate, setInlineTaskDate] = useState(dayjs().format("YYYY-MM-DD"));
   const todayDate = dayjs().format("YYYY-MM-DD");
   const selectedMapMonth = dayjs(selectedMapDate).month() + 1;
   const selectedMapYear = dayjs(selectedMapDate).year();
@@ -262,9 +260,9 @@ export default function EmployeesPage() {
     if (!expandedId) return [];
     return (tasksQuery.data ?? []).filter(t => 
       t.assignedToId === expandedId && 
-      dayjs(t.dueDate).format("YYYY-MM-DD") === inlineTaskDate
+      dayjs(t.dueDate).format("YYYY-MM-DD") === selectedMapDate
     );
-  }, [tasksQuery.data, expandedId, inlineTaskDate]);
+  }, [tasksQuery.data, expandedId, selectedMapDate]);
  
   const employeeReports = useMemo(() => {
     return reportsQuery.data ?? [];
@@ -818,6 +816,7 @@ export default function EmployeesPage() {
                                                              : "--"}
                                                        </p>
                                                     </div>
+)}
                                                  </div>
                                               </div>
                                             )}
@@ -825,71 +824,8 @@ export default function EmployeesPage() {
                                     </Card>
                                  </div>
  
-                                 {/* Middle: Map Integration */}
+                                 {/* Middle: Assigned Tasks List */}
                                  <div className="col-span-6">
-                                    <Card className="border-none shadow-sm ring-1 ring-slate-200/50 h-full relative overflow-hidden bg-slate-200">
-                                       <div className="absolute top-4 left-4 z-10">
-                                          <div className="flex items-center gap-2 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white shadow-sm ring-1 ring-slate-200/20 animate-pulse">
-                                             <div className={cn("h-2 w-2 rounded-full", isFieldEmployee ? "bg-emerald-500" : "bg-indigo-500")} />
-                                             <span className="text-[10px] font-black uppercase tracking-wider text-slate-700">{isFieldEmployee ? "Live Tracking Active" : "Office Attendance"}</span>
-                                          </div>
-                                       </div>
-
-                                       <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-                                          <Input 
-                                             type="date" 
-                                             value={selectedMapDate} 
-                                             onChange={(e) => setSelectedMapDate(e.target.value)}
-                                             className="h-8 text-[11px] font-bold rounded-lg border-slate-200 bg-white/90 shadow-sm backdrop-blur-sm w-36"
-                                          />
-                                       </div>
-                                       
-                                       <div className="w-full h-full bg-[#E5E7EB] flex items-center justify-center p-10">
-                                          <div className="w-full max-w-md rounded-2xl bg-white/90 p-6 text-center shadow-sm ring-1 ring-slate-200">
-                                             <MapPin className="mx-auto h-8 w-8 text-blue-600" />
-                                             <p className="mt-3 text-sm font-black text-slate-900">{isFieldEmployee ? "Latest Location" : "Office Punch Details"}</p>
-                                             <p className="mt-1 text-xs font-bold text-slate-500">
-                                               {isFieldEmployee
-                                                 ? (latestLocation ? `${latestLocation.lat.toFixed(5)}, ${latestLocation.lng.toFixed(5)}` : `No location logs for ${dayjs(selectedMapDate).format("DD MMM")}.`)
-                                                 : (latestAttendance?.checkInTime ? `Checked in ${formatTime(latestAttendance.checkInTime)}` : `No office check-in for ${dayjs(selectedMapDate).format("DD MMM")}.`)}
-                                             </p>
-                                             <p className="mt-4 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                               {isFieldEmployee ? `${locationQuery.data?.length ?? 0} pings tracked` : `${user.shiftStart} - ${user.shiftEnd} shift`}
-                                             </p>
-
-                                             {isFieldEmployee && (
-                                                <Dialog open={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen}>
-                                                  <DialogTrigger asChild>
-                                                    <Button className="mt-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-10 px-4 font-bold text-xs shadow-md">
-                                                       View Location History ({locationQuery.data?.length ?? 0} pings)
-                                                    </Button>
-                                                  </DialogTrigger>
-                                                  <DialogContent className="max-w-lg p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] hide-close text-left">
-                                                    <DialogHeader className="p-8 bg-blue-600 text-white relative">
-                                                      <DialogClose className="absolute right-6 top-6 rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
-                                                         <X className="h-4 w-4" />
-                                                      </DialogClose>
-                                                      <DialogTitle className="text-2xl font-black">Location Logs History</DialogTitle>
-                                                      <p className="text-blue-100 text-xs font-bold mt-1">
-                                                         Viewing historic GPS pings for {selectedEmployee?.name} on {dayjs(selectedMapDate).format("DD MMM, YYYY")}.
-                                                      </p>
-                                                    </DialogHeader>
-                                                    <div className="p-8 space-y-4 max-h-[50vh] overflow-y-auto">
-                                                      {(locationQuery.data?.length ?? 0) === 0 ? (
-                                                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-12 text-center">
-                                                          <MapPin className="mx-auto h-8 w-8 text-slate-300" />
-                                                          <p className="mt-3 text-[11px] font-black uppercase tracking-widest text-slate-400">No location logs yet</p>
-                                                          <p className="mt-2 text-xs font-bold text-slate-500">Pings will appear here as soon as the staff device uploads coordinates.</p>
-                                                        </div>
-                                                      ) : (
-                                                        [...locationQuery.data!].sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((log: any, idx: number) => (
-                                                          <div key={log.id || idx} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100/80 shadow-sm">
-                                                            <div className="flex items-center gap-3">
-                                                              <div className="h-8 w-8 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-bold text-xs">{idx + 1}</div>
-                                                              <div>
-                                                                <p className="text-xs font-black text-slate-800">{log.lat.toFixed(6)}, {log.lng.toFixed(6)}</p>
-                                                                <p className="text-[10px] font-bold text-slate-400 mt-0.5">{dayjs(log.timestamp).format("hh:mm:ss A")} • Accuracy: {log.accuracy.toFixed(1)}m</p>
-                                                              </div>
                                                             </div>
                                                             <Button 
                                                               variant="secondary" 
@@ -925,7 +861,7 @@ export default function EmployeesPage() {
                                     <Tabs defaultValue="attendance" className="h-full flex flex-col">
                                        <TabsList className="bg-white/50 p-1 rounded-xl h-11 border border-slate-200/60 shadow-sm">
                                           <TabsTrigger value="attendance" className="rounded-lg font-bold text-[10px] uppercase px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm">Attendance</TabsTrigger>
-                                          <TabsTrigger value="tasks" className="rounded-lg font-bold text-[10px] uppercase px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm">Tasks</TabsTrigger>
+                                          <TabsTrigger value="locations" className="rounded-lg font-bold text-[10px] uppercase px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm">Attendance Logs</TabsTrigger>
                                           <TabsTrigger value="der" className="rounded-lg font-bold text-[10px] uppercase px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm">DER</TabsTrigger>
                                        </TabsList>
                                        
@@ -1019,45 +955,41 @@ export default function EmployeesPage() {
                                                       </div>
                                                    </div>
                                                 </TabsContent>
-                                                <TabsContent value="tasks" className="m-0 py-4 space-y-4">
+                                                <TabsContent value="locations" className="m-0 py-4 space-y-4">
                                                    <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
-                                                      <span className="text-xs font-black text-slate-700">Filter Date:</span>
-                                                      <Input 
-                                                        type="date" 
-                                                        value={inlineTaskDate} 
-                                                        onChange={(e) => setInlineTaskDate(e.target.value)} 
-                                                        className="h-9 w-36 rounded-lg text-xs" 
-                                                      />
+                                                      <span className="text-xs font-black text-slate-700">Tracking Status:</span>
+                                                      <Badge className={cn(
+                                                        "text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border shadow-sm",
+                                                        (locationQuery.data?.length ?? 0) > 0 ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-slate-50 text-slate-400 border-slate-100"
+                                                      )}>
+                                                        {(locationQuery.data?.length ?? 0) > 0 ? `${locationQuery.data?.length} Pings Tracked` : "Offline / No Pings"}
+                                                      </Badge>
                                                    </div>
                                                    <div className="max-h-[350px] overflow-y-auto pr-1 space-y-3">
-                                                      {inlineFilteredTasks.length === 0 ? (
-                                                        <div className="text-center py-12 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                                                           <ClipboardList className="h-8 w-8 text-slate-300 mx-auto mb-3" />
-                                                           <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">No tasks for this date</p>
+                                                      {(locationQuery.data?.length ?? 0) === 0 ? (
+                                                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-10 text-center">
+                                                           <MapPin className="mx-auto h-8 w-8 text-slate-300" />
+                                                           <p className="mt-3 text-[11px] font-black uppercase tracking-widest text-slate-400">No location logs yet</p>
+                                                           <p className="mt-2 text-xs font-bold text-slate-500">Pings will appear here as soon as the staff device uploads coordinates.</p>
                                                         </div>
                                                       ) : (
-                                                        inlineFilteredTasks.map((task) => (
-                                                          <div key={task.id} className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md transition-all group">
-                                                             <div className="flex items-start justify-between">
-                                                                <div className="space-y-1">
-                                                                   <h4 className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors">{task.title}</h4>
-                                                                   <p className="text-xs text-slate-500 font-medium leading-relaxed">{task.description}</p>
-                                                                </div>
-                                                                <Badge className={cn(
-                                                                  "text-[10px] font-black uppercase px-2.5 py-1 rounded-lg",
-                                                                  task.status === "COMPLETED" ? "bg-emerald-50 text-emerald-600 border-emerald-100" : 
-                                                                  task.status === "IN_PROGRESS" ? "bg-blue-50 text-blue-600 border-blue-100" :
-                                                                  "bg-amber-50 text-amber-600 border-amber-100"
-                                                                )}>
-                                                                   {task.status.replace("_", " ")}
-                                                                </Badge>
-                                                             </div>
-                                                             <div className="mt-4 pt-3 border-t border-slate-50 flex items-center gap-4">
-                                                                <div className="flex items-center gap-1.5 text-slate-400">
-                                                                   <Calendar className="h-3.5 w-3.5" />
-                                                                   <span className="text-[10px] font-bold uppercase tracking-wider">{new Date(task.dueDate).toLocaleDateString()}</span>
+                                                        [...locationQuery.data!].sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((log: any, idx: number) => (
+                                                          <div key={log.id || idx} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100/80 shadow-sm hover:shadow-md transition-all">
+                                                             <div className="flex items-center gap-3">
+                                                                <div className="h-8 w-8 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-bold text-xs">{idx + 1}</div>
+                                                                <div>
+                                                                   <p className="text-xs font-black text-slate-800">{log.lat.toFixed(5)}, {log.lng.toFixed(5)}</p>
+                                                                   <p className="text-[10px] font-bold text-slate-400 mt-0.5">{dayjs(log.timestamp).format("hh:mm:ss A")} • Accuracy: {log.accuracy.toFixed(1)}m</p>
                                                                 </div>
                                                              </div>
+                                                             <Button 
+                                                                variant="secondary" 
+                                                                size="sm" 
+                                                                className="rounded-xl font-bold gap-1 text-[10px] uppercase bg-white border border-slate-200/60 hover:bg-slate-50"
+                                                                onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${log.lat},${log.lng}`, "_blank")}
+                                                             >
+                                                                Maps
+                                                             </Button>
                                                           </div>
                                                         ))
                                                       )}
