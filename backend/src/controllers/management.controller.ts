@@ -4,6 +4,7 @@ import * as projectService from "../services/project.service";
 import * as issueService from "../services/issue.service";
 import * as formService from "../services/form.service";
 import * as templateService from "../services/template.service";
+import { getIO, SOCKET_EVENTS } from "../lib/socket";
 
 // Projects
 export async function listProjects(req: Request, res: Response) {
@@ -93,6 +94,17 @@ export async function createTemplate(req: Request, res: Response) {
 
 export async function deleteTemplate(req: Request, res: Response) {
   await templateService.deleteTemplate(req.params.id);
+
+  // Emit WebSocket event to refresh tasks for all users in the company
+  try {
+    getIO().to(`company:${req.user!.companyId}`).emit(SOCKET_EVENTS.TASK_UPDATE, {
+      type: "delete-template",
+      data: { templateId: req.params.id }
+    });
+  } catch (err) {
+    console.error("Failed to emit task-update socket event on template deletion:", err);
+  }
+
   sendSuccess(res, null, "Template deleted");
 }
 

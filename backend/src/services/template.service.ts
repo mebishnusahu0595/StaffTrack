@@ -29,6 +29,10 @@ export async function useTemplate(id: string) {
 }
 
 export async function deleteTemplate(id: string) {
+  await prisma.task.deleteMany({
+    where: { templateId: id }
+  });
+
   return prisma.template.delete({
     where: { id }
   });

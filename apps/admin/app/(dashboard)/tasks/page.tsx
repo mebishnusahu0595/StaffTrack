@@ -171,6 +171,16 @@ export default function TasksPage() {
     }
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: deleteTask,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message || err?.message || "Failed to delete task");
+    }
+  });
+
   // Apply inline status transitions
   const handleStatusChange = async (taskId: string, newStatus: string) => {
     try {
@@ -1025,6 +1035,16 @@ export default function TasksPage() {
                                           >
                                             Cancel Task
                                           </DropdownMenuItem>
+                                          <DropdownMenuItem 
+                                            className="text-xs font-bold gap-2 text-rose-600 cursor-pointer"
+                                            onClick={() => {
+                                              if (confirm("Are you sure you want to delete this task permanently from everywhere?")) {
+                                                deleteMutation.mutate(task.id);
+                                              }
+                                            }}
+                                          >
+                                            Delete Task
+                                          </DropdownMenuItem>
                                        </DropdownMenuContent>
                                     </DropdownMenu>
                                 </div>
@@ -1154,6 +1174,16 @@ export default function TasksPage() {
                                   >
                                     Cancel Task
                                   </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    className="text-xs font-bold gap-2 text-rose-600 cursor-pointer"
+                                    onClick={() => {
+                                      if (confirm("Are you sure you want to delete this task permanently from everywhere?")) {
+                                        deleteMutation.mutate(task.id);
+                                      }
+                                    }}
+                                  >
+                                    Delete Task
+                                  </DropdownMenuItem>
                                </DropdownMenuContent>
                             </DropdownMenu>
                         </div>
@@ -1249,6 +1279,16 @@ export default function TasksPage() {
                                   }}
                                 >
                                   Cancel Task
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  className="text-xs font-bold gap-2 text-rose-600 cursor-pointer"
+                                  onClick={() => {
+                                    if (confirm("Are you sure you want to delete this task permanently from everywhere?")) {
+                                      deleteMutation.mutate(task.id);
+                                    }
+                                  }}
+                                >
+                                  Delete Task
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
