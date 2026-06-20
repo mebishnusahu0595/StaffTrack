@@ -89,6 +89,7 @@ export default function EmployeesPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedMapDate, setSelectedMapDate] = useState(dayjs().format("YYYY-MM-DD"));
   const [drawerEmployeeId, setDrawerEmployeeId] = useState<string | null>(null);
+  const [derDateFilter, setDerDateFilter] = useState<string>("");
   const todayDate = dayjs().format("YYYY-MM-DD");
   const selectedMapMonth = dayjs(selectedMapDate).month() + 1;
   const selectedMapYear = dayjs(selectedMapDate).year();
@@ -265,6 +266,151 @@ export default function EmployeesPage() {
   const employeeReports = useMemo(() => {
     return reportsQuery.data ?? [];
   }, [reportsQuery.data]);
+
+  const inlineFilteredReports = useMemo(() => {
+    if (!reportsQuery.data) return [];
+    return reportsQuery.data.filter(report => {
+      if (!derDateFilter) return true;
+      return dayjs(report.date).format("YYYY-MM-DD") === derDateFilter;
+    });
+  }, [reportsQuery.data, derDateFilter]);
+
+  const handleDownloadDER = (report: any, employee: any) => {
+    if (!employee || !report) return;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("Please allow popups to download/print reports.");
+      return;
+    }
+    const formattedDate = dayjs(report.date).format("DD MMM YYYY");
+    const formattedSubmittedAt = dayjs(report.submittedAt).format("DD MMM YYYY hh:mm A");
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Day End Report - ${employee.name} - ${formattedDate}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @media print {
+      body { -webkit-print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body class="bg-white p-8 text-slate-800 font-sans">
+  <div class="max-w-3xl mx-auto border border-slate-200 rounded-3xl p-8 shadow-sm">
+    <!-- Header -->
+    <div class="flex justify-between items-start border-b border-slate-200 pb-6 mb-6">
+      <div>
+        <h1 class="text-2xl font-black text-slate-900 tracking-tight">DAY END REPORT</h1>
+        <p class="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">StaffTrack Activity Log</p>
+      </div>
+      <div class="text-right">
+        <p class="text-sm font-black text-slate-900">${employee.name}</p>
+        <p class="text-xs font-bold text-slate-500 mt-0.5">${employee.designation || 'Field Staff'}</p>
+        <p class="text-[10px] font-bold text-slate-400 mt-0.5">${employee.email}</p>
+      </div>
+    </div>
+
+    <!-- Meta Grid -->
+    <div class="grid grid-cols-3 gap-4 mb-8">
+      <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Report Date</p>
+        <p class="text-sm font-black text-slate-800">${formattedDate}</p>
+      </div>
+      <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Distance</p>
+        <p class="text-sm font-black text-blue-600">${report.kmTravelled} KM</p>
+      </div>
+      <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Submitted At</p>
+        <p class="text-sm font-black text-slate-800">${formattedSubmittedAt}</p>
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="grid grid-cols-2 gap-4 mb-8">
+      <div class="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 flex justify-between items-center">
+        <div>
+          <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Orders Booked</p>
+          <p class="text-2xl font-black text-emerald-800 mt-1">${report.ordersTaken}</p>
+        </div>
+      </div>
+      <div class="p-4 rounded-2xl bg-rose-50 border border-rose-100 flex justify-between items-center">
+        <div>
+          <p class="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Orders Cancelled</p>
+          <p class="text-2xl font-black text-rose-800 mt-1">${report.ordersCancelled}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Odometer readings -->
+    \${report.startOdometer !== null || report.endOdometer !== null ? \`
+    <div class="border border-slate-100 rounded-2xl p-5 mb-8 bg-slate-50/50">
+      <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider mb-3">Odometer Readings</h3>
+      <div class="grid grid-cols-2 gap-6">
+        <div>
+          <p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Start Odometer</p>
+          <p class="text-sm font-black text-slate-800">\${report.startOdometer !== null ? report.startOdometer + ' km' : '--'}</p>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold text-slate-400 uppercase mb-1">End Odometer</p>
+          <p class="text-sm font-black text-slate-800">\${report.endOdometer !== null ? report.endOdometer + ' km' : '--'}</p>
+        </div>
+      </div>
+    </div>
+    \` : ''}
+
+    <!-- Work Summary -->
+    <div class="mb-8">
+      <h3 class="text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Work Summary</h3>
+      <div class="p-5 rounded-2xl border border-slate-100 bg-white shadow-sm leading-relaxed text-sm text-slate-700">
+        \${report.visitsSummary}
+      </div>
+    </div>
+
+    <!-- Remarks -->
+    \${report.remarks ? \`
+    <div class="mb-8">
+      <h3 class="text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Additional Remarks</h3>
+      <div class="p-5 rounded-2xl border border-slate-100 bg-white shadow-sm italic text-sm text-slate-500 leading-relaxed">
+        \${report.remarks}
+      </div>
+    </div>
+    \` : ''}
+
+    <!-- Photos -->
+    \${report.startOdometerPhotoUrl || report.kmPhotoUrl ? \`
+    <div class="border-t border-slate-200 pt-6 mt-6">
+      <h3 class="text-xs font-black text-slate-400 uppercase tracking-wider mb-4">Verification Media</h3>
+      <div class="grid grid-cols-2 gap-4">
+        \${report.startOdometerPhotoUrl ? \`
+        <div class="border border-slate-100 rounded-2xl p-2 bg-slate-50 text-center">
+          <p class="text-[9px] font-bold text-slate-400 uppercase mb-2">Start Odometer Photo</p>
+          <img src="\${report.startOdometerPhotoUrl}" class="max-h-64 object-contain mx-auto rounded-lg" />
+        </div>
+        \` : ''}
+        \${report.kmPhotoUrl ? \`
+        <div class="border border-slate-100 rounded-2xl p-2 bg-slate-50 text-center">
+          <p class="text-[9px] font-bold text-slate-400 uppercase mb-2">End Odometer Photo</p>
+          <img src="\${report.kmPhotoUrl}" class="max-h-64 object-contain mx-auto rounded-lg" />
+        </div>
+        \` : ''}
+      </div>
+    </div>
+    \` : ''}
+  </div>
+</body>
+</html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    printWindow.onload = function() {
+      printWindow.focus();
+      printWindow.print();
+    };
+  };
 
   const handleForceCheckout = async (userId: string) => {
     if (!confirm("Are you sure you want to force check-out this employee? This will close their active attendance session.")) {
@@ -1025,62 +1171,130 @@ export default function EmployeesPage() {
                                                       )}
                                                    </div>
                                                 </TabsContent>
-                                                <TabsContent value="der" className="m-0 py-4">
-                                                   {employeeReports.length === 0 ? (
-                                                     <div className="text-center py-12 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                                                        <MapIcon className="h-8 w-8 text-slate-300 mx-auto mb-3" />
-                                                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">No reports submitted yet</p>
-                                                     </div>
-                                                   ) : (
-                                                     <div className="grid grid-cols-1 gap-4">
-                                                        {employeeReports.map((report) => (
-                                                          <div key={report.id} className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm">
-                                                             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-50">
-                                                                <div className="flex items-center gap-2">
-                                                                   <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                                                                      <Calendar className="h-4 w-4 text-blue-600" />
-                                                                   </div>
-                                                                   <span className="text-xs font-black text-slate-900">{new Date(report.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                                                                </div>
-                                                                <Badge className="bg-slate-900 text-white text-[10px] font-black px-3 py-1 rounded-full">{report.kmTravelled} KM</Badge>
-                                                             </div>
-                                                             
-                                                             <div className="grid grid-cols-2 gap-3 mb-4">
-                                                                <div className="p-3 rounded-xl bg-emerald-50/50 border border-emerald-100/50 flex items-center gap-3">
-                                                                   <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center">
-                                                                      <Package className="h-3.5 w-3.5 text-emerald-600" />
-                                                                   </div>
-                                                                   <div>
-                                                                      <p className="text-[10px] font-black text-emerald-800 uppercase leading-none">{report.ordersTaken}</p>
-                                                                      <p className="text-[9px] font-bold text-emerald-600 uppercase mt-1">Orders</p>
-                                                                   </div>
-                                                                </div>
-                                                                <div className="p-3 rounded-xl bg-red-50/50 border border-red-100/50 flex items-center gap-3">
-                                                                   <div className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center">
-                                                                      <XCircle className="h-3.5 w-3.5 text-red-600" />
-                                                                   </div>
-                                                                   <div>
-                                                                      <p className="text-[10px] font-black text-red-800 uppercase leading-none">{report.ordersCancelled}</p>
-                                                                      <p className="text-[9px] font-bold text-red-600 uppercase mt-1">Cancelled</p>
-                                                                   </div>
-                                                                </div>
-                                                             </div>
+                                                <TabsContent value="der" className="m-0 py-4 space-y-4">
+                                                   <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                                                      <span className="text-xs font-black text-slate-700">Filter Date:</span>
+                                                      <div className="flex items-center gap-2">
+                                                         <Input 
+                                                            type="date" 
+                                                            value={derDateFilter} 
+                                                            onChange={(e) => setDerDateFilter(e.target.value)}
+                                                            className="h-8 text-[11px] font-bold rounded-lg border-slate-200 bg-white shadow-sm w-36"
+                                                         />
+                                                         {derDateFilter && (
+                                                            <Button 
+                                                               variant="ghost" 
+                                                               size="sm" 
+                                                               className="h-8 px-2 text-slate-400 hover:text-slate-600 rounded-lg"
+                                                               onClick={() => setDerDateFilter("")}
+                                                            >
+                                                               <X className="h-4 w-4" />
+                                                            </Button>
+                                                         )}
+                                                      </div>
+                                                   </div>
 
-                                                             <div className="space-y-3">
-                                                                <div>
-                                                                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Work Summary</p>
-                                                                   <p className="text-xs font-medium text-slate-700 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">{report.visitsSummary}</p>
-                                                                </div>
-                                                                {report.remarks && (
-                                                                  <div>
-                                                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Additional Remarks</p>
-                                                                     <p className="text-xs font-medium text-slate-500 italic leading-relaxed">{report.remarks}</p>
-                                                                  </div>
-                                                                )}
-                                                             </div>
-                                                          </div>
-                                                        ))}
-                                                     </div>
+                                                   {inlineFilteredReports.length === 0 ? (
+                                                      <div className="text-center py-12 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                                                         <MapIcon className="h-8 w-8 text-slate-300 mx-auto mb-3" />
+                                                         <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">No reports found</p>
+                                                         <p className="text-[10px] text-slate-400 mt-1 font-medium">Try clearing the date filter to see all submissions.</p>
+                                                      </div>
+                                                   ) : (
+                                                      <div className="grid grid-cols-1 gap-4 max-h-[500px] overflow-y-auto pr-1">
+                                                         {inlineFilteredReports.map((report) => (
+                                                           <div key={report.id} className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm space-y-4">
+                                                              <div className="flex items-center justify-between pb-3 border-b border-slate-50">
+                                                                 <div className="flex items-center gap-2">
+                                                                    <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                                                                       <Calendar className="h-4 w-4 text-blue-600" />
+                                                                    </div>
+                                                                    <span className="text-xs font-black text-slate-900">
+                                                                       {dayjs(report.date).format("DD MMM YYYY")}
+                                                                    </span>
+                                                                 </div>
+                                                                 <div className="flex items-center gap-2">
+                                                                    <Badge className="bg-slate-900 text-white text-[10px] font-black px-3 py-1 rounded-full">{report.kmTravelled} KM</Badge>
+                                                                    <Button 
+                                                                       variant="outline" 
+                                                                       size="sm" 
+                                                                       className="h-7 w-7 p-0 rounded-lg border-slate-200 hover:bg-slate-50"
+                                                                       onClick={() => handleDownloadDER(report, selectedEmployee)}
+                                                                       title="Download PDF"
+                                                                    >
+                                                                       <Download className="h-3.5 w-3.5 text-slate-500" />
+                                                                    </Button>
+                                                                 </div>
+                                                              </div>
+                                                              
+                                                              <div className="grid grid-cols-2 gap-3">
+                                                                 <div className="p-3 rounded-xl bg-emerald-50/50 border border-emerald-100/50 flex items-center gap-3">
+                                                                    <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center">
+                                                                       <Package className="h-3.5 w-3.5 text-emerald-600" />
+                                                                    </div>
+                                                                    <div>
+                                                                       <p className="text-[10px] font-black text-emerald-800 uppercase leading-none">{report.ordersTaken}</p>
+                                                                       <p className="text-[9px] font-bold text-emerald-600 uppercase mt-1">Orders</p>
+                                                                    </div>
+                                                                 </div>
+                                                                 <div className="p-3 rounded-xl bg-red-50/50 border border-red-100/50 flex items-center gap-3">
+                                                                    <div className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center">
+                                                                       <XCircle className="h-3.5 w-3.5 text-red-600" />
+                                                                    </div>
+                                                                    <div>
+                                                                       <p className="text-[10px] font-black text-red-800 uppercase leading-none">{report.ordersCancelled}</p>
+                                                                       <p className="text-[9px] font-bold text-red-600 uppercase mt-1">Cancelled</p>
+                                                                    </div>
+                                                                 </div>
+                                                              </div>
+
+                                                              {(report.startOdometer !== null || report.endOdometer !== null) && (
+                                                                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-100/80 space-y-2">
+                                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Odometer Details</p>
+                                                                    <div className="grid grid-cols-2 gap-4 text-xs">
+                                                                       <div>
+                                                                          <span className="text-slate-400 font-bold">Start:</span>{" "}
+                                                                          <span className="text-slate-800 font-black">{report.startOdometer !== null ? `${report.startOdometer} km` : "--"}</span>
+                                                                          {report.startOdometerPhotoUrl && (
+                                                                             <button 
+                                                                                className="mt-1 flex items-center gap-1 text-[9px] font-bold text-blue-600 hover:text-blue-700"
+                                                                                onClick={() => window.open(report.startOdometerPhotoUrl, "_blank")}
+                                                                             >
+                                                                                View Photo
+                                                                             </button>
+                                                                          )}
+                                                                       </div>
+                                                                       <div>
+                                                                          <span className="text-slate-400 font-bold">End:</span>{" "}
+                                                                          <span className="text-slate-800 font-black">{report.endOdometer !== null ? `${report.endOdometer} km` : "--"}</span>
+                                                                          {report.kmPhotoUrl && (
+                                                                             <button 
+                                                                                className="mt-1 flex items-center gap-1 text-[9px] font-bold text-blue-600 hover:text-blue-700"
+                                                                                onClick={() => window.open(report.kmPhotoUrl, "_blank")}
+                                                                             >
+                                                                                View Photo
+                                                                             </button>
+                                                                          )}
+                                                                       </div>
+                                                                    </div>
+                                                                 </div>
+                                                              )}
+
+                                                              <div className="space-y-3">
+                                                                 <div>
+                                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Work Summary</p>
+                                                                    <p className="text-xs font-medium text-slate-700 leading-relaxed bg-slate-50/50 p-3 rounded-xl border border-slate-100">{report.visitsSummary}</p>
+                                                                 </div>
+                                                                 {report.remarks && (
+                                                                   <div>
+                                                                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Additional Remarks</p>
+                                                                      <p className="text-xs font-medium text-slate-500 italic leading-relaxed bg-slate-50/20 p-2.5 rounded-xl border border-slate-100/50">{report.remarks}</p>
+                                                                   </div>
+                                                                 )}
+                                                              </div>
+                                                           </div>
+                                                         ))}
+                                                      </div>
                                                    )}
                                                 </TabsContent>
                                              </CardContent>
