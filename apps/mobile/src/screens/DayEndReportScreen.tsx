@@ -7,7 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import * as ImagePicker from "expo-image-picker";
 
-import { createDayEndReport, fetchDayEndReports, uploadPhoto, DayEndReport } from "../api";
+import { createDayEndReport, fetchDayEndReports, fetchDaySummary, uploadPhoto, DayEndReport } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useAttendance } from "../hooks/useAttendance";
 import { API_ORIGIN_URL } from "../config/env";
@@ -52,6 +52,117 @@ export function DayEndReportScreen() {
   });
 
   const todayReport = (historyQuery.data ?? []).find(r => dayjs(r.date).isSame(dayjs(), "day"));
+
+  // ---- Day Summary (date-filtered, richer breakdown + PDF export) ----
+  const [summaryDate, setSummaryDate] = useState(dayjs().format("YYYY-MM-DD"));
+  const [isExporting, setIsExporting] = useState(false);
+  const daySummaryQuery = useQuery({
+    enabled: Boolean(user?.id),
+    queryKey: ["daySummary", user?.id, summaryDate],
+    queryFn: () => fetchDaySummary(user!.id, summaryDate)
+  });
+  const summary = daySummaryQuery.data;
+  const isToday = dayjs(summaryDate).isSame(dayjs(), "day");
+
+  function fmtTime(value?: string | null) {
+    return value ? dayjs(value).format("hh:mm A") : "—";
+  }
+
+  async function handleExportSummaryPDF() {
+    if (!summary) return;
+    setIsExporting(true);
+    try {
+      const isAvailable = await Sharing.isAvailableAsync();
+      const dateStr = dayjs(summary.date).format("DD MMMM YYYY");
+      const att = summary.attendance || {};
+      const tasks = summary.tasks || {};
+      const pts = summary.points || {};
+
+      const completedHtml = (tasks.completed || []).map((t: any) => {
+        const responses = Array.isArray(t.checklistResponses) ? t.checklistResponses : [];
+        const qaHtml = responses.map((r: any) => {
+          const val = r.type === "TEXT" || r.type === "DROPDOWN" ? (r.value || "—") : (r.fileUrl ? `[${r.type}]` : "—");
+          return `<tr><td class="q">${r.title || r.type}</td><td>${val}</td></tr>`;
+        }).join("");
+        return `
+          <div class="task">
+            <div class="task-head">
+              <span class="task-title">✅ ${t.title}</span>
+              <span class="task-pts">${t.points ?? 0} pts</span>
+            </div>
+            ${t.description ? `<div class="task-desc">${t.description}</div>` : ""}
+            ${t.completionRemarks ? `<div class="task-remark"><b>Remark:</b> ${t.completionRemarks}</div>` : ""}
+            ${qaHtml ? `<table class="qa">${qaHtml}</table>` : ""}
+          </div>`;
+      }).join("");
+
+      const pendingHtml = (tasks.pending || []).map((t: any) =>
+        `<li>${t.title} <span style="color:#94A3B8">(${t.points ?? 0} pts)</span></li>`
+      ).join("");
+
+      const formsHtml = (summary.forms || []).map((f: any) => {
+        const rows = (f.answers || []).map((a: any) => `<tr><td class="q">${a.question}</td><td>${a.answer}</td></tr>`).join("");
+        return `<div class="task"><div class="task-head"><span class="task-title">📝 ${f.formName}</span></div><table class="qa">${rows}</table></div>`;
+      }).join("");
+
+      const html = `
+        <!DOCTYPE html><html><head><meta charset="utf-8"/>
+        <style>
+          body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 24px; color: #1E293B; }
+          h1 { color: #1A365D; font-size: 22px; margin: 0; text-align:center; }
+          .sub { text-align:center; color:#64748B; font-size:12px; margin: 4px 0 18px; }
+          .meta { width:100%; border-collapse:collapse; margin-bottom:16px; }
+          .meta td { padding:7px 10px; border-bottom:1px solid #E2E8F0; font-size:13px; }
+          .meta td.l { font-weight:bold; background:#F8FAFC; width:35%; }
+          .grid { display:flex; gap:10px; margin:16px 0; }
+          .stat { flex:1; background:#EFF6FF; border:1px solid #DBEAFE; border-radius:8px; padding:10px; text-align:center; }
+          .stat .n { font-size:18px; font-weight:800; color:#1D4ED8; }
+          .stat .l { font-size:9px; text-transform:uppercase; color:#64748B; font-weight:700; margin-top:4px; }
+          h3 { color:#0F172A; font-size:14px; border-bottom:2px solid #E2E8F0; padding-bottom:6px; margin-top:24px; }
+          .task { border:1px solid #E2E8F0; border-radius:8px; padding:10px; margin-bottom:10px; }
+          .task-head { display:flex; justify-content:space-between; align-items:center; }
+          .task-title { font-weight:700; font-size:13px; }
+          .task-pts { font-size:11px; font-weight:800; color:#16A34A; }
+          .task-desc { font-size:12px; color:#475569; margin-top:4px; }
+          .task-remark { font-size:12px; color:#475569; margin-top:4px; }
+          .qa { width:100%; border-collapse:collapse; margin-top:8px; }
+          .qa td { padding:5px 8px; border-bottom:1px solid #F1F5F9; font-size:12px; }
+          .qa td.q { font-weight:600; color:#475569; width:45%; }
+          ul { margin:6px 0; padding-left:18px; font-size:12px; }
+          .footer { text-align:center; margin-top:30px; font-size:10px; color:#94A3B8; }
+        </style></head><body>
+          <h1>STAFFTRACK DAY END REPORT</h1>
+          <div class="sub">${dateStr}</div>
+          <table class="meta">
+            <tr><td class="l">Staff</td><td>${summary.user?.name || user?.name || "Employee"}</td></tr>
+            <tr><td class="l">Check-in</td><td>${fmtTime(att.checkInTime)}</td></tr>
+            <tr><td class="l">Check-out</td><td>${fmtTime(att.checkOutTime)}</td></tr>
+            <tr><td class="l">Odometer</td><td>${att.startOdometer ?? "—"} → ${att.endOdometer ?? "—"} (${att.kmTravelled ?? 0} km)</td></tr>
+          </table>
+          <div class="grid">
+            <div class="stat"><div class="n">${tasks.completedCount ?? 0}</div><div class="l">Completed</div></div>
+            <div class="stat"><div class="n">${tasks.pendingCount ?? 0}</div><div class="l">Pending</div></div>
+            <div class="stat"><div class="n">${pts.taskPointsEarned ?? 0}/${pts.taskPointsPossible ?? 0}</div><div class="l">Task Pts</div></div>
+            <div class="stat"><div class="n">${pts.totalPoints ?? 0}</div><div class="l">Total Pts</div></div>
+          </div>
+          ${completedHtml ? `<h3>Completed Tasks</h3>${completedHtml}` : ""}
+          ${pendingHtml ? `<h3>Pending Tasks</h3><ul>${pendingHtml}</ul>` : ""}
+          ${formsHtml ? `<h3>Forms Submitted</h3>${formsHtml}` : ""}
+          <div class="footer">System-generated • StaffTrack &copy; ${dayjs().year()}</div>
+        </body></html>`;
+
+      const { uri } = await Print.printToFileAsync({ html });
+      if (isAvailable) {
+        await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: `Day End Report - ${dateStr}`, UTI: "com.adobe.pdf" });
+      } else {
+        Alert.alert("PDF created", "Saved to: " + uri);
+      }
+    } catch (error) {
+      Alert.alert("Export failed", "Could not generate the report PDF.");
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   useEffect(() => {
     if (todayReport) {
@@ -380,6 +491,107 @@ export function DayEndReportScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.content} style={styles.screen}>
+      <Card mode="elevated" style={styles.card}>
+        <Card.Content>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <Text style={styles.title} variant="titleLarge">Day Summary</Text>
+            <Button
+              compact
+              mode="contained"
+              icon="file-pdf-box"
+              loading={isExporting}
+              disabled={isExporting || !summary}
+              onPress={handleExportSummaryPDF}
+            >
+              Export PDF
+            </Button>
+          </View>
+
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <IconButton icon="chevron-left" mode="outlined" size={20} onPress={() => setSummaryDate(dayjs(summaryDate).subtract(1, "day").format("YYYY-MM-DD"))} />
+            <View style={{ alignItems: "center" }}>
+              <Text style={{ fontWeight: "800", fontSize: 15, color: "#0F172A" }}>{dayjs(summaryDate).format("DD MMM YYYY")}</Text>
+              {!isToday && (
+                <TouchableOpacity onPress={() => setSummaryDate(dayjs().format("YYYY-MM-DD"))}>
+                  <Text style={{ fontSize: 11, color: "#2563EB", fontWeight: "700" }}>Jump to Today</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <IconButton icon="chevron-right" mode="outlined" size={20} disabled={isToday} onPress={() => setSummaryDate(dayjs(summaryDate).add(1, "day").format("YYYY-MM-DD"))} />
+          </View>
+
+          {daySummaryQuery.isLoading ? (
+            <ActivityIndicator style={{ marginVertical: 16 }} />
+          ) : summary ? (
+            <View style={{ gap: 12 }}>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <View style={styles.summaryStat}><Text style={styles.summaryStatLabel}>CHECK-IN</Text><Text style={styles.summaryStatValue}>{fmtTime(summary.attendance?.checkInTime)}</Text></View>
+                <View style={styles.summaryStat}><Text style={styles.summaryStatLabel}>CHECK-OUT</Text><Text style={styles.summaryStatValue}>{fmtTime(summary.attendance?.checkOutTime)}</Text></View>
+                <View style={styles.summaryStat}><Text style={styles.summaryStatLabel}>KM</Text><Text style={styles.summaryStatValue}>{summary.attendance?.kmTravelled ?? 0}</Text></View>
+              </View>
+
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <View style={styles.summaryStat}><Text style={styles.summaryStatLabel}>COMPLETED</Text><Text style={styles.summaryStatValue}>{summary.tasks?.completedCount ?? 0}</Text></View>
+                <View style={styles.summaryStat}><Text style={styles.summaryStatLabel}>PENDING</Text><Text style={styles.summaryStatValue}>{summary.tasks?.pendingCount ?? 0}</Text></View>
+                <View style={styles.summaryStat}><Text style={styles.summaryStatLabel}>TASK PTS</Text><Text style={styles.summaryStatValue}>{summary.points?.taskPointsEarned ?? 0}/{summary.points?.taskPointsPossible ?? 0}</Text></View>
+                <View style={styles.summaryStat}><Text style={styles.summaryStatLabel}>TOTAL PTS</Text><Text style={styles.summaryStatValue}>{summary.points?.totalPoints ?? 0}</Text></View>
+              </View>
+
+              {(summary.tasks?.completed || []).length > 0 && (
+                <View style={{ gap: 8 }}>
+                  <Text style={styles.summarySectionTitle}>COMPLETED TASKS</Text>
+                  {(summary.tasks.completed as any[]).map((t) => (
+                    <View key={t.id} style={styles.summaryTaskCard}>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                        <Text style={{ fontWeight: "700", color: "#0F172A", flex: 1 }}>✅ {t.title}</Text>
+                        <Text style={{ fontWeight: "800", color: "#16A34A", fontSize: 12 }}>{t.points ?? 0} pts</Text>
+                      </View>
+                      {t.completionRemarks ? <Text style={{ fontSize: 12, color: "#475569", marginTop: 4 }}>{t.completionRemarks}</Text> : null}
+                      {Array.isArray(t.checklistResponses) && t.checklistResponses.map((r: any, i: number) => (
+                        <View key={i} style={{ flexDirection: "row", marginTop: 4 }}>
+                          <Text style={{ fontSize: 11, color: "#64748B", fontWeight: "600", flex: 1 }}>{r.title || r.type}</Text>
+                          <Text style={{ fontSize: 11, color: "#334155", flex: 1 }}>
+                            {r.type === "TEXT" || r.type === "DROPDOWN" ? (r.value || "—") : `[${r.type}]`}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {(summary.tasks?.pending || []).length > 0 && (
+                <View style={{ gap: 4 }}>
+                  <Text style={styles.summarySectionTitle}>PENDING TASKS</Text>
+                  {(summary.tasks.pending as any[]).map((t) => (
+                    <Text key={t.id} style={{ fontSize: 12, color: "#475569" }}>• {t.title} ({t.points ?? 0} pts)</Text>
+                  ))}
+                </View>
+              )}
+
+              {(summary.forms || []).length > 0 && (
+                <View style={{ gap: 8 }}>
+                  <Text style={styles.summarySectionTitle}>FORMS SUBMITTED</Text>
+                  {(summary.forms as any[]).map((f) => (
+                    <View key={f.id} style={styles.summaryTaskCard}>
+                      <Text style={{ fontWeight: "700", color: "#0F172A" }}>📝 {f.formName}</Text>
+                      {(f.answers || []).map((a: any, i: number) => (
+                        <View key={i} style={{ flexDirection: "row", marginTop: 4 }}>
+                          <Text style={{ fontSize: 11, color: "#64748B", fontWeight: "600", flex: 1 }}>{a.question}</Text>
+                          <Text style={{ fontSize: 11, color: "#334155", flex: 1 }}>{a.answer}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          ) : (
+            <Text style={styles.emptyText}>No data for this day.</Text>
+          )}
+        </Card.Content>
+      </Card>
+
       <Card mode="elevated" style={styles.card}>
         <Card.Content>
           <Text style={styles.title} variant="titleLarge">
@@ -847,5 +1059,39 @@ const styles = StyleSheet.create({
     color: "#4C5A7A",
     fontSize: 13,
     lineHeight: 18
+  },
+  summaryStat: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    paddingVertical: 8,
+    alignItems: "center"
+  },
+  summaryStatLabel: {
+    fontSize: 8,
+    color: "#64748B",
+    fontWeight: "700"
+  },
+  summaryStatValue: {
+    fontSize: 13,
+    color: "#0F172A",
+    fontWeight: "800",
+    marginTop: 3
+  },
+  summarySectionTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#475569",
+    textTransform: "uppercase",
+    letterSpacing: 0.5
+  },
+  summaryTaskCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    padding: 10
   }
 });

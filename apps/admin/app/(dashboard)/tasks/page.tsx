@@ -42,7 +42,7 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
-import { fetchTasks, deleteTask, updateTask, createTask as apiCreateTask, fetchUsers, createTemplate, fetchProjects, createProject as apiCreateProject } from "@/lib/api";
+import { fetchTasks, deleteTask, deleteAllTasks, updateTask, createTask as apiCreateTask, fetchUsers, createTemplate, fetchProjects, createProject as apiCreateProject } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -180,6 +180,25 @@ export default function TasksPage() {
       alert(err?.response?.data?.message || err?.message || "Failed to delete task");
     }
   });
+
+  const deleteAllMutation = useMutation({
+    mutationFn: deleteAllTasks,
+    onSuccess: (result: { count: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      alert(`Deleted ${result?.count ?? 0} task(s).`);
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message || err?.message || "Failed to delete all tasks");
+    }
+  });
+
+  const handleDeleteAllTasks = () => {
+    const first = confirm("Delete ALL tasks for the company? This is permanent and cannot be undone.");
+    if (!first) return;
+    const second = confirm("Are you absolutely sure? Every task will be permanently removed.");
+    if (!second) return;
+    deleteAllMutation.mutate();
+  };
 
   // Apply inline status transitions
   const handleStatusChange = async (taskId: string, newStatus: string) => {
@@ -577,6 +596,14 @@ export default function TasksPage() {
                  }}
                >
                  <FileText className="h-4 w-4 text-emerald-600" /> Daily PDF
+               </Button>
+               <Button
+                 variant="outline"
+                 className="h-10 rounded-lg px-4 font-bold text-xs gap-2 border-rose-200 text-rose-600 hover:bg-rose-50"
+                 onClick={handleDeleteAllTasks}
+                 disabled={deleteAllMutation.isPending}
+               >
+                 <Trash2 className="h-4 w-4" /> {deleteAllMutation.isPending ? "Deleting..." : "Delete All"}
                </Button>
                <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                   <DialogTrigger asChild>
@@ -1873,6 +1900,8 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
     { label: "Dropdown", val: "DROPDOWN" },
     { label: "Geo Tag", val: "GEOTAG" }
   ];
+  // Checklist items must not offer the "Dropdown" validation.
+  const checklistValidationTypes = validationTypes.filter(v => v.val !== "DROPDOWN");
 
   const handleSaveTemplate = async () => {
     if (!data.title) {
@@ -1885,13 +1914,26 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
         type: "Task",
         priority: data.priority,
         description: data.description,
+        recurrence: data.repeatFrequency && data.repeatFrequency !== "NONE"
+          ? data.repeatFrequency.charAt(0) + data.repeatFrequency.slice(1).toLowerCase()
+          : "None",
+        // Full task configuration so an assigned blueprint behaves exactly like the task.
         data: JSON.stringify({
+          description: data.description,
+          points: data.points,
           validations: data.validations,
           checklist: data.checklist,
           geofenceLat: data.geofenceLat,
           geofenceLng: data.geofenceLng,
           geofenceRadius: data.geofenceRadius,
-          reminder: data.reminder
+          reminder: data.reminder,
+          attachmentUrl: data.attachmentUrl,
+          attachmentName: data.attachmentName,
+          repeatFrequency: data.repeatFrequency,
+          repeatDays: data.repeatDays,
+          repeatDates: data.repeatDates,
+          skipHolidays: data.skipHolidays,
+          subtasks: data.subtasks
         })
       });
       alert("Template saved successfully!");
@@ -2367,9 +2409,9 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
                         <div className="space-y-1.5">
                            <span className="text-[8px] font-black uppercase text-slate-400">Validations</span>
                            <div className="flex flex-wrap gap-3">
-                              {validationTypes.map(v => (
+                              {checklistValidationTypes.map(v => (
                                  <label key={v.val} className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 cursor-pointer">
-                                   <input 
+                                   <input
                                      type="checkbox"
                                      checked={item.validations.includes(v.val)}
                                      onChange={() => toggleChecklistItemValidation(item.id, v.val)}
@@ -2488,7 +2530,7 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
                                  <Input placeholder="Question title" className="h-8 border-none bg-white font-bold text-xs rounded-lg flex-1" value={ci.title} onChange={e=>updateSubtask(sub.id,{checklist:(sub.checklist||[]).map((c:any)=>c.id===ci.id?{...c,title:e.target.value}:c)})}/>
                                </div>
                                <div className="flex flex-wrap gap-2">
-                                 {validationTypes.map(v=>(<label key={v.val} className="flex items-center gap-1 text-[9px] font-bold text-slate-600 cursor-pointer"><input type="checkbox" checked={(ci.validations||[]).includes(v.val)} onChange={()=>{const nv=(ci.validations||[]).includes(v.val)?(ci.validations||[]).filter((x:string)=>x!==v.val):[...(ci.validations||[]),v.val];updateSubtask(sub.id,{checklist:(sub.checklist||[]).map((c:any)=>c.id===ci.id?{...c,validations:nv}:c)});}} className="rounded border-slate-300"/> {v.label}</label>))}
+                                 {checklistValidationTypes.map(v=>(<label key={v.val} className="flex items-center gap-1 text-[9px] font-bold text-slate-600 cursor-pointer"><input type="checkbox" checked={(ci.validations||[]).includes(v.val)} onChange={()=>{const nv=(ci.validations||[]).includes(v.val)?(ci.validations||[]).filter((x:string)=>x!==v.val):[...(ci.validations||[]),v.val];updateSubtask(sub.id,{checklist:(sub.checklist||[]).map((c:any)=>c.id===ci.id?{...c,validations:nv}:c)});}} className="rounded border-slate-300"/> {v.label}</label>))}
                                </div>
                              </div>
                            ))}
@@ -2898,6 +2940,8 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
     { label: "Dropdown", val: "DROPDOWN" },
     { label: "Geo Tag", val: "GEOTAG" }
   ];
+  // Checklist items must not offer the "Dropdown" validation.
+  const checklistValidationTypes = validationTypes.filter(v => v.val !== "DROPDOWN");
 
   const handleSaveTemplate = async () => {
     if (!data.title) {
@@ -2910,13 +2954,26 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
         type: "Task",
         priority: data.priority,
         description: data.description,
+        recurrence: data.repeatFrequency && data.repeatFrequency !== "NONE"
+          ? data.repeatFrequency.charAt(0) + data.repeatFrequency.slice(1).toLowerCase()
+          : "None",
+        // Full task configuration so an assigned blueprint behaves exactly like the task.
         data: JSON.stringify({
+          description: data.description,
+          points: data.points,
           validations: data.validations,
           checklist: data.checklist,
           geofenceLat: data.geofenceLat,
           geofenceLng: data.geofenceLng,
           geofenceRadius: data.geofenceRadius,
-          reminder: data.reminder
+          reminder: data.reminder,
+          attachmentUrl: data.attachmentUrl,
+          attachmentName: data.attachmentName,
+          repeatFrequency: data.repeatFrequency,
+          repeatDays: data.repeatDays,
+          repeatDates: data.repeatDates,
+          skipHolidays: data.skipHolidays,
+          subtasks: data.subtasks
         })
       });
       alert("Template saved successfully!");
@@ -3287,9 +3344,9 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
                         <div className="space-y-1.5">
                            <span className="text-[8px] font-black uppercase text-slate-400">Validations</span>
                            <div className="flex flex-wrap gap-3">
-                              {validationTypes.map(v => (
+                              {checklistValidationTypes.map(v => (
                                  <label key={v.val} className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 cursor-pointer">
-                                   <input 
+                                   <input
                                      type="checkbox"
                                      checked={item.validations.includes(v.val)}
                                      onChange={() => toggleChecklistItemValidation(item.id, v.val)}
@@ -3408,7 +3465,7 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
                                  <Input placeholder="Question title" className="h-8 border-none bg-white font-bold text-xs rounded-lg flex-1" value={ci.title} onChange={e=>updateSubtask(sub.id,{checklist:(sub.checklist||[]).map((c:any)=>c.id===ci.id?{...c,title:e.target.value}:c)})}/>
                                </div>
                                <div className="flex flex-wrap gap-2">
-                                 {validationTypes.map(v=>(<label key={v.val} className="flex items-center gap-1 text-[9px] font-bold text-slate-600 cursor-pointer"><input type="checkbox" checked={(ci.validations||[]).includes(v.val)} onChange={()=>{const nv=(ci.validations||[]).includes(v.val)?(ci.validations||[]).filter((x:string)=>x!==v.val):[...(ci.validations||[]),v.val];updateSubtask(sub.id,{checklist:(sub.checklist||[]).map((c:any)=>c.id===ci.id?{...c,validations:nv}:c)});}} className="rounded border-slate-300"/> {v.label}</label>))}
+                                 {checklistValidationTypes.map(v=>(<label key={v.val} className="flex items-center gap-1 text-[9px] font-bold text-slate-600 cursor-pointer"><input type="checkbox" checked={(ci.validations||[]).includes(v.val)} onChange={()=>{const nv=(ci.validations||[]).includes(v.val)?(ci.validations||[]).filter((x:string)=>x!==v.val):[...(ci.validations||[]),v.val];updateSubtask(sub.id,{checklist:(sub.checklist||[]).map((c:any)=>c.id===ci.id?{...c,validations:nv}:c)});}} className="rounded border-slate-300"/> {v.label}</label>))}
                                </div>
                              </div>
                            ))}

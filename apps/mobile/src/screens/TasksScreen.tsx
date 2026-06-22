@@ -38,7 +38,7 @@ export function TasksScreen() {
     for (const item of checklist) {
       if (item.required) {
         const resp = checklistResponses[item.id] || {};
-        for (const valType of item.validations) {
+        for (const valType of (item.validations || [])) {
           if (valType === "TEXT" && !resp.text?.trim()) return false;
           if (valType === "DROPDOWN" && !resp.dropdown) return false;
           if (valType === "IMAGE" && !resp.image) return false;
@@ -235,7 +235,7 @@ export function TasksScreen() {
         const checklist = (selectedTask.checklist as any[]);
         for (const item of checklist) {
           const resp = checklistResponses[item.id] || {};
-          for (const valType of item.validations) {
+          for (const valType of (item.validations || [])) {
             if (valType === "TEXT" && resp.text) {
               compiledResponses.push({ id: item.id, title: item.title, type: "TEXT", value: resp.text });
             }
@@ -573,7 +573,7 @@ export function TasksScreen() {
                         {item.title} {item.required ? <Text style={{ color: "#EF4444" }}>*</Text> : ""}
                       </Text>
                       <View style={styles.checklistFields}>
-                        {item.validations.map((valType: string) => {
+                        {(item.validations || []).map((valType: string) => {
                           if (valType === "TEXT") {
                             return (
                               <TextInput

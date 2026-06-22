@@ -464,6 +464,21 @@ export async function deleteTask(actor: AuthUser, taskId: string) {
   });
 }
 
+export async function deleteAllTasks(actor: AuthUser) {
+  // Only admins/superadmins may wipe tasks in bulk.
+  if (actor.role !== UserRole.SUPERADMIN && actor.role !== UserRole.ADMIN) {
+    forbidden("Only admins can delete all tasks");
+  }
+
+  // Superadmin clears every task; an admin clears only their own company's tasks.
+  const where: Prisma.TaskWhereInput =
+    actor.role === UserRole.SUPERADMIN
+      ? {}
+      : { assignedTo: { companyId: actor.companyId } };
+
+  return prisma.task.deleteMany({ where });
+}
+
 export async function updateTaskStatus(
   actor: AuthUser, 
   taskId: string, 

@@ -28,6 +28,11 @@ router.get(
 );
 
 router.get(
+  "/day-summary",
+  asyncHandler(reportController.getDaySummary)
+);
+
+router.get(
   "/monthly/:userId",
   asyncHandler(reportController.getMonthlyPerformanceReport)
 );

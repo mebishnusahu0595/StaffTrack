@@ -2,7 +2,7 @@ export default ({ config }) => ({
   ...config,
   name: "StaffTrack",
   slug: "stafftrack",
-  version: "1.0.0",
+  version: "1.0.3",
   orientation: "portrait",
   icon: "./assets/icon.png",
   userInterfaceStyle: "light",
@@ -37,7 +37,7 @@ export default ({ config }) => ({
     [
       "expo-notifications",
       {
-        icon: "./assets/icon.png",
+        icon: "./assets/logo.png",
         color: "#10B981"
       }
     ],
@@ -59,6 +59,11 @@ export default ({ config }) => ({
   android: {
     package: "com.stafftrack.staff",
     googleServicesFile: "./google-services.json",
+    versionCode: 3,
+    notification: {
+      icon: "./assets/logo.png",
+      color: "#10B981"
+    },
     permissions: [
       "ACCESS_COARSE_LOCATION",
       "ACCESS_FINE_LOCATION",

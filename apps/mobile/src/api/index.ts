@@ -343,6 +343,14 @@ export async function fetchAllDayEndReports(): Promise<any[]> {
   return unwrap(await api.get<ApiEnvelope<any[]>>("/reports/der"));
 }
 
+export async function fetchDaySummary(userId: string, date: string): Promise<any> {
+  return unwrap(
+    await api.get<ApiEnvelope<any>>("/reports/day-summary", {
+      params: { userId, date }
+    })
+  );
+}
+
 export async function fetchMonthlyPerformanceReport(
   userId: string,
   month: number,

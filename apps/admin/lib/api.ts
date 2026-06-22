@@ -218,6 +218,11 @@ export async function deleteTask(id: string) {
   await api.delete(`/tasks/${id}`);
 }
 
+export async function deleteAllTasks() {
+  const response = await api.delete<{ data: { count: number } }>(`/tasks/all`);
+  return response.data.data;
+}
+
 export async function fetchAttendance(userId: string, params?: { month?: number; year?: number }) {
   const response = await api.get<{ data: AttendanceRecord[] }>(`/attendance/${userId}`, { params });
   return response.data.data;
@@ -243,6 +248,13 @@ export async function fetchAllReports(userId?: string) {
 export async function fetchMonthlyReport(userId: string, month: number, year: number) {
   const response = await api.get<{ data: any }>(`/reports/monthly/${userId}`, {
     params: { month, year }
+  });
+  return response.data.data;
+}
+
+export async function fetchDaySummary(userId: string, date: string) {
+  const response = await api.get<{ data: any }>(`/reports/day-summary`, {
+    params: { userId, date }
   });
   return response.data.data;
 }

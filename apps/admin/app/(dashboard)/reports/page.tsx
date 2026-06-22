@@ -43,7 +43,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { fetchAllReports, fetchUsers } from "@/lib/api";
+import { fetchAllReports, fetchUsers, fetchDaySummary } from "@/lib/api";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
@@ -615,6 +615,9 @@ export default function ReportsPage() {
                                </div>
                             </div>
                           </div>
+                          <div className="px-24 pb-12">
+                            <DaySummaryPanel userId={row.userId} date={row.date} />
+                          </div>
                         </TableCell>
                       </TableRow>
                     )}
@@ -645,6 +648,121 @@ export default function ReportsPage() {
   );
 }
  
+function DaySummaryPanel({ userId, date }: { userId: string; date: string | Date }) {
+  const dateStr = new Date(date).toISOString().slice(0, 10);
+  const { data: summary, isLoading } = useQuery({
+    queryKey: ["daySummary", userId, dateStr],
+    queryFn: () => fetchDaySummary(userId, dateStr)
+  });
+
+  if (isLoading) {
+    return <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 py-4">Loading day summary…</div>;
+  }
+  if (!summary) return null;
+
+  const att = summary.attendance || {};
+  const tasks = summary.tasks || {};
+  const pts = summary.points || {};
+  const fmtTime = (v: any) => (v ? new Date(v).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—");
+
+  const stats = [
+    { label: "Check-in", value: fmtTime(att.checkInTime) },
+    { label: "Check-out", value: fmtTime(att.checkOutTime) },
+    { label: "KM", value: `${att.kmTravelled ?? 0}` },
+    { label: "Completed", value: `${tasks.completedCount ?? 0}` },
+    { label: "Pending", value: `${tasks.pendingCount ?? 0}` },
+    { label: "Task Pts", value: `${pts.taskPointsEarned ?? 0}/${pts.taskPointsPossible ?? 0}` },
+    { label: "Total Pts", value: `${pts.totalPoints ?? 0}` }
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-purple-600 flex items-center gap-3">
+        Day Performance Breakdown
+        <div className="h-px flex-1 bg-purple-100" />
+      </div>
+
+      <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
+        {stats.map((s) => (
+          <div key={s.label} className="rounded-2xl bg-white ring-1 ring-slate-100 shadow-sm p-3 text-center">
+            <div className="text-sm font-black text-slate-900">{s.value}</div>
+            <div className="text-[8px] font-black uppercase tracking-widest text-slate-400 mt-1">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-5 md:grid-cols-2">
+        <div className="space-y-3">
+          <div className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Completed Tasks ({tasks.completedCount ?? 0})</div>
+          {(tasks.completed || []).length === 0 ? (
+            <p className="text-xs font-bold text-slate-400">No tasks completed.</p>
+          ) : (
+            (tasks.completed as any[]).map((t) => (
+              <div key={t.id} className="rounded-2xl bg-white ring-1 ring-slate-100 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-black text-slate-800">✅ {t.title}</span>
+                  <span className="text-[10px] font-black text-emerald-600">{t.points ?? 0} pts</span>
+                </div>
+                {t.completionRemarks && <p className="text-xs font-semibold text-slate-500 mt-1">{t.completionRemarks}</p>}
+                {Array.isArray(t.checklistResponses) && t.checklistResponses.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {t.checklistResponses.map((r: any, i: number) => (
+                      <div key={i} className="flex justify-between gap-3 text-[11px]">
+                        <span className="font-bold text-slate-500">{r.title || r.type}</span>
+                        <span className="text-slate-700 text-right">
+                          {r.type === "TEXT" || r.type === "DROPDOWN"
+                            ? (r.value || "—")
+                            : r.fileUrl
+                              ? <a href={r.fileUrl.startsWith("http") ? r.fileUrl : `${r.fileUrl}`} target="_blank" rel="noreferrer" className="text-blue-600 underline">{r.type}</a>
+                              : `[${r.type}]`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="space-y-5">
+          <div className="space-y-2">
+            <div className="text-[10px] font-black uppercase tracking-widest text-amber-600">Pending Tasks ({tasks.pendingCount ?? 0})</div>
+            {(tasks.pending || []).length === 0 ? (
+              <p className="text-xs font-bold text-slate-400">No pending tasks.</p>
+            ) : (
+              <ul className="space-y-1">
+                {(tasks.pending as any[]).map((t) => (
+                  <li key={t.id} className="text-xs font-semibold text-slate-600">• {t.title} <span className="text-slate-400">({t.points ?? 0} pts)</span></li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {(summary.forms || []).length > 0 && (
+            <div className="space-y-2">
+              <div className="text-[10px] font-black uppercase tracking-widest text-blue-600">Forms Submitted ({summary.forms.length})</div>
+              {(summary.forms as any[]).map((f) => (
+                <div key={f.id} className="rounded-2xl bg-white ring-1 ring-slate-100 p-4 shadow-sm">
+                  <div className="text-sm font-black text-slate-800">📝 {f.formName}</div>
+                  <div className="mt-2 space-y-1">
+                    {(f.answers || []).map((a: any, i: number) => (
+                      <div key={i} className="flex justify-between gap-3 text-[11px]">
+                        <span className="font-bold text-slate-500">{a.question}</span>
+                        <span className="text-slate-700 text-right">{a.answer}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Label({ children, className }: { children: React.ReactNode, className?: string }) {
   return <label className={cn("block text-sm font-medium leading-none", className)}>{children}</label>;
 }

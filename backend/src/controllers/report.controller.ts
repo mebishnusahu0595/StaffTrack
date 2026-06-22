@@ -18,6 +18,14 @@ export async function listDayEndReports(req: Request, res: Response): Promise<vo
   sendSuccess(res, result, "Day end reports fetched");
 }
 
+export async function getDaySummary(req: Request, res: Response): Promise<void> {
+  const userId = (req.query.userId as string) || req.user!.id;
+  const dateStr = req.query.date as string;
+  const date = dateStr ? new Date(dateStr) : new Date();
+  const result = await reportService.getDaySummary(req.user!, userId, date);
+  sendSuccess(res, result, "Day summary fetched");
+}
+
 export async function getMonthlyPerformanceReport(req: Request, res: Response): Promise<void> {
   const { userId } = req.params;
   const { month, year } = req.query;

@@ -87,8 +87,12 @@ export async function deleteTemplateTasks(id: string, option: string) {
 }
 
 export async function deleteTemplate(id: string, deleteTasksOption?: string) {
-  if (deleteTasksOption && deleteTasksOption !== "none") {
-    await deleteTemplateTasks(id, deleteTasksOption);
+  // When a template is deleted its tasks should be removed too, so they no longer
+  // appear in the admin web or on the staff app. Default to deleting all linked
+  // tasks unless the caller explicitly opts to keep them ("none").
+  const option = deleteTasksOption || "all";
+  if (option !== "none") {
+    await deleteTemplateTasks(id, option);
   }
   return prisma.template.delete({
     where: { id }

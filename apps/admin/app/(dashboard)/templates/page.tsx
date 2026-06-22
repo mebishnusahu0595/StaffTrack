@@ -421,19 +421,199 @@ export default function TemplatesPage() {
   );
 }
 
+const TASK_VALIDATION_TYPES = [
+  { label: "Video", val: "VIDEO" },
+  { label: "Audio", val: "AUDIO" },
+  { label: "Image", val: "IMAGE" },
+  { label: "File", val: "FILE" },
+  { label: "Text", val: "TEXT" },
+  { label: "Dropdown", val: "DROPDOWN" },
+  { label: "Geo Tag", val: "GEOTAG" }
+];
+// Checklist items must not offer the "Dropdown" validation.
+const CHECKLIST_VALIDATION_TYPES = TASK_VALIDATION_TYPES.filter(v => v.val !== "DROPDOWN");
+
+function emptyTemplateConfig() {
+  return {
+    points: 10,
+    validations: [] as string[],
+    checklist: [] as Array<{ id: string; title: string; required: boolean; validations: string[] }>,
+    geofenceLat: "",
+    geofenceLng: "",
+    geofenceRadius: "",
+    reminder: ""
+  };
+}
+
+function parseTemplateConfig(raw: any) {
+  let cfg: any = {};
+  try {
+    cfg = typeof raw === "string" ? JSON.parse(raw || "{}") : (raw || {});
+  } catch {
+    cfg = {};
+  }
+  return {
+    ...emptyTemplateConfig(),
+    ...cfg,
+    points: cfg.points ?? 10,
+    validations: Array.isArray(cfg.validations) ? cfg.validations : [],
+    checklist: Array.isArray(cfg.checklist) ? cfg.checklist : [],
+    geofenceLat: cfg.geofenceLat ?? "",
+    geofenceLng: cfg.geofenceLng ?? "",
+    geofenceRadius: cfg.geofenceRadius ?? "",
+    reminder: cfg.reminder ?? ""
+  };
+}
+
+// Reusable task-config builder (points / validations / checklist) shared by the
+// template Create and Edit dialogs so a template carries the same setup as a task.
+function TemplateTaskConfig({ config, setConfig }: { config: any; setConfig: (updater: (c: any) => any) => void }) {
+  const toggleValidation = (val: string) => {
+    setConfig(c => ({
+      ...c,
+      validations: c.validations.includes(val)
+        ? c.validations.filter((v: string) => v !== val)
+        : [...c.validations, val]
+    }));
+  };
+  const addItem = () => {
+    setConfig(c => ({
+      ...c,
+      checklist: [...c.checklist, { id: Math.random().toString(36).slice(2), title: "", required: true, validations: [] }]
+    }));
+  };
+  const removeItem = (id: string) => {
+    setConfig(c => ({ ...c, checklist: c.checklist.filter((i: any) => i.id !== id) }));
+  };
+  const updateItem = (id: string, updates: any) => {
+    setConfig(c => ({ ...c, checklist: c.checklist.map((i: any) => i.id === id ? { ...i, ...updates } : i) }));
+  };
+  const toggleItemValidation = (id: string, val: string) => {
+    setConfig(c => ({
+      ...c,
+      checklist: c.checklist.map((i: any) => {
+        if (i.id !== id) return i;
+        const vals = (i.validations || []).includes(val)
+          ? i.validations.filter((v: string) => v !== val)
+          : [...(i.validations || []), val];
+        return { ...i, validations: vals };
+      })
+    }));
+  };
+
+  return (
+    <div className="space-y-4 border-t border-slate-100 pt-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label className="text-[10px] font-black uppercase text-slate-400">Points</Label>
+          <Input
+            type="number"
+            className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs"
+            value={config.points}
+            onChange={e => setConfig(c => ({ ...c, points: parseInt(e.target.value) || 0 }))}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label className="text-[10px] font-black uppercase text-slate-400">Reminder (mins before)</Label>
+          <Input
+            type="number"
+            placeholder="e.g. 30"
+            className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs"
+            value={config.reminder}
+            onChange={e => setConfig(c => ({ ...c, reminder: e.target.value }))}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-[10px] font-black uppercase text-slate-400">Ask Validations (completion proof)</Label>
+        <div className="flex flex-wrap gap-3 bg-slate-50 rounded-2xl p-3 border border-slate-100">
+          {TASK_VALIDATION_TYPES.map(v => (
+            <label key={v.val} className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 cursor-pointer">
+              <input type="checkbox" checked={config.validations.includes(v.val)} onChange={() => toggleValidation(v.val)} className="rounded border-slate-300 text-emerald-600" />
+              {v.label}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="text-[10px] font-black uppercase text-slate-400">Checklist Items</Label>
+          <button type="button" onClick={addItem} className="text-[10px] font-black uppercase text-emerald-600 hover:text-emerald-700">+ Add Checklist Item</button>
+        </div>
+        {config.checklist.length === 0 && (
+          <p className="text-center text-[10px] font-bold text-slate-400 py-2">No checklist items. Click add to begin.</p>
+        )}
+        {config.checklist.map((item: any) => (
+          <div key={item.id} className="p-3 bg-white border border-slate-100 rounded-xl space-y-3 relative">
+            <button type="button" onClick={() => removeItem(item.id)} className="absolute right-2 top-2 text-slate-400 hover:text-rose-500"><Trash2 className="h-3.5 w-3.5" /></button>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-1.5 text-[9px] font-black uppercase text-slate-500 cursor-pointer shrink-0">
+                <input type="checkbox" checked={item.required} onChange={e => updateItem(item.id, { required: e.target.checked })} className="rounded border-slate-300 text-emerald-600" />
+                Required
+              </label>
+              <Input
+                placeholder="Enter field title here"
+                className="h-9 border-none bg-slate-50 font-bold text-xs rounded-lg flex-1"
+                value={item.title}
+                onChange={e => updateItem(item.id, { title: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <span className="text-[8px] font-black uppercase text-slate-400">Validations</span>
+              <div className="flex flex-wrap gap-3">
+                {CHECKLIST_VALIDATION_TYPES.map(v => (
+                  <label key={v.val} className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 cursor-pointer">
+                    <input type="checkbox" checked={(item.validations || []).includes(v.val)} onChange={() => toggleItemValidation(item.id, v.val)} className="rounded border-slate-300 text-emerald-600" />
+                    {v.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="space-y-1">
+          <Label className="text-[9px] font-black uppercase text-slate-400">Geofence Lat</Label>
+          <Input className="h-10 rounded-xl bg-slate-50 border-none font-bold text-[11px]" value={config.geofenceLat} onChange={e => setConfig(c => ({ ...c, geofenceLat: e.target.value }))} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[9px] font-black uppercase text-slate-400">Geofence Lng</Label>
+          <Input className="h-10 rounded-xl bg-slate-50 border-none font-bold text-[11px]" value={config.geofenceLng} onChange={e => setConfig(c => ({ ...c, geofenceLng: e.target.value }))} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[9px] font-black uppercase text-slate-400">Radius (m)</Label>
+          <Input className="h-10 rounded-xl bg-slate-50 border-none font-bold text-[11px]" value={config.geofenceRadius} onChange={e => setConfig(c => ({ ...c, geofenceRadius: e.target.value }))} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CreateTemplateDialog({ onSubmit, isSubmitting }: any) {
-  const [data, setData] = useState({ 
-    name: "", 
-    type: "Task", 
+  const [data, setData] = useState({
+    name: "",
+    type: "Task",
     priority: "Medium",
     recurrence: "None",
     startTime: "06:00 PM",
     dueTime: "07:30 PM",
     description: ""
   });
+  const [config, setConfig] = useState(emptyTemplateConfig());
+
+  const handleSubmit = () => {
+    onSubmit({
+      ...data,
+      data: JSON.stringify({ ...config, description: data.description })
+    });
+  };
 
   return (
-    <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] hide-close text-left">
+    <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] hide-close text-left max-h-[88vh] flex flex-col">
       <DialogHeader className="p-8 bg-emerald-600 text-white relative">
         <DialogClose className="absolute right-6 top-6 rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
            <X className="h-4 w-4" />
@@ -441,12 +621,12 @@ function CreateTemplateDialog({ onSubmit, isSubmitting }: any) {
         <DialogTitle className="text-2xl font-black">New Template</DialogTitle>
         <p className="text-emerald-100 text-xs font-bold mt-1">Design a reusable blueprint for tasks or projects.</p>
       </DialogHeader>
-      <div className="p-8 space-y-6">
+      <div className="p-8 space-y-6 overflow-y-auto flex-1">
          <div className="space-y-4">
             <div className="space-y-2">
                <Label className="text-[10px] font-black uppercase text-slate-400">Template Name</Label>
-               <Input 
-                 placeholder="e.g. Weekly Site Audit" 
+               <Input
+                 placeholder="e.g. Weekly Site Audit"
                  className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
                  value={data.name}
                  onChange={e => setData({...data, name: e.target.value})}
@@ -518,18 +698,21 @@ function CreateTemplateDialog({ onSubmit, isSubmitting }: any) {
                </div>
                <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-slate-400">Description</Label>
-                  <Input 
-                    placeholder="Description of blueprint..." 
-                    className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
+                  <Input
+                    placeholder="Description of blueprint..."
+                    className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs"
                     value={data.description}
                     onChange={e => setData({...data, description: e.target.value})}
                   />
                </div>
             </div>
+            {data.type === "Task" && (
+              <TemplateTaskConfig config={config} setConfig={setConfig} />
+            )}
          </div>
-         <Button 
+         <Button
           className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 shadow-xl shadow-emerald-100 rounded-2xl font-black uppercase tracking-widest text-xs"
-          onClick={() => onSubmit(data)}
+          onClick={handleSubmit}
           disabled={isSubmitting || !data.name}
          >
             {isSubmitting ? "Saving..." : "Create Template"}
@@ -771,20 +954,40 @@ function AssignTemplateDialog({ template, open, onOpenChange }: { template: any;
       const taskDueDate = isRepeating ? startDate : dueDate;
       const taskEndDate = isRepeating ? dueDate : undefined;
 
+      // Parse the full task configuration stored on the template so the spawned
+      // tasks behave exactly like the original task (checklist, validations, points, etc.).
+      let cfg: any = {};
+      try {
+        cfg = typeof template.data === "string" ? JSON.parse(template.data || "{}") : (template.data || {});
+      } catch {
+        cfg = {};
+      }
+      const toNum = (v: any) => (v === "" || v === null || v === undefined ? null : Number(v));
+
       await Promise.all(
-        uniqueSelectedUserIds.map(userId => 
+        uniqueSelectedUserIds.map(userId =>
           createTask({
             title: template.name,
-            description: template.description || template.name,
+            description: cfg.description || template.description || template.name,
             assignedToId: userId,
             dueDate: new Date(taskDueDate).toISOString(),
             startDate: startDate ? new Date(startDate).toISOString() : undefined,
             endDate: taskEndDate ? new Date(taskEndDate).toISOString() : undefined,
             priority: template.priority || "Medium",
+            points: cfg.points !== undefined ? Number(cfg.points) : undefined,
             isRepeating: isRepeating,
             repeatFrequency: isRepeating ? recurrence : undefined,
+            validations: cfg.validations && cfg.validations.length ? cfg.validations : undefined,
+            checklist: cfg.checklist && cfg.checklist.length ? cfg.checklist : undefined,
+            geofenceLat: toNum(cfg.geofenceLat),
+            geofenceLng: toNum(cfg.geofenceLng),
+            geofenceRadius: toNum(cfg.geofenceRadius),
+            reminder: toNum(cfg.reminder),
+            attachmentUrl: cfg.attachmentUrl || undefined,
+            attachmentName: cfg.attachmentName || undefined,
+            subtasks: cfg.subtasks && cfg.subtasks.length ? cfg.subtasks : undefined,
             templateId: template.id
-          })
+          } as any)
         )
       );
       alert("Blueprint assigned successfully as live tasks to selected employees!");
@@ -939,10 +1142,11 @@ function AssignTemplateDialog({ template, open, onOpenChange }: { template: any;
 }
 
 function EditTemplateDialog({ template, open, onOpenChange, onSubmit, isSubmitting }: any) {
-  const [data, setData] = useState({ 
-    name: "", type: "Task", priority: "Medium", recurrence: "None", 
-    startTime: "06:00 PM", dueTime: "07:30 PM", description: "" 
+  const [data, setData] = useState({
+    name: "", type: "Task", priority: "Medium", recurrence: "None",
+    startTime: "06:00 PM", dueTime: "07:30 PM", description: ""
   });
+  const [config, setConfig] = useState(emptyTemplateConfig());
 
   React.useEffect(() => {
     if (template) {
@@ -955,22 +1159,30 @@ function EditTemplateDialog({ template, open, onOpenChange, onSubmit, isSubmitti
         dueTime: template.dueTime || "07:30 PM",
         description: template.description || ""
       });
+      setConfig(parseTemplateConfig(template.data));
     }
   }, [template]);
+
+  const handleEditSubmit = () => {
+    onSubmit({
+      ...data,
+      data: JSON.stringify({ ...config, description: data.description })
+    });
+  };
 
   if (!template) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] hide-close text-left">
-        <DialogHeader className="p-8 bg-blue-600 text-white relative">
+      <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] hide-close text-left max-h-[88vh] flex flex-col">
+        <DialogHeader className="p-8 bg-blue-600 text-white relative shrink-0">
           <DialogClose className="absolute right-6 top-6 rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
              <X className="h-4 w-4" />
           </DialogClose>
           <DialogTitle className="text-2xl font-black">Edit Template</DialogTitle>
           <p className="text-blue-100 text-xs font-bold mt-1">Changes will automatically update future assigned tasks.</p>
         </DialogHeader>
-        <div className="p-8 space-y-6">
+        <div className="p-8 space-y-6 overflow-y-auto flex-1">
            <div className="space-y-4">
               <div className="space-y-2">
                  <Label className="text-[10px] font-black uppercase text-slate-400">Template Name</Label>
@@ -1053,10 +1265,13 @@ function EditTemplateDialog({ template, open, onOpenChange, onSubmit, isSubmitti
                     />
                  </div>
               </div>
+              {data.type === "Task" && (
+                <TemplateTaskConfig config={config} setConfig={setConfig} />
+              )}
            </div>
-           <Button 
+           <Button
             className="w-full h-14 bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-100 rounded-2xl font-black uppercase tracking-widest text-xs"
-            onClick={() => onSubmit(data)}
+            onClick={handleEditSubmit}
             disabled={isSubmitting || !data.name}
            >
               {isSubmitting ? "Saving..." : "Save Changes"}
@@ -1110,7 +1325,7 @@ function DeleteTasksDialog({ template, open, onOpenChange, onSubmit, isSubmittin
 }
 
 function DeleteTemplateDialog({ template, open, onOpenChange, onSubmit, isSubmitting }: any) {
-  const [option, setOption] = useState("none");
+  const [option, setOption] = useState("all");
   if (!template) return null;
 
   return (
@@ -1131,11 +1346,11 @@ function DeleteTemplateDialog({ template, open, onOpenChange, onSubmit, isSubmit
                     <SelectValue />
                  </SelectTrigger>
                  <SelectContent className="rounded-2xl bg-white border border-slate-100 shadow-xl">
-                    <SelectItem value="none">No, keep all assigned tasks</SelectItem>
+                    <SelectItem value="all">Delete all assigned tasks (recommended)</SelectItem>
                     <SelectItem value="future">Delete future tasks</SelectItem>
                     <SelectItem value="past">Delete past tasks</SelectItem>
                     <SelectItem value="recent">Delete recent (Last 7 Days) tasks</SelectItem>
-                    <SelectItem value="all">Delete all assigned tasks</SelectItem>
+                    <SelectItem value="none">No, keep all assigned tasks</SelectItem>
                  </SelectContent>
               </Select>
            </div>

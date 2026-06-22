@@ -187,7 +187,7 @@ export async function getMonthlyPerformanceReport(actor: AuthUser, userId: strin
   const { start: startDate, end: endDate } = monthRange(year, month);
   const daysInMonth = new Date(year, month, 0).getDate();
 
-  const [attendances, reports, expenses, user, holidays, completedTasks, pendingTasks] = await Promise.all([
+  const [attendances, reports, expenses, user, holidays, completedTasks, pendingTasks, leaveRequests] = await Promise.all([
     prisma.attendance.findMany({
       where: { userId, date: { gte: startDate, lt: endDate } },
       include: { breaks: true },
@@ -225,6 +225,7 @@ export async function getMonthlyPerformanceReport(actor: AuthUser, userId: strin
       },
       select: {
         id: true,
+        title: true,
         points: true,
         updatedAt: true
       }
@@ -240,8 +241,19 @@ export async function getMonthlyPerformanceReport(actor: AuthUser, userId: strin
       },
       select: {
         id: true,
+        title: true,
+        points: true,
         dueDate: true
       }
+    }),
+    prisma.leaveRequest.findMany({
+      where: {
+        userId,
+        // Any leave whose span overlaps the selected month.
+        startDate: { lt: endDate },
+        endDate: { gte: startDate }
+      },
+      orderBy: { startDate: "asc" }
     })
   ]);
 
@@ -340,6 +352,53 @@ export async function getMonthlyPerformanceReport(actor: AuthUser, userId: strin
   const deductions = ((absentDays + onLeave) * dailyRate) + (halfDays * 0.5 * dailyRate);
   const finalSalary = Math.max(0, baseSalary - deductions);
 
+  // Task rollup for the month.
+  const completedTaskPoints = completedTasks.reduce((sum, t) => sum + Number(t.points ?? 0), 0);
+  const pendingTaskPoints = pendingTasks.reduce((sum, t) => sum + Number(t.points ?? 0), 0);
+  const tasksSummary = {
+    completedCount: completedTasks.length,
+    pendingCount: pendingTasks.length,
+    completedPoints: completedTaskPoints,
+    possiblePoints: completedTaskPoints + pendingTaskPoints,
+    completed: completedTasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      points: t.points ?? 0,
+      date: t.updatedAt
+    })),
+    pending: pendingTasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      points: t.points ?? 0,
+      dueDate: t.dueDate
+    }))
+  };
+
+  // Leaves overlapping the month.
+  const countLeaveDays = (start: Date, end: Date) => {
+    const from = new Date(Math.max(startOfDay(start).getTime(), startDate.getTime()));
+    const to = new Date(Math.min(startOfDay(end).getTime(), new Date(endDate.getTime() - 1).getTime()));
+    return Math.max(0, Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)) + 1);
+  };
+  const leaves = leaveRequests.map((leave) => ({
+    id: leave.id,
+    startDate: leave.startDate,
+    endDate: leave.endDate,
+    reason: leave.reason,
+    status: leave.status,
+    days: countLeaveDays(leave.startDate, leave.endDate)
+  }));
+
+  // Holiday list for the month.
+  const holidaysList = applicableHolidays
+    .filter((holiday) => holiday.type === "HOLIDAY")
+    .map((holiday) => ({
+      id: holiday.id,
+      date: holiday.date,
+      name: holiday.name
+    }))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
   return {
     month,
     year,
@@ -357,7 +416,10 @@ export async function getMonthlyPerformanceReport(actor: AuthUser, userId: strin
       paidHolidays,
       totalKm,
       totalExpenses,
-      monthlyPoints
+      monthlyPoints,
+      tasksCompleted: tasksSummary.completedCount,
+      tasksPending: tasksSummary.pendingCount,
+      taskPoints: completedTaskPoints
     },
     payroll: {
       baseSalary,
@@ -365,8 +427,167 @@ export async function getMonthlyPerformanceReport(actor: AuthUser, userId: strin
       finalSalary,
       dailyRate
     },
+    tasks: tasksSummary,
+    leaves,
+    holidays: holidaysList,
     dailyLogs: dailyLogs.sort((a, b) => a.date.localeCompare(b.date))
   };
+}
+
+/**
+ * Comprehensive single-day summary used by the enriched Day End Report on both
+ * the staff app and the admin web. Combines attendance (auto check-in/out times,
+ * odometer km), completed/pending task counts with their completion details
+ * (remarks, checklist Q&A, points), points earned vs possible, and any forms the
+ * user submitted that day.
+ */
+export async function getDaySummary(actor: AuthUser, userId: string, date: Date) {
+  await ensureCanAccessUser(actor, userId);
+
+  const dayStart = startOfDay(date);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+
+  const [user, attendances, report, completedTasks, pendingTasks, formResponses] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true, designation: true, workMode: true }
+    }),
+    prisma.attendance.findMany({
+      where: { userId, date: { gte: dayStart, lt: dayEnd } },
+      orderBy: { checkInTime: "asc" }
+    }),
+    prisma.dayEndReport.findUnique({
+      where: { userId_date: { userId, date: dayStart } }
+    }),
+    prisma.task.findMany({
+      where: {
+        assignedToId: userId,
+        status: TaskStatus.COMPLETED,
+        updatedAt: { gte: dayStart, lt: dayEnd }
+      },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        priority: true,
+        points: true,
+        completionRemarks: true,
+        completionPhotoUrl: true,
+        checklist: true,
+        checklistResponses: true,
+        updatedAt: true
+      },
+      orderBy: { updatedAt: "asc" }
+    }),
+    prisma.task.findMany({
+      where: {
+        assignedToId: userId,
+        status: { in: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS] },
+        dueDate: { lt: dayEnd }
+      },
+      select: { id: true, title: true, priority: true, points: true, dueDate: true }
+    }),
+    prisma.formResponse.findMany({
+      where: { userId, submittedAt: { gte: dayStart, lt: dayEnd } },
+      include: { form: { include: { fields: true } } },
+      orderBy: { submittedAt: "asc" }
+    })
+  ]);
+
+  // Attendance: earliest check-in, latest check-out, odometer readings.
+  const checkInTime = attendances.find((a) => a.checkInTime)?.checkInTime ?? null;
+  const checkOutTime =
+    attendances.slice().reverse().find((a) => a.checkOutTime)?.checkOutTime ?? null;
+  const startOdometer = attendances.find((a) => a.startOdometer != null)?.startOdometer ?? report?.startOdometer ?? null;
+  const endOdometer =
+    attendances.slice().reverse().find((a) => a.endOdometer != null)?.endOdometer ?? report?.endOdometer ?? null;
+
+  let kmTravelled = report?.kmTravelled ?? 0;
+  if (startOdometer != null && endOdometer != null && endOdometer >= startOdometer) {
+    kmTravelled = endOdometer - startOdometer;
+  }
+
+  const metrics = await calculatePerformanceMetrics(userId, dayStart, report ?? {
+    ordersTaken: 0,
+    ordersCancelled: 0,
+    kmTravelled,
+    startOdometer,
+    endOdometer
+  });
+
+  const completedPoints = completedTasks.reduce((sum, t) => sum + Number(t.points ?? 0), 0);
+  const pendingPoints = pendingTasks.reduce((sum, t) => sum + Number(t.points ?? 0), 0);
+  const possibleTaskPoints = completedPoints + pendingPoints;
+
+  // Map each form response's stored JSON onto its field labels for readable Q&A.
+  const forms = formResponses.map((fr) => {
+    let parsed: Record<string, any> = {};
+    try {
+      parsed = JSON.parse(fr.data || "{}");
+    } catch {
+      parsed = {};
+    }
+    const fields = fr.form?.fields ?? [];
+    const answers = fields.length
+      ? fields.map((f) => ({
+          question: f.label,
+          answer: formatFormAnswer(parsed[f.id] ?? parsed[f.label])
+        }))
+      : Object.entries(parsed).map(([question, answer]) => ({
+          question,
+          answer: formatFormAnswer(answer)
+        }));
+    return {
+      id: fr.id,
+      formName: fr.form?.name ?? "Form",
+      submittedAt: fr.submittedAt,
+      answers
+    };
+  });
+
+  return {
+    date: dayStart,
+    user,
+    attendance: {
+      checkInTime,
+      checkOutTime,
+      startOdometer,
+      endOdometer,
+      kmTravelled
+    },
+    report: report
+      ? { ...report, ...metrics }
+      : { ...metrics, kmTravelled, startOdometer, endOdometer, remarks: null, visitsSummary: null, ordersTaken: 0, ordersCancelled: 0 },
+    tasks: {
+      completed: completedTasks,
+      pending: pendingTasks,
+      completedCount: completedTasks.length,
+      pendingCount: pendingTasks.length,
+      pointsEarned: completedPoints,
+      pointsPossible: possibleTaskPoints
+    },
+    points: {
+      taskPoints: metrics.taskPoints,
+      orderPoints: metrics.orderPoints,
+      kmPoints: metrics.kmPoints,
+      cancellationPenalty: metrics.cancellationPenalty,
+      totalPoints: metrics.totalPoints,
+      taskPointsEarned: completedPoints,
+      taskPointsPossible: possibleTaskPoints
+    },
+    forms
+  };
+}
+
+function formatFormAnswer(value: any): string {
+  if (value === null || value === undefined) return "—";
+  if (Array.isArray(value)) return value.map((v) => formatFormAnswer(v)).join(", ");
+  if (typeof value === "object") {
+    if (value.url || value.name) return value.name || value.url;
+    return JSON.stringify(value);
+  }
+  return String(value);
 }
 
 async function calculatePerformanceMetrics(

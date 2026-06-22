@@ -44,6 +44,18 @@ export async function updateTask(req: Request, res: Response): Promise<void> {
   sendSuccess(res, result, "Task updated");
 }
 
+export async function deleteAllTasks(req: Request, res: Response): Promise<void> {
+  const result = await taskService.deleteAllTasks(req.user!);
+
+  // Emit WebSocket event so connected staff/admin clients clear their task lists.
+  getIO().to(`company:${req.user!.companyId}`).emit(SOCKET_EVENTS.TASK_UPDATE, {
+    type: "delete-all",
+    data: { count: result.count }
+  });
+
+  sendSuccess(res, result, "All tasks deleted");
+}
+
 export async function deleteTask(req: Request, res: Response): Promise<void> {
   await taskService.deleteTask(req.user!, req.params.id);
   

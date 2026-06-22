@@ -32,6 +32,11 @@ router.patch(
   asyncHandler(taskController.updateTaskStatus)
 );
 router.delete(
+  "/all",
+  roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN),
+  asyncHandler(taskController.deleteAllTasks)
+);
+router.delete(
   "/:id",
   roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER),
   validate({ params: taskIdParamSchema }),
