@@ -97,8 +97,21 @@ export async function createTemplate(req: Request, res: Response) {
   sendSuccess(res, result, "Template created", 201);
 }
 
+
+export async function updateTemplate(req: Request, res: Response) {
+  const result = await templateService.updateTemplate(req.params.id, req.body);
+  sendSuccess(res, result, "Template updated");
+}
+
+export async function deleteTemplateTasks(req: Request, res: Response) {
+  const { option } = req.body;
+  const result = await templateService.deleteTemplateTasks(req.params.id, option);
+  sendSuccess(res, result, "Template tasks deleted");
+}
+
 export async function deleteTemplate(req: Request, res: Response) {
-  await templateService.deleteTemplate(req.params.id);
+  const { deleteTasksOption } = req.query;
+  await templateService.deleteTemplate(req.params.id, deleteTasksOption as string);
 
   // Emit WebSocket event to refresh tasks for all users in the company
   try {
@@ -113,7 +126,7 @@ export async function deleteTemplate(req: Request, res: Response) {
   sendSuccess(res, null, "Template deleted");
 }
 
-export async function updateTemplate(req: Request, res: Response) {
-  const result = await templateService.updateTemplate(req.params.id, req.body);
-  sendSuccess(res, result, "Template updated");
+export async function cleanupTemplateDuplicates(req: Request, res: Response) {
+  const result = await templateService.cleanupTemplateDuplicates(req.params.id);
+  sendSuccess(res, result, "Template duplicates cleaned up");
 }

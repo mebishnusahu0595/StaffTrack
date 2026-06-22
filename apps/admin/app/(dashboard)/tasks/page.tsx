@@ -2126,6 +2126,53 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
                     value={data.endDate}
                     onChange={e => setData({...data, endDate: e.target.value, dueDate: e.target.value})}
                   />
+                  <div className="flex gap-2 items-center mt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        const today = new Date();
+                        const iso = today.toISOString().split('T')[0];
+                        setData(prev => ({
+                          ...prev,
+                          startDate: iso,
+                          endDate: iso,
+                          dueDate: iso,
+                        }));
+                      }}
+                      className="h-9 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100"
+                    >
+                      Today
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        const tomorrow = new Date();
+                        tomorrow.setDate(tomorrow.getDate() + 1);
+                        const iso = tomorrow.toISOString().split('T')[0];
+                        setData(prev => ({
+                          ...prev,
+                          startDate: iso,
+                          endDate: iso,
+                          dueDate: iso,
+                        }));
+                      }}
+                      className="h-9 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100"
+                    >
+                      Tomorrow
+                    </Button>
+                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-2">Due Time</Label>
+                    <Input
+                      type="time"
+                      className="h-9 rounded-full bg-slate-50 border-none"
+                      value={data.dueDate?.split('T')[1] || ''}
+                      onChange={e => {
+                        const datePart = data.dueDate?.split('T')[0] || data.endDate || new Date().toISOString().split('T')[0];
+                        setData(prev => ({ ...prev, dueDate: `${datePart}T${e.target.value}` }));
+                      }}
+                    />
+                  </div>
                </div>
             </div>
 

@@ -355,12 +355,23 @@ export async function createTemplate(data: any) {
   return response.data.data;
 }
 
-export async function deleteTemplate(id: string) {
-  await api.delete(`/templates/${id}`);
+export async function updateTemplate(id: string, data: any) {
+  const response = await api.put<{ data: any }>(`/templates/${id}`, data);
+  return response.data.data;
 }
 
-export async function updateTemplate(id: string, data: any) {
-  const response = await api.patch<{ data: any }>(`/templates/${id}`, data);
+export async function deleteTemplateTasks(id: string, option: string) {
+  const response = await api.delete<{ data: any }>(`/templates/${id}/tasks`, { data: { option } });
+  return response.data.data;
+}
+
+export async function deleteTemplate(id: string, deleteTasksOption?: string) {
+  const response = await api.delete<{ data: any }>(`/templates/${id}`, { params: { deleteTasksOption } });
+  return response.data.data;
+}
+
+export async function cleanupTemplateDuplicates(id: string) {
+  const response = await api.post<{ data: any }>(`/templates/${id}/cleanup-duplicates`);
   return response.data.data;
 }
 

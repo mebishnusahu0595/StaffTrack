@@ -8,6 +8,11 @@ export async function listTemplates(type?: string, search?: string) {
       type: type || undefined,
       name: search ? { contains: search, mode: "insensitive" } : undefined
     },
+    include: {
+      createdBy: {
+        select: { name: true }
+      }
+    },
     orderBy: { usageCount: "desc" }
   });
 }
@@ -28,23 +33,100 @@ export async function useTemplate(id: string) {
   });
 }
 
-export async function deleteTemplate(id: string) {
-  await prisma.task.deleteMany({
-    where: { templateId: id }
+export async function updateTemplate(id: string, data: any) {
+  const updatedTemplate = await prisma.template.update({
+    where: { id },
+    data: {
+      ...data,
+      data: typeof data.data === 'string' ? data.data : (data.data ? JSON.stringify(data.data) : undefined)
+    }
   });
 
+  // Update pending future tasks linked to this template
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+
+  await prisma.task.updateMany({
+    where: {
+      templateId: id,
+      status: "PENDING",
+      dueDate: { gte: todayStart }
+    },
+    data: {
+      title: updatedTemplate.name,
+      description: updatedTemplate.description || updatedTemplate.name,
+      priority: updatedTemplate.priority
+    }
+  });
+
+  return updatedTemplate;
+}
+
+export async function deleteTemplateTasks(id: string, option: string) {
+  let whereClause: any = { templateId: id };
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+
+  if (option === "future") {
+    whereClause.dueDate = { gte: todayStart };
+  } else if (option === "past") {
+    whereClause.dueDate = { lt: todayStart };
+  } else if (option === "recent") {
+    const last7Days = new Date(todayStart);
+    last7Days.setDate(last7Days.getDate() - 7);
+    whereClause.dueDate = { gte: last7Days, lt: todayStart };
+  } else if (option === "all") {
+    // leave as is
+  } else {
+    throw new Error("Invalid delete option");
+  }
+
+  return prisma.task.deleteMany({
+    where: whereClause
+  });
+}
+
+export async function deleteTemplate(id: string, deleteTasksOption?: string) {
+  if (deleteTasksOption && deleteTasksOption !== "none") {
+    await deleteTemplateTasks(id, deleteTasksOption);
+  }
   return prisma.template.delete({
     where: { id }
   });
 }
 
-export async function updateTemplate(id: string, data: any) {
-  const updateData = { ...data };
-  if (updateData.data !== undefined) {
-    updateData.data = typeof updateData.data === 'string' ? updateData.data : JSON.stringify(updateData.data);
-  }
-  return prisma.template.update({
-    where: { id },
-    data: updateData
+export async function cleanupTemplateDuplicates(id: string) {
+  // Find all tasks for this template
+  const tasks = await prisma.task.findMany({
+    where: { templateId: id },
+    select: { id: true, assignedToId: true, dueDate: true }
   });
+
+  // Group by assignedToId and dueDate (date part only)
+  const groupedTasks: Record<string, string[]> = {};
+  for (const task of tasks) {
+    const dateStr = task.dueDate.toISOString().split('T')[0];
+    const key = `${task.assignedToId}_${dateStr}`;
+    if (!groupedTasks[key]) {
+      groupedTasks[key] = [];
+    }
+    groupedTasks[key].push(task.id);
+  }
+
+  // Find IDs to delete (keep the first one, delete the rest)
+  const idsToDelete: string[] = [];
+  for (const key in groupedTasks) {
+    if (groupedTasks[key].length > 1) {
+      // Keep first, delete the rest
+      idsToDelete.push(...groupedTasks[key].slice(1));
+    }
+  }
+
+  if (idsToDelete.length > 0) {
+    return prisma.task.deleteMany({
+      where: { id: { in: idsToDelete } }
+    });
+  }
+
+  return { count: 0 };
 }

@@ -18,7 +18,9 @@ import {
   Layers,
   FileText,
   Send,
+  Edit2,
   Trash2,
+  CalendarOff,
   Pencil
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -46,8 +48,24 @@ import {
 } from "@/components/ui/select";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchTemplates, createTemplate, createTask, fetchUsers, deleteTemplate, updateTemplate } from "@/lib/api";
+import { 
+  fetchTemplates, 
+  createTemplate, 
+  createTask, 
+  fetchUsers,
+  updateTemplate,
+  deleteTemplateTasks,
+  deleteTemplate,
+  cleanupTemplateDuplicates
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator
+} from "@/components/ui/dropdown-menu";
 import dayjs from "dayjs";
 
 export default function TemplatesPage() {
@@ -58,6 +76,9 @@ export default function TemplatesPage() {
   const [viewTemplate, setViewTemplate] = useState<any>(null);
   const [assignTemplate, setAssignTemplate] = useState<any>(null);
   const [editTemplate, setEditTemplate] = useState<any>(null);
+  const [deleteTasksTemplate, setDeleteTasksTemplate] = useState<any>(null);
+  const [deleteTemplateItem, setDeleteTemplateItem] = useState<any>(null);
+  const [cleanupTemplate, setCleanupTemplate] = useState<any>(null);
   
   // Custom filters
   const [priorityFilter, setPriorityFilter] = useState("All");
@@ -79,24 +100,47 @@ export default function TemplatesPage() {
     }
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: deleteTemplate,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["templates"] });
-    },
-    onError: (err: any) => {
-      alert(err?.response?.data?.message || err?.message || "Failed to delete template");
-    }
-  });
-
   const updateMutation = useMutation({
-    mutationFn: ({ id, ...data }: { id: string; [key: string]: any }) => updateTemplate(id, data),
+    mutationFn: (data: {id: string, payload: any}) => updateTemplate(data.id, data.payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["templates"] });
       setEditTemplate(null);
     },
     onError: (err: any) => {
       alert(err?.response?.data?.message || err?.message || "Failed to update template");
+    }
+  });
+
+  const deleteTasksMutation = useMutation({
+    mutationFn: (data: {id: string, option: string}) => deleteTemplateTasks(data.id, data.option),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["templates"] });
+      setDeleteTasksTemplate(null);
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message || err?.message || "Failed to delete tasks");
+    }
+  });
+
+  const deleteTemplateMutation = useMutation({
+    mutationFn: (data: {id: string, option: string}) => deleteTemplate(data.id, data.option),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["templates"] });
+      setDeleteTemplateItem(null);
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message || err?.message || "Failed to delete template");
+    }
+  });
+
+  const cleanupMutation = useMutation({
+    mutationFn: (id: string) => cleanupTemplateDuplicates(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["templates"] });
+      setCleanupTemplate(null);
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message || err?.message || "Failed to cleanup duplicates");
     }
   });
 
@@ -236,9 +280,7 @@ export default function TemplatesPage() {
                        <tr key={template.id} className="group hover:bg-slate-50/50 transition-colors">
                           <td className="px-8 py-6">
                              <div className="flex items-center gap-3">
-                                {template.hasSubtasks && <Plus className="h-3.5 w-3.5 text-emerald-600" />}
                                 <p className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight">{template.name}</p>
-                                {template.subtaskCount && <span className="text-[10px] font-bold text-emerald-600">({template.subtaskCount} Subtasks)</span>}
                              </div>
                           </td>
                           <td className="py-6 text-center">
@@ -262,71 +304,52 @@ export default function TemplatesPage() {
                           </td>
                           <td className="py-6 text-xs font-bold text-slate-500">{dayjs(template.createdAt).format("DD-MM-YYYY")}</td>
                           <td className="px-8 py-6 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                 <Button 
-                                   variant="ghost" 
-                                   size="icon" 
-                                   className="h-9 w-9 rounded-xl hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition-all"
-                                   onClick={() => setAssignTemplate(template)}
-                                   title="Assign Blueprint"
-                                 >
-                                    <Send className="h-4 w-4 text-emerald-600" />
-                                 </Button>
-                                 <Button 
-                                   variant="ghost" 
-                                   size="icon" 
-                                   className="h-9 w-9 rounded-xl hover:bg-amber-50 text-slate-400 hover:text-amber-600 transition-all"
-                                   onClick={() => {
-                                      const confirmCopy = confirm(`Do you want to duplicate "${template.name}"?`);
-                                      if (confirmCopy) {
-                                         createMutation.mutate({
-                                            name: `${template.name} - Copy`,
-                                            type: template.type || "Task",
-                                            priority: template.priority || "Medium",
-                                            recurrence: template.recurrence || "None",
-                                            startTime: template.startTime || "06:00 PM",
-                                            dueTime: template.dueTime || "07:30 PM",
-                                            description: template.description || "",
-                                            data: template.data || "{}"
-                                         });
-                                      }
-                                   }}
-                                   title="Clone Template"
-                                 >
-                                    <Zap className="h-4 w-4" />
-                                 </Button>
-                                 <Button 
-                                   variant="ghost" 
-                                   size="icon" 
-                                   className="h-9 w-9 rounded-xl hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-all"
-                                   onClick={() => setViewTemplate(template)}
-                                   title="View Details"
-                                 >
-                                    <Eye className="h-4 w-4" />
-                                 </Button>
-                                 <Button 
-                                   variant="ghost" 
-                                   size="icon" 
-                                   className="h-9 w-9 rounded-xl hover:bg-sky-50 text-slate-400 hover:text-sky-600 transition-all"
-                                   onClick={() => setEditTemplate(template)}
-                                   title="Edit Blueprint"
-                                 >
-                                    <Pencil className="h-4 w-4 text-sky-600" />
-                                 </Button>
-                                 <Button 
-                                   variant="ghost" 
-                                   size="icon" 
-                                   className="h-9 w-9 rounded-xl hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-all"
-                                   onClick={() => {
-                                      const confirmDelete = confirm(`Are you sure you want to delete blueprint "${template.name}"? This will delete all live tasks spawned from this blueprint from everyone's mobile app.`);
-                                      if (confirmDelete) {
-                                         deleteMutation.mutate(template.id);
-                                      }
-                                    }}
-                                   title="Delete Template"
-                                 >
-                                    <Trash2 className="h-4 w-4 text-rose-600" />
-                                 </Button>
+                               <div className="flex items-center justify-end gap-1">
+                                 <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                       <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-slate-100 text-slate-400">
+                                          <MoreHorizontal className="h-4 w-4" />
+                                       </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-48 rounded-2xl p-2 border-slate-100 shadow-xl">
+                                       <DropdownMenuItem onClick={() => setAssignTemplate(template)} className="text-xs font-bold gap-2 cursor-pointer p-2 rounded-xl text-emerald-600 focus:text-emerald-600 focus:bg-emerald-50">
+                                          <Send className="h-4 w-4" /> Assign Blueprint
+                                       </DropdownMenuItem>
+                                       <DropdownMenuItem onClick={() => setViewTemplate(template)} className="text-xs font-bold gap-2 cursor-pointer p-2 rounded-xl text-slate-600 focus:text-slate-600 focus:bg-slate-50">
+                                          <Eye className="h-4 w-4" /> View Details
+                                       </DropdownMenuItem>
+                                       <DropdownMenuItem onClick={() => setEditTemplate(template)} className="text-xs font-bold gap-2 cursor-pointer p-2 rounded-xl text-blue-600 focus:text-blue-600 focus:bg-blue-50">
+                                          <Edit2 className="h-4 w-4" /> Edit Template
+                                       </DropdownMenuItem>
+                                       <DropdownMenuItem onClick={() => {
+                                          const confirmCopy = confirm(`Do you want to duplicate "${template.name}"?`);
+                                          if (confirmCopy) {
+                                             createMutation.mutate({
+                                                name: `${template.name} - Copy`,
+                                                type: template.type || "Task",
+                                                priority: template.priority || "Medium",
+                                                recurrence: template.recurrence || "None",
+                                                startTime: template.startTime || "06:00 PM",
+                                                dueTime: template.dueTime || "07:30 PM",
+                                                description: template.description || "",
+                                                data: template.data || "{}"
+                                             });
+                                          }
+                                       }} className="text-xs font-bold gap-2 cursor-pointer p-2 rounded-xl text-amber-600 focus:text-amber-600 focus:bg-amber-50">
+                                          <Zap className="h-4 w-4" /> Clone Template
+                                       </DropdownMenuItem>
+                                       <DropdownMenuSeparator />
+                                       <DropdownMenuItem onClick={() => setCleanupTemplate(template)} className="text-xs font-bold gap-2 cursor-pointer p-2 rounded-xl text-purple-600 focus:text-purple-600 focus:bg-purple-50">
+                                          <Layers className="h-4 w-4" /> Cleanup Duplicates
+                                       </DropdownMenuItem>
+                                       <DropdownMenuItem onClick={() => setDeleteTasksTemplate(template)} className="text-xs font-bold gap-2 cursor-pointer p-2 rounded-xl text-rose-600 focus:text-rose-600 focus:bg-rose-50">
+                                          <CalendarOff className="h-4 w-4" /> Bulk Delete Tasks
+                                       </DropdownMenuItem>
+                                       <DropdownMenuItem onClick={() => setDeleteTemplateItem(template)} className="text-xs font-bold gap-2 cursor-pointer p-2 rounded-xl text-rose-600 focus:text-rose-600 focus:bg-rose-50">
+                                          <Trash2 className="h-4 w-4" /> Delete Template
+                                       </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                 </DropdownMenu>
                               </div>
                            </td>
                        </tr>
@@ -355,22 +378,45 @@ export default function TemplatesPage() {
       <ViewTemplateDialog
         template={viewTemplate}
         open={!!viewTemplate}
-        onOpenChange={(open) => !open && setViewTemplate(null)}
+        onOpenChange={(open: boolean) => !open && setViewTemplate(null)}
       />
       
       <AssignTemplateDialog
         template={assignTemplate}
         open={!!assignTemplate}
-        onOpenChange={(open) => !open && setAssignTemplate(null)}
+        onOpenChange={(open: boolean) => !open && setAssignTemplate(null)}
+      />
+      <EditTemplateDialog
+        template={editTemplate}
+        open={!!editTemplate}
+        onOpenChange={(open: boolean) => !open && setEditTemplate(null)}
+        onSubmit={(data: any) => updateMutation.mutate({ id: editTemplate.id, payload: data })}
+        isSubmitting={updateMutation.isPending}
       />
 
-      <Dialog open={!!editTemplate} onOpenChange={(open) => !open && setEditTemplate(null)}>
-         <EditTemplateDialog 
-            template={editTemplate}
-            onSubmit={(data: any) => updateMutation.mutate({ id: editTemplate.id, ...data })}
-            isSubmitting={updateMutation.isPending}
-         />
-      </Dialog>
+      <DeleteTasksDialog
+        template={deleteTasksTemplate}
+        open={!!deleteTasksTemplate}
+        onOpenChange={(open: boolean) => !open && setDeleteTasksTemplate(null)}
+        onSubmit={(option: string) => deleteTasksMutation.mutate({ id: deleteTasksTemplate.id, option })}
+        isSubmitting={deleteTasksMutation.isPending}
+      />
+
+      <DeleteTemplateDialog
+        template={deleteTemplateItem}
+        open={!!deleteTemplateItem}
+        onOpenChange={(open: boolean) => !open && setDeleteTemplateItem(null)}
+        onSubmit={(option: string) => deleteTemplateMutation.mutate({ id: deleteTemplateItem.id, option })}
+        isSubmitting={deleteTemplateMutation.isPending}
+      />
+
+      <CleanupDuplicatesDialog
+        template={cleanupTemplate}
+        open={!!cleanupTemplate}
+        onOpenChange={(open: boolean) => !open && setCleanupTemplate(null)}
+        onSubmit={() => cleanupMutation.mutate(cleanupTemplate.id)}
+        isSubmitting={cleanupMutation.isPending}
+      />
     </div>
   );
 }
@@ -892,15 +938,10 @@ function AssignTemplateDialog({ template, open, onOpenChange }: { template: any;
   );
 }
 
-function EditTemplateDialog({ template, onSubmit, isSubmitting }: any) {
+function EditTemplateDialog({ template, open, onOpenChange, onSubmit, isSubmitting }: any) {
   const [data, setData] = useState({ 
-    name: template?.name || "", 
-    type: template?.type || "Task", 
-    priority: template?.priority || "Medium",
-    recurrence: template?.recurrence || "None",
-    startTime: template?.startTime || "06:00 PM",
-    dueTime: template?.dueTime || "07:30 PM",
-    description: template?.description || ""
+    name: "", type: "Task", priority: "Medium", recurrence: "None", 
+    startTime: "06:00 PM", dueTime: "07:30 PM", description: "" 
   });
 
   React.useEffect(() => {
@@ -917,110 +958,235 @@ function EditTemplateDialog({ template, onSubmit, isSubmitting }: any) {
     }
   }, [template]);
 
+  if (!template) return null;
+
   return (
-    <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] hide-close text-left">
-      <DialogHeader className="p-8 bg-blue-600 text-white relative">
-        <DialogClose className="absolute right-6 top-6 rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
-           <X className="h-4 w-4" />
-        </DialogClose>
-        <DialogTitle className="text-2xl font-black">Edit Template</DialogTitle>
-        <p className="text-blue-100 text-xs font-bold mt-1">Modify the specifications for this blueprint.</p>
-      </DialogHeader>
-      <div className="p-8 space-y-6">
-         <div className="space-y-4">
-            <div className="space-y-2">
-               <Label className="text-[10px] font-black uppercase text-slate-400">Template Name</Label>
-               <Input 
-                 placeholder="e.g. Weekly Site Audit" 
-                 className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
-                 value={data.name}
-                 onChange={e => setData({...data, name: e.target.value})}
-               />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-               <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">Type</Label>
-                  <Select value={data.type} onValueChange={t => setData({...data, type: t})}>
-                     <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs">
-                        <SelectValue />
-                     </SelectTrigger>
-                     <SelectContent className="rounded-2xl bg-white border border-slate-100 shadow-xl">
-                        <SelectItem value="Task">Task</SelectItem>
-                        <SelectItem value="Project">Project</SelectItem>
-                     </SelectContent>
-                  </Select>
-               </div>
-               <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">Priority</Label>
-                  <Select value={data.priority} onValueChange={p => setData({...data, priority: p})}>
-                     <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs">
-                        <SelectValue />
-                     </SelectTrigger>
-                     <SelectContent className="rounded-2xl bg-white border border-slate-100 shadow-xl">
-                        <SelectItem value="Low">Low</SelectItem>
-                        <SelectItem value="Medium">Medium</SelectItem>
-                        <SelectItem value="High">High</SelectItem>
-                     </SelectContent>
-                  </Select>
-               </div>
-            </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] hide-close text-left">
+        <DialogHeader className="p-8 bg-blue-600 text-white relative">
+          <DialogClose className="absolute right-6 top-6 rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
+             <X className="h-4 w-4" />
+          </DialogClose>
+          <DialogTitle className="text-2xl font-black">Edit Template</DialogTitle>
+          <p className="text-blue-100 text-xs font-bold mt-1">Changes will automatically update future assigned tasks.</p>
+        </DialogHeader>
+        <div className="p-8 space-y-6">
+           <div className="space-y-4">
+              <div className="space-y-2">
+                 <Label className="text-[10px] font-black uppercase text-slate-400">Template Name</Label>
+                 <Input 
+                   className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
+                   value={data.name}
+                   onChange={e => setData({...data, name: e.target.value})}
+                 />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400">Type</Label>
+                    <Select value={data.type} onValueChange={t => setData({...data, type: t})}>
+                       <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs">
+                          <SelectValue />
+                       </SelectTrigger>
+                       <SelectContent className="rounded-2xl bg-white border border-slate-100 shadow-xl">
+                          <SelectItem value="Task">Task</SelectItem>
+                          <SelectItem value="Project">Project</SelectItem>
+                       </SelectContent>
+                    </Select>
+                 </div>
+                 <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400">Priority</Label>
+                    <Select value={data.priority} onValueChange={p => setData({...data, priority: p})}>
+                       <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs">
+                          <SelectValue />
+                       </SelectTrigger>
+                       <SelectContent className="rounded-2xl bg-white border border-slate-100 shadow-xl">
+                          <SelectItem value="Low">Low</SelectItem>
+                          <SelectItem value="Medium">Medium</SelectItem>
+                          <SelectItem value="High">High</SelectItem>
+                       </SelectContent>
+                    </Select>
+                 </div>
+              </div>
 
-            <div className="grid grid-cols-2 gap-4">
-               <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">Start Time</Label>
-                  <Input 
-                    placeholder="e.g. 06:00 PM" 
-                    className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
-                    value={data.startTime}
-                    onChange={e => setData({...data, startTime: e.target.value})}
-                  />
-               </div>
-               <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">Due Time</Label>
-                  <Input 
-                    placeholder="e.g. 07:30 PM" 
-                    className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
-                    value={data.dueTime}
-                    onChange={e => setData({...data, dueTime: e.target.value})}
-                  />
-               </div>
-            </div>
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400">Start Time</Label>
+                    <Input 
+                      placeholder="e.g. 06:00 PM" 
+                      className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
+                      value={data.startTime}
+                      onChange={e => setData({...data, startTime: e.target.value})}
+                    />
+                 </div>
+                 <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400">Due Time</Label>
+                    <Input 
+                      placeholder="e.g. 07:30 PM" 
+                      className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
+                      value={data.dueTime}
+                      onChange={e => setData({...data, dueTime: e.target.value})}
+                    />
+                 </div>
+              </div>
 
-            <div className="grid grid-cols-2 gap-4">
-               <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">Recurrence</Label>
-                  <Select value={data.recurrence} onValueChange={r => setData({...data, recurrence: r})}>
-                     <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs">
-                        <SelectValue />
-                     </SelectTrigger>
-                     <SelectContent className="rounded-2xl bg-white border border-slate-100 shadow-xl">
-                        <SelectItem value="None">None</SelectItem>
-                        <SelectItem value="Daily">Daily</SelectItem>
-                        <SelectItem value="Weekly">Weekly</SelectItem>
-                        <SelectItem value="Monthly">Monthly</SelectItem>
-                     </SelectContent>
-                  </Select>
-               </div>
-               <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">Description</Label>
-                  <Input 
-                    placeholder="Description of blueprint..." 
-                    className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
-                    value={data.description}
-                    onChange={e => setData({...data, description: e.target.value})}
-                  />
-               </div>
-            </div>
-         </div>
-         <Button 
-          className="w-full h-14 bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-100 rounded-2xl font-black uppercase tracking-widest text-xs"
-          onClick={() => onSubmit(data)}
-          disabled={isSubmitting || !data.name}
-         >
-            {isSubmitting ? "Saving..." : "Save Changes"}
-         </Button>
-      </div>
-    </DialogContent>
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400">Recurrence</Label>
+                    <Select value={data.recurrence} onValueChange={r => setData({...data, recurrence: r})}>
+                       <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs">
+                          <SelectValue />
+                       </SelectTrigger>
+                       <SelectContent className="rounded-2xl bg-white border border-slate-100 shadow-xl">
+                          <SelectItem value="None">None</SelectItem>
+                          <SelectItem value="Daily">Daily</SelectItem>
+                          <SelectItem value="Weekly">Weekly</SelectItem>
+                          <SelectItem value="Monthly">Monthly</SelectItem>
+                       </SelectContent>
+                    </Select>
+                 </div>
+                 <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400">Description</Label>
+                    <Input 
+                      className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs" 
+                      value={data.description}
+                      onChange={e => setData({...data, description: e.target.value})}
+                    />
+                 </div>
+              </div>
+           </div>
+           <Button 
+            className="w-full h-14 bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-100 rounded-2xl font-black uppercase tracking-widest text-xs"
+            onClick={() => onSubmit(data)}
+            disabled={isSubmitting || !data.name}
+           >
+              {isSubmitting ? "Saving..." : "Save Changes"}
+           </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
+function DeleteTasksDialog({ template, open, onOpenChange, onSubmit, isSubmitting }: any) {
+  const [option, setOption] = useState("future");
+  if (!template) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] hide-close text-left">
+        <DialogHeader className="p-8 bg-rose-600 text-white relative">
+          <DialogClose className="absolute right-6 top-6 rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
+             <X className="h-4 w-4" />
+          </DialogClose>
+          <DialogTitle className="text-2xl font-black">Bulk Delete Tasks</DialogTitle>
+          <p className="text-rose-100 text-xs font-bold mt-1">Delete tasks assigned from blueprint: {template.name}</p>
+        </DialogHeader>
+        <div className="p-8 space-y-6">
+           <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-slate-400">Which tasks should be deleted?</Label>
+              <Select value={option} onValueChange={setOption}>
+                 <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs">
+                    <SelectValue />
+                 </SelectTrigger>
+                 <SelectContent className="rounded-2xl bg-white border border-slate-100 shadow-xl">
+                    <SelectItem value="future">Future Dates Only</SelectItem>
+                    <SelectItem value="past">Past Dates Only</SelectItem>
+                    <SelectItem value="recent">Recent (Last 7 Days)</SelectItem>
+                    <SelectItem value="all">All Dates</SelectItem>
+                 </SelectContent>
+              </Select>
+           </div>
+           <Button 
+            className="w-full h-14 bg-rose-600 hover:bg-rose-700 shadow-xl shadow-rose-100 rounded-2xl font-black uppercase tracking-widest text-xs"
+            onClick={() => onSubmit(option)}
+            disabled={isSubmitting}
+           >
+              {isSubmitting ? "Deleting..." : "Confirm Deletion"}
+           </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteTemplateDialog({ template, open, onOpenChange, onSubmit, isSubmitting }: any) {
+  const [option, setOption] = useState("none");
+  if (!template) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] hide-close text-left">
+        <DialogHeader className="p-8 bg-rose-600 text-white relative">
+          <DialogClose className="absolute right-6 top-6 rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
+             <X className="h-4 w-4" />
+          </DialogClose>
+          <DialogTitle className="text-2xl font-black">Delete Blueprint</DialogTitle>
+          <p className="text-rose-100 text-xs font-bold mt-1">This will permanently remove the blueprint: {template.name}</p>
+        </DialogHeader>
+        <div className="p-8 space-y-6">
+           <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-slate-400">Also delete assigned tasks?</Label>
+              <Select value={option} onValueChange={setOption}>
+                 <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold text-xs">
+                    <SelectValue />
+                 </SelectTrigger>
+                 <SelectContent className="rounded-2xl bg-white border border-slate-100 shadow-xl">
+                    <SelectItem value="none">No, keep all assigned tasks</SelectItem>
+                    <SelectItem value="future">Delete future tasks</SelectItem>
+                    <SelectItem value="past">Delete past tasks</SelectItem>
+                    <SelectItem value="recent">Delete recent (Last 7 Days) tasks</SelectItem>
+                    <SelectItem value="all">Delete all assigned tasks</SelectItem>
+                 </SelectContent>
+              </Select>
+           </div>
+           <Button 
+            className="w-full h-14 bg-rose-600 hover:bg-rose-700 shadow-xl shadow-rose-100 rounded-2xl font-black uppercase tracking-widest text-xs"
+            onClick={() => onSubmit(option)}
+            disabled={isSubmitting}
+           >
+              {isSubmitting ? "Deleting..." : "Confirm Blueprint Deletion"}
+           </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CleanupDuplicatesDialog({ template, open, onOpenChange, onSubmit, isSubmitting }: any) {
+  if (!template) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] hide-close text-left">
+        <DialogHeader className="p-8 bg-purple-600 text-white relative">
+          <DialogClose className="absolute right-6 top-6 rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
+             <X className="h-4 w-4" />
+          </DialogClose>
+          <DialogTitle className="text-2xl font-black">Cleanup Duplicates</DialogTitle>
+          <p className="text-purple-100 text-xs font-bold mt-1">Remove multiple task assignments for {template.name}</p>
+        </DialogHeader>
+        <div className="p-8 space-y-6">
+           <p className="text-sm font-medium text-slate-600">
+             If this blueprint was assigned to the same user multiple times on the same date, this action will keep one instance and delete the extra duplicates.
+           </p>
+           <div className="flex gap-4">
+             <Button 
+              variant="outline"
+              className="flex-1 h-14 rounded-2xl font-black uppercase tracking-widest text-xs"
+              onClick={() => onOpenChange(false)}
+             >
+                Cancel
+             </Button>
+             <Button 
+              className="flex-1 h-14 bg-purple-600 hover:bg-purple-700 shadow-xl shadow-purple-100 rounded-2xl font-black uppercase tracking-widest text-xs text-white"
+              onClick={onSubmit}
+              disabled={isSubmitting}
+             >
+                {isSubmitting ? "Cleaning..." : "Proceed Cleanup"}
+             </Button>
+           </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

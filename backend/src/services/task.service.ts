@@ -509,6 +509,12 @@ export async function updateTaskStatus(
 
   const data: Prisma.TaskUpdateInput = { status };
 
+  if (status === TaskStatus.COMPLETED) {
+    data.points = 10;
+  } else {
+    data.points = 0;
+  }
+
   if (status === TaskStatus.COMPLETED && completionData) {
     data.completionPhotoUrl = completionData.photoUrl;
     data.completionRemarks = completionData.remarks;
@@ -664,7 +670,7 @@ async function preGenerateTasksForSeries(baseTask: any, companyId: string) {
       parentTaskId: baseTask.id,
       attachmentUrl: baseTask.attachmentUrl,
       attachmentName: baseTask.attachmentName,
-      templateId: baseTask.templateId
+      templateId: baseTask.templateId || null
     });
 
     // Move state to next occurrence
