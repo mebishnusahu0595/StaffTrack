@@ -101,6 +101,7 @@ export default function LeaveManagementPage() {
   const [assignWeekdays, setAssignWeekdays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
   const [assignSelectedUsers, setAssignSelectedUsers] = useState<string[]>([]);
   const [assignCycle, setAssignCycle] = useState<"ONCE" | "WEEKLY" | "MONTHLY">("ONCE");
+  const [assignMonthlyDates, setAssignMonthlyDates] = useState<number[]>([]);
 
   // Fetch employees
   const employeesQuery = useQuery({
@@ -122,15 +123,24 @@ export default function LeaveManagementPage() {
       const dates: string[] = [];
 
       while (start.isBefore(end) || start.isSame(end, "day")) {
-        const dayOfWeek = start.day();
-        if (assignWeekdays.includes(dayOfWeek)) {
+        if (assignCycle === "ONCE") {
           dates.push(start.format("YYYY-MM-DD"));
+        } else if (assignCycle === "WEEKLY") {
+          const dayOfWeek = start.day();
+          if (assignWeekdays.includes(dayOfWeek)) {
+            dates.push(start.format("YYYY-MM-DD"));
+          }
+        } else if (assignCycle === "MONTHLY") {
+          const dateOfMonth = start.date();
+          if (assignMonthlyDates.includes(dateOfMonth)) {
+            dates.push(start.format("YYYY-MM-DD"));
+          }
         }
         start = start.add(1, "day");
       }
 
       if (dates.length === 0) {
-        alert("No dates match the selected weekdays in the range.");
+        alert("No dates match the selected cycle parameters in the range.");
         return;
       }
 
@@ -516,6 +526,7 @@ export default function LeaveManagementPage() {
 
                     // Filter holidays on this day
                     const dayHolidays = holidays.filter((h: any) => dayjs(h.date).isSame(d, "day"));
+                    const uniqueDayHolidays = Array.from(new Map(dayHolidays.map((h: any) => [h.name, h])).values());
 
                     // Filter leaves on this day
                     const dayLeaves = leaves.filter((l: any) => {
@@ -549,7 +560,7 @@ export default function LeaveManagementPage() {
                           </div>
 
                           <div className="space-y-1 overflow-y-auto max-h-[64px] scrollbar-thin">
-                             {dayHolidays.map((h: any) => (
+                             {uniqueDayHolidays.map((h: any) => (
                                 <div 
                                   key={h.id} 
                                   className="text-[8px] leading-tight font-black bg-amber-50 text-amber-600 border border-amber-100 rounded px-1 py-0.5 truncate"
@@ -592,23 +603,29 @@ export default function LeaveManagementPage() {
                  
                  <CardContent className="p-0 pt-6 space-y-6">
                     {/* Holidays on Selected Day */}
-                    <div className="space-y-3">
-                       <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Holidays ({holidays.filter((h: any) => dayjs(h.date).isSame(selectedDate, "day")).length})</h3>
-                       <div className="space-y-2">
-                          {holidays.filter((h: any) => dayjs(h.date).isSame(selectedDate, "day")).map((h: any) => (
-                             <div key={h.id} className="p-3 bg-amber-50/50 border border-amber-100 rounded-2xl flex items-center justify-between">
-                                <div>
-                                   <p className="text-xs font-black text-slate-800">{h.name}</p>
-                                   <p className="text-[9px] font-bold text-amber-600 mt-0.5">{h.type.replace("_", " ")}</p>
-                                </div>
-                                <span className="text-lg">🎉</span>
-                             </div>
-                          ))}
-                          {holidays.filter((h: any) => dayjs(h.date).isSame(selectedDate, "day")).length === 0 && (
-                             <p className="text-xs font-bold text-slate-400 italic">No holidays marked for today.</p>
-                          )}
-                       </div>
-                    </div>
+                    {(() => {
+                        const dayHols = holidays.filter((h: any) => dayjs(h.date).isSame(selectedDate, "day"));
+                        const uniqueDayHols = Array.from(new Map(dayHols.map((h: any) => [h.name, h])).values());
+                        return (
+                           <div className="space-y-3">
+                              <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Holidays ({uniqueDayHols.length})</h3>
+                              <div className="space-y-2">
+                                 {uniqueDayHols.map((h: any) => (
+                                    <div key={h.id} className="p-3 bg-amber-50/50 border border-amber-100 rounded-2xl flex items-center justify-between">
+                                       <div>
+                                          <p className="text-xs font-black text-slate-800">{h.name}</p>
+                                          <p className="text-[9px] font-bold text-amber-600 mt-0.5">{h.type.replace("_", " ")}</p>
+                                       </div>
+                                       <span className="text-lg">🎉</span>
+                                    </div>
+                                 ))}
+                                 {uniqueDayHols.length === 0 && (
+                                    <p className="text-xs font-bold text-slate-400 italic">No holidays marked for today.</p>
+                                 )}
+                              </div>
+                           </div>
+                        );
+                     })()}
 
                     {/* Leaves on Selected Day */}
                     <div className="space-y-3">
@@ -695,110 +712,7 @@ export default function LeaveManagementPage() {
       {activeMainTab === "setup" && (
         <div className="space-y-8 animate-in fade-in duration-300">
           
-          {/* Welcome Screen (Screenshot #1) */}
-          {showWelcome && leaveTypes.length === 0 ? (
-            <Card className="rounded-[40px] border-none shadow-xl shadow-slate-200/50 bg-white overflow-hidden p-8 md:p-12 ring-1 ring-slate-100">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-                
-                {/* Visual Art/Illustration representation (Screenshot #1) */}
-                <div className="lg:col-span-6 flex justify-center">
-                  <div className="relative w-full max-w-[420px] aspect-[4/3] bg-gradient-to-br from-blue-50/50 via-slate-50 to-indigo-50/30 rounded-3xl p-6 flex flex-col justify-end border border-slate-100 shadow-inner">
-                    
-                    {/* CSS Line Drawing/Illustration representation of 3 standing employees and Biometric device */}
-                    <div className="absolute inset-0 flex items-center justify-around px-8 pb-10">
-                      
-                      {/* Character 1 */}
-                      <div className="flex flex-col items-center translate-y-4">
-                        <div className="h-20 w-8 border-[2.5px] border-slate-400 bg-white rounded-full flex flex-col justify-between p-1 items-center">
-                          <div className="h-3 w-3 rounded-full bg-slate-400" />
-                          <div className="h-8 w-full bg-slate-200 rounded-b-full" />
-                        </div>
-                        <div className="h-3 w-1 bg-slate-400 mt-1" />
-                      </div>
 
-                      {/* Character 2 */}
-                      <div className="flex flex-col items-center">
-                        <div className="h-24 w-9 border-[2.5px] border-slate-700 bg-slate-900 rounded-full flex flex-col justify-between p-1 items-center">
-                          <div className="h-3.5 w-3.5 rounded-full bg-white" />
-                          <div className="h-10 w-full bg-slate-700 rounded-b-full" />
-                        </div>
-                        <div className="h-4 w-1 bg-slate-700 mt-1" />
-                      </div>
-
-                      {/* Character 3 punching device */}
-                      <div className="flex flex-col items-center -translate-y-4 relative">
-                        <div className="h-28 w-10 border-[2.5px] border-slate-500 bg-white rounded-full flex flex-col justify-between p-1.5 items-center">
-                          <div className="h-4 w-4 rounded-full bg-slate-400" />
-                          <div className="h-12 w-full bg-blue-100 rounded-b-full" />
-                        </div>
-                        <div className="h-5 w-1 bg-slate-500 mt-1" />
-                        
-                        {/* Hand pointing to device */}
-                        <div className="absolute right-[-14px] top-8 h-2 w-5 bg-slate-400 rounded-full rotate-[-15deg] border-t border-slate-600" />
-                      </div>
-
-                      {/* Biometric Circle Punch Device on door */}
-                      <div className="absolute right-10 top-16 h-10 w-10 rounded-full bg-slate-900 border-[3px] border-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
-                        <div className="h-4 w-4 rounded-full bg-blue-500 animate-ping opacity-60" />
-                      </div>
-
-                    </div>
-
-                    <div className="bg-white/80 backdrop-blur-md rounded-2xl p-4 border border-white/60 shadow-md flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md">
-                        <UserCheck className="h-4.5 w-4.5" />
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Leave Setup Status</p>
-                        <p className="text-xs font-black text-slate-800">Not configured yet</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Content block */}
-                <div className="lg:col-span-6 space-y-6 text-left">
-                  <h2 className="text-3xl font-black text-slate-900 tracking-tight leading-tight">
-                    Leave Management
-                  </h2>
-                  <p className="text-slate-500 text-sm leading-relaxed">
-                    PetPooja Payroll is equipped with a comprehensive Leave Management Module!
-                  </p>
-                  <p className="text-slate-500 text-sm leading-relaxed">
-                    Simplify your leave tracking process and ensure accurate payroll management seamlessly integrated within a single platform.
-                  </p>
-                  <Button 
-                    onClick={() => setShowWelcome(false)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-8 h-12 rounded-xl text-xs uppercase tracking-widest shadow-lg shadow-blue-200"
-                  >
-                    Get Started
-                  </Button>
-                </div>
-
-              </div>
-
-              {/* 4 Feature Cards at the bottom (Screenshot #1) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 pt-12 border-t border-slate-100 mt-12">
-                {[
-                  { icon: CalendarDays, title: "Easy Leave Management", desc: "Easily manage staff leaves and records" },
-                  { icon: Sliders, title: "Comprehensive Leave Types", desc: "Create Sick, Casual, Paid leave categories" },
-                  { icon: Clock, title: "Leave Balances and History", desc: "Track historical balances and monthly overrides" },
-                  { icon: FileSpreadsheet, title: "Report & Analytics", desc: "Generate tabular reports instantly" }
-                ].map((item, idx) => (
-                  <div key={idx} className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100/60 space-y-4 hover:bg-white hover:shadow-xl hover:shadow-slate-100 transition-all duration-300">
-                    <div className="h-12 w-12 rounded-xl bg-white border border-slate-200/50 flex items-center justify-center text-blue-600 shadow-sm">
-                      <item.icon className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <h4 className="font-black text-slate-800 text-sm">{item.title}</h4>
-                      <p className="text-slate-400 text-xs font-semibold leading-relaxed mt-1">{item.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-            </Card>
-          ) : (
             <div className="space-y-8 animate-in fade-in duration-300">
               
               {/* Header Action Bar */}
@@ -1104,35 +1018,70 @@ export default function LeaveManagementPage() {
                                </div>
 
                                {/* Weekday Selection */}
-                               <div className="space-y-2">
-                                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Select Weekdays</Label>
-                                  <div className="flex flex-wrap gap-1.5">
-                                     {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, idx) => {
-                                        const isSelected = assignWeekdays.includes(idx);
-                                        return (
-                                           <button
-                                              type="button"
-                                              key={day}
-                                              onClick={() => {
-                                                 if (isSelected) {
-                                                    setAssignWeekdays(assignWeekdays.filter(d => d !== idx));
-                                                 } else {
-                                                    setAssignWeekdays([...assignWeekdays, idx]);
-                                                 }
-                                              }}
-                                              className={cn(
-                                                 "px-3 py-1.5 text-[10px] font-black rounded-lg border uppercase transition-all",
-                                                 isSelected 
-                                                    ? "bg-blue-600 border-blue-600 text-white shadow-sm"
-                                                    : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
-                                              )}
-                                           >
-                                              {day}
-                                           </button>
-                                        );
-                                     })}
+                               {assignCycle === "WEEKLY" && (
+                                  <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                                     <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Select Weekdays</Label>
+                                     <div className="flex flex-wrap gap-1.5">
+                                        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, idx) => {
+                                           const isSelected = assignWeekdays.includes(idx);
+                                           return (
+                                              <button
+                                                 type="button"
+                                                 key={day}
+                                                 onClick={() => {
+                                                    if (isSelected) {
+                                                       setAssignWeekdays(assignWeekdays.filter(d => d !== idx));
+                                                    } else {
+                                                       setAssignWeekdays([...assignWeekdays, idx]);
+                                                    }
+                                                 }}
+                                                 className={cn(
+                                                    "px-3 py-1.5 text-[10px] font-black rounded-lg border uppercase transition-all",
+                                                    isSelected 
+                                                       ? "bg-blue-600 border-blue-600 text-white shadow-sm"
+                                                       : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                                                 )}
+                                              >
+                                                 {day}
+                                              </button>
+                                           );
+                                        })}
+                                     </div>
                                   </div>
-                               </div>
+                               )}
+
+                               {/* Monthly Dates Selection */}
+                               {assignCycle === "MONTHLY" && (
+                                  <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                                     <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Select Dates of Month</Label>
+                                     <div className="grid grid-cols-7 gap-1 bg-slate-50 p-3 rounded-2xl border border-slate-200/60">
+                                        {Array.from({ length: 31 }, (_, i) => i + 1).map(date => {
+                                           const isSelected = assignMonthlyDates.includes(date);
+                                           return (
+                                              <button
+                                                 type="button"
+                                                 key={date}
+                                                 onClick={() => {
+                                                    if (isSelected) {
+                                                       setAssignMonthlyDates(assignMonthlyDates.filter(d => d !== date));
+                                                    } else {
+                                                       setAssignMonthlyDates([...assignMonthlyDates, date]);
+                                                    }
+                                                 }}
+                                                 className={cn(
+                                                    "h-7 w-7 rounded-lg text-[9px] font-bold border transition-all",
+                                                    isSelected 
+                                                       ? "bg-blue-600 border-blue-600 text-white shadow-sm"
+                                                       : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                                                 )}
+                                              >
+                                                 {date}
+                                              </button>
+                                           );
+                                        })}
+                                     </div>
+                                  </div>
+                               )}
 
                                {/* Staff Selection Dropdown / Checklist */}
                                <div className="space-y-2">
@@ -1273,7 +1222,6 @@ export default function LeaveManagementPage() {
               )}
 
             </div>
-          )}
 
         </div>
       )}

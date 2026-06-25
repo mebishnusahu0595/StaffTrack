@@ -13,37 +13,64 @@ export async function listHolidays(req: Request, res: Response) {
 
 export async function createHoliday(req: Request, res: Response) {
   const { date, name, description, type, groupId, userId, userIds } = req.body;
+  const holidayDate = startOfDay(new Date(date));
+  const companyId = req.user!.companyId;
   
   if (userIds && Array.isArray(userIds) && userIds.length > 0) {
-    const holidays = await Promise.all(
-      userIds.map((id) =>
-        prisma.holiday.create({
+    const holidays = [];
+    for (const id of userIds) {
+      const existing = await prisma.holiday.findFirst({
+        where: {
+          date: holidayDate,
+          name,
+          companyId,
+          userId: id
+        }
+      });
+      if (!existing) {
+        const created = await prisma.holiday.create({
           data: {
-            date: startOfDay(new Date(date)),
+            date: holidayDate,
             name,
             description,
             type,
             groupId: groupId || null,
             userId: id,
-            companyId: req.user!.companyId
+            companyId
           }
-        })
-      )
-    );
-    sendSuccess(res, holidays, "Holidays created for selected employees", 201);
+        });
+        holidays.push(created);
+      } else {
+        holidays.push(existing);
+      }
+    }
+    sendSuccess(res, holidays, "Holidays processed for selected employees", 201);
   } else {
-    const holiday = await prisma.holiday.create({
-      data: {
-        date: startOfDay(new Date(date)),
+    const targetUserId = userId || null;
+    const existing = await prisma.holiday.findFirst({
+      where: {
+        date: holidayDate,
         name,
-        description,
-        type, // HOLIDAY or PAID_LEAVE
-        groupId: groupId || null,
-        userId: userId || null,
-        companyId: req.user!.companyId
+        companyId,
+        userId: targetUserId
       }
     });
-    sendSuccess(res, holiday, "Holiday created", 201);
+    if (!existing) {
+      const holiday = await prisma.holiday.create({
+        data: {
+          date: holidayDate,
+          name,
+          description,
+          type, // HOLIDAY or PAID_LEAVE
+          groupId: groupId || null,
+          userId: targetUserId,
+          companyId
+        }
+      });
+      sendSuccess(res, holiday, "Holiday created", 201);
+    } else {
+      sendSuccess(res, existing, "Holiday already exists", 200);
+    }
   }
 }
 
