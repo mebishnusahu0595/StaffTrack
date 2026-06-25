@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, View, RefreshControl, Dimensions, TouchableOpacity, Image, Alert } from "react-native";
+import { ScrollView, StyleSheet, View, RefreshControl, Dimensions, TouchableOpacity, Image, Alert, Linking } from "react-native";
 import { Text, Card, Avatar, ActivityIndicator, IconButton, Portal, Modal, Divider, TextInput, Button, Switch, Chip } from "react-native-paper";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
@@ -257,18 +257,50 @@ export function ManagerFormsScreen() {
                   {Object.entries(selectedResponse.parsedData).map(([key, val]: [string, any], index) => {
                     const fieldObj = selectedForm.fields?.find((f: any) => f.label === key);
                     const isPhoto = fieldObj?.type === "photo" || (typeof val === "string" && (val.startsWith("/uploads/") || val.endsWith(".jpg") || val.endsWith(".png")));
-                    const displayVal = typeof val === "boolean" ? (val ? "Yes" : "No") : val?.toString() || "N/A";
+                    
+                    let imageUrl = "";
+                    let locationText = "";
+                    let hasCoordinates = false;
+                    
+                    if (isPhoto && val) {
+                      imageUrl = typeof val === "object" ? val.url : val;
+                      if (typeof val === "object" && val.latitude) {
+                        hasCoordinates = true;
+                        locationText = `Lat: ${val.latitude.toFixed(6)}, Lng: ${val.longitude.toFixed(6)} | ${dayjs(val.timestamp).format("DD MMM YYYY, hh:mm A")}`;
+                      }
+                    }
+
+                    const displayVal = typeof val === "boolean" 
+                      ? (val ? "Yes" : "No") 
+                      : (typeof val === "object" ? (val.url || JSON.stringify(val)) : val?.toString() || "N/A");
 
                     return (
                       <View key={key} style={[styles.inputItem, index > 0 && styles.inputBorder]}>
                         <Text style={styles.inputKey}>{key}</Text>
-                        {isPhoto && val ? (
-                          <View style={styles.submissionImageContainer}>
-                            <Image 
-                              source={{ uri: val.startsWith("http") ? val : `${API_ORIGIN_URL}${val}` }} 
-                              style={styles.submissionImage}
-                              resizeMode="cover"
-                            />
+                        {isPhoto && imageUrl ? (
+                          <View style={{ gap: 8, marginTop: 6 }}>
+                            <View style={styles.submissionImageContainer}>
+                              <Image 
+                                source={{ uri: imageUrl.startsWith("http") ? imageUrl : `${API_ORIGIN_URL}${imageUrl}` }} 
+                                style={styles.submissionImage}
+                                resizeMode="cover"
+                              />
+                            </View>
+                            {hasCoordinates && val ? (
+                              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#F8FAFC", padding: 8, borderRadius: 8, borderWidth: 1, borderColor: "#E2E8F0" }}>
+                                <Text style={{ fontSize: 10, color: "#475569", fontWeight: "700", flex: 1 }}>
+                                  📍 {locationText}
+                                </Text>
+                                <Button 
+                                  mode="text" 
+                                  compact 
+                                  labelStyle={{ fontSize: 9, fontWeight: "900", color: "#3B82F6", margin: 0, padding: 0 }}
+                                  onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${val.latitude},${val.longitude}`)}
+                                >
+                                  View Map
+                                </Button>
+                              </View>
+                            ) : null}
                           </View>
                         ) : (
                           <Text style={styles.inputVal}>{displayVal}</Text>

@@ -39,6 +39,28 @@ export default function FillFormPage() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isUploading, setIsUploading] = useState<string | null>(null);
 
+  const getCoordinates = (): Promise<{ latitude: number; longitude: number } | null> => {
+    return new Promise((resolve) => {
+      if (typeof window === "undefined" || !navigator.geolocation) {
+        resolve(null);
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.error("Error fetching location", error);
+          resolve(null);
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    });
+  };
+
   const { data: form, isLoading, error } = useQuery({
     queryKey: ["forms", id],
     queryFn: () => fetchForm(id as string)
@@ -61,14 +83,23 @@ export default function FillFormPage() {
 
   const handlePhotoUpload = async (label: string, file: File) => {
     setIsUploading(label);
-    const formData = new FormData();
-    formData.append("file", file);
+    const uploadFormData = new FormData();
+    uploadFormData.append("file", file);
 
     try {
-      const response = await axios.post("/api/upload", formData, {
+      const coords = await getCoordinates();
+      const timestamp = new Date().toISOString();
+
+      const response = await axios.post("/api/upload", uploadFormData, {
         headers: { "Content-Type": "multipart/form-data" }
       });
-      handleInputChange(label, response.data.url);
+      
+      handleInputChange(label, {
+        url: response.data.url,
+        latitude: coords?.latitude || null,
+        longitude: coords?.longitude || null,
+        timestamp: timestamp
+      });
     } catch (err) {
       alert("Photo upload failed. Please try again.");
     } finally {
@@ -88,7 +119,9 @@ export default function FillFormPage() {
 
     // Validate required fields
     for (const field of form.fields) {
-      if (field.required && !formData[field.label]) {
+      const val = formData[field.label];
+      const hasValue = typeof val === 'object' && val ? !!val.url : !!val;
+      if (field.required && !hasValue) {
         alert(`${field.label} is required`);
         return;
       }
@@ -303,43 +336,60 @@ export default function FillFormPage() {
 
                 {field.type === "photo" && (
                   <div className="space-y-4">
-                    {formData[field.label] ? (
-                      <div className="relative h-48 w-full rounded-[32px] overflow-hidden border-4 border-white shadow-xl group">
-                        <img src={formData[field.label]} className="h-full w-full object-cover" alt={field.label} />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                           <Button 
-                            type="button" 
-                            variant="ghost" 
-                            className="text-white font-black uppercase text-xs"
-                            onClick={() => handleInputChange(field.label, null)}
-                           >
-                             Retake Photo
-                           </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <label className="flex flex-col items-center justify-center h-48 w-full border-4 border-dashed border-slate-100 rounded-[32px] bg-slate-50/50 hover:bg-slate-50 hover:border-blue-200 transition-all cursor-pointer group">
-                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                          {isUploading === field.label ? (
-                            <Loader2 className="h-10 w-10 text-blue-600 animate-spin" />
-                          ) : (
-                            <>
-                              <div className="h-12 w-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-slate-400 group-hover:text-blue-600 group-hover:scale-110 transition-all mb-3">
-                                <Camera className="h-6 w-6" />
-                              </div>
-                              <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Tap to capture photo</p>
-                            </>
+                    {(() => {
+                      const photoVal = formData[field.label];
+                      const imageUrl = typeof photoVal === 'object' && photoVal ? photoVal.url : photoVal;
+                      if (!imageUrl) {
+                        return (
+                          <label className="flex flex-col items-center justify-center h-48 w-full border-4 border-dashed border-slate-100 rounded-[32px] bg-slate-50/50 hover:bg-slate-50 hover:border-blue-200 transition-all cursor-pointer group">
+                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                              {isUploading === field.label ? (
+                                <Loader2 className="h-10 w-10 text-blue-600 animate-spin" />
+                              ) : (
+                                <>
+                                  <div className="h-12 w-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-slate-400 group-hover:text-blue-600 group-hover:scale-110 transition-all mb-3">
+                                    <Camera className="h-6 w-6" />
+                                  </div>
+                                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Tap to capture photo</p>
+                                </>
+                              )}
+                            </div>
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              capture="environment"
+                              className="hidden" 
+                              onChange={e => e.target.files?.[0] && handlePhotoUpload(field.label, e.target.files[0])}
+                            />
+                          </label>
+                        );
+                      }
+                      return (
+                        <div className="space-y-2">
+                          <div className="relative h-48 w-full rounded-[32px] overflow-hidden border-4 border-white shadow-xl group">
+                            <img src={imageUrl} className="h-full w-full object-cover" alt={field.label} />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                               <Button 
+                                type="button" 
+                                variant="ghost" 
+                                className="text-white font-black uppercase text-xs"
+                                onClick={() => handleInputChange(field.label, null)}
+                               >
+                                 Retake Photo
+                               </Button>
+                            </div>
+                          </div>
+                          {typeof photoVal === 'object' && photoVal && photoVal.latitude && (
+                            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 px-2">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
+                              <span>Lat: {photoVal.latitude.toFixed(6)}, Lng: {photoVal.longitude.toFixed(6)}</span>
+                              <span className="text-slate-300">|</span>
+                              <span>{dayjs(photoVal.timestamp).format("DD MMM YYYY, hh:mm A")}</span>
+                            </div>
                           )}
                         </div>
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          capture="environment"
-                          className="hidden" 
-                          onChange={e => e.target.files?.[0] && handlePhotoUpload(field.label, e.target.files[0])}
-                        />
-                      </label>
-                    )}
+                      );
+                    })()}
                   </div>
                 )}
 

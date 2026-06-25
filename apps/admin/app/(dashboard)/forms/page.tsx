@@ -20,7 +20,8 @@ import {
   Link as LinkIcon,
   Copy,
   Check,
-  Download
+  Download,
+  MapPin
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -594,7 +595,13 @@ function ViewResponsesDialog({ form }: any) {
       return [
         resp.user?.name || "System",
         dayjs(resp.submittedAt).format("YYYY-MM-DD HH:mm"),
-        ...fieldsList.map((f: any) => respData[f.label] || "")
+        ...fieldsList.map((f: any) => {
+          const val = respData[f.label];
+          if (val && typeof val === "object" && val.url) {
+            return `${val.url} (Lat: ${val.latitude ?? "N/A"}, Lng: ${val.longitude ?? "N/A"}, Time: ${val.timestamp ? dayjs(val.timestamp).format("YYYY-MM-DD HH:mm") : "N/A"})`;
+          }
+          return val || "";
+        })
       ];
     });
 
@@ -687,28 +694,54 @@ function ViewResponsesDialog({ form }: any) {
                            <Badge variant="outline" className="text-[10px] font-bold border-slate-200"># {resp.id.slice(-6)}</Badge>
                         </div>
                         <div className="p-6 grid grid-cols-2 gap-6">
-                           {Object.entries(data).map(([key, value]: [string, any]) => (
-                              <div key={key} className="space-y-1">
-                                 <Label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">{key}</Label>
-                                 {typeof value === 'string' && (value.startsWith('http') || value.includes('data:image') || value.startsWith('/uploads/')) ? (
-                                    <div className="h-48 w-full rounded-2xl overflow-hidden border border-slate-200 shadow-sm relative group">
-                                       <img src={value} className="h-full w-full object-cover" alt={key} />
-                                       <a 
-                                         href={value} 
-                                         target="_blank" 
-                                         rel="noopener noreferrer" 
-                                         className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold uppercase tracking-wider"
-                                       >
-                                         View Full Image
-                                       </a>
-                                    </div>
-                                 ) : (
-                                    <p className="text-sm font-bold text-slate-700">
-                                      {Array.isArray(value) ? value.join(", ") : String(value)}
-                                    </p>
-                                 )}
-                              </div>
-                           ))}
+                           {Object.entries(data).map(([key, value]: [string, any]) => {
+                              const isPhotoObj = typeof value === 'object' && value && 'url' in value;
+                              const imageUrl = isPhotoObj ? value.url : (typeof value === 'string' ? value : '');
+                              const hasImage = imageUrl && (imageUrl.startsWith('http') || imageUrl.includes('data:image') || imageUrl.startsWith('/uploads/'));
+                              
+                              return (
+                               <div key={key} className="space-y-1">
+                                  <Label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">{key}</Label>
+                                  {hasImage ? (
+                                     <div className="space-y-2">
+                                       <div className="h-48 w-full rounded-2xl overflow-hidden border border-slate-200 shadow-sm relative group">
+                                          <img src={imageUrl} className="h-full w-full object-cover" alt={key} />
+                                          <a 
+                                            href={imageUrl} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer" 
+                                            className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold uppercase tracking-wider"
+                                          >
+                                            View Full Image
+                                          </a>
+                                       </div>
+                                       {isPhotoObj && value.latitude && (
+                                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-white border border-slate-100 rounded-xl mt-1 shadow-sm">
+                                           <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                                             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+                                             <span>GPS: {value.latitude.toFixed(6)}, {value.longitude.toFixed(6)}</span>
+                                             <span className="text-slate-300">|</span>
+                                             <span>{dayjs(value.timestamp).format("hh:mm:ss A")}</span>
+                                           </div>
+                                           <a 
+                                             href={`https://www.google.com/maps/search/?api=1&query=${value.latitude},${value.longitude}`}
+                                             target="_blank"
+                                             rel="noopener noreferrer"
+                                             className="text-[9px] font-black text-blue-600 hover:text-blue-700 hover:underline uppercase tracking-widest flex items-center gap-1"
+                                           >
+                                             <MapPin className="h-3.5 w-3.5 text-blue-600" /> View Map
+                                           </a>
+                                         </div>
+                                       )}
+                                     </div>
+                                  ) : (
+                                     <p className="text-sm font-bold text-slate-700">
+                                       {Array.isArray(value) ? value.join(", ") : String(value)}
+                                     </p>
+                                  )}
+                               </div>
+                              );
+                           })}
                         </div>
                      </div>
                    )

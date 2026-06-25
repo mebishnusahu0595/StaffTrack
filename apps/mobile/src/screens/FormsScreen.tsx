@@ -23,6 +23,7 @@ import {
   RadioButton
 } from "react-native-paper";
 import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
 import { useForms } from "../hooks/useForms";
 import { fetchFormDetails, uploadPhoto, Form, FormField } from "../api";
 import { API_ORIGIN_URL } from "../config/env";
@@ -70,6 +71,23 @@ export function FormsScreen() {
   };
 
   const pickImage = async (label: string) => {
+    // Request permission first
+    let coords = null;
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        coords = {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude
+        };
+      }
+    } catch (e) {
+      console.warn("Could not get location permission/coordinates:", e);
+    }
+
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       quality: 0.7
@@ -79,7 +97,13 @@ export function FormsScreen() {
       setIsUploading(true);
       try {
         const url = await uploadPhoto(result.assets[0]);
-        handleInputChange(label, url);
+        const photoData = {
+          url: url,
+          latitude: coords?.latitude || null,
+          longitude: coords?.longitude || null,
+          timestamp: new Date().toISOString()
+        };
+        handleInputChange(label, photoData);
       } catch (error) {
         Alert.alert("Upload Failed", "Could not upload photo. Please try again.");
       } finally {
@@ -93,7 +117,9 @@ export function FormsScreen() {
 
     // Validate required fields
     for (const field of selectedForm.fields || []) {
-      if (field.required && !formData[field.label]) {
+      const val = formData[field.label];
+      const hasValue = typeof val === 'object' && val ? !!val.url : !!val;
+      if (field.required && !hasValue) {
         Alert.alert("Required Field", `${field.label} is required.`);
         return;
       }
@@ -145,26 +171,38 @@ export function FormsScreen() {
           </View>
         );
       case "photo":
+        const photoVal = formData[field.label];
+        const imageUrl = typeof photoVal === 'object' && photoVal ? photoVal.url : photoVal;
         return (
           <View key={field.id} style={styles.fieldContainer}>
             <Text style={styles.fieldLabel}>{field.label}{field.required && " *"}</Text>
-            {formData[field.label] ? (
-              <View style={styles.imagePreviewContainer}>
-                <Image 
-                  source={{ 
-                    uri: formData[field.label]?.startsWith("http") 
-                      ? formData[field.label] 
-                      : `${API_ORIGIN_URL}${formData[field.label]}` 
-                  }} 
-                  style={styles.imagePreview} 
-                />
-                <IconButton 
-                  icon="close-circle" 
-                  size={24} 
-                  iconColor="red"
-                  onPress={() => handleInputChange(field.label, undefined)}
-                  style={styles.removeImageBtn}
-                />
+            {imageUrl ? (
+              <View style={{ gap: 8 }}>
+                <View style={styles.imagePreviewContainer}>
+                  <Image 
+                    source={{ 
+                      uri: imageUrl.startsWith("http") 
+                        ? imageUrl 
+                        : `${API_ORIGIN_URL}${imageUrl}` 
+                    }} 
+                    style={styles.imagePreview} 
+                  />
+                  <IconButton 
+                    icon="close-circle" 
+                    size={24} 
+                    iconColor="red"
+                    onPress={() => handleInputChange(field.label, undefined)}
+                    style={styles.removeImageBtn}
+                  />
+                </View>
+                {typeof photoVal === 'object' && photoVal && photoVal.latitude && (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4 }}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#10B981" }} />
+                    <Text style={{ fontSize: 10, color: "#66736F", fontWeight: "700" }}>
+                      Lat: {photoVal.latitude.toFixed(6)}, Lng: {photoVal.longitude.toFixed(6)} | {dayjs(photoVal.timestamp).format("hh:mm A")}
+                    </Text>
+                  </View>
+                )}
               </View>
             ) : (
               <Button 
