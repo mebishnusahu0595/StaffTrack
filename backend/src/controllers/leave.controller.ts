@@ -46,6 +46,19 @@ export async function createHolidayTemplate(req: Request, res: Response) {
   sendSuccess(res, result, "Holiday template created successfully", 201);
 }
 
+export async function updateHolidayTemplate(req: Request, res: Response) {
+  const { id } = req.params;
+  const result = await leaveSetupService.updateHolidayTemplate(req.user!, id, req.body);
+  sendSuccess(res, result, "Holiday template updated successfully");
+}
+
+export async function deleteHolidayTemplate(req: Request, res: Response) {
+  const { id } = req.params;
+  const { deleteOption } = req.query; // 'future' | 'present' | 'all'
+  const result = await leaveSetupService.deleteHolidayTemplate(req.user!, id, deleteOption as any);
+  sendSuccess(res, result, "Holiday template deleted successfully");
+}
+
 export async function assignHolidayTemplate(req: Request, res: Response) {
   const { templateId, userIds } = req.body;
   const result = await leaveSetupService.assignHolidayTemplate(req.user!, templateId, userIds);

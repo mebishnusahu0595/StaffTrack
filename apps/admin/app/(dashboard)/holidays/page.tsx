@@ -36,7 +36,9 @@ import {
   fetchEmployees,
   fetchHolidayTemplates,
   createHolidayTemplate,
-  assignHolidayTemplate
+  assignHolidayTemplate,
+  updateHolidayTemplate,
+  deleteHolidayTemplate
 } from "@/lib/api";
 import { 
   Dialog, 
@@ -53,6 +55,12 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
@@ -71,12 +79,31 @@ export default function HolidaysPage() {
     userIds: [] as string[]
   });
 
+  // Recurrence states for Mark Holiday
+  const [holidayStartDate, setHolidayStartDate] = useState(dayjs().format("YYYY-MM-DD"));
+  const [holidayEndDate, setHolidayEndDate] = useState(dayjs().format("YYYY-MM-DD"));
+  const [holidayCycle, setHolidayCycle] = useState<"ONCE" | "WEEKLY" | "MONTHLY">("ONCE");
+  const [holidayWeekdays, setHolidayWeekdays] = useState<number[]>([0, 6]); // Default Sat/Sun
+  const [holidayMonthlyDates, setHolidayMonthlyDates] = useState<number[]>([]);
+
   // Holiday Templates Create Modal state
   const [isCreateTemplateOpen, setIsCreateTemplateOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [newHolidays, setNewHolidays] = useState<{ date: string; name: string; description?: string }[]>([
     { date: "", name: "", description: "" }
   ]);
+
+  // Edit template state
+  const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
+  const [isEditTemplateOpen, setIsEditTemplateOpen] = useState(false);
+  const [editTemplateName, setEditTemplateName] = useState("");
+  const [editHolidays, setEditHolidays] = useState<{ date: string; name: string; description?: string }[]>([]);
+  const [editDeleteOption, setEditDeleteOption] = useState<"future" | "present" | "all">("present");
+
+  // Delete template state
+  const [deletingTemplate, setDeletingTemplate] = useState<any | null>(null);
+  const [isDeleteTemplateOpen, setIsDeleteTemplateOpen] = useState(false);
+  const [deleteOption, setDeleteOption] = useState<"future" | "present" | "all">("present");
 
   // Holiday Assignment state
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -86,6 +113,8 @@ export default function HolidaysPage() {
   // Search filter states
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [templateSearch, setTemplateSearch] = useState("");
+  const [selectedYear, setSelectedYear] = useState<string>("2026");
+  const [selectedMonth, setSelectedMonth] = useState<string>("ALL");
 
   // Queries
   const holidaysQuery = useQuery({ queryKey: ["holidays"], queryFn: fetchHolidays });
@@ -112,6 +141,36 @@ export default function HolidaysPage() {
     },
     onError: (err: any) => {
       alert(err?.response?.data?.message || "Failed to create holiday template.");
+    }
+  });
+
+  const updateTemplateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => updateHolidayTemplate(id, data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["holidayTemplates"] });
+      void queryClient.invalidateQueries({ queryKey: ["employees"] });
+      void queryClient.invalidateQueries({ queryKey: ["holidays"] });
+      setIsEditTemplateOpen(false);
+      setEditingTemplate(null);
+      alert("Holiday template successfully updated!");
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message || "Failed to update holiday template.");
+    }
+  });
+
+  const deleteTemplateMutation = useMutation({
+    mutationFn: ({ id, option }: { id: string; option: "future" | "present" | "all" }) => deleteHolidayTemplate(id, option),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["holidayTemplates"] });
+      void queryClient.invalidateQueries({ queryKey: ["employees"] });
+      void queryClient.invalidateQueries({ queryKey: ["holidays"] });
+      setIsDeleteTemplateOpen(false);
+      setDeletingTemplate(null);
+      alert("Holiday template successfully deleted!");
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message || "Failed to delete holiday template.");
     }
   });
 
@@ -143,6 +202,60 @@ export default function HolidaysPage() {
     const updated = [...newHolidays];
     updated[index] = { ...updated[index], [field]: value };
     setNewHolidays(updated);
+  };
+
+  const handleCreateSpecialDay = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name) {
+      alert("Please enter occasion name.");
+      return;
+    }
+    
+    let start = dayjs(holidayStartDate);
+    const end = dayjs(holidayEndDate);
+    const dates: string[] = [];
+
+    while (start.isBefore(end) || start.isSame(end, "day")) {
+      if (holidayCycle === "ONCE") {
+        dates.push(start.format("YYYY-MM-DD"));
+      } else if (holidayCycle === "WEEKLY") {
+        const dayOfWeek = start.day();
+        if (holidayWeekdays.includes(dayOfWeek)) {
+          dates.push(start.format("YYYY-MM-DD"));
+        }
+      } else if (holidayCycle === "MONTHLY") {
+        const dateOfMonth = start.date();
+        if (holidayMonthlyDates.includes(dateOfMonth)) {
+          dates.push(start.format("YYYY-MM-DD"));
+        }
+      }
+      start = start.add(1, "day");
+    }
+
+    if (dates.length === 0) {
+      alert("No dates match the cycle parameters in the selected range.");
+      return;
+    }
+
+    const targetUserIds = formData.targetType === "USER" ? formData.userIds : undefined;
+
+    try {
+      for (const d of dates) {
+        await createHoliday({
+          date: new Date(d),
+          name: formData.name,
+          type: formData.type,
+          userIds: targetUserIds
+        });
+      }
+      alert("Holidays marked successfully!");
+      setIsAddOpen(false);
+      setFormData({ name: "", date: "", type: "HOLIDAY", targetType: "COMPANY", userIds: [] });
+      void queryClient.invalidateQueries({ queryKey: ["holidays"] });
+    } catch (err) {
+      console.error(err);
+      alert("Failed to mark holidays");
+    }
   };
 
   const handleCreateTemplateSubmit = (e: React.FormEvent) => {
@@ -202,6 +315,12 @@ export default function HolidaysPage() {
   );
 
   const holidays = holidaysQuery.data ?? [];
+  const filteredHolidays = holidays.filter((h: any) => {
+    const hDate = dayjs(h.date);
+    const yearMatch = hDate.year().toString() === selectedYear;
+    const monthMatch = selectedMonth === "ALL" || (hDate.month() + 1).toString() === selectedMonth;
+    return yearMatch && monthMatch;
+  });
 
   return (
     <div className="p-8 space-y-8 bg-slate-50/50 min-h-screen animate-in fade-in duration-500">
@@ -404,9 +523,44 @@ export default function HolidaysPage() {
                       <h3 className="text-lg font-black text-slate-900">{template.name}</h3>
                       <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-0.5">Custom Calendar template</p>
                     </div>
-                    <Badge className="bg-emerald-50 text-emerald-600 font-bold text-[9px] px-2 py-0.5 rounded border border-emerald-100">
-                      Standard
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-emerald-50 text-emerald-600 font-bold text-[9px] px-2 py-0.5 rounded border border-emerald-100">
+                        Standard
+                      </Badge>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-slate-100">
+                            <MoreHorizontal className="h-4 w-4 text-slate-500" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="bg-white border border-slate-200 rounded-xl p-1 shadow-lg">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setEditingTemplate(template);
+                              setEditTemplateName(template.name);
+                              setEditHolidays(template.holidays.map((h: any) => ({
+                                date: dayjs(h.date).format("YYYY-MM-DD"),
+                                name: h.name,
+                                description: h.description || ""
+                              })));
+                              setIsEditTemplateOpen(true);
+                            }}
+                            className="flex items-center gap-2 text-xs font-bold text-slate-700 hover:bg-slate-50 p-2.5 rounded-lg cursor-pointer"
+                          >
+                            <Settings2 className="h-4 w-4" /> Edit Template
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setDeletingTemplate(template);
+                              setIsDeleteTemplateOpen(true);
+                            }}
+                            className="flex items-center gap-2 text-xs font-bold text-rose-600 hover:bg-rose-50 p-2.5 rounded-lg cursor-pointer"
+                          >
+                            <Trash className="h-4 w-4" /> Delete Template
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </CardHeader>
                   <CardContent className="p-6 pt-0 space-y-5">
                     
@@ -608,16 +762,16 @@ export default function HolidaysPage() {
                   <div className="space-y-4">
                      <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-500">Public Holidays</span>
-                        <span className="text-sm font-black text-slate-900">{holidays.filter(h => h.type === 'HOLIDAY').length}</span>
+                        <span className="text-sm font-black text-slate-900">{filteredHolidays.filter(h => h.type === 'HOLIDAY').length}</span>
                      </div>
                      <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-500">Paid Leaves</span>
-                        <span className="text-sm font-black text-slate-900">{holidays.filter(h => h.type === 'PAID_LEAVE').length}</span>
+                        <span className="text-sm font-black text-slate-900">{filteredHolidays.filter(h => h.type === 'PAID_LEAVE').length}</span>
                      </div>
                      <div className="pt-4 border-t border-slate-50">
                         <div className="flex items-center justify-between">
                            <span className="text-xs font-black text-blue-600 uppercase tracking-widest">Total Protected Days</span>
-                           <span className="text-lg font-black text-blue-600">{holidays.length}</span>
+                           <span className="text-lg font-black text-blue-600">{filteredHolidays.length}</span>
                         </div>
                      </div>
                   </div>
@@ -644,18 +798,55 @@ export default function HolidaysPage() {
                 <p className="text-slate-400 text-xs font-bold mt-0.5">List of custom manual public holidays registered in the database.</p>
               </div>
 
-              <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-                <DialogTrigger asChild>
-                  <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-2xl px-6 h-12 font-extrabold shadow-lg shadow-blue-200 gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] text-xs">
-                    <Plus className="h-5 w-5" /> Mark Holiday
-                  </Button>
-                </DialogTrigger>
+              <div className="flex items-center flex-wrap gap-3">
+                <Select value={selectedYear} onValueChange={setSelectedYear}>
+                  <SelectTrigger className="h-10 w-28 rounded-xl bg-slate-50 border-slate-200 text-xs font-bold">
+                    <SelectValue placeholder="Year" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-slate-200 rounded-xl">
+                    {["2024", "2025", "2026", "2027", "2028"].map(yr => (
+                      <SelectItem key={yr} value={yr}>{yr}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                  <SelectTrigger className="h-10 w-32 rounded-xl bg-slate-50 border-slate-200 text-xs font-bold">
+                    <SelectValue placeholder="Month" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-slate-200 rounded-xl">
+                    <SelectItem value="ALL">All Months</SelectItem>
+                    {[
+                      { val: "1", label: "January" },
+                      { val: "2", label: "February" },
+                      { val: "3", label: "March" },
+                      { val: "4", label: "April" },
+                      { val: "5", label: "May" },
+                      { val: "6", label: "June" },
+                      { val: "7", label: "July" },
+                      { val: "8", label: "August" },
+                      { val: "9", label: "September" },
+                      { val: "10", label: "October" },
+                      { val: "11", label: "November" },
+                      { val: "12", label: "December" }
+                    ].map(m => (
+                      <SelectItem key={m.val} value={m.val}>{m.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-2xl px-6 h-12 font-extrabold shadow-lg shadow-blue-200 gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] text-xs">
+                      <Plus className="h-5 w-5" /> Mark Holiday
+                    </Button>
+                  </DialogTrigger>
                 <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-3xl">
                   <DialogHeader className="p-8 bg-blue-600 text-white">
                     <DialogTitle className="text-2xl font-black">Mark Special Day</DialogTitle>
                     <CardDescription className="text-blue-100 text-sm font-medium mt-1">Schedule public holidays or approved paid leaves.</CardDescription>
                   </DialogHeader>
-                  <div className="p-8 space-y-6">
+                  <div className="p-8 space-y-4">
                      <div className="space-y-2">
                         <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Occasion Name</Label>
                         <Input 
@@ -667,13 +858,38 @@ export default function HolidaysPage() {
                      </div>
                      <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                           <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Date</Label>
+                           <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Start Date</Label>
                            <Input 
                              type="date"
                              className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-                             value={formData.date}
-                             onChange={e => setFormData({...formData, date: e.target.value})}
+                             value={holidayStartDate}
+                             onChange={e => setHolidayStartDate(e.target.value)}
                            />
+                        </div>
+                        <div className="space-y-2">
+                           <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">End Date</Label>
+                           <Input 
+                             type="date"
+                             className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+                             value={holidayEndDate}
+                             onChange={e => setHolidayEndDate(e.target.value)}
+                           />
+                        </div>
+                     </div>
+
+                     <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                           <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Cycle Frequency</Label>
+                           <Select value={holidayCycle} onValueChange={(v: any) => setHolidayCycle(v)}>
+                              <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 font-bold text-xs">
+                                 <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="bg-white border-slate-200 rounded-xl">
+                                 <SelectItem value="ONCE">Once (Single Range)</SelectItem>
+                                 <SelectItem value="WEEKLY">Weekly Recurring</SelectItem>
+                                 <SelectItem value="MONTHLY">Monthly Recurring</SelectItem>
+                              </SelectContent>
+                           </Select>
                         </div>
                         <div className="space-y-2">
                            <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Type</Label>
@@ -688,6 +904,70 @@ export default function HolidaysPage() {
                            </Select>
                         </div>
                      </div>
+
+                     {holidayCycle === "WEEKLY" && (
+                        <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                           <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Select Weekdays</Label>
+                           <div className="flex flex-wrap gap-1">
+                              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, idx) => {
+                                 const isSelected = holidayWeekdays.includes(idx);
+                                 return (
+                                    <button
+                                       type="button"
+                                       key={day}
+                                       onClick={() => {
+                                          if (isSelected) {
+                                             setHolidayWeekdays(holidayWeekdays.filter(d => d !== idx));
+                                          } else {
+                                             setHolidayWeekdays([...holidayWeekdays, idx]);
+                                          }
+                                       }}
+                                       className={cn(
+                                          "px-2.5 py-1 text-[9px] font-black rounded-lg border uppercase transition-all",
+                                          isSelected 
+                                             ? "bg-blue-600 border-blue-600 text-white shadow-sm"
+                                             : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                                       )}
+                                    >
+                                       {day}
+                                    </button>
+                                 );
+                              })}
+                           </div>
+                        </div>
+                     )}
+
+                     {holidayCycle === "MONTHLY" && (
+                        <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                           <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Select Dates of Month</Label>
+                           <div className="grid grid-cols-7 gap-1 bg-slate-50 p-2 rounded-xl border border-slate-200/60 max-h-32 overflow-y-auto">
+                              {Array.from({ length: 31 }, (_, i) => i + 1).map(date => {
+                                 const isSelected = holidayMonthlyDates.includes(date);
+                                 return (
+                                    <button
+                                       type="button"
+                                       key={date}
+                                       onClick={() => {
+                                          if (isSelected) {
+                                             setHolidayMonthlyDates(holidayMonthlyDates.filter(d => d !== date));
+                                          } else {
+                                             setHolidayMonthlyDates([...holidayMonthlyDates, date]);
+                                          }
+                                       }}
+                                       className={cn(
+                                          "h-6 w-6 rounded-lg text-[9px] font-bold border transition-all flex items-center justify-center mx-auto",
+                                          isSelected 
+                                             ? "bg-blue-600 border-blue-600 text-white shadow-sm"
+                                             : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                                       )}
+                                    >
+                                       {date}
+                                    </button>
+                                 );
+                              })}
+                           </div>
+                        </div>
+                     )}
 
                      <div className="space-y-2">
                         <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Assign To</Label>
@@ -708,24 +988,24 @@ export default function HolidaysPage() {
                      {formData.targetType === "USER" && (
                         <div className="space-y-2">
                            <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Select Employees *</Label>
-                           <div className="border border-slate-100 rounded-2xl p-4 bg-slate-50 max-h-44 overflow-y-auto space-y-2">
+                           <div className="border border-slate-100 rounded-2xl p-4 bg-slate-50 max-h-32 overflow-y-auto space-y-2">
                               {employees.map((emp: any) => (
                                  <div key={emp.id} className="flex items-center gap-2">
                                     <input 
-                                      type="checkbox"
-                                      id={`holiday-emp-${emp.id}`}
-                                      checked={formData.userIds.includes(emp.id)}
-                                      onChange={e => {
-                                         if (e.target.checked) {
-                                            setFormData({...formData, userIds: [...formData.userIds, emp.id]});
-                                         } else {
-                                            setFormData({...formData, userIds: formData.userIds.filter(id => id !== emp.id)});
-                                         }
-                                      }}
-                                      className="h-4 w-4 text-blue-600 rounded border-slate-300 cursor-pointer"
+                                       type="checkbox"
+                                       id={`holiday-emp-${emp.id}`}
+                                       checked={formData.userIds.includes(emp.id)}
+                                       onChange={e => {
+                                          if (e.target.checked) {
+                                             setFormData({...formData, userIds: [...formData.userIds, emp.id]});
+                                          } else {
+                                             setFormData({...formData, userIds: formData.userIds.filter(id => id !== emp.id)});
+                                          }
+                                       }}
+                                       className="h-4 w-4 text-blue-600 rounded border-slate-300 cursor-pointer"
                                     />
                                     <Label htmlFor={`holiday-emp-${emp.id}`} className="text-xs font-bold text-slate-700 cursor-pointer">
-                                       {emp.name} ({emp.designation || "Staff"})
+                                       {emp.name}
                                     </Label>
                                  </div>
                               ))}
@@ -733,16 +1013,11 @@ export default function HolidaysPage() {
                         </div>
                      )}
  
-                     <DialogFooter className="pt-4">
+                     <DialogFooter className="pt-2">
                        <Button 
-                        onClick={() => createSpecialDayMutation.mutate({
-                          name: formData.name,
-                          date: new Date(formData.date),
-                          type: formData.type,
-                          userIds: formData.targetType === "USER" ? formData.userIds : undefined
-                        })}
-                        disabled={createSpecialDayMutation.isPending || !formData.name || !formData.date || (formData.targetType === "USER" && formData.userIds.length === 0)}
-                        className="w-full h-14 bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-200 rounded-2xl font-black text-sm uppercase tracking-widest gap-2"
+                        onClick={handleCreateSpecialDay}
+                        disabled={createSpecialDayMutation.isPending || !formData.name || (formData.targetType === "USER" && formData.userIds.length === 0)}
+                        className="w-full h-12 bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-200 rounded-2xl font-black text-xs uppercase tracking-widest gap-2"
                        >
                          {createSpecialDayMutation.isPending ? "Syncing..." : "Save Special Day"}
                        </Button>
@@ -751,18 +1026,19 @@ export default function HolidaysPage() {
                 </DialogContent>
               </Dialog>
             </div>
+            </div>
  
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {holidaysQuery.isLoading ? (
                 Array(4).fill(0).map((_, i) => <div key={i} className="h-40 bg-white ring-1 ring-slate-100 animate-pulse rounded-[32px]" />)
-              ) : holidays.length === 0 ? (
+              ) : filteredHolidays.length === 0 ? (
                 <div className="col-span-full py-20 text-center bg-white rounded-[32px] border-2 border-dashed border-slate-200 flex flex-col items-center gap-4">
                    <div className="h-14 w-14 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-300">
                       <Sun className="h-6 w-6" />
                    </div>
-                   <p className="text-sm font-bold text-slate-500">No special days marked in the calendar yet.</p>
+                   <p className="text-sm font-bold text-slate-500">No special days marked in the calendar for this selection.</p>
                 </div>
-              ) : holidays.map((holiday: any) => (
+              ) : filteredHolidays.map((holiday: any) => (
                 <Card key={holiday.id} className="rounded-[32px] border-none shadow-sm ring-1 ring-slate-200/60 hover:ring-blue-400 hover:shadow-xl hover:shadow-blue-900/5 transition-all group overflow-hidden bg-white text-left">
                    <CardHeader className="p-6">
                       <div className="flex items-center justify-between mb-4">
@@ -803,6 +1079,182 @@ export default function HolidaysPage() {
         </div>
       )}
 
+      {/* Edit Template Dialog */}
+      <Dialog open={isEditTemplateOpen} onOpenChange={setIsEditTemplateOpen}>
+        <DialogContent className="max-w-xl p-0 overflow-hidden border-none shadow-2xl bg-white rounded-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader className="p-8 bg-blue-600 text-white flex-shrink-0">
+            <DialogTitle className="text-2xl font-black">Edit Holiday Template</DialogTitle>
+            <p className="text-blue-100 text-xs font-semibold mt-1">Modify standard yearly holiday calendar groups for employees.</p>
+          </DialogHeader>
+
+          <div className="p-8 space-y-6 overflow-y-auto flex-grow">
+            
+            {/* Template Name */}
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Template Name *</Label>
+              <Input 
+                placeholder="e.g. National Holidays 2026" 
+                required
+                value={editTemplateName}
+                onChange={e => setEditTemplateName(e.target.value)}
+                className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+              />
+            </div>
+
+            {/* Occasion List builder */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Configure Holidays *</Label>
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  onClick={() => setEditHolidays([...editHolidays, { date: "", name: "", description: "" }])}
+                  className="h-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700 rounded-lg text-xs font-extrabold"
+                >
+                  + Add Row
+                </Button>
+              </div>
+
+              <div className="space-y-3 max-h-[30vh] overflow-y-auto pr-1">
+                {editHolidays.map((holiday, idx) => (
+                  <div key={idx} className="grid grid-cols-12 gap-3 items-center bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <div className="col-span-4">
+                      <Input 
+                        type="date"
+                        required
+                        value={holiday.date}
+                        onChange={e => {
+                          const updated = [...editHolidays];
+                          updated[idx] = { ...updated[idx], date: e.target.value };
+                          setEditHolidays(updated);
+                        }}
+                        className="h-10 rounded-xl bg-white border-slate-200 focus:bg-white font-semibold text-xs"
+                      />
+                    </div>
+                    <div className="col-span-7">
+                      <Input 
+                        placeholder="Occasion Name (e.g. Christmas)"
+                        required
+                        value={holiday.name}
+                        onChange={e => {
+                          const updated = [...editHolidays];
+                          updated[idx] = { ...updated[idx], name: e.target.value };
+                          setEditHolidays(updated);
+                        }}
+                        className="h-10 rounded-xl bg-white border-slate-200 focus:bg-white font-semibold text-xs"
+                      />
+                    </div>
+                    <div className="col-span-1 flex justify-center">
+                      <Button 
+                        type="button" 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => setEditHolidays(editHolidays.filter((_, i) => i !== idx))}
+                        disabled={editHolidays.length <= 1}
+                        className="h-8 w-8 text-rose-500 hover:bg-rose-50 rounded-lg"
+                      >
+                        <Trash2 className="h-4.5 w-4.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Cascade option for assigned users */}
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400 font-extrabold">Sync with Assigned Employees</Label>
+              <Select value={editDeleteOption} onValueChange={(v: any) => setEditDeleteOption(v)}>
+                <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 font-bold text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white border-slate-200 rounded-xl">
+                  <SelectItem value="future">Update future holidays only (after today)</SelectItem>
+                  <SelectItem value="present">Update today & future holidays (from today onwards)</SelectItem>
+                  <SelectItem value="all">Update all holidays (past, present, & future)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+          </div>
+
+          <DialogFooter className="p-8 border-t border-slate-50 flex-shrink-0">
+            <Button 
+              onClick={() => {
+                if (!editTemplateName) {
+                  alert("Please enter a name.");
+                  return;
+                }
+                const valid = editHolidays.filter(h => h.date && h.name);
+                if (valid.length === 0) {
+                  alert("Configure at least one holiday.");
+                  return;
+                }
+                updateTemplateMutation.mutate({
+                  id: editingTemplate.id,
+                  data: {
+                    name: editTemplateName,
+                    holidays: valid,
+                    deleteOption: editDeleteOption
+                  }
+                });
+              }}
+              disabled={updateTemplateMutation.isPending}
+              className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold uppercase tracking-widest text-[10px]"
+            >
+              {updateTemplateMutation.isPending ? "Updating..." : "Update Template"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Template Dialog */}
+      <Dialog open={isDeleteTemplateOpen} onOpenChange={setIsDeleteTemplateOpen}>
+        <DialogContent className="max-w-md p-8 overflow-hidden border-none shadow-2xl bg-white rounded-3xl text-left animate-in fade-in zoom-in-95 duration-200">
+          <DialogHeader className="p-0 text-left">
+            <DialogTitle className="text-xl font-black text-slate-900 font-extrabold">Delete Holiday Template</DialogTitle>
+            <p className="text-slate-500 text-xs font-bold leading-normal mt-1">
+              Are you sure you want to delete template &quot;{deletingTemplate?.name}&quot;?
+            </p>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-6">
+            <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400 font-extrabold">Assigned Employees Holidays Cascade</Label>
+            <Select value={deleteOption} onValueChange={(v: any) => setDeleteOption(v)}>
+              <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 font-bold text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-white border-slate-200 rounded-xl">
+                <SelectItem value="future">Delete future template holidays only</SelectItem>
+                <SelectItem value="present">Delete today & future template holidays</SelectItem>
+                <SelectItem value="all">Delete all template holidays (historical + future)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <DialogFooter className="pt-8 flex gap-3">
+            <Button 
+              variant="outline"
+              onClick={() => setIsDeleteTemplateOpen(false)}
+              className="flex-1 h-12 rounded-xl text-xs font-extrabold text-slate-700 border-slate-200 uppercase tracking-wider"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                deleteTemplateMutation.mutate({
+                  id: deletingTemplate.id,
+                  option: deleteOption
+                });
+              }}
+              disabled={deleteTemplateMutation.isPending}
+              className="flex-1 h-12 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-extrabold text-xs uppercase tracking-wider"
+            >
+              {deleteTemplateMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -15,6 +15,8 @@ router.post("/types", leaveController.createLeaveType);
 
 router.get("/holiday-templates", leaveController.listHolidayTemplates);
 router.post("/holiday-templates", leaveController.createHolidayTemplate);
+router.put("/holiday-templates/:id", leaveController.updateHolidayTemplate);
+router.delete("/holiday-templates/:id", leaveController.deleteHolidayTemplate);
 router.post("/holiday-templates/assign", leaveController.assignHolidayTemplate);
 
 export default router;

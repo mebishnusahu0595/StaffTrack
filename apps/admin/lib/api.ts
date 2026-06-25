@@ -640,6 +640,20 @@ export async function createHolidayTemplate(data: {
   return response.data.data;
 }
 
+export async function updateHolidayTemplate(id: string, data: {
+  name: string;
+  holidays: { date: string; name: string; description?: string }[];
+  deleteOption: "future" | "present" | "all";
+}) {
+  const response = await api.put<{ data: any }>(`/leaves/holiday-templates/${id}`, data);
+  return response.data.data;
+}
+
+export async function deleteHolidayTemplate(id: string, deleteOption: "future" | "present" | "all") {
+  const response = await api.delete<{ data: any }>(`/leaves/holiday-templates/${id}?deleteOption=${deleteOption}`);
+  return response.data.data;
+}
+
 export async function assignHolidayTemplate(data: {
   templateId: string;
   userIds: string[];
