@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { 
   FileSpreadsheet, 
   Plus, 
@@ -21,7 +21,8 @@ import {
   Copy,
   Check,
   Download,
-  MapPin
+  MapPin,
+  Printer
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchForms, createForm, updateForm, deleteForm, fetchFormResponses } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useReactToPrint } from "react-to-print";
 import dayjs from "dayjs";
 
 export default function FormsPage() {
@@ -577,6 +579,10 @@ function CreateFormDialog({ onSubmit, isSubmitting, initialData }: any) {
 
 function ViewResponsesDialog({ form }: any) {
   const [respSearch, setRespSearch] = useState("");
+  const printRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+  });
   const { data: responses = [], isLoading } = useQuery({
     queryKey: ["responses", form.id],
     queryFn: () => fetchFormResponses(form.id)
@@ -655,13 +661,22 @@ function ViewResponsesDialog({ form }: any) {
                  className="h-10 pl-9 rounded-xl bg-slate-50 border-none font-bold text-xs" 
               />
            </div>
-           <Button 
-              onClick={downloadCSV}
-              disabled={responses.length === 0}
-              className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-2 px-4 shadow-sm"
-           >
-              <Download className="h-4 w-4" /> Export CSV
-           </Button>
+           <div className="flex items-center gap-2">
+              <Button 
+                 onClick={downloadCSV}
+                 disabled={responses.length === 0}
+                 className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-2 px-4 shadow-sm"
+              >
+                 <Download className="h-4 w-4" /> Export CSV
+              </Button>
+              <Button 
+                 onClick={handlePrint}
+                 disabled={responses.length === 0}
+                 className="h-10 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs gap-2 px-4 shadow-sm"
+              >
+                 <Printer className="h-4 w-4" /> Export PDF
+              </Button>
+           </div>
         </div>
         
         <div className="flex-1 overflow-y-auto p-8">
@@ -748,6 +763,83 @@ function ViewResponsesDialog({ form }: any) {
                  })}
               </div>
            )}
+        </div>
+
+        {/* Hidden Printable Area */}
+        <div style={{ position: 'absolute', top: -9999, left: -9999, width: '1050px' }}>
+           <div ref={printRef} className="p-8 text-slate-900 bg-white font-sans text-[10px]">
+              <div className="border-b-2 border-slate-300 pb-4 mb-6">
+                 <h1 className="text-xl font-bold uppercase tracking-tight text-slate-900">{form.name}</h1>
+                 <p className="text-slate-500 font-bold uppercase tracking-widest text-[9px] mt-1">
+                    Category: {form.category || "General"} | Total Submissions: {filteredResponses.length}
+                 </p>
+                 <p className="text-slate-400 text-[8px] mt-1">
+                    Exported on: {dayjs().format("DD MMM YYYY, hh:mm A")}
+                 </p>
+              </div>
+
+              <table className="w-full border-collapse border border-slate-300">
+                 <thead>
+                    <tr className="bg-slate-100 border-b border-slate-300">
+                       <th className="border border-slate-300 px-3 py-2 text-left font-bold uppercase tracking-wider text-[9px]">Submitter</th>
+                       <th className="border border-slate-300 px-3 py-2 text-left font-bold uppercase tracking-wider text-[9px]">Date Submitted</th>
+                       {form.fields?.map((f: any) => (
+                          <th key={f.label} className="border border-slate-300 px-3 py-2 text-left font-bold uppercase tracking-wider text-[9px]">
+                             {f.label}
+                          </th>
+                       ))}
+                    </tr>
+                 </thead>
+                 <tbody>
+                    {filteredResponses.map((resp: any) => {
+                       let data: any = {};
+                       try {
+                          data = typeof resp.data === "string" ? JSON.parse(resp.data) : (resp.data || {});
+                       } catch (e) {}
+
+                       return (
+                          <tr key={resp.id} className="border-b border-slate-200 even:bg-slate-50/50">
+                             <td className="border border-slate-300 px-3 py-2 font-bold text-slate-900">{resp.user?.name || "System"}</td>
+                             <td className="border border-slate-300 px-3 py-2 text-slate-500 whitespace-nowrap">
+                                {dayjs(resp.submittedAt).format("DD-MM-YYYY HH:mm")}
+                             </td>
+                             {form.fields?.map((f: any) => {
+                                const value = data[f.label];
+                                const isPhotoObj = typeof value === 'object' && value && 'url' in value;
+                                const imageUrl = isPhotoObj ? value.url : (typeof value === 'string' ? value : '');
+                                const hasImage = imageUrl && (imageUrl.startsWith('http') || imageUrl.includes('data:image') || imageUrl.startsWith('/uploads/'));
+
+                                return (
+                                   <td key={f.label} className="border border-slate-300 px-3 py-2 max-w-xs break-words">
+                                      {hasImage ? (
+                                         <div className="space-y-1">
+                                            <img 
+                                               src={imageUrl} 
+                                               className="h-16 w-24 object-cover rounded border border-slate-200" 
+                                               alt={f.label} 
+                                            />
+                                            {isPhotoObj && value.latitude && (
+                                               <div className="text-[8px] text-slate-500 font-bold leading-tight">
+                                                  GPS: {value.latitude.toFixed(6)}, {value.longitude.toFixed(6)}
+                                                  <br />
+                                                  {dayjs(value.timestamp).format("hh:mm:ss A")}
+                                               </div>
+                                            )}
+                                         </div>
+                                      ) : (
+                                         <span className="font-medium text-slate-700">
+                                            {Array.isArray(value) ? value.join(", ") : String(value ?? "")}
+                                         </span>
+                                      )}
+                                   </td>
+                                );
+                             })}
+                          </tr>
+                       );
+                    })}
+                 </tbody>
+              </table>
+           </div>
         </div>
       </DialogContent>
     </Dialog>
