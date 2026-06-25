@@ -20,7 +20,15 @@ import { AppIcon } from "./AppIcon";
  * the day's odometer readings. Shared by the staff Home and the Manager Home so
  * a manager can clock their own day exactly like a field employee.
  */
-export function PersonalAttendancePanel({ onNavigateDayEnd }: { onNavigateDayEnd?: () => void }) {
+export function PersonalAttendancePanel({ 
+  onNavigateDayEnd,
+  hideTimeSummary = false,
+  hideDayEndButton = false
+}: { 
+  onNavigateDayEnd?: () => void;
+  hideTimeSummary?: boolean;
+  hideDayEndButton?: boolean;
+}) {
   const { user } = useAuth();
   const { checkIn, checkOut, startBreak, endBreak, isCheckingIn, isCheckingOut, isStartingBreak, isEndingBreak, todayAttendance, activeAttendance, todaySessions, activeBreak } = useAttendance();
   const { getCurrentCoordinates, isLoading: isLocationLoading } = useLocation();
@@ -289,8 +297,27 @@ export function PersonalAttendancePanel({ onNavigateDayEnd }: { onNavigateDayEnd
             </View>
           ) : (
             <View>
+              {activeAttendance?.isCheckInPending ? (
+                <View style={styles.pendingCard}>
+                  <View style={styles.pendingHeaderRow}>
+                    <Icon source="clock-alert-outline" size={24} color="#D97706" />
+                    <Text style={styles.pendingTitle}>Check-In Pending Approval</Text>
+                  </View>
+                  <Text style={styles.pendingText}>Your check-in is pending approval because it was registered after your shift start time.</Text>
+                </View>
+              ) : (
+                <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
+                  {!activeBreak ? (
+                    <Button buttonColor="#F39C12" disabled={isStartingBreak || isEndingBreak} icon="coffee" loading={isStartingBreak} mode="contained" onPress={() => void startBreak()} style={{ flex: 1, borderRadius: 8 }}>Break On</Button>
+                  ) : (
+                    <Button buttonColor="#27AE60" disabled={isStartingBreak || isEndingBreak} icon="coffee-outline" loading={isEndingBreak} mode="contained" onPress={() => void endBreak()} style={{ flex: 1, borderRadius: 8 }}>Break Off</Button>
+                  )}
+                  <Button buttonColor="#A4262C" disabled={isBusy || Boolean(activeBreak)} icon="logout" loading={isCheckingOut} mode="contained" onPress={handleCheckOut} style={{ flex: 1, borderRadius: 8 }}>Check out</Button>
+                </View>
+              )}
+
               {activeAttendance?.checkInPhotoUrl && (
-                <View style={{ marginTop: 12 }}>
+                <View style={{ marginTop: 16 }}>
                   <View style={{ flexDirection: "row", gap: 12, justifyContent: "center" }}>
                     <View style={activeAttendance?.startOdometerPhotoUrl ? { flex: 1, alignItems: "center" } : { width: 120, alignItems: "center" }}>
                       <PanelImage source={{ uri: absUrl(activeAttendance.checkInPhotoUrl) }} style={{ width: "100%", height: 110, borderRadius: 8, borderWidth: 1, borderColor: "#DDDDDD" }} />
@@ -305,24 +332,6 @@ export function PersonalAttendancePanel({ onNavigateDayEnd }: { onNavigateDayEnd
                   </View>
                 </View>
               )}
-              {activeAttendance?.isCheckInPending ? (
-                <View style={styles.pendingCard}>
-                  <View style={styles.pendingHeaderRow}>
-                    <Icon source="clock-alert-outline" size={24} color="#D97706" />
-                    <Text style={styles.pendingTitle}>Check-In Pending Approval</Text>
-                  </View>
-                  <Text style={styles.pendingText}>Your check-in is pending approval because it was registered after your shift start time.</Text>
-                </View>
-              ) : (
-                <View style={{ flexDirection: "row", gap: 12, marginTop: 24 }}>
-                  {!activeBreak ? (
-                    <Button buttonColor="#F39C12" disabled={isStartingBreak || isEndingBreak} icon="coffee" loading={isStartingBreak} mode="contained" onPress={() => void startBreak()} style={{ flex: 1, borderRadius: 8 }}>Break On</Button>
-                  ) : (
-                    <Button buttonColor="#27AE60" disabled={isStartingBreak || isEndingBreak} icon="coffee-outline" loading={isEndingBreak} mode="contained" onPress={() => void endBreak()} style={{ flex: 1, borderRadius: 8 }}>Break Off</Button>
-                  )}
-                  <Button buttonColor="#A4262C" disabled={isBusy || Boolean(activeBreak)} icon="logout" loading={isCheckingOut} mode="contained" onPress={handleCheckOut} style={{ flex: 1, borderRadius: 8 }}>Check out</Button>
-                </View>
-              )}
             </View>
           )}
 
@@ -331,39 +340,41 @@ export function PersonalAttendancePanel({ onNavigateDayEnd }: { onNavigateDayEnd
       </Card>
 
       {/* Time summary */}
-      <View style={{ gap: 8 }}>
-        <View style={styles.summaryRow}>
-          <Card mode="contained" style={styles.summaryCard}>
-            <Card.Content style={styles.summaryContent}>
-              <View style={styles.summaryIconRow}><AppIcon color="#4A6583" name="office-building" size={20} /><Text style={styles.mutedSummaryLabel}>OFFICE TIME</Text></View>
-              <Text style={[styles.summaryValue, { fontSize: 16 }]}>{officeTime}</Text>
-            </Card.Content>
-          </Card>
-          <Card mode="contained" style={styles.summaryCard}>
-            <Card.Content style={styles.summaryContent}>
-              <View style={styles.summaryIconRow}><AppIcon color="#4A6583" name="map-marker-outline" size={20} /><Text style={styles.mutedSummaryLabel}>FIELD TIME</Text></View>
-              <Text style={[styles.summaryValue, { fontSize: 16 }]}>{fieldTime}</Text>
-            </Card.Content>
-          </Card>
+      {!hideTimeSummary && (
+        <View style={{ gap: 8 }}>
+          <View style={styles.summaryRow}>
+            <Card mode="contained" style={styles.summaryCard}>
+              <Card.Content style={styles.summaryContent}>
+                <View style={styles.summaryIconRow}><AppIcon color="#4A6583" name="office-building" size={20} /><Text style={styles.mutedSummaryLabel}>OFFICE TIME</Text></View>
+                <Text style={[styles.summaryValue, { fontSize: 16 }]}>{officeTime}</Text>
+              </Card.Content>
+            </Card>
+            <Card mode="contained" style={styles.summaryCard}>
+              <Card.Content style={styles.summaryContent}>
+                <View style={styles.summaryIconRow}><AppIcon color="#4A6583" name="map-marker-outline" size={20} /><Text style={styles.mutedSummaryLabel}>FIELD TIME</Text></View>
+                <Text style={[styles.summaryValue, { fontSize: 16 }]}>{fieldTime}</Text>
+              </Card.Content>
+            </Card>
+          </View>
+          <View style={styles.summaryRow}>
+            <Card mode="contained" style={styles.summaryCard}>
+              <Card.Content style={styles.summaryContent}>
+                <View style={styles.summaryIconRow}><AppIcon color="#F39C12" name="coffee" size={20} /><Text style={styles.mutedSummaryLabel}>TOTAL BREAK</Text></View>
+                <Text style={[styles.summaryValue, { fontSize: 16 }]}>{friendlyBreakTime}</Text>
+              </Card.Content>
+            </Card>
+            <Card mode="contained" style={styles.summaryCard}>
+              <Card.Content style={styles.summaryContent}>
+                <View style={styles.summaryIconRow}><AppIcon color="#4A6583" name="map-marker-distance" size={20} /><Text style={styles.mutedSummaryLabel}>KM TODAY</Text></View>
+                <Text style={[styles.summaryValue, { fontSize: 16 }]}>{distanceKm.toFixed(1)}</Text>
+              </Card.Content>
+            </Card>
+          </View>
         </View>
-        <View style={styles.summaryRow}>
-          <Card mode="contained" style={styles.summaryCard}>
-            <Card.Content style={styles.summaryContent}>
-              <View style={styles.summaryIconRow}><AppIcon color="#F39C12" name="coffee" size={20} /><Text style={styles.mutedSummaryLabel}>TOTAL BREAK</Text></View>
-              <Text style={[styles.summaryValue, { fontSize: 16 }]}>{friendlyBreakTime}</Text>
-            </Card.Content>
-          </Card>
-          <Card mode="contained" style={styles.summaryCard}>
-            <Card.Content style={styles.summaryContent}>
-              <View style={styles.summaryIconRow}><AppIcon color="#4A6583" name="map-marker-distance" size={20} /><Text style={styles.mutedSummaryLabel}>KM TODAY</Text></View>
-              <Text style={[styles.summaryValue, { fontSize: 16 }]}>{distanceKm.toFixed(1)}</Text>
-            </Card.Content>
-          </Card>
-        </View>
-      </View>
+      )}
 
       {/* Live tracking */}
-      {isCheckedIn && !isCheckedOut && isFieldPunch && (
+      {!hideTimeSummary && isCheckedIn && !isCheckedOut && isFieldPunch && (
         <Card mode="contained" style={styles.logCard}>
           <Card.Content style={styles.logContent}>
             <View style={styles.logHeader}>
@@ -392,12 +403,12 @@ export function PersonalAttendancePanel({ onNavigateDayEnd }: { onNavigateDayEnd
         </Card>
       )}
 
-      {!alreadySubmittedDer && isCheckedIn && onNavigateDayEnd ? (
+      {!hideDayEndButton && !alreadySubmittedDer && isCheckedIn && onNavigateDayEnd ? (
         <Button icon="file-document-edit" mode="outlined" onPress={onNavigateDayEnd} style={{ borderRadius: 8 }}>Submit day end report</Button>
       ) : null}
 
       {/* Today's odometer readings */}
-      {todayAttendance && !todayAttendance.isCheckInPending && todayAttendance.punchType === "FIELD" && (todayAttendance.startOdometerPhotoUrl || todayAttendance.endOdometerPhotoUrl || (todayAttendance.startOdometer !== undefined && todayAttendance.startOdometer !== null)) ? (
+      {!hideTimeSummary && todayAttendance && !todayAttendance.isCheckInPending && todayAttendance.punchType === "FIELD" && (todayAttendance.startOdometerPhotoUrl || todayAttendance.endOdometerPhotoUrl || (todayAttendance.startOdometer !== undefined && todayAttendance.startOdometer !== null)) ? (
         <Card mode="contained" style={{ borderRadius: 12, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E2E8F0" }}>
           <Card.Content style={{ padding: 12 }}>
             <Text style={{ fontSize: 13, fontWeight: "800", color: "#24312D", marginBottom: 12, letterSpacing: 0.5 }}>TODAY&apos;S ODOMETER READINGS</Text>

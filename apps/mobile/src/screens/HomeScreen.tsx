@@ -12,10 +12,12 @@ import * as DocumentPicker from "expo-document-picker";
 
 dayjs.extend(relativeTime);
 
-import { fetchExpenses, fetchNotifications, markNotificationAsRead, fetchMonthlyPerformanceReport, uploadPhoto, uploadFile, type Task } from "../api";
+import { fetchExpenses, fetchNotifications, markNotificationAsRead, fetchMonthlyPerformanceReport, uploadPhoto, uploadFile, type Task, fetchTodayLocationLogs, fetchDayEndReports } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useTasks } from "../hooks/useTasks";
 import { useForms } from "../hooks/useForms";
+import { useAttendance } from "../hooks/useAttendance";
+import { useTimeTracker } from "../hooks/useTimeTracker";
 import type { MainDrawerParamList } from "../navigation/AppNavigator";
 import { appIconSource, AppIcon } from "../components/AppIcon";
 import { PersonalAttendancePanel } from "../components/PersonalAttendancePanel";
@@ -31,6 +33,65 @@ export function HomeScreen() {
   const { forms } = useForms();
   const [currentTime, setCurrentTime] = useState(dayjs());
   const [showNotifications, setShowNotifications] = useState(false);
+
+  // Time tracking & attendance states
+  const { todaySessions, activeAttendance, todayAttendance, activeBreak } = useAttendance();
+  const { officeTime, fieldTime, breakTime, friendlyBreakTime } = useTimeTracker(todaySessions, currentTime);
+  const isCheckedIn = Boolean(activeAttendance);
+  const isCheckedOut = !isCheckedIn && todaySessions.length > 0;
+  const isFieldPunch = (activeAttendance || todayAttendance)?.punchType === "FIELD";
+
+  const [activeTab, setActiveTab] = useState<"ALL" | "PENDING" | "COMPLETED">("ALL");
+  const [taskMenuVisible, setTaskMenuVisible] = useState(false);
+
+  const locationLogsQuery = useQuery({
+    enabled: Boolean(user?.id && isFieldPunch),
+    queryKey: ["locationLogs", user?.id, "today"],
+    queryFn: () => fetchTodayLocationLogs(user!.id),
+    refetchInterval: isFieldPunch && !isCheckedOut ? 30_000 : false
+  });
+
+  const distanceKm = useMemo(() => {
+    const logs = locationLogsQuery.data ?? [];
+    const ACCURACY_THRESHOLD = 50;
+    const MIN_DISTANCE_THRESHOLD = 0.03;
+    const filteredLogs = logs
+      .filter((log) => log.accuracy > 0 && log.accuracy <= ACCURACY_THRESHOLD)
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    let totalDistance = 0;
+    let lastStablePoint: any = null;
+    for (const point of filteredLogs) {
+      if (!lastStablePoint) { lastStablePoint = point; continue; }
+      const distance = haversineKm(lastStablePoint, point);
+      if (distance >= MIN_DISTANCE_THRESHOLD) { totalDistance += distance; lastStablePoint = point; }
+    }
+    return totalDistance;
+  }, [locationLogsQuery.data]);
+
+  const reportsQuery = useQuery({
+    enabled: Boolean(user?.id),
+    queryKey: ["dayEndReports", user?.id],
+    queryFn: () => fetchDayEndReports(user!.id)
+  });
+
+  const alreadySubmittedDer = useMemo(
+    () => (reportsQuery.data ?? []).some((report) => dayjs(report.date).isSame(dayjs(), "day")),
+    [reportsQuery.data]
+  );
+
+  function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+    const radiusKm = 6371;
+    const dLat = toRadians(b.lat - a.lat);
+    const dLng = toRadians(b.lng - a.lng);
+    const lat1 = toRadians(a.lat);
+    const lat2 = toRadians(b.lat);
+    const value = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+    return 2 * radiusKm * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+  }
+
+  function toRadians(value: number) {
+    return (value * Math.PI) / 180;
+  }
 
   const [selectedDate, setSelectedDate] = useState(dayjs().startOf("day"));
   // Completion Modal State
@@ -170,23 +231,37 @@ export function HomeScreen() {
     }
   }
 
-  const filteredTasks = useMemo(() => {
-    let result = tasks;
-
+  const matchesDate = (t: Task) => {
+    const taskDateString = dayjs(t.dueDate).format("YYYY-MM-DD");
     const selectedDateString = selectedDate.format("YYYY-MM-DD");
     const isSelectedToday = selectedDateString === dayjs().format("YYYY-MM-DD");
+    if (isSelectedToday) {
+      return (
+        taskDateString === selectedDateString ||
+        (taskDateString < selectedDateString && t.status !== "COMPLETED" && t.status !== "CANCELLED")
+      );
+    }
+    return taskDateString === selectedDateString;
+  };
 
-    return result.filter((t) => {
-      const taskDateString = dayjs(t.dueDate).format("YYYY-MM-DD");
-      if (isSelectedToday) {
-        return (
-          taskDateString === selectedDateString ||
-          (taskDateString < selectedDateString && t.status !== "COMPLETED" && t.status !== "CANCELLED")
-        );
-      }
-      return taskDateString === selectedDateString;
-    });
+  const todoCount = useMemo(() => {
+    return tasks.filter((t) => (t.status === "PENDING" || t.status === "IN_PROGRESS") && matchesDate(t)).length;
   }, [tasks, selectedDate]);
+
+  const doneCount = useMemo(() => {
+    return tasks.filter((t) => t.status === "COMPLETED" && matchesDate(t)).length;
+  }, [tasks, selectedDate]);
+
+  const filteredTasks = useMemo(() => {
+    const dailyTasks = tasks.filter(matchesDate);
+    if (activeTab === "PENDING") {
+      return dailyTasks.filter((t) => t.status === "PENDING" || t.status === "IN_PROGRESS");
+    }
+    if (activeTab === "COMPLETED") {
+      return dailyTasks.filter((t) => t.status === "COMPLETED");
+    }
+    return dailyTasks;
+  }, [tasks, selectedDate, activeTab]);
 
   async function pickCompletionPhoto() {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -402,11 +477,55 @@ export function HomeScreen() {
       </View>
 
       {/* Personal attendance: punch, odometer photos, KM, day-end report */}
-      <PersonalAttendancePanel onNavigateDayEnd={() => navigation.navigate("DayEndReport")} />
+      <PersonalAttendancePanel 
+        hideTimeSummary={true} 
+        hideDayEndButton={true} 
+        onNavigateDayEnd={() => navigation.navigate("DayEndReport")} 
+      />
 
       {/* Daily Tasks Section with Date Navigator */}
       <Card mode="contained" style={styles.tasksSectionCard}>
         <Card.Content style={{ padding: 12 }}>
+          {/* Task Stats Row */}
+          <View style={styles.taskStatsRow}>
+            <TouchableRipple onPress={() => setActiveTab("PENDING")} style={styles.taskStatBox}>
+              <View style={{ alignItems: "center" }}>
+                <Text style={styles.taskStatNumber}>{todoCount}</Text>
+                <Text style={styles.taskStatLabel}>To do</Text>
+              </View>
+            </TouchableRipple>
+            <View style={styles.taskStatsDivider} />
+            <TouchableRipple onPress={() => setActiveTab("COMPLETED")} style={styles.taskStatBox}>
+              <View style={{ alignItems: "center" }}>
+                <Text style={styles.taskStatNumber}>{doneCount}</Text>
+                <Text style={styles.taskStatLabel}>Done</Text>
+              </View>
+            </TouchableRipple>
+            <View style={styles.taskStatsDivider} />
+            <View style={styles.taskStatBox}>
+              <Menu
+                visible={taskMenuVisible}
+                onDismiss={() => setTaskMenuVisible(false)}
+                anchor={
+                  <Button 
+                    mode="text" 
+                    compact 
+                    onPress={() => setTaskMenuVisible(true)}
+                    labelStyle={{ fontSize: 11, fontWeight: "700", color: "#4A6583" }}
+                  >
+                    Filter: {activeTab}
+                  </Button>
+                }
+              >
+                <Menu.Item onPress={() => { setActiveTab("ALL"); setTaskMenuVisible(false); }} title="All" />
+                <Menu.Item onPress={() => { setActiveTab("PENDING"); setTaskMenuVisible(false); }} title="Pending" />
+                <Menu.Item onPress={() => { setActiveTab("COMPLETED"); setTaskMenuVisible(false); }} title="Completed" />
+              </Menu>
+            </View>
+          </View>
+
+          <Divider style={{ marginVertical: 8 }} />
+
           <View style={styles.dateNavigator}>
             <IconButton
               icon={appIconSource("chevron-left")}
@@ -450,9 +569,68 @@ export function HomeScreen() {
         </Card.Content>
       </Card>
 
+      {/* Time Summary Cards Section */}
+      <View style={{ gap: 8 }}>
+        <View style={styles.summaryRow}>
+          <Card mode="contained" style={styles.summaryCard}>
+            <Card.Content style={styles.summaryContent}>
+              <View style={styles.summaryIconRow}>
+                <AppIcon color="#4A6583" name="office-building" size={20} />
+                <Text style={styles.mutedSummaryLabel}>OFFICE TIME</Text>
+              </View>
+              <Text style={[styles.summaryValue, { fontSize: 16 }]}>{officeTime}</Text>
+            </Card.Content>
+          </Card>
+          <Card mode="contained" style={styles.summaryCard}>
+            <Card.Content style={styles.summaryContent}>
+              <View style={styles.summaryIconRow}>
+                <AppIcon color="#4A6583" name="map-marker-outline" size={20} />
+                <Text style={styles.mutedSummaryLabel}>FIELD TIME</Text>
+              </View>
+              <Text style={[styles.summaryValue, { fontSize: 16 }]}>{fieldTime}</Text>
+            </Card.Content>
+          </Card>
+        </View>
+        <View style={styles.summaryRow}>
+          <Card mode="contained" style={styles.summaryCard}>
+            <Card.Content style={styles.summaryContent}>
+              <View style={styles.summaryIconRow}>
+                <AppIcon color="#F39C12" name="coffee" size={20} />
+                <Text style={styles.mutedSummaryLabel}>TOTAL BREAK</Text>
+              </View>
+              <Text style={[styles.summaryValue, { fontSize: 16 }]}>{friendlyBreakTime}</Text>
+            </Card.Content>
+          </Card>
+          <Card mode="contained" style={styles.summaryCard}>
+            <Card.Content style={styles.summaryContent}>
+              <View style={styles.summaryIconRow}>
+                <AppIcon color="#4A6583" name="map-marker-distance" size={20} />
+                <Text style={styles.mutedSummaryLabel}>KM TODAY</Text>
+              </View>
+              <Text style={[styles.summaryValue, { fontSize: 16 }]}>{distanceKm.toFixed(1)}</Text>
+            </Card.Content>
+          </Card>
+        </View>
+      </View>
+
+      {/* Submit Day End Report Button */}
+      {isCheckedIn && !alreadySubmittedDer && (
+        <Button 
+          icon="file-document-edit" 
+          mode="contained" 
+          buttonColor="#A4262C"
+          onPress={() => navigation.navigate("DayEndReport")} 
+          style={{ borderRadius: 8, marginVertical: 8, paddingVertical: 4 }}
+          labelStyle={{ fontSize: 14, fontWeight: "700" }}
+        >
+          Submit day end report
+        </Button>
+      )}
+
+      {/* Shortcuts 2x3 Grid */}
       <View style={styles.summaryRow}>
         <Card mode="contained" style={styles.summaryCard} onPress={() => navigation.navigate("Forms")}>
-          <Card.Content>
+          <Card.Content style={styles.summaryContent}>
             <View style={styles.summaryIconRow}>
               <AppIcon color="#24312D" name="file-document-edit-outline" size={20} />
               <Text style={styles.mutedSummaryLabel}>FORMS</Text>
@@ -462,7 +640,7 @@ export function HomeScreen() {
         </Card>
 
         <Card mode="contained" style={styles.summaryCard} onPress={() => navigation.navigate("LeaveRequest")}>
-          <Card.Content>
+          <Card.Content style={styles.summaryContent}>
             <View style={styles.summaryIconRow}>
               <AppIcon color="#24312D" name="calendar-clock" size={20} />
               <Text style={styles.mutedSummaryLabel}>LEAVE</Text>
@@ -483,16 +661,35 @@ export function HomeScreen() {
       </View>
 
       <View style={styles.summaryRow}>
-        <Card mode="contained" style={styles.summaryCardWide} onPress={() => navigation.navigate("Expenses")}>
+        <Card mode="contained" style={styles.summaryCard} onPress={() => navigation.navigate("Expenses")}>
           <Card.Content style={styles.summaryContent}>
             <View style={styles.summaryIconRow}>
-              <AppIcon color="#24312D" name="file-document-outline" size={20} />
+              <AppIcon color="#24312D" name="cash-multiple" size={20} />
               <Text style={styles.mutedSummaryLabel}>EXPENSES</Text>
             </View>
-            <Text style={[styles.summaryValue, { fontSize: 16 }]}>
+            <Text style={[styles.summaryValue, { fontSize: 14 }]}>
               INR {approvedExpenseTotal.toFixed(0)}
             </Text>
-            <Text style={styles.summarySubValue}>{pendingExpenseCount} pending approval</Text>
+          </Card.Content>
+        </Card>
+
+        <Card mode="contained" style={styles.summaryCard} onPress={() => navigation.navigate("Issues")}>
+          <Card.Content style={styles.summaryContent}>
+            <View style={styles.summaryIconRow}>
+              <AppIcon color="#24312D" name="alert-circle-outline" size={20} />
+              <Text style={styles.mutedSummaryLabel}>ISSUES</Text>
+            </View>
+            <Text style={[styles.summaryValue, { fontSize: 14 }]}>Report</Text>
+          </Card.Content>
+        </Card>
+
+        <Card mode="contained" style={styles.summaryCard} onPress={() => navigation.navigate("Attendance")}>
+          <Card.Content style={styles.summaryContent}>
+            <View style={styles.summaryIconRow}>
+              <AppIcon color="#24312D" name="calendar-check" size={20} />
+              <Text style={styles.mutedSummaryLabel}>ATTENDANCE</Text>
+            </View>
+            <Text style={[styles.summaryValue, { fontSize: 14 }]}>History</Text>
           </Card.Content>
         </Card>
       </View>
@@ -1073,5 +1270,36 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E2E8F0",
     marginTop: 16,
+  },
+  taskStatsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F7F9F8",
+    borderRadius: 12,
+    padding: 8,
+    marginBottom: 8,
+  },
+  taskStatBox: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  taskStatNumber: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#24312D",
+  },
+  taskStatLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#66736F",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
+  taskStatsDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: "#E0E0E0",
   }
 });
