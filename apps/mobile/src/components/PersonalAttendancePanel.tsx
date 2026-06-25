@@ -290,20 +290,19 @@ export function PersonalAttendancePanel({ onNavigateDayEnd }: { onNavigateDayEnd
           ) : (
             <View>
               {activeAttendance?.checkInPhotoUrl && (
-                <View style={{ marginTop: 20 }}>
-                  <View style={[styles.photoContainer, { marginTop: 0 }]}>
-                    <PanelImage source={{ uri: absUrl(activeAttendance.checkInPhotoUrl) }} style={styles.verificationPhoto} />
-                    <Text style={styles.photoLabel}>Check-in Verification Photo</Text>
-                  </View>
-                  {isFieldPunch && activeAttendance?.startOdometerPhotoUrl ? (
-                    <View style={styles.odometerSmallContainer}>
-                      <PanelImage source={{ uri: absUrl(activeAttendance.startOdometerPhotoUrl) }} style={styles.odometerSmallPhoto} />
-                      <View style={styles.odometerSmallInfo}>
-                        <Text style={styles.odometerSmallTitle}>Start Odometer Photo</Text>
-                        <Text style={styles.odometerSmallStatus}>Successfully Verified</Text>
-                      </View>
+                <View style={{ marginTop: 12 }}>
+                  <View style={{ flexDirection: "row", gap: 12, justifyContent: "center" }}>
+                    <View style={activeAttendance?.startOdometerPhotoUrl ? { flex: 1, alignItems: "center" } : { width: 120, alignItems: "center" }}>
+                      <PanelImage source={{ uri: absUrl(activeAttendance.checkInPhotoUrl) }} style={{ width: "100%", height: 110, borderRadius: 8, borderWidth: 1, borderColor: "#DDDDDD" }} />
+                      <Text style={{ fontSize: 9, color: "#66736F", fontWeight: "700", marginTop: 4 }}>Check-in Photo</Text>
                     </View>
-                  ) : null}
+                    {isFieldPunch && activeAttendance?.startOdometerPhotoUrl ? (
+                      <View style={{ flex: 1, alignItems: "center" }}>
+                        <PanelImage source={{ uri: absUrl(activeAttendance.startOdometerPhotoUrl) }} style={{ width: "100%", height: 110, borderRadius: 8, borderWidth: 1, borderColor: "#DDDDDD" }} />
+                        <Text style={{ fontSize: 9, color: "#66736F", fontWeight: "700", marginTop: 4 }}>Odometer Photo</Text>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
               )}
               {activeAttendance?.isCheckInPending ? (
