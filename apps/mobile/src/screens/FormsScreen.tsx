@@ -71,23 +71,58 @@ export function FormsScreen() {
   };
 
   const pickImage = async (label: string) => {
-    // Request permission first
-    let coords = null;
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-        coords = {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude
-        };
-      }
-    } catch (e) {
-      console.warn("Could not get location permission/coordinates:", e);
+    // 1. Check if location services are enabled on the device
+    const servicesEnabled = await Location.hasServicesEnabledAsync();
+    if (!servicesEnabled) {
+      Alert.alert(
+        "Location Services Disabled",
+        "Please enable GPS / Location services on your device to capture photo coordinates.",
+        [{ text: "OK" }]
+      );
+      return;
     }
 
+    // 2. Request / verify permission status
+    let { status } = await Location.getForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      const requestResult = await Location.requestForegroundPermissionsAsync();
+      status = requestResult.status;
+    }
+
+    if (status !== 'granted') {
+      Alert.alert(
+        "Location Permission Denied",
+        "Location permission is required to capture photos for forms. Please enable it in device settings.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
+    // 3. Fetch coordinates with a loader and balanced accuracy
+    setIsUploading(true);
+    let coords = null;
+    try {
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      coords = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude
+      };
+    } catch (error) {
+      console.warn("Error getting location: ", error);
+      Alert.alert(
+        "Location Error",
+        "Could not determine your GPS location. Please make sure you have a clear GPS signal and try again.",
+        [{ text: "OK" }]
+      );
+      setIsUploading(false);
+      return;
+    }
+
+    setIsUploading(false);
+
+    // 4. Launch camera only when coordinates are secured
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       quality: 0.7
@@ -99,8 +134,8 @@ export function FormsScreen() {
         const url = await uploadPhoto(result.assets[0]);
         const photoData = {
           url: url,
-          latitude: coords?.latitude || null,
-          longitude: coords?.longitude || null,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
           timestamp: new Date().toISOString()
         };
         handleInputChange(label, photoData);
