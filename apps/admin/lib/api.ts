@@ -627,6 +627,26 @@ export async function createLeaveType(data: {
   return response.data.data;
 }
 
+export async function updateLeaveType(id: string, data: {
+  name: string;
+  alias: string;
+  description?: string;
+  autoAllocationCount: number;
+  autoAllocationFreq: string;
+  carryForward: number;
+  carryForwardFreq: string;
+  encashment: boolean;
+  leaveCycle: string;
+}) {
+  const response = await api.put<{ data: any }>(`/leaves/types/${id}`, data);
+  return response.data.data;
+}
+
+export async function deleteLeaveType(id: string) {
+  const response = await api.delete<{ data: any }>(`/leaves/types/${id}`);
+  return response.data.data;
+}
+
 export async function fetchHolidayTemplates() {
   const response = await api.get<{ data: any[] }>("/leaves/holiday-templates");
   return response.data.data;

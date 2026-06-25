@@ -26,7 +26,8 @@ import {
   FileText,
   UserPlus2,
   ListFilter,
-  X
+  X,
+  Trash
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
@@ -36,7 +37,9 @@ import {
   createLeaveType,
   fetchHolidays,
   createHoliday,
-  fetchEmployees
+  fetchEmployees,
+  updateLeaveType,
+  deleteLeaveType
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -60,6 +63,19 @@ import {
   SheetTrigger,
   SheetFooter
 } from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem
+} from "@/components/ui/dropdown-menu";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -91,6 +107,22 @@ export default function LeaveManagementPage() {
   const [carryForwardCount, setCarryForwardCount] = useState("0");
   const [carryForwardFreq, setCarryForwardFreq] = useState("END_OF_MONTH"); // END_OF_MONTH, END_OF_YEAR
   const [encashment, setEncashment] = useState(false);
+
+  // Edit Leave Category state
+  const [editingLeaveType, setEditingLeaveType] = useState<any | null>(null);
+  const [isEditLeaveOpen, setIsEditLeaveOpen] = useState(false);
+  const [editLeaveName, setEditLeaveName] = useState("");
+  const [editLeaveAlias, setEditLeaveAlias] = useState("");
+  const [editLeaveDescription, setEditLeaveDescription] = useState("");
+  const [editAutoAllocCount, setEditAutoAllocCount] = useState("0");
+  const [editAutoAllocFreq, setEditAutoAllocFreq] = useState("MONTHLY");
+  const [editCarryForwardCount, setEditCarryForwardCount] = useState("0");
+  const [editCarryForwardFreq, setEditCarryForwardFreq] = useState("END_OF_MONTH");
+  const [editEncashment, setEditEncashment] = useState(false);
+
+  // Delete Leave Category state
+  const [deletingLeaveType, setDeletingLeaveType] = useState<any | null>(null);
+  const [isDeleteLeaveOpen, setIsDeleteLeaveOpen] = useState(false);
 
   // New Drawer State
   const [drawerTab, setDrawerTab] = useState<"assign" | "rules">("rules");
@@ -211,6 +243,32 @@ export default function LeaveManagementPage() {
     },
     onError: (err: any) => {
       alert(err?.response?.data?.message || "Failed to create leave type.");
+    }
+  });
+
+  const updateLeaveTypeMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => updateLeaveType(id, data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["leaveTypes"] });
+      setIsEditLeaveOpen(false);
+      setEditingLeaveType(null);
+      alert("Leave category successfully updated!");
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message || "Failed to update leave category.");
+    }
+  });
+
+  const deleteLeaveTypeMutation = useMutation({
+    mutationFn: (id: string) => deleteLeaveType(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["leaveTypes"] });
+      setIsDeleteLeaveOpen(false);
+      setDeletingLeaveType(null);
+      alert("Leave category successfully deleted!");
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message || "Failed to delete leave category.");
     }
   });
 
@@ -871,14 +929,24 @@ export default function LeaveManagementPage() {
                                    className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
                                  />
                                  
-                                 {/* Every Month vs Every Calendar Year radios */}
-                                 <div className="flex items-center gap-6">
+                                 {/* Every Week vs Every Month vs Every Calendar Year radios */}
+                                 <div className="flex flex-wrap items-center gap-6">
                                    <label className="flex items-center gap-2.5 cursor-pointer">
                                      <input 
                                        type="radio" 
                                        name="autoAllocFreq" 
-                                       checked={autoAllocFreq === "MONTHLY"}
-                                       onChange={() => setAutoAllocFreq("MONTHLY")}
+                                       checked={autoAllocFreq.startsWith("WEEKLY")}
+                                       onChange={() => setAutoAllocFreq("WEEKLY:1")} // Default to Monday
+                                       className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
+                                     />
+                                     <span className="text-xs font-bold text-slate-600">Every Week</span>
+                                   </label>
+                                   <label className="flex items-center gap-2.5 cursor-pointer">
+                                     <input 
+                                       type="radio" 
+                                       name="autoAllocFreq" 
+                                       checked={autoAllocFreq.startsWith("MONTHLY")}
+                                       onChange={() => setAutoAllocFreq("MONTHLY:1")} // Default to 1st of month
                                        className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
                                      />
                                      <span className="text-xs font-bold text-slate-600">Every Month</span>
@@ -894,6 +962,50 @@ export default function LeaveManagementPage() {
                                      <span className="text-xs font-bold text-slate-600">Every Calendar Year</span>
                                    </label>
                                  </div>
+
+                                 {/* Conditional Weekdays Select */}
+                                 {autoAllocFreq.startsWith("WEEKLY") && (
+                                   <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                                     <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Weekday for Auto Allocation</Label>
+                                     <Select 
+                                       value={autoAllocFreq.split(":")[1] || "1"} 
+                                       onValueChange={(val) => setAutoAllocFreq(`WEEKLY:${val}`)}
+                                     >
+                                       <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 font-bold text-xs">
+                                         <SelectValue />
+                                       </SelectTrigger>
+                                       <SelectContent className="bg-white border-slate-200 rounded-xl">
+                                         <SelectItem value="0">Sunday</SelectItem>
+                                         <SelectItem value="1">Monday</SelectItem>
+                                         <SelectItem value="2">Tuesday</SelectItem>
+                                         <SelectItem value="3">Wednesday</SelectItem>
+                                         <SelectItem value="4">Thursday</SelectItem>
+                                         <SelectItem value="5">Friday</SelectItem>
+                                         <SelectItem value="6">Saturday</SelectItem>
+                                       </SelectContent>
+                                     </Select>
+                                   </div>
+                                 )}
+
+                                 {/* Conditional Day of Month Select */}
+                                 {autoAllocFreq.startsWith("MONTHLY") && (
+                                   <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                                     <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Day of Month for Auto Allocation</Label>
+                                     <Select 
+                                       value={autoAllocFreq.split(":")[1] || "1"} 
+                                       onValueChange={(val) => setAutoAllocFreq(`MONTHLY:${val}`)}
+                                     >
+                                       <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 font-bold text-xs">
+                                         <SelectValue />
+                                       </SelectTrigger>
+                                       <SelectContent className="bg-white border-slate-200 rounded-xl max-h-48 overflow-y-auto">
+                                         {Array.from({ length: 31 }, (_, i) => (i + 1).toString()).map(date => (
+                                           <SelectItem key={date} value={date}>{date}{date === "1" ? "st" : date === "2" ? "nd" : date === "3" ? "rd" : "th"} of month</SelectItem>
+                                         ))}
+                                       </SelectContent>
+                                     </Select>
+                                   </div>
+                                 )}
                                </div>
 
                                {/* Carry Forward */}
@@ -1015,6 +1127,20 @@ export default function LeaveManagementPage() {
                                         className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
                                      />
                                   </div>
+                                </div>
+
+                               {/* Cycle Selection */}
+                               <div className="space-y-2">
+                                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Cycle Frequency</Label>
+                                  <select 
+                                     value={assignCycle}
+                                     onChange={(e: any) => setAssignCycle(e.target.value)}
+                                     className="w-full h-12 px-4 rounded-2xl bg-slate-50 border border-slate-200/60 focus:bg-white transition-all font-bold text-xs outline-none"
+                                  >
+                                     <option value="ONCE">Once (Single Range)</option>
+                                     <option value="WEEKLY">Weekly Recurring</option>
+                                     <option value="MONTHLY">Monthly Recurring</option>
+                                   </select>
                                </div>
 
                                {/* Weekday Selection */}
@@ -1129,19 +1255,7 @@ export default function LeaveManagementPage() {
                                   </div>
                                </div>
 
-                               {/* Cycle Selection */}
-                               <div className="space-y-2">
-                                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Cycle Frequency</Label>
-                                  <select 
-                                     value={assignCycle}
-                                     onChange={(e: any) => setAssignCycle(e.target.value)}
-                                     className="w-full h-12 px-4 rounded-2xl bg-slate-50 border border-slate-200/60 focus:bg-white transition-all font-bold text-xs outline-none"
-                                  >
-                                     <option value="ONCE">Once (Single Range)</option>
-                                     <option value="WEEKLY">Weekly Recurring</option>
-                                     <option value="MONTHLY">Monthly Recurring</option>
-                                   </select>
-                               </div>
+
 
                                <Button 
                                   type="submit" 
@@ -1184,9 +1298,46 @@ export default function LeaveManagementPage() {
                           <h4 className="font-black text-slate-900 text-base">{type.name}</h4>
                           <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">{type.alias}</span>
                         </div>
-                        <Badge className="bg-blue-50 text-blue-600 font-bold border-none text-[10px] px-2 py-0.5 rounded-md">
-                          Active
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-blue-50 text-blue-600 font-bold border-none text-[10px] px-2 py-0.5 rounded-md">
+                            Active
+                          </Badge>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-slate-200">
+                                <MoreVertical className="h-4 w-4 text-slate-500" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="bg-white border border-slate-200 rounded-xl p-1 shadow-lg">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setEditingLeaveType(type);
+                                  setEditLeaveName(type.name);
+                                  setEditLeaveAlias(type.alias);
+                                  setEditLeaveDescription(type.description || "");
+                                  setEditAutoAllocCount(type.autoAllocationCount.toString());
+                                  setEditAutoAllocFreq(type.autoAllocationFreq);
+                                  setEditCarryForwardCount(type.carryForward.toString());
+                                  setEditCarryForwardFreq(type.carryForwardFreq);
+                                  setEditEncashment(type.encashment);
+                                  setIsEditLeaveOpen(true);
+                                }}
+                                className="flex items-center gap-2 text-xs font-bold text-slate-700 hover:bg-slate-50 p-2.5 rounded-lg cursor-pointer"
+                              >
+                                <Settings2 className="h-4 w-4" /> Edit Rules
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setDeletingLeaveType(type);
+                                  setIsDeleteLeaveOpen(true);
+                                }}
+                                className="flex items-center gap-2 text-xs font-bold text-rose-600 hover:bg-rose-50 p-2.5 rounded-lg cursor-pointer"
+                              >
+                                <Trash className="h-4 w-4" /> Delete Category
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </CardHeader>
                       <CardContent className="p-6 space-y-4">
                         <p className="text-slate-500 text-xs font-semibold leading-relaxed">
@@ -1196,7 +1347,23 @@ export default function LeaveManagementPage() {
                         <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-50">
                           <div>
                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Auto Allocation</span>
-                            <span className="text-xs font-black text-slate-700">{type.autoAllocationCount} / {type.autoAllocationFreq === "MONTHLY" ? "Month" : "Year"}</span>
+                            <span className="text-xs font-black text-slate-700">
+                              {type.autoAllocationCount} / {(() => {
+                                if (type.autoAllocationFreq.startsWith("WEEKLY:")) {
+                                  const dayIdx = parseInt(type.autoAllocationFreq.split(":")[1] || "1");
+                                  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+                                  return `Week (${days[dayIdx]})`;
+                                } else if (type.autoAllocationFreq.startsWith("MONTHLY:")) {
+                                  const date = type.autoAllocationFreq.split(":")[1] || "1";
+                                  const suffix = date === "1" ? "st" : date === "2" ? "nd" : date === "3" ? "rd" : "th";
+                                  return `Month (${date}${suffix})`;
+                                } else if (type.autoAllocationFreq === "MONTHLY") {
+                                  return "Month";
+                                } else {
+                                  return "Year";
+                                }
+                              })()}
+                            </span>
                           </div>
                           <div>
                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Carry Forward Limit</span>
@@ -1226,6 +1393,261 @@ export default function LeaveManagementPage() {
         </div>
       )}
 
+      {/* Edit Leave Category Dialog */}
+      <Dialog open={isEditLeaveOpen} onOpenChange={setIsEditLeaveOpen}>
+        <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader className="p-8 bg-blue-600 text-white flex-shrink-0">
+            <DialogTitle className="text-2xl font-black">Edit Leave Category</DialogTitle>
+            <p className="text-blue-100 text-xs font-semibold mt-1">Modify rules and allocation parameters for this leave type.</p>
+          </DialogHeader>
+
+          <div className="p-8 space-y-6 overflow-y-auto flex-grow text-left">
+            {/* Leave Name */}
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Leave Name *</Label>
+              <Input 
+                placeholder="e.g. Sick Leave" 
+                required
+                value={editLeaveName}
+                onChange={e => setEditLeaveName(e.target.value)}
+                className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+              />
+            </div>
+
+            {/* Alias */}
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Alias *</Label>
+              <Input 
+                placeholder="e.g. SL" 
+                required
+                value={editLeaveAlias}
+                onChange={e => setEditLeaveAlias(e.target.value)}
+                className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+              />
+            </div>
+
+            {/* Description */}
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Description</Label>
+              <Input 
+                placeholder="Short description..." 
+                value={editLeaveDescription}
+                onChange={e => setEditLeaveDescription(e.target.value)}
+                className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+              />
+            </div>
+
+            {/* Auto Allocation */}
+            <div className="space-y-4">
+              <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Number Of Auto Allocation Leaves *</Label>
+              <Input 
+                type="number"
+                required
+                value={editAutoAllocCount}
+                onChange={e => setEditAutoAllocCount(e.target.value)}
+                className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+              />
+              
+              <div className="flex flex-wrap items-center gap-6">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="editAutoAllocFreq" 
+                    checked={editAutoAllocFreq.startsWith("WEEKLY")}
+                    onChange={() => setEditAutoAllocFreq("WEEKLY:1")}
+                    className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
+                  />
+                  <span className="text-xs font-bold text-slate-600">Every Week</span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="editAutoAllocFreq" 
+                    checked={editAutoAllocFreq.startsWith("MONTHLY")}
+                    onChange={() => setEditAutoAllocFreq("MONTHLY:1")}
+                    className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
+                  />
+                  <span className="text-xs font-bold text-slate-600">Every Month</span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="editAutoAllocFreq" 
+                    checked={editAutoAllocFreq === "YEARLY"}
+                    onChange={() => setEditAutoAllocFreq("YEARLY")}
+                    className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
+                  />
+                  <span className="text-xs font-bold text-slate-600">Every Calendar Year</span>
+                </label>
+              </div>
+
+              {editAutoAllocFreq.startsWith("WEEKLY") && (
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Weekday for Auto Allocation</Label>
+                  <Select 
+                    value={editAutoAllocFreq.split(":")[1] || "1"} 
+                    onValueChange={(val) => setEditAutoAllocFreq(`WEEKLY:${val}`)}
+                  >
+                    <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 font-bold text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-slate-200 rounded-xl">
+                      <SelectItem value="0">Sunday</SelectItem>
+                      <SelectItem value="1">Monday</SelectItem>
+                      <SelectItem value="2">Tuesday</SelectItem>
+                      <SelectItem value="3">Wednesday</SelectItem>
+                      <SelectItem value="4">Thursday</SelectItem>
+                      <SelectItem value="5">Friday</SelectItem>
+                      <SelectItem value="6">Saturday</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {editAutoAllocFreq.startsWith("MONTHLY") && (
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Day of Month for Auto Allocation</Label>
+                  <Select 
+                    value={editAutoAllocFreq.split(":")[1] || "1"} 
+                    onValueChange={(val) => setEditAutoAllocFreq(`MONTHLY:${val}`)}
+                  >
+                    <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 font-bold text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-slate-200 rounded-xl max-h-48 overflow-y-auto">
+                      {Array.from({ length: 31 }, (_, i) => (i + 1).toString()).map(date => (
+                        <SelectItem key={date} value={date}>{date}{date === "1" ? "st" : date === "2" ? "nd" : date === "3" ? "rd" : "th"} of month</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            {/* Carry Forward */}
+            <div className="space-y-4">
+              <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Carry Forward *</Label>
+              <Input 
+                type="number"
+                required
+                value={editCarryForwardCount}
+                onChange={e => setEditCarryForwardCount(e.target.value)}
+                className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+              />
+              
+              <div className="flex items-center gap-6">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="editCarryForwardFreq" 
+                    checked={editCarryForwardFreq === "END_OF_MONTH"}
+                    onChange={() => setEditCarryForwardFreq("END_OF_MONTH")}
+                    className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
+                  />
+                  <span className="text-xs font-bold text-slate-600">End Of Every Month</span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="editCarryForwardFreq" 
+                    checked={editCarryForwardFreq === "END_OF_YEAR"}
+                    onChange={() => setEditCarryForwardFreq("END_OF_YEAR")}
+                    className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
+                  />
+                  <span className="text-xs font-bold text-slate-600">End Of Every Calendar Year</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Encashment */}
+            <div className="space-y-2.5">
+              <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400 font-extrabold">Encashment Of Leave</Label>
+              <div className="flex items-center gap-6">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="editEncashment" 
+                    checked={!editEncashment}
+                    onChange={() => setEditEncashment(false)}
+                    className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
+                  />
+                  <span className="text-xs font-bold text-slate-600">Off</span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="editEncashment" 
+                    checked={editEncashment}
+                    onChange={() => setEditEncashment(true)}
+                    className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
+                  />
+                  <span className="text-xs font-bold text-slate-600">On</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="p-8 border-t border-slate-50 flex-shrink-0">
+            <Button 
+              onClick={() => {
+                if (!editLeaveName || !editLeaveAlias) {
+                  alert("Name and Alias are required.");
+                  return;
+                }
+                updateLeaveTypeMutation.mutate({
+                  id: editingLeaveType.id,
+                  data: {
+                    name: editLeaveName,
+                    alias: editLeaveAlias,
+                    description: editLeaveDescription,
+                    autoAllocationCount: parseFloat(editAutoAllocCount),
+                    autoAllocationFreq: editAutoAllocFreq,
+                    carryForward: parseFloat(editCarryForwardCount),
+                    carryForwardFreq: editCarryForwardFreq,
+                    encashment: editEncashment,
+                    leaveCycle: editingLeaveType.leaveCycle
+                  }
+                });
+              }}
+              disabled={updateLeaveTypeMutation.isPending}
+              className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold uppercase tracking-widest text-[10px]"
+            >
+              {updateLeaveTypeMutation.isPending ? "Updating..." : "Update Rules"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Leave Category Dialog */}
+      <Dialog open={isDeleteLeaveOpen} onOpenChange={setIsDeleteLeaveOpen}>
+        <DialogContent className="max-w-md p-8 overflow-hidden border-none shadow-2xl bg-white rounded-3xl text-left">
+          <DialogHeader className="p-0 text-left">
+            <DialogTitle className="text-xl font-black text-slate-900 font-extrabold">Delete Leave Category</DialogTitle>
+            <p className="text-slate-500 text-xs font-bold leading-normal mt-2">
+              Are you sure you want to delete leave category &quot;{deletingLeaveType?.name}&quot;? This action cannot be undone and will delete all associated setup rules.
+            </p>
+          </DialogHeader>
+
+          <DialogFooter className="pt-8 flex gap-3">
+            <Button 
+              variant="outline"
+              onClick={() => setIsDeleteLeaveOpen(false)}
+              className="flex-1 h-12 rounded-xl text-xs font-extrabold text-slate-700 border-slate-200 uppercase tracking-wider"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                deleteLeaveTypeMutation.mutate(deletingLeaveType.id);
+              }}
+              disabled={deleteLeaveTypeMutation.isPending}
+              className="flex-1 h-12 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-extrabold text-xs uppercase tracking-wider"
+            >
+              {deleteLeaveTypeMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

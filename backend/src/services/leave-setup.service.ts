@@ -30,6 +30,29 @@ export class LeaveSetupService {
     });
   }
 
+  async updateLeaveType(user: AuthUser, id: string, data: {
+    name: string;
+    alias: string;
+    description?: string;
+    autoAllocationCount: number;
+    autoAllocationFreq: string;
+    carryForward: number;
+    carryForwardFreq: string;
+    encashment: boolean;
+    leaveCycle: string;
+  }) {
+    return await prisma.leaveType.update({
+      where: { id, companyId: user.companyId },
+      data
+    });
+  }
+
+  async deleteLeaveType(user: AuthUser, id: string) {
+    return await prisma.leaveType.delete({
+      where: { id, companyId: user.companyId }
+    });
+  }
+
   async getHolidayTemplates(user: AuthUser) {
     const templates = await prisma.holidayTemplate.findMany({
       where: { companyId: user.companyId },

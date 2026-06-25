@@ -36,6 +36,18 @@ export async function listLeaveTypes(req: Request, res: Response) {
   sendSuccess(res, result, "Leave types fetched successfully");
 }
 
+export async function updateLeaveType(req: Request, res: Response) {
+  const { id } = req.params;
+  const result = await leaveSetupService.updateLeaveType(req.user!, id, req.body);
+  sendSuccess(res, result, "Leave type updated successfully");
+}
+
+export async function deleteLeaveType(req: Request, res: Response) {
+  const { id } = req.params;
+  const result = await leaveSetupService.deleteLeaveType(req.user!, id);
+  sendSuccess(res, result, "Leave type deleted successfully");
+}
+
 export async function listHolidayTemplates(req: Request, res: Response) {
   const result = await leaveSetupService.getHolidayTemplates(req.user!);
   sendSuccess(res, result, "Holiday templates fetched successfully");

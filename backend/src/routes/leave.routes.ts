@@ -12,6 +12,8 @@ router.patch("/:id/status", leaveController.updateLeaveStatus);
 
 router.get("/types", leaveController.listLeaveTypes);
 router.post("/types", leaveController.createLeaveType);
+router.put("/types/:id", leaveController.updateLeaveType);
+router.delete("/types/:id", leaveController.deleteLeaveType);
 
 router.get("/holiday-templates", leaveController.listHolidayTemplates);
 router.post("/holiday-templates", leaveController.createHolidayTemplate);
