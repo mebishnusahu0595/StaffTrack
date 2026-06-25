@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { useEffect, useState, useMemo } from "react";
 import { ScrollView, StyleSheet, View, Alert, Linking, TouchableOpacity, Image } from "react-native";
-import { Avatar, Badge, Button, Card, Dialog, Icon, IconButton, Portal, Text, TouchableRipple, Modal, TextInput, Divider } from "react-native-paper";
+import { Avatar, Badge, Button, Card, Dialog, Icon, IconButton, Portal, Text, TouchableRipple, Modal, TextInput, Divider, Menu } from "react-native-paper";
 import relativeTime from "dayjs/plugin/relativeTime";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
