@@ -38,6 +38,37 @@ export default function FillFormPage() {
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isUploading, setIsUploading] = useState<string | null>(null);
+  const fileInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        () => {},
+        (err) => {
+          console.log("Initial location permission check/request:", err);
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+  }, []);
+
+  const handlePhotoClick = async (label: string) => {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      fileInputRefs.current[label]?.click();
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        fileInputRefs.current[label]?.click();
+      },
+      (error) => {
+        alert("Please grant location permission to verify photo submissions. Go to browser settings to allow location access.");
+        fileInputRefs.current[label]?.click();
+      },
+      { enableHighAccuracy: true, timeout: 6000 }
+    );
+  };
 
   const getCoordinates = (): Promise<{ latitude: number; longitude: number } | null> => {
     return new Promise((resolve) => {
@@ -341,27 +372,33 @@ export default function FillFormPage() {
                       const imageUrl = typeof photoVal === 'object' && photoVal ? photoVal.url : photoVal;
                       if (!imageUrl) {
                         return (
-                          <label className="flex flex-col items-center justify-center h-48 w-full border-4 border-dashed border-slate-100 rounded-[32px] bg-slate-50/50 hover:bg-slate-50 hover:border-blue-200 transition-all cursor-pointer group">
-                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                              {isUploading === field.label ? (
-                                <Loader2 className="h-10 w-10 text-blue-600 animate-spin" />
-                              ) : (
-                                <>
-                                  <div className="h-12 w-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-slate-400 group-hover:text-blue-600 group-hover:scale-110 transition-all mb-3">
-                                    <Camera className="h-6 w-6" />
-                                  </div>
-                                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Tap to capture photo</p>
-                                </>
-                              )}
+                          <div className="space-y-2">
+                            <div 
+                              onClick={() => handlePhotoClick(field.label)}
+                              className="flex flex-col items-center justify-center h-48 w-full border-4 border-dashed border-slate-100 rounded-[32px] bg-slate-50/50 hover:bg-slate-50 hover:border-blue-200 transition-all cursor-pointer group"
+                            >
+                              <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                {isUploading === field.label ? (
+                                  <Loader2 className="h-10 w-10 text-blue-600 animate-spin" />
+                                ) : (
+                                  <>
+                                    <div className="h-12 w-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-slate-400 group-hover:text-blue-600 group-hover:scale-110 transition-all mb-3">
+                                      <Camera className="h-6 w-6" />
+                                    </div>
+                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Tap to capture photo</p>
+                                  </>
+                                )}
+                              </div>
                             </div>
                             <input 
                               type="file" 
+                              ref={el => { fileInputRefs.current[field.label] = el; }}
                               accept="image/*" 
                               capture="environment"
                               className="hidden" 
                               onChange={e => e.target.files?.[0] && handlePhotoUpload(field.label, e.target.files[0])}
                             />
-                          </label>
+                          </div>
                         );
                       }
                       return (
