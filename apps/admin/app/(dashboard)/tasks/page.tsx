@@ -1722,7 +1722,9 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
     assignedToId: "", 
     dueDate: initialDate || format(addDays(new Date(), 1), 'yyyy-MM-dd'),
     startDate: format(new Date(), 'yyyy-MM-dd'),
+    startTime: "09:00",
     endDate: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
+    endTime: "18:00",
     priority: "Medium",
     points: 10,
     repeatFrequency: "NONE",
@@ -1762,7 +1764,7 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
 
   useEffect(() => {
     if (initialDate) {
-      setData(d => ({ ...d, dueDate: initialDate, endDate: `${initialDate}T23:59` }));
+      setData(d => ({ ...d, dueDate: initialDate, endDate: initialDate, endTime: "23:59" }));
     }
   }, [initialDate]);
 
@@ -2152,70 +2154,74 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
 
             <div className="grid grid-cols-2 gap-4">
                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">Start Date</Label>
-                  <Input 
-                    type="date" 
-                    className="h-12 rounded-2xl bg-slate-50 border-none font-bold" 
-                    value={data.startDate}
-                    onChange={e => setData({...data, startDate: e.target.value})}
-                  />
-               </div>
-               <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">End Date</Label>
-                  <Input 
-                    type="date" 
-                    className="h-12 rounded-2xl bg-slate-50 border-none font-bold" 
-                    value={data.endDate}
-                    onChange={e => setData({...data, endDate: e.target.value, dueDate: e.target.value})}
-                  />
-                  <div className="flex gap-2 items-center mt-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        const today = new Date();
-                        const iso = today.toISOString().split('T')[0];
-                        setData(prev => ({
-                          ...prev,
-                          startDate: iso,
-                          endDate: iso,
-                          dueDate: iso,
-                        }));
-                      }}
-                      className="h-9 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100"
-                    >
-                      Today
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        const tomorrow = new Date();
-                        tomorrow.setDate(tomorrow.getDate() + 1);
-                        const iso = tomorrow.toISOString().split('T')[0];
-                        setData(prev => ({
-                          ...prev,
-                          startDate: iso,
-                          endDate: iso,
-                          dueDate: iso,
-                        }));
-                      }}
-                      className="h-9 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100"
-                    >
-                      Tomorrow
-                    </Button>
-                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-2">Due Time</Label>
-                    <Input
-                      type="time"
-                      className="h-9 rounded-full bg-slate-50 border-none"
-                      value={data.dueDate?.split('T')[1] || ''}
-                      onChange={e => {
-                        const datePart = data.dueDate?.split('T')[0] || data.endDate || new Date().toISOString().split('T')[0];
-                        setData(prev => ({ ...prev, dueDate: `${datePart}T${e.target.value}` }));
-                      }}
-                    />
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Start Date & Time</Label>
+                  <div className="flex gap-2">
+                     <Input 
+                       type="date" 
+                       className="h-12 rounded-2xl bg-slate-50 border-none font-bold flex-1" 
+                       value={data.startDate}
+                       onChange={e => setData({...data, startDate: e.target.value})}
+                     />
+                     <Input
+                       type="time"
+                       className="h-12 w-28 rounded-2xl bg-slate-50 border-none font-bold"
+                       value={data.startTime}
+                       onChange={e => setData({...data, startTime: e.target.value})}
+                     />
                   </div>
                </div>
+               <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400">End Date & Time</Label>
+                  <div className="flex gap-2">
+                     <Input 
+                       type="date" 
+                       className="h-12 rounded-2xl bg-slate-50 border-none font-bold flex-1" 
+                       value={data.endDate}
+                       onChange={e => setData({...data, endDate: e.target.value})}
+                     />
+                     <Input
+                       type="time"
+                       className="h-12 w-28 rounded-2xl bg-slate-50 border-none font-bold"
+                       value={data.endTime}
+                       onChange={e => setData({...data, endTime: e.target.value})}
+                     />
+                  </div>
+               </div>
+            </div>
+            <div className="flex gap-2 items-center">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const today = new Date();
+                  const iso = today.toISOString().split('T')[0];
+                  setData(prev => ({
+                    ...prev,
+                    startDate: iso,
+                    endDate: iso,
+                  }));
+                }}
+                className="h-9 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-bold"
+              >
+                Today
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const tomorrow = new Date();
+                  tomorrow.setDate(tomorrow.getDate() + 1);
+                  const iso = tomorrow.toISOString().split('T')[0];
+                  setData(prev => ({
+                    ...prev,
+                    startDate: iso,
+                    endDate: iso,
+                  }));
+                }}
+                className="h-9 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-bold"
+              >
+                Tomorrow
+              </Button>
             </div>
 
             <div className="flex gap-2 flex-wrap pt-2">
@@ -2688,8 +2694,9 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
              isRepeating: data.repeatFrequency !== "NONE",
              repeatDays: data.repeatDays.join(','),
              repeatDates: data.repeatDates.join(','),
-             startDate: data.startDate ? new Date(data.startDate) : null,
-             endDate: data.endDate ? new Date(data.endDate) : null,
+             startDate: data.startDate ? new Date(`${data.startDate}T${data.startTime || '00:00'}`) : null,
+             endDate: data.endDate ? new Date(`${data.endDate}T${data.endTime || '23:59'}`) : null,
+             dueDate: data.endDate ? `${data.endDate}T${data.endTime || '23:59'}` : null,
              geofenceLat: data.geofenceLat ? parseFloat(data.geofenceLat) : null,
              geofenceLng: data.geofenceLng ? parseFloat(data.geofenceLng) : null,
              geofenceRadius: data.geofenceRadius ? parseFloat(data.geofenceRadius) : null,
@@ -2768,7 +2775,9 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
     assignedToId: task.assignedToId || "",
     dueDate: task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : format(addDays(new Date(), 1), 'yyyy-MM-dd'),
     startDate: task.startDate ? format(new Date(task.startDate), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
-    endDate: task.endDate ? format(new Date(task.endDate), 'yyyy-MM-dd') : format(new Date(task.dueDate || new Date()), 'yyyy-MM-dd'),
+    startTime: task.startDate ? format(new Date(task.startDate), 'HH:mm') : '09:00',
+    endDate: task.endDate ? format(new Date(task.endDate), 'yyyy-MM-dd') : task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : format(addDays(new Date(), 1), 'yyyy-MM-dd'),
+    endTime: task.endDate ? format(new Date(task.endDate), 'HH:mm') : task.dueDate ? format(new Date(task.dueDate), 'HH:mm') : '18:00',
     priority: task.priority || "Medium",
     points: task.points || 10,
     status: task.status || "PENDING",
@@ -3119,22 +3128,38 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
 
             <div className="grid grid-cols-2 gap-4">
                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">Start Date</Label>
-                  <Input 
-                    type="date"
-                    className="h-12 rounded-2xl bg-slate-50 border-none font-bold" 
-                    value={data.startDate}
-                    onChange={e => setData({...data, startDate: e.target.value})}
-                  />
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Start Date & Time</Label>
+                  <div className="flex gap-2">
+                     <Input 
+                       type="date"
+                       className="h-12 rounded-2xl bg-slate-50 border-none font-bold flex-1" 
+                       value={data.startDate}
+                       onChange={e => setData({...data, startDate: e.target.value})}
+                     />
+                     <Input 
+                       type="time"
+                       className="h-12 w-28 rounded-2xl bg-slate-50 border-none font-bold" 
+                       value={data.startTime}
+                       onChange={e => setData({...data, startTime: e.target.value})}
+                     />
+                  </div>
                </div>
                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">End Date</Label>
-                  <Input 
-                    type="date"
-                    className="h-12 rounded-2xl bg-slate-50 border-none font-bold" 
-                    value={data.endDate}
-                    onChange={e => setData({...data, endDate: e.target.value, dueDate: e.target.value})}
-                  />
+                  <Label className="text-[10px] font-black uppercase text-slate-400">End Date & Time</Label>
+                  <div className="flex gap-2">
+                     <Input 
+                       type="date"
+                       className="h-12 rounded-2xl bg-slate-50 border-none font-bold flex-1" 
+                       value={data.endDate}
+                       onChange={e => setData({...data, endDate: e.target.value})}
+                     />
+                     <Input 
+                       type="time"
+                       className="h-12 w-28 rounded-2xl bg-slate-50 border-none font-bold" 
+                       value={data.endTime}
+                       onChange={e => setData({...data, endTime: e.target.value})}
+                     />
+                  </div>
                </div>
             </div>
 
@@ -3623,8 +3648,9 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
              isRepeating: data.repeatFrequency !== "NONE",
              repeatDays: data.repeatDays.join(','),
              repeatDates: data.repeatDates.join(','),
-             startDate: data.startDate ? new Date(data.startDate) : null,
-             endDate: data.endDate ? new Date(data.endDate) : null,
+             startDate: data.startDate ? new Date(`${data.startDate}T${data.startTime || '00:00'}`) : null,
+             endDate: data.endDate ? new Date(`${data.endDate}T${data.endTime || '23:59'}`) : null,
+             dueDate: data.endDate ? `${data.endDate}T${data.endTime || '23:59'}` : null,
              geofenceLat: data.geofenceLat ? parseFloat(data.geofenceLat) : null,
              geofenceLng: data.geofenceLng ? parseFloat(data.geofenceLng) : null,
              geofenceRadius: data.geofenceRadius ? parseFloat(data.geofenceRadius) : null,

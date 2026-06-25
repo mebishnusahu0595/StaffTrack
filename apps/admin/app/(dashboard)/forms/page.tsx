@@ -61,6 +61,8 @@ export default function FormsPage() {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("All");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingForm, setEditingForm] = useState<any>(null);
+  const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
   const queryClient = useQueryClient();
@@ -82,7 +84,8 @@ export default function FormsPage() {
     mutationFn: ({ id, data }: { id: string; data: any }) => updateForm(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["forms"] });
-      setIsCreateOpen(false);
+      setIsEditOpen(false);
+      setEditingForm(null);
     }
   });
 
@@ -259,18 +262,15 @@ export default function FormsPage() {
                                         </Button>
                                      </DropdownMenuTrigger>
                                      <DropdownMenuContent align="end" className="w-40 rounded-xl">
-                                        <Dialog>
-                                           <DialogTrigger asChild>
-                                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-xs font-bold gap-2">
-                                                 Edit Form
-                                              </DropdownMenuItem>
-                                           </DialogTrigger>
-                                           <CreateFormDialog 
-                                              initialData={form}
-                                              onSubmit={(data: any) => updateMutation.mutate({ id: form.id, data })}
-                                              isSubmitting={updateMutation.isPending}
-                                           />
-                                        </Dialog>
+                                         <DropdownMenuItem 
+                                           onClick={() => {
+                                             setEditingForm(form);
+                                             setIsEditOpen(true);
+                                           }}
+                                           className="text-xs font-bold gap-2"
+                                         >
+                                            Edit Form
+                                         </DropdownMenuItem>
                                         <DropdownMenuItem 
                                           className="text-xs font-bold gap-2 text-rose-500"
                                           onClick={() => {
@@ -344,18 +344,15 @@ export default function FormsPage() {
                                   </Button>
                                </DropdownMenuTrigger>
                                <DropdownMenuContent align="end" className="w-40 rounded-xl">
-                                  <Dialog>
-                                     <DialogTrigger asChild>
-                                        <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-xs font-bold gap-2">
-                                           Edit Form
-                                        </DropdownMenuItem>
-                                     </DialogTrigger>
-                                     <CreateFormDialog 
-                                        initialData={form}
-                                        onSubmit={(data: any) => updateMutation.mutate({ id: form.id, data })}
-                                        isSubmitting={updateMutation.isPending}
-                                     />
-                                  </Dialog>
+                                         <DropdownMenuItem 
+                                           onClick={() => {
+                                             setEditingForm(form);
+                                             setIsEditOpen(true);
+                                           }}
+                                           className="text-xs font-bold gap-2"
+                                         >
+                                            Edit Form
+                                         </DropdownMenuItem>
                                   <DropdownMenuItem 
                                     className="text-xs font-bold gap-2 text-rose-500"
                                     onClick={() => {
@@ -390,6 +387,19 @@ export default function FormsPage() {
            </div>
         </div>
       </Card>
+
+      <Dialog open={isEditOpen} onOpenChange={(open) => {
+        setIsEditOpen(open);
+        if (!open) setEditingForm(null);
+      }}>
+         {editingForm && (
+            <CreateFormDialog 
+               initialData={editingForm}
+               onSubmit={(data: any) => updateMutation.mutate({ id: editingForm.id, data })}
+               isSubmitting={updateMutation.isPending}
+            />
+         )}
+      </Dialog>
     </div>
   );
 }
