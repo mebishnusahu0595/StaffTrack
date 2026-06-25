@@ -147,14 +147,19 @@ export async function createForm(user: AuthUser, data: any) {
 }
 
 export async function updateForm(user: AuthUser, formId: string, data: any) {
-  const { fields, ...formData } = data;
+  const { fields, name, category, status } = data;
+
+  const updateData: any = {};
+  if (name !== undefined) updateData.name = name;
+  if (category !== undefined) updateData.category = category;
+  if (status !== undefined) updateData.status = status;
 
   await prisma.form.update({
     where: {
       id: formId,
       companyId: user.companyId
     },
-    data: formData
+    data: updateData
   });
 
   if (fields) {

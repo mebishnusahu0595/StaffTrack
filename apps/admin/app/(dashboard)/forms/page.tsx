@@ -556,7 +556,15 @@ function CreateFormDialog({ onSubmit, isSubmitting, initialData }: any) {
 
          <Button 
           className="w-full h-14 bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-100 rounded-2xl font-black uppercase tracking-widest text-xs"
-          onClick={() => onSubmit(data)}
+          onClick={() => {
+            const cleanData = {
+              name: data.name,
+              category: data.category,
+              status: data.status,
+              fields: data.fields
+            };
+            onSubmit(cleanData);
+          }}
           disabled={isSubmitting || !data.name || data.fields.length === 0}
          >
             {isSubmitting ? "Processing..." : initialData ? "Save Changes" : "Create Form"}
