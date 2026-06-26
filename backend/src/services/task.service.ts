@@ -272,6 +272,30 @@ export async function listTasks(actor: AuthUser) {
     }
   }
 
+  if (actor.role === UserRole.EMPLOYEE) {
+    for (const t of tasks) {
+      if (t.startDate) {
+        const formatOptionsDate: Intl.DateTimeFormatOptions = {
+          timeZone: "Asia/Kolkata",
+          day: "2-digit",
+          month: "short"
+        };
+        const formatOptionsTime: Intl.DateTimeFormatOptions = {
+          timeZone: "Asia/Kolkata",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true
+        };
+        const startStr = new Intl.DateTimeFormat("en-IN", formatOptionsDate).format(new Date(t.startDate));
+        const startTimeStr = new Intl.DateTimeFormat("en-IN", formatOptionsTime).format(new Date(t.startDate));
+        const dueTimeStr = new Intl.DateTimeFormat("en-IN", formatOptionsTime).format(new Date(t.dueDate));
+
+        const timingInfo = `[Start: ${startStr} @ ${startTimeStr} - ${dueTimeStr}]`;
+        t.description = t.description ? `${timingInfo}\n${t.description}` : timingInfo;
+      }
+    }
+  }
+
   return tasks;
 }
 
