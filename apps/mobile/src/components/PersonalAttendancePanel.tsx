@@ -142,7 +142,7 @@ export function PersonalAttendancePanel({
         `Please take a clear photo of the vehicle odometer for the ${type === "Start" ? "start" : "end"} of your field day.`,
         [
           { text: "Cancel", onPress: () => resolve(null), style: "cancel" },
-          { text: "Take Photo", onPress: async () => resolve(await pickVerificationImage({ quality: 0.6 })) }
+          { text: "Take Photo", onPress: async () => resolve(await pickVerificationImage({ quality: 0.3 })) }
         ],
         { cancelable: false }
       );

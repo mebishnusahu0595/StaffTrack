@@ -255,7 +255,7 @@ export async function uploadPhoto(asset: ImagePickerAsset): Promise<string> {
         "Content-Type": "multipart/form-data",
       },
       transformRequest: (data) => data,
-      timeout: 60000 
+      timeout: 180000 
     }
   );
 
@@ -296,7 +296,7 @@ export async function uploadFile(uri: string, name: string, mimeType: string): P
         "Content-Type": "multipart/form-data",
       },
       transformRequest: (data) => data,
-      timeout: 60000 
+      timeout: 180000 
     }
   );
 

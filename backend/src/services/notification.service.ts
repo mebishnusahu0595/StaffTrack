@@ -13,19 +13,20 @@ export async function createNotification(userId: string, title: string, message:
     }
   });
 
-  // Fetch the user's expoPushToken and send an Expo push notification
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { expoPushToken: true }
-    });
-
+  // Fetch token and send push notification asynchronously to avoid blocking the caller
+  prisma.user.findUnique({
+    where: { id: userId },
+    select: { expoPushToken: true }
+  }).then((user) => {
     if (user?.expoPushToken) {
-      await sendFcmPushNotification(user.expoPushToken, title, message, { notificationId: notification.id, type });
+      sendFcmPushNotification(user.expoPushToken, title, message, { notificationId: notification.id, type })
+        .catch((error) => {
+          console.error("[Notification Service] Error sending push notification:", error);
+        });
     }
-  } catch (error) {
-    console.error("[Notification Service] Error sending push notification:", error);
-  }
+  }).catch((error) => {
+    console.error("[Notification Service] Error fetching push token for notification:", error);
+  });
 
   return notification;
 }

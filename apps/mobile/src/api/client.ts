@@ -25,7 +25,7 @@ type RefreshResponse = {
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 60000
+  timeout: 120000
 });
 
 let unauthorizedHandler: (() => void) | undefined;
