@@ -72,8 +72,8 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
     const windowStart = baseStartDate ?? new Date(input.dueDate);
     const windowEnd = baseEndDate ?? new Date(input.dueDate);
     const firstDue = computeFirstOccurrence(windowStart, input.repeatFrequency, input.repeatDays, input.repeatDates);
-    baseDueDate = firstDue;
-    baseStartDate = firstDue;
+    baseDueDate = setISTTime(firstDue, new Date(input.dueDate));
+    baseStartDate = setISTTime(firstDue, windowStart);
     baseEndDate = windowEnd;
   }
 
@@ -269,7 +269,7 @@ export async function listTasks(actor: AuthUser) {
         const startTimeStr = new Intl.DateTimeFormat("en-IN", formatOptionsTime).format(new Date(t.startDate));
         const dueTimeStr = new Intl.DateTimeFormat("en-IN", formatOptionsTime).format(new Date(t.dueDate));
 
-        const timingInfo = startTimeStr === dueTimeStr
+        const timingInfo = (startTimeStr === dueTimeStr || (startTimeStr === "12:00 AM" && dueTimeStr === "11:59 PM"))
           ? `[Start: ${startStr}]`
           : `[Start: ${startStr} @ ${startTimeStr} - ${dueTimeStr}]`;
         t.description = t.description ? `${timingInfo}\n${t.description}` : timingInfo;
@@ -334,8 +334,8 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
     const days = input.repeatDays ?? task.repeatDays ?? undefined;
     const dates = input.repeatDates ?? task.repeatDates ?? undefined;
     const firstDue = computeFirstOccurrence(windowStart, freq, days, dates);
-    anchoredDue = firstDue;
-    anchoredStart = firstDue;
+    anchoredDue = setISTTime(firstDue, input.dueDate ? new Date(input.dueDate) : task.dueDate);
+    anchoredStart = setISTTime(firstDue, windowStart);
     anchoredEnd = windowEnd;
   }
 
@@ -698,6 +698,18 @@ function toIST(date: Date | string | number): Date {
 
 function fromIST(date: Date): Date {
   return new Date(date.getTime() - IST_OFFSET);
+}
+
+function setISTTime(date: Date, timeSource: Date): Date {
+  const dateIST = toIST(date);
+  const sourceIST = toIST(timeSource);
+  dateIST.setUTCHours(
+    sourceIST.getUTCHours(),
+    sourceIST.getUTCMinutes(),
+    sourceIST.getUTCSeconds(),
+    sourceIST.getUTCMilliseconds()
+  );
+  return fromIST(dateIST);
 }
 
 /**
