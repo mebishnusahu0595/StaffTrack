@@ -1,6 +1,6 @@
 import { autoCheckoutStuckUsers, autoCheckoutOldStuckSessions } from "../services/attendance.service";
 import { checkStaleLocations } from "../services/location.service";
-import { rolloverOverdueTasks } from "../services/task.service";
+import { rolloverOverdueTasks, sendDailyTaskNotifications } from "../services/task.service";
 
 export function startScheduler() {
   // 1. Immediately clean up any old stuck sessions from previous days on startup
@@ -12,6 +12,11 @@ export function startScheduler() {
   rolloverOverdueTasks()
     .then(() => console.log("[Scheduler] Initial task rollover completed."))
     .catch((err) => console.error("[Scheduler] Initial task rollover failed:", err));
+
+  // 1c. Automatically send daily task notifications on startup
+  sendDailyTaskNotifications()
+    .then(() => console.log("[Scheduler] Initial daily task notifications sent."))
+    .catch((err) => console.error("[Scheduler] Initial daily task notifications failed:", err));
 
   // 2. Schedule the daily auto-checkout to run at midnight in Indian Standard Time (IST)
   function scheduleNextRun() {
@@ -48,6 +53,12 @@ export function startScheduler() {
         console.log("[Scheduler] Scheduled daily task rollover completed.");
       } catch (error) {
         console.error("[Scheduler] Error in scheduled daily task rollover:", error);
+      }
+      try {
+        await sendDailyTaskNotifications();
+        console.log("[Scheduler] Scheduled daily task notifications sent.");
+      } catch (error) {
+        console.error("[Scheduler] Error in scheduled daily task notifications:", error);
       }
       // Recursively schedule the next day's run
       scheduleNextRun();

@@ -133,15 +133,18 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
       // Notify the subtask assignee. Skip if it's the parent assignee — they are
       // already notified about the main task below (avoids duplicate alerts).
       if (createdSub.assignedToId && createdSub.assignedToId !== task.assignedToId) {
-        try {
-          await notificationService.createNotification(
-            createdSub.assignedToId,
-            "New Subtask Assigned",
-            `You have been assigned a subtask: ${createdSub.title} (part of "${task.title}"). Due on ${createdSub.dueDate.toLocaleDateString()}`,
-            "TASK_ASSIGNED"
-          );
-        } catch (err) {
-          console.error("[Task Service] Failed to send subtask assignment notification:", err);
+        const subStartsInFuture = createdSub.startDate && createdSub.startDate > new Date();
+        if (!subStartsInFuture) {
+          try {
+            await notificationService.createNotification(
+              createdSub.assignedToId,
+              "New Subtask Assigned",
+              `You have been assigned a subtask: ${createdSub.title} (part of "${task.title}"). Due on ${createdSub.dueDate.toLocaleDateString()}`,
+              "TASK_ASSIGNED"
+            );
+          } catch (err) {
+            console.error("[Task Service] Failed to send subtask assignment notification:", err);
+          }
         }
       }
     }
@@ -153,15 +156,18 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
   }
 
   // Notify the task assignee (don't let a notification failure fail task creation)
-  try {
-    await notificationService.createNotification(
-      task.assignedToId,
-      "New Task Assigned",
-      `You have been assigned a new task: ${task.title}. Due on ${input.dueDate.toLocaleDateString()}`,
-      "TASK_ASSIGNED"
-    );
-  } catch (err) {
-    console.error("[Task Service] Failed to send task assignment notification:", err);
+  const startsInFuture = task.startDate && task.startDate > new Date();
+  if (!startsInFuture) {
+    try {
+      await notificationService.createNotification(
+        task.assignedToId,
+        "New Task Assigned",
+        `You have been assigned a new task: ${task.title}. Due on ${input.dueDate.toLocaleDateString()}`,
+        "TASK_ASSIGNED"
+      );
+    } catch (err) {
+      console.error("[Task Service] Failed to send task assignment notification:", err);
+    }
   }
 
   return task;
@@ -398,40 +404,43 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
   }
 
   // Notify employee that task has been updated/re-assigned
-  if (task.assignedToId !== updatedTask.assignedToId) {
-    // Notify the old assignee
-    try {
-      await notificationService.createNotification(
-        task.assignedToId,
-        "Task Unassigned",
-        `You have been unassigned from task: ${task.title}.`,
-        "TASK_UNASSIGNED"
-      );
-    } catch (err) {
-      console.error("Failed to send task unassigned notification:", err);
-    }
-    
-    // Notify the new assignee
-    try {
-      await notificationService.createNotification(
-        updatedTask.assignedToId,
-        "New Task Assigned",
-        `You have been assigned a new task: ${updatedTask.title}. Due on ${new Date(updatedTask.dueDate).toLocaleDateString()}`,
-        "TASK_ASSIGNED"
-      );
-    } catch (err) {
-      console.error("Failed to send task assigned notification:", err);
-    }
-  } else if (updatedTask.assignedToId && actor.id !== updatedTask.assignedToId) {
-    try {
-      await notificationService.createNotification(
-        updatedTask.assignedToId,
-        "Task Updated",
-        `Task "${updatedTask.title}" has been updated by the manager.`,
-        "TASK_UPDATED"
-      );
-    } catch (err) {
-      console.error("Failed to send task update notification:", err);
+  const updatedStartsInFuture = updatedTask.startDate && updatedTask.startDate > new Date();
+  if (!updatedStartsInFuture) {
+    if (task.assignedToId !== updatedTask.assignedToId) {
+      // Notify the old assignee
+      try {
+        await notificationService.createNotification(
+          task.assignedToId,
+          "Task Unassigned",
+          `You have been unassigned from task: ${task.title}.`,
+          "TASK_UNASSIGNED"
+        );
+      } catch (err) {
+        console.error("Failed to send task unassigned notification:", err);
+      }
+      
+      // Notify the new assignee
+      try {
+        await notificationService.createNotification(
+          updatedTask.assignedToId,
+          "New Task Assigned",
+          `You have been assigned a new task: ${updatedTask.title}. Due on ${new Date(updatedTask.dueDate).toLocaleDateString()}`,
+          "TASK_ASSIGNED"
+        );
+      } catch (err) {
+        console.error("Failed to send task assigned notification:", err);
+      }
+    } else if (updatedTask.assignedToId && actor.id !== updatedTask.assignedToId) {
+      try {
+        await notificationService.createNotification(
+          updatedTask.assignedToId,
+          "Task Updated",
+          `Task "${updatedTask.title}" has been updated by the manager.`,
+          "TASK_UPDATED"
+        );
+      } catch (err) {
+        console.error("Failed to send task update notification:", err);
+      }
     }
   }
 
@@ -880,7 +889,7 @@ export async function rolloverOverdueTasks() {
   });
 
   if (overdueTasks.length > 0) {
-    console.log(`[Task Rollover] Found \${overdueTasks.length} overdue tasks. Rolling over to \${todayStart.toISOString()} and resetting points to 0.`);
+    console.log(`[Task Rollover] Found ${overdueTasks.length} overdue tasks. Rolling over to ${todayStart.toISOString()} and resetting points to 0.`);
     await prisma.task.updateMany({
       where: {
         id: {
@@ -892,5 +901,93 @@ export async function rolloverOverdueTasks() {
         points: 0
       }
     });
+  }
+}
+
+export async function sendDailyTaskNotifications() {
+  const today = getStartOfDayIST();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  // 1. Find all pending tasks starting today
+  const startingToday = await prisma.task.findMany({
+    where: {
+      status: TaskStatus.PENDING,
+      OR: [
+        {
+          startDate: {
+            gte: today,
+            lt: tomorrow
+          }
+        },
+        {
+          parentTask: {
+            startDate: {
+              gte: today,
+              lt: tomorrow
+            }
+          }
+        }
+      ]
+    }
+  });
+
+  for (const task of startingToday) {
+    try {
+      const existing = await prisma.notification.findFirst({
+        where: {
+          userId: task.assignedToId,
+          type: "TASK_STARTED_TODAY",
+          message: { contains: task.title },
+          createdAt: { gte: today }
+        }
+      });
+
+      if (!existing) {
+        await notificationService.createNotification(
+          task.assignedToId,
+          "New Task Started",
+          `Your task "${task.title}" has started today. Please complete it.`,
+          "TASK_STARTED_TODAY"
+        );
+      }
+    } catch (err) {
+      console.error(`[Scheduler] Failed to send task start notification for task ${task.id}:`, err);
+    }
+  }
+
+  // 2. Also notify about tasks due today
+  const dueToday = await prisma.task.findMany({
+    where: {
+      status: TaskStatus.PENDING,
+      dueDate: {
+        gte: today,
+        lt: tomorrow
+      }
+    }
+  });
+
+  for (const task of dueToday) {
+    try {
+      const existing = await prisma.notification.findFirst({
+        where: {
+          userId: task.assignedToId,
+          type: "TASK_DUE_TODAY",
+          message: { contains: task.title },
+          createdAt: { gte: today }
+        }
+      });
+
+      if (!existing) {
+        await notificationService.createNotification(
+          task.assignedToId,
+          "Task Due Today",
+          `Your task "${task.title}" is due today. Please complete it.`,
+          "TASK_DUE_TODAY"
+        );
+      }
+    } catch (err) {
+      console.error(`[Scheduler] Failed to send task due notification for task ${task.id}:`, err);
+    }
   }
 }
