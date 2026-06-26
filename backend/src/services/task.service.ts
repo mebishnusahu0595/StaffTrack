@@ -649,30 +649,8 @@ async function taskAccessWhere(actor: AuthUser): Promise<Prisma.TaskWhereInput> 
     };
   }
 
-  const now = new Date();
   return {
-    assignedToId: actor.id,
-    AND: [
-      {
-        OR: [
-          { startDate: null },
-          { startDate: { lte: now } }
-        ]
-      },
-      {
-        OR: [
-          { parentTaskId: null },
-          {
-            parentTask: {
-              OR: [
-                { startDate: null },
-                { startDate: { lte: now } }
-              ]
-            }
-          }
-        ]
-      }
-    ]
+    assignedToId: actor.id
   };
 }
 
