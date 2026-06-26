@@ -1849,8 +1849,9 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
           title: "",
           description: "",
           assignedToId: "",
-          startDate: format(new Date(), 'yyyy-MM-dd'),
-          endDate: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
+          // Default to parent task's start/end dates so subtask appears on the correct calendar date
+          startDate: prev.startDate || format(new Date(), 'yyyy-MM-dd'),
+          endDate: prev.endDate || (prev.dueDate ? prev.dueDate : format(addDays(new Date(), 1), 'yyyy-MM-dd')),
           priority: "Medium",
           validations: [],
           checklist: [],
@@ -2896,8 +2897,9 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
           title: "",
           description: "",
           assignedToId: "",
-          startDate: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-          endDate: format(addDays(new Date(), 1), "yyyy-MM-dd'T'23:59"),
+          // Default to parent task's start/end dates so subtask appears on the correct calendar date
+          startDate: prev.startDate ? `${prev.startDate}T${prev.startTime || '09:00'}` : format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+          endDate: prev.endDate ? `${prev.endDate}T${prev.endTime || '23:59'}` : format(addDays(new Date(), 1), "yyyy-MM-dd'T'23:59"),
           priority: "Medium",
           validations: [],
           checklist: [],

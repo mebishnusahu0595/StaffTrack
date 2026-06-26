@@ -104,14 +104,12 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
           assignedById: actor.id,
           dueDate: sub.endDate ? new Date(sub.endDate) : (sub.dueDate ? new Date(sub.dueDate) : input.dueDate),
           startDate: (() => {
-            const parentStart = input.startDate ? new Date(input.startDate) : null;
-            let subStart = sub.startDate ? new Date(sub.startDate) : null;
-            if (parentStart) {
-              if (!subStart || subStart < parentStart) {
-                return parentStart;
-              }
+            // If subtask has an explicitly set startDate, always respect it.
+            // Only fall back to parent's startDate if no subtask startDate is provided at all.
+            if (sub.startDate) {
+              return new Date(sub.startDate);
             }
-            return subStart;
+            return input.startDate ? new Date(input.startDate) : null;
           })(),
           endDate: sub.endDate ? new Date(sub.endDate) : (input.endDate ? new Date(input.endDate) : null),
           lat: sub.lat || null,
@@ -369,16 +367,14 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
     include: taskInclude
   });
 
-  // If parent task's startDate is updated, propagate to subtasks if they are earlier or null
+  // If parent task's startDate is updated, propagate ONLY to subtasks that have no startDate set.
+  // Do NOT override subtasks that already have an explicitly set startDate.
   if (input.startDate) {
     const parentStart = new Date(input.startDate);
     await prisma.task.updateMany({
       where: {
         parentTaskId: taskId,
-        OR: [
-          { startDate: null },
-          { startDate: { lt: parentStart } }
-        ]
+        startDate: null  // Only update subtasks that have no date explicitly set
       },
       data: {
         startDate: parentStart
