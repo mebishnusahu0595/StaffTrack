@@ -33,17 +33,10 @@ export async function registerForPushNotificationsAsync() {
       return null;
     }
 
-    // Get EAS Project ID from Expo config or fallback
-    const projectId =
-      Constants?.expoConfig?.extra?.eas?.projectId ??
-      Constants?.easConfig?.projectId;
-
     token = (
-      await Notifications.getExpoPushTokenAsync({
-        projectId,
-      })
+      await Notifications.getDevicePushTokenAsync()
     ).data;
-    console.log("[Push Notification] Expo Push Token successfully fetched:", token);
+    console.log("[Push Notification] Native Device Push Token successfully fetched:", token);
   } catch (error) {
     console.error("[Push Notification] Error during push registration:", error);
   }
