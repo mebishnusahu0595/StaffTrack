@@ -59,15 +59,33 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
   const lat = input.location?.lat ?? input.lat;
   const lng = input.location?.lng ?? input.lng;
 
+  // Resolve the base occurrence dates. For repeating tasks the client sends the
+  // window end as dueDate, so we re-anchor dueDate/startDate to the FIRST matching
+  // occurrence within [startDate, endDate]; endDate stays as the series window end.
+  // Without this the series generator immediately stops (next occurrence > endDate)
+  // and no weekly/daily occurrences are ever created.
+  let baseDueDate: Date = new Date(input.dueDate);
+  let baseStartDate: Date | null = input.startDate ? new Date(input.startDate) : null;
+  let baseEndDate: Date | null = input.endDate ? new Date(input.endDate) : null;
+
+  if (input.isRepeating) {
+    const windowStart = baseStartDate ?? new Date(input.dueDate);
+    const windowEnd = baseEndDate ?? new Date(input.dueDate);
+    const firstDue = computeFirstOccurrence(windowStart, input.repeatFrequency, input.repeatDays, input.repeatDates);
+    baseDueDate = firstDue;
+    baseStartDate = firstDue;
+    baseEndDate = windowEnd;
+  }
+
   const task = await prisma.task.create({
     data: {
       title: input.title,
       description: input.description,
       assignedToId: input.assignedToId,
       assignedById: actor.id,
-      dueDate: input.dueDate,
-      startDate: input.startDate ? new Date(input.startDate) : null,
-      endDate: input.endDate ? new Date(input.endDate) : null,
+      dueDate: baseDueDate,
+      startDate: baseStartDate,
+      endDate: baseEndDate,
       lat,
       lng,
       priority: input.priority || "Medium",
@@ -93,64 +111,27 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
     include: taskInclude
   });
 
-  // If subtasks are provided, create them linked to the parent task
+  // Subtasks for the base occurrence. They default to the parent occurrence's
+  // dates; for a one-off task an explicitly set subtask date is respected.
   if (input.subtasks && input.subtasks.length > 0) {
-    for (const sub of input.subtasks) {
-      const createdSub = await prisma.task.create({
-        data: {
-          title: sub.title || sub.name || "",
-          description: sub.description || "",
-          assignedToId: sub.assignedToId || input.assignedToId,
-          assignedById: actor.id,
-          dueDate: sub.endDate ? new Date(sub.endDate) : (sub.dueDate ? new Date(sub.dueDate) : input.dueDate),
-          startDate: (() => {
-            // If subtask has an explicitly set startDate, always respect it.
-            // Only fall back to parent's startDate if no subtask startDate is provided at all.
-            if (sub.startDate) {
-              return new Date(sub.startDate);
-            }
-            return input.startDate ? new Date(input.startDate) : null;
-          })(),
-          endDate: sub.endDate ? new Date(sub.endDate) : (input.endDate ? new Date(input.endDate) : null),
-          lat: sub.lat || null,
-          lng: sub.lng || null,
-          priority: sub.priority || "Medium",
-          points: sub.points !== undefined ? sub.points : 10,
-          isRepeating: false,
-          isSubtask: true,
-          parentTaskId: task.id,
-          validations: sub.validations || null,
-          checklist: sub.checklist || null,
-          geofenceLat: sub.geofenceLat || null,
-          geofenceLng: sub.geofenceLng || null,
-          geofenceRadius: sub.geofenceRadius || null,
-          reminder: sub.reminder || null
-        }
-      });
-
-      // Notify the subtask assignee. Skip if it's the parent assignee — they are
-      // already notified about the main task below (avoids duplicate alerts).
-      if (createdSub.assignedToId && createdSub.assignedToId !== task.assignedToId) {
-        const subStartsInFuture = createdSub.startDate && createdSub.startDate > new Date();
-        if (!subStartsInFuture) {
-          try {
-            await notificationService.createNotification(
-              createdSub.assignedToId,
-              "New Subtask Assigned",
-              `You have been assigned a subtask: ${createdSub.title} (part of "${task.title}"). Due on ${createdSub.dueDate.toLocaleDateString()}`,
-              "TASK_ASSIGNED"
-            );
-          } catch (err) {
-            console.error("[Task Service] Failed to send subtask assignment notification:", err);
-          }
-        }
-      }
-    }
+    await createSubtasksForOccurrence(
+      task.id,
+      baseStartDate,
+      baseDueDate,
+      baseEndDate,
+      input.subtasks,
+      actor,
+      task.assignedToId,
+      task.title,
+      !input.isRepeating, // respect manual dates only for one-off tasks
+      true // notify
+    );
   }
 
-  // If task is repeating, pre-generate occurrences up to 180 days horizon
+  // If task is repeating, pre-generate every occurrence across the window, each
+  // carrying its own copy of the subtasks.
   if (task.isRepeating) {
-    await preGenerateTasksForSeries(task, actor.companyId);
+    await preGenerateTasksForSeries(task, actor.companyId, input.subtasks || []);
   }
 
   // Notify the task assignee (don't let a notification failure fail task creation)
@@ -333,15 +314,38 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
     forbidden("Task is outside your company");
   }
 
+  // Re-anchor a repeating task's first occurrence the same way as on create, so
+  // editing a recurring task (where the client still sends the window end as the
+  // due date) keeps the series correct.
+  const willRepeat = input.isRepeating ?? task.isRepeating;
+  let anchoredDue: Date | undefined = input.dueDate;
+  let anchoredStart: Date | undefined = input.startDate ? new Date(input.startDate) : undefined;
+  let anchoredEnd: Date | undefined = input.endDate ? new Date(input.endDate) : undefined;
+  const repeatFieldsTouched =
+    input.dueDate !== undefined || input.startDate !== undefined || input.endDate !== undefined ||
+    input.repeatFrequency !== undefined || input.repeatDays !== undefined || input.repeatDates !== undefined;
+
+  if (willRepeat && repeatFieldsTouched) {
+    const windowStart = input.startDate ? new Date(input.startDate) : (task.startDate ?? (input.dueDate ? new Date(input.dueDate) : task.dueDate));
+    const windowEnd = input.endDate ? new Date(input.endDate) : (task.endDate ?? (input.dueDate ? new Date(input.dueDate) : task.dueDate));
+    const freq = input.repeatFrequency ?? task.repeatFrequency ?? undefined;
+    const days = input.repeatDays ?? task.repeatDays ?? undefined;
+    const dates = input.repeatDates ?? task.repeatDates ?? undefined;
+    const firstDue = computeFirstOccurrence(windowStart, freq, days, dates);
+    anchoredDue = firstDue;
+    anchoredStart = firstDue;
+    anchoredEnd = windowEnd;
+  }
+
   const updatedTask = await prisma.task.update({
     where: { id: taskId },
     data: {
       title: input.title,
       description: input.description,
       status: input.status,
-      dueDate: input.dueDate,
-      startDate: input.startDate ? new Date(input.startDate) : undefined,
-      endDate: input.endDate ? new Date(input.endDate) : undefined,
+      dueDate: anchoredDue,
+      startDate: anchoredStart,
+      endDate: anchoredEnd,
       assignedToId: input.assignedToId,
       lat: input.lat,
       lng: input.lng,
@@ -391,6 +395,7 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
     await prisma.task.updateMany({
       where: {
         parentTaskId: parentId,
+        isSubtask: false, // only series occurrences, never the real subtasks
         status: TaskStatus.PENDING,
         dueDate: { gte: todayStart }
       },
@@ -404,22 +409,31 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
       }
     });
 
-    const repeatChanged = 
-      input.repeatFrequency !== undefined || 
-      input.repeatDays !== undefined || 
+    const repeatChanged =
+      input.repeatFrequency !== undefined ||
+      input.repeatDays !== undefined ||
       input.repeatDates !== undefined ||
-      input.skipHolidays !== undefined;
+      input.skipHolidays !== undefined ||
+      input.startDate !== undefined ||
+      input.endDate !== undefined;
 
     if (repeatChanged) {
-      // Clear future pending ones and re-generate
+      // Grab the existing subtask templates so regenerated occurrences keep them.
+      const subtaskTemplates = await prisma.task.findMany({
+        where: { parentTaskId: parentId, isSubtask: true },
+        orderBy: { createdAt: "asc" }
+      });
+
+      // Clear future occurrences (their subtasks cascade) and re-generate.
       await prisma.task.deleteMany({
         where: {
           parentTaskId: parentId,
+          isSubtask: false,
           status: TaskStatus.PENDING,
           dueDate: { gte: todayStart }
         }
       });
-      await preGenerateTasksForSeries(updatedTask, actor.companyId);
+      await preGenerateTasksForSeries(updatedTask, actor.companyId, subtaskTemplates);
     }
   }
 
@@ -616,12 +630,12 @@ export async function updateTaskStatus(
     const parentId = updatedTask.parentTaskId || updatedTask.id;
     const nextDueDate = await calculateNextOccurrence(updatedTask);
 
-    // Check if next occurrence already exists in series
+    // Check if next occurrence already exists in series (occurrences only, not subtasks)
     const existingNext = await prisma.task.findFirst({
       where: {
         OR: [
           { id: parentId },
-          { parentTaskId: parentId }
+          { parentTaskId: parentId, isSubtask: false }
         ],
         dueDate: {
           gte: new Date(new Date(nextDueDate).setUTCHours(0, 0, 0, 0)),
@@ -674,8 +688,106 @@ async function taskAccessWhere(actor: AuthUser): Promise<Prisma.TaskWhereInput> 
   };
 }
 
-async function preGenerateTasksForSeries(baseTask: any, companyId: string) {
-  const horizonDays = 180;
+/**
+ * The first occurrence on/after `windowStart` matching the recurrence rule.
+ * Unlike calculateNextOccurrence (which always advances), this can return the
+ * start day itself when it already matches the selected weekday/date.
+ */
+function computeFirstOccurrence(
+  windowStart: Date,
+  frequency?: string,
+  repeatDays?: string,
+  repeatDates?: string
+): Date {
+  const d = new Date(windowStart);
+  d.setUTCHours(0, 0, 0, 0);
+  const freq = frequency ? frequency.toUpperCase() : null;
+
+  if (freq === "WEEKLY" && repeatDays) {
+    const allowedDays = repeatDays.split(",").map(Number).filter((n) => !Number.isNaN(n));
+    let count = 0;
+    while (allowedDays.length > 0 && !allowedDays.includes(d.getUTCDay()) && count < 8) {
+      d.setUTCDate(d.getUTCDate() + 1);
+      count++;
+    }
+  } else if (freq === "MONTHLY" && repeatDates) {
+    const allowedDates = repeatDates.split(",").map(Number).filter((n) => !Number.isNaN(n));
+    let count = 0;
+    while (allowedDates.length > 0 && !allowedDates.includes(d.getUTCDate()) && count < 32) {
+      d.setUTCDate(d.getUTCDate() + 1);
+      count++;
+    }
+  }
+  // DAILY or no day/date selection → the window start itself.
+  return d;
+}
+
+/** Creates the subtasks for a single occurrence (base task or a generated one). */
+async function createSubtasksForOccurrence(
+  parentTaskId: string,
+  occStart: Date | null,
+  occDue: Date,
+  occEnd: Date | null,
+  subtasks: any[],
+  actor: AuthUser,
+  parentAssigneeId: string,
+  parentTitle: string,
+  respectManualDates: boolean,
+  notify: boolean
+) {
+  for (const sub of subtasks) {
+    const subStart = respectManualDates && sub.startDate ? new Date(sub.startDate) : occStart;
+    const subDue =
+      respectManualDates && (sub.endDate || sub.dueDate)
+        ? new Date(sub.endDate || sub.dueDate)
+        : occDue;
+    const subEnd = respectManualDates && sub.endDate ? new Date(sub.endDate) : occEnd;
+
+    const createdSub = await prisma.task.create({
+      data: {
+        title: sub.title || sub.name || "",
+        description: sub.description || "",
+        assignedToId: sub.assignedToId || parentAssigneeId,
+        assignedById: actor.id,
+        dueDate: subDue,
+        startDate: subStart,
+        endDate: subEnd,
+        lat: sub.lat || null,
+        lng: sub.lng || null,
+        priority: sub.priority || "Medium",
+        points: sub.points !== undefined ? sub.points : 10,
+        isRepeating: false,
+        isSubtask: true,
+        parentTaskId,
+        validations: sub.validations || null,
+        checklist: sub.checklist || null,
+        geofenceLat: sub.geofenceLat ?? null,
+        geofenceLng: sub.geofenceLng ?? null,
+        geofenceRadius: sub.geofenceRadius ?? null,
+        reminder: sub.reminder ?? null
+      }
+    });
+
+    if (notify && createdSub.assignedToId && createdSub.assignedToId !== parentAssigneeId) {
+      const subStartsInFuture = createdSub.startDate && createdSub.startDate > new Date();
+      if (!subStartsInFuture) {
+        try {
+          await notificationService.createNotification(
+            createdSub.assignedToId,
+            "New Subtask Assigned",
+            `You have been assigned a subtask: ${createdSub.title} (part of "${parentTitle}"). Due on ${createdSub.dueDate.toLocaleDateString()}`,
+            "TASK_ASSIGNED"
+          );
+        } catch (err) {
+          console.error("[Task Service] Failed to send subtask assignment notification:", err);
+        }
+      }
+    }
+  }
+}
+
+async function preGenerateTasksForSeries(baseTask: any, companyId: string, subtasks: any[] = []) {
+  const horizonDays = 366;
   let maxDate = new Date();
   maxDate.setDate(maxDate.getDate() + horizonDays);
 
@@ -699,12 +811,12 @@ async function preGenerateTasksForSeries(baseTask: any, companyId: string) {
     assignedTo: { companyId }
   };
 
-  const tasksToCreate = [];
-
-  while (true) {
+  let guard = 0;
+  while (guard < 400) {
+    guard++;
     const nextDueDate = await calculateNextOccurrence(currentTaskState);
     if (nextDueDate.getTime() <= currentTaskState.dueDate.getTime()) {
-      console.warn("[Task Service] calculateNextOccurrence did not advance date. Terminating loop to prevent hang. current:", currentTaskState.dueDate, "next:", nextDueDate);
+      console.warn("[Task Service] calculateNextOccurrence did not advance date. Terminating loop to prevent hang.");
       break;
     }
     if (nextDueDate > maxDate) {
@@ -715,37 +827,54 @@ async function preGenerateTasksForSeries(baseTask: any, companyId: string) {
       ? new Date(nextDueDate.getTime() - startDateOffset)
       : null;
 
-    tasksToCreate.push({
-      title: baseTask.title,
-      description: baseTask.description,
-      assignedToId: baseTask.assignedToId,
-      assignedById: baseTask.assignedById,
-      dueDate: new Date(nextDueDate),
-      startDate: calculatedStartDate,
-      endDate: baseTask.endDate ? new Date(baseTask.endDate) : null,
-      lat: baseTask.lat,
-      lng: baseTask.lng,
-      isRepeating: true,
-      repeatFrequency: baseTask.repeatFrequency,
-      repeatDays: baseTask.repeatDays,
-      repeatDates: baseTask.repeatDates,
-      skipHolidays: baseTask.skipHolidays,
-      priority: baseTask.priority,
-      points: baseTask.points === 0 ? 10 : baseTask.points,
-      parentTaskId: baseTask.id,
-      attachmentUrl: baseTask.attachmentUrl,
-      attachmentName: baseTask.attachmentName,
-      templateId: baseTask.templateId || null
+    // Create each occurrence individually so we can attach its own subtasks.
+    const occurrence = await prisma.task.create({
+      data: {
+        title: baseTask.title,
+        description: baseTask.description,
+        assignedToId: baseTask.assignedToId,
+        assignedById: baseTask.assignedById,
+        dueDate: new Date(nextDueDate),
+        startDate: calculatedStartDate,
+        endDate: baseTask.endDate ? new Date(baseTask.endDate) : null,
+        lat: baseTask.lat,
+        lng: baseTask.lng,
+        isRepeating: true,
+        repeatFrequency: baseTask.repeatFrequency,
+        repeatDays: baseTask.repeatDays,
+        repeatDates: baseTask.repeatDates,
+        skipHolidays: baseTask.skipHolidays,
+        priority: baseTask.priority,
+        points: baseTask.points === 0 ? 10 : baseTask.points,
+        parentTaskId: baseTask.id,
+        validations: baseTask.validations ?? undefined,
+        checklist: baseTask.checklist ?? undefined,
+        geofenceLat: baseTask.geofenceLat,
+        geofenceLng: baseTask.geofenceLng,
+        geofenceRadius: baseTask.geofenceRadius,
+        reminder: baseTask.reminder,
+        attachmentUrl: baseTask.attachmentUrl,
+        attachmentName: baseTask.attachmentName,
+        templateId: baseTask.templateId || null
+      }
     });
 
-    // Move state to next occurrence
+    if (subtasks && subtasks.length > 0) {
+      await createSubtasksForOccurrence(
+        occurrence.id,
+        calculatedStartDate ?? new Date(nextDueDate),
+        new Date(nextDueDate),
+        baseTask.endDate ? new Date(baseTask.endDate) : null,
+        subtasks,
+        { id: baseTask.assignedById } as AuthUser,
+        baseTask.assignedToId,
+        baseTask.title,
+        false, // occurrences always align subtasks to the occurrence date
+        false // don't spam notifications for future occurrences
+      );
+    }
+
     currentTaskState.dueDate = new Date(nextDueDate);
-  }
-
-  if (tasksToCreate.length > 0) {
-    await prisma.task.createMany({
-      data: tasksToCreate
-    });
   }
 }
 
@@ -843,6 +972,9 @@ const taskInclude = {
     }
   },
   subtasks: {
+    // Only real subtasks — never the generated repeat occurrences, which also
+    // share parentTaskId with their series anchor.
+    where: { isSubtask: true },
     include: {
       assignedTo: {
         select: {
