@@ -269,9 +269,7 @@ export async function listTasks(actor: AuthUser) {
         const startTimeStr = new Intl.DateTimeFormat("en-IN", formatOptionsTime).format(new Date(t.startDate));
         const dueTimeStr = new Intl.DateTimeFormat("en-IN", formatOptionsTime).format(new Date(t.dueDate));
 
-        const timingInfo = (startTimeStr === dueTimeStr || (startTimeStr === "12:00 AM" && dueTimeStr === "11:59 PM"))
-          ? `[Start: ${startStr}]`
-          : `[Start: ${startStr} @ ${startTimeStr} - ${dueTimeStr}]`;
+        const timingInfo = `[Start: ${startStr} @ ${startTimeStr} - ${dueTimeStr}]`;
         t.description = t.description ? `${timingInfo}\n${t.description}` : timingInfo;
       }
     }
