@@ -269,7 +269,9 @@ export async function listTasks(actor: AuthUser) {
         const startTimeStr = new Intl.DateTimeFormat("en-IN", formatOptionsTime).format(new Date(t.startDate));
         const dueTimeStr = new Intl.DateTimeFormat("en-IN", formatOptionsTime).format(new Date(t.dueDate));
 
-        const timingInfo = `[Start: ${startStr} @ ${startTimeStr} - ${dueTimeStr}]`;
+        const timingInfo = startTimeStr === dueTimeStr
+          ? `[Start: ${startStr}]`
+          : `[Start: ${startStr} @ ${startTimeStr} - ${dueTimeStr}]`;
         t.description = t.description ? `${timingInfo}\n${t.description}` : timingInfo;
       }
     }
@@ -638,8 +640,8 @@ export async function updateTaskStatus(
           { parentTaskId: parentId, isSubtask: false }
         ],
         dueDate: {
-          gte: new Date(new Date(nextDueDate).setUTCHours(0, 0, 0, 0)),
-          lte: new Date(new Date(nextDueDate).setUTCHours(23, 59, 59, 999))
+          gte: fromIST(new Date(toIST(nextDueDate).setUTCHours(0, 0, 0, 0))),
+          lte: fromIST(new Date(toIST(nextDueDate).setUTCHours(23, 59, 59, 999)))
         }
       }
     });
@@ -688,6 +690,16 @@ async function taskAccessWhere(actor: AuthUser): Promise<Prisma.TaskWhereInput> 
   };
 }
 
+const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+
+function toIST(date: Date | string | number): Date {
+  return new Date(new Date(date).getTime() + IST_OFFSET);
+}
+
+function fromIST(date: Date): Date {
+  return new Date(date.getTime() - IST_OFFSET);
+}
+
 /**
  * The first occurrence on/after `windowStart` matching the recurrence rule.
  * Unlike calculateNextOccurrence (which always advances), this can return the
@@ -699,27 +711,35 @@ function computeFirstOccurrence(
   repeatDays?: string,
   repeatDates?: string
 ): Date {
-  const d = new Date(windowStart);
-  d.setUTCHours(0, 0, 0, 0);
+  const originalIST = toIST(windowStart);
+  const hours = originalIST.getUTCHours();
+  const minutes = originalIST.getUTCMinutes();
+  const seconds = originalIST.getUTCSeconds();
+  const ms = originalIST.getUTCMilliseconds();
+
+  const dIST = toIST(windowStart);
+  dIST.setUTCHours(0, 0, 0, 0);
   const freq = frequency ? frequency.toUpperCase() : null;
 
   if (freq === "WEEKLY" && repeatDays) {
     const allowedDays = repeatDays.split(",").map(Number).filter((n) => !Number.isNaN(n));
     let count = 0;
-    while (allowedDays.length > 0 && !allowedDays.includes(d.getUTCDay()) && count < 8) {
-      d.setUTCDate(d.getUTCDate() + 1);
+    while (allowedDays.length > 0 && !allowedDays.includes(dIST.getUTCDay()) && count < 8) {
+      dIST.setUTCDate(dIST.getUTCDate() + 1);
       count++;
     }
   } else if (freq === "MONTHLY" && repeatDates) {
     const allowedDates = repeatDates.split(",").map(Number).filter((n) => !Number.isNaN(n));
     let count = 0;
-    while (allowedDates.length > 0 && !allowedDates.includes(d.getUTCDate()) && count < 32) {
-      d.setUTCDate(d.getUTCDate() + 1);
+    while (allowedDates.length > 0 && !allowedDates.includes(dIST.getUTCDate()) && count < 32) {
+      dIST.setUTCDate(dIST.getUTCDate() + 1);
       count++;
     }
   }
-  // DAILY or no day/date selection → the window start itself.
-  return d;
+
+  // Restore the original time component in IST
+  dIST.setUTCHours(hours, minutes, seconds, ms);
+  return fromIST(dIST);
 }
 
 /** Creates the subtasks for a single occurrence (base task or a generated one). */
@@ -879,8 +899,14 @@ async function preGenerateTasksForSeries(baseTask: any, companyId: string, subta
 }
 
 async function calculateNextOccurrence(task: any) {
-  let next = new Date(task.dueDate);
-  next.setUTCHours(0, 0, 0, 0);
+  const originalIST = toIST(task.dueDate);
+  const hours = originalIST.getUTCHours();
+  const minutes = originalIST.getUTCMinutes();
+  const seconds = originalIST.getUTCSeconds();
+  const ms = originalIST.getUTCMilliseconds();
+
+  const dIST = toIST(task.dueDate);
+  dIST.setUTCHours(0, 0, 0, 0);
 
   const frequency = task.repeatFrequency ? task.repeatFrequency.toUpperCase() : null;
   const days = task.repeatDays;
@@ -888,35 +914,35 @@ async function calculateNextOccurrence(task: any) {
   const skipHolidays = task.skipHolidays;
 
   if (frequency === 'DAILY') {
-    next.setUTCDate(next.getUTCDate() + 1);
+    dIST.setUTCDate(dIST.getUTCDate() + 1);
   } else if (frequency === 'WEEKLY' && days) {
     const allowedDays = days.split(',').map(Number); // 0-6
     let count = 0;
     do {
-      next.setUTCDate(next.getUTCDate() + 1);
+      dIST.setUTCDate(dIST.getUTCDate() + 1);
       count++;
-    } while (!allowedDays.includes(next.getUTCDay()) && count < 8);
+    } while (!allowedDays.includes(dIST.getUTCDay()) && count < 8);
   } else if (frequency === 'MONTHLY' && dates) {
     const allowedDates = dates.split(',').map(Number); // 1-31
     let count = 0;
     do {
-      next.setUTCDate(next.getUTCDate() + 1);
+      dIST.setUTCDate(dIST.getUTCDate() + 1);
       count++;
-    } while (!allowedDates.includes(next.getUTCDate()) && count < 32);
+    } while (!allowedDates.includes(dIST.getUTCDate()) && count < 32);
   } else {
     // Fallback
-    if (frequency === 'DAILY') next.setUTCDate(next.getUTCDate() + 1);
-    else if (frequency === 'WEEKLY') next.setUTCDate(next.getUTCDate() + 7);
-    else if (frequency === 'MONTHLY') next.setUTCMonth(next.getUTCMonth() + 1);
+    if (frequency === 'DAILY') dIST.setUTCDate(dIST.getUTCDate() + 1);
+    else if (frequency === 'WEEKLY') dIST.setUTCDate(dIST.getUTCDate() + 7);
+    else if (frequency === 'MONTHLY') dIST.setUTCMonth(dIST.getUTCMonth() + 1);
   }
 
   if (skipHolidays) {
     let isHoliday = true;
     let iterations = 0;
     while (isHoliday && iterations < 30) {
-      next.setUTCHours(0, 0, 0, 0);
-      const startOfDay = new Date(next.getTime());
-      const endOfDay = new Date(next.getTime());
+      dIST.setUTCHours(0, 0, 0, 0);
+      const startOfDay = fromIST(dIST);
+      const endOfDay = new Date(startOfDay.getTime());
       endOfDay.setUTCHours(23, 59, 59, 999);
 
       const holiday = await prisma.holiday.findFirst({
@@ -929,7 +955,7 @@ async function calculateNextOccurrence(task: any) {
         }
       });
       if (holiday) {
-        next.setUTCDate(next.getUTCDate() + 1);
+        dIST.setUTCDate(dIST.getUTCDate() + 1);
       } else {
         isHoliday = false;
       }
@@ -937,8 +963,8 @@ async function calculateNextOccurrence(task: any) {
     }
   }
 
-  next.setUTCHours(0, 0, 0, 0);
-  return next;
+  dIST.setUTCHours(hours, minutes, seconds, ms);
+  return fromIST(dIST);
 }
 
 const taskInclude = {
