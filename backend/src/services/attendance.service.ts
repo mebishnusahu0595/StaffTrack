@@ -228,6 +228,37 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
     console.error("[Attendance Service] Failed to send check-in notification:", err);
   }
 
+  // Send Push Notification to employee for their assigned tasks
+  try {
+    const todayStart = startOfDay(now);
+    const todayEnd = new Date(todayStart);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const activeTasks = await prisma.task.findMany({
+      where: {
+        assignedToId: actor.id,
+        status: { in: ["PENDING", "IN_PROGRESS"] },
+        dueDate: { lte: todayEnd }
+      },
+      select: { title: true }
+    });
+
+    if (activeTasks.length > 0) {
+      const taskTitle = "Your Assigned Tasks Today";
+      const taskList = activeTasks.map((t, idx) => `${idx + 1}. ${t.title}`).join(", ");
+      const taskMessage = `You have ${activeTasks.length} task${activeTasks.length > 1 ? 's' : ''} pending: ${taskList}`;
+      
+      await notificationService.createNotification(
+        actor.id,
+        taskTitle,
+        taskMessage,
+        "TASK_CHECKIN_SUMMARY"
+      );
+    }
+  } catch (err) {
+    console.error("[Attendance Service] Failed to send tasks check-in notification to employee:", err);
+  }
+
   return result;
 }
 

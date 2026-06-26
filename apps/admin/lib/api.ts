@@ -356,6 +356,16 @@ export async function fetchUserFormResponses(userId: string) {
   return response.data.data;
 }
 
+export async function sendBroadcast(data: {
+  userIds?: string[];
+  allSelected?: boolean;
+  title: string;
+  message: string;
+}) {
+  const response = await api.post<{ success: boolean; count: number }>("/notifications/broadcast", data);
+  return response.data;
+}
+
 // Templates
 export async function fetchTemplates(params?: { type?: string; search?: string }) {
   const response = await api.get<{ data: any[] }>("/templates", { params });

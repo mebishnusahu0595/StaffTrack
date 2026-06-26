@@ -67,7 +67,9 @@ async function sendExpoPushNotification(token: string, title: string, message: s
         sound: "default",
         title,
         body: message,
-        data: data || {}
+        data: data || {},
+        channelId: "default",
+        priority: "high"
       })
     });
     const result = await response.json();
@@ -75,4 +77,68 @@ async function sendExpoPushNotification(token: string, title: string, message: s
   } catch (error) {
     console.error("[Push Notification] Error sending to Expo:", error);
   }
+}
+
+export async function sendBroadcastNotification(senderId: string, input: {
+  userIds?: string[];
+  allSelected?: boolean;
+  title: string;
+  message: string;
+}) {
+  const { userIds, allSelected, title, message } = input;
+  
+  let targetUserIds: string[] = [];
+  if (allSelected) {
+    const users = await prisma.user.findMany({
+      where: {
+        role: {
+          in: ["EMPLOYEE", "MANAGER"]
+        }
+      },
+      select: { id: true }
+    });
+    targetUserIds = users.map(u => u.id);
+  } else if (userIds && userIds.length > 0) {
+    targetUserIds = userIds;
+  }
+  
+  if (targetUserIds.length === 0) {
+    return { success: false, message: "No target users found" };
+  }
+
+  // Create notifications in database
+  const notificationsData = targetUserIds.map(userId => ({
+    userId,
+    title,
+    message,
+    type: "BROADCAST"
+  }));
+
+  await prisma.notification.createMany({
+    data: notificationsData
+  });
+
+  // Fetch users with tokens to send push notification
+  const usersWithTokens = await prisma.user.findMany({
+    where: {
+      id: { in: targetUserIds },
+      expoPushToken: { not: null }
+    },
+    select: { id: true, expoPushToken: true }
+  });
+
+  // Send push notifications in parallel
+  const pushPromises = usersWithTokens.map(async (u) => {
+    if (u.expoPushToken) {
+      try {
+        await sendExpoPushNotification(u.expoPushToken, title, message, { type: "BROADCAST" });
+      } catch (err) {
+        console.error(`Failed to send push to user ${u.id}:`, err);
+      }
+    }
+  });
+
+  await Promise.all(pushPromises);
+
+  return { success: true, count: targetUserIds.length };
 }
