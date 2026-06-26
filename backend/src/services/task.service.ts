@@ -103,7 +103,16 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
           assignedToId: sub.assignedToId || input.assignedToId,
           assignedById: actor.id,
           dueDate: sub.endDate ? new Date(sub.endDate) : (sub.dueDate ? new Date(sub.dueDate) : input.dueDate),
-          startDate: sub.startDate ? new Date(sub.startDate) : (input.startDate ? new Date(input.startDate) : null),
+          startDate: (() => {
+            const parentStart = input.startDate ? new Date(input.startDate) : null;
+            let subStart = sub.startDate ? new Date(sub.startDate) : null;
+            if (parentStart) {
+              if (!subStart || subStart < parentStart) {
+                return parentStart;
+              }
+            }
+            return subStart;
+          })(),
           endDate: sub.endDate ? new Date(sub.endDate) : (input.endDate ? new Date(input.endDate) : null),
           lat: sub.lat || null,
           lng: sub.lng || null,
@@ -329,6 +338,23 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
     },
     include: taskInclude
   });
+
+  // If parent task's startDate is updated, propagate to subtasks if they are earlier or null
+  if (input.startDate) {
+    const parentStart = new Date(input.startDate);
+    await prisma.task.updateMany({
+      where: {
+        parentTaskId: taskId,
+        OR: [
+          { startDate: null },
+          { startDate: { lt: parentStart } }
+        ]
+      },
+      data: {
+        startDate: parentStart
+      }
+    });
+  }
 
   // If this task is part of a repeating series, propagate updates to all future pending child tasks
   if (updatedTask.isRepeating) {
@@ -617,9 +643,26 @@ async function taskAccessWhere(actor: AuthUser): Promise<Prisma.TaskWhereInput> 
   const now = new Date();
   return {
     assignedToId: actor.id,
-    OR: [
-      { startDate: null },
-      { startDate: { lte: now } }
+    AND: [
+      {
+        OR: [
+          { startDate: null },
+          { startDate: { lte: now } }
+        ]
+      },
+      {
+        OR: [
+          { parentTaskId: null },
+          {
+            parentTask: {
+              OR: [
+                { startDate: null },
+                { startDate: { lte: now } }
+              ]
+            }
+          }
+        ]
+      }
     ]
   };
 }

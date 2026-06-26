@@ -238,7 +238,28 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
       where: {
         assignedToId: actor.id,
         status: { in: ["PENDING", "IN_PROGRESS"] },
-        dueDate: { lte: todayEnd }
+        dueDate: { lte: todayEnd },
+        AND: [
+          {
+            OR: [
+              { startDate: null },
+              { startDate: { lte: now } }
+            ]
+          },
+          {
+            OR: [
+              { parentTaskId: null },
+              {
+                parentTask: {
+                  OR: [
+                    { startDate: null },
+                    { startDate: { lte: now } }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
       },
       select: { title: true }
     });
