@@ -157,7 +157,11 @@ export async function updateAttendance(req: Request, res: Response): Promise<voi
     checkInPhotoUrl,
     checkOutPhotoUrl,
     startOdometerPhotoUrl,
-    endOdometerPhotoUrl
+    endOdometerPhotoUrl,
+    checkInLat,
+    checkInLng,
+    checkOutLat,
+    checkOutLng
   } = req.body;
 
   let existing = null;
@@ -191,6 +195,10 @@ export async function updateAttendance(req: Request, res: Response): Promise<voi
 
   const startOdo = startOdometer !== undefined ? (startOdometer !== null && startOdometer !== "" ? Number(startOdometer) : null) : undefined;
   const endOdo = endOdometer !== undefined ? (endOdometer !== null && endOdometer !== "" ? Number(endOdometer) : null) : undefined;
+  const parsedCheckInLat = checkInLat !== undefined ? (checkInLat !== null && checkInLat !== "" ? Number(checkInLat) : null) : undefined;
+  const parsedCheckInLng = checkInLng !== undefined ? (checkInLng !== null && checkInLng !== "" ? Number(checkInLng) : null) : undefined;
+  const parsedCheckOutLat = checkOutLat !== undefined ? (checkOutLat !== null && checkOutLat !== "" ? Number(checkOutLat) : null) : undefined;
+  const parsedCheckOutLng = checkOutLng !== undefined ? (checkOutLng !== null && checkOutLng !== "" ? Number(checkOutLng) : null) : undefined;
 
   // Build a data object that only touches fields the superadmin actually sent.
   const data: Record<string, unknown> = {};
@@ -213,6 +221,10 @@ export async function updateAttendance(req: Request, res: Response): Promise<voi
   if (checkOutPhotoUrl !== undefined) data.checkOutPhotoUrl = checkOutPhotoUrl || null;
   if (startOdometerPhotoUrl !== undefined) data.startOdometerPhotoUrl = startOdometerPhotoUrl || null;
   if (endOdometerPhotoUrl !== undefined) data.endOdometerPhotoUrl = endOdometerPhotoUrl || null;
+  if (parsedCheckInLat !== undefined) data.checkInLat = parsedCheckInLat;
+  if (parsedCheckInLng !== undefined) data.checkInLng = parsedCheckInLng;
+  if (parsedCheckOutLat !== undefined) data.checkOutLat = parsedCheckOutLat;
+  if (parsedCheckOutLng !== undefined) data.checkOutLng = parsedCheckOutLng;
 
   const finalCheckInTime = data.checkInTime !== undefined ? data.checkInTime : (existing ? existing.checkInTime : null);
   const finalPunchType = data.punchType !== undefined ? data.punchType : (existing ? existing.punchType : null);
@@ -646,6 +658,62 @@ export async function bulkMarkAttendance(req: Request, res: Response): Promise<v
   }
 
   sendSuccess(res, results, `Bulk attendance updated for ${results.length} days`);
+}
+
+export async function updateTravelDistance(req: Request, res: Response): Promise<void> {
+  const { userId, date, km } = req.body;
+
+  if (!userId || !date || km === undefined) {
+    res.status(400).json({ success: false, message: "Missing required fields" });
+    return;
+  }
+
+  const targetDate = new Date(date);
+  targetDate.setHours(0, 0, 0, 0);
+  const newKm = Number(km);
+
+  // 1. Update/Create DayEndReport
+  await prisma.dayEndReport.upsert({
+    where: {
+      userId_date: {
+        userId,
+        date: targetDate
+      }
+    },
+    update: {
+      kmTravelled: newKm
+    },
+    create: {
+      userId,
+      date: targetDate,
+      visitsSummary: "Updated via admin console",
+      ordersTaken: 0,
+      ordersCancelled: 0,
+      kmTravelled: newKm,
+      remarks: "Updated via admin console"
+    }
+  });
+
+  // 2. Update Attendance start/end odometer if attendance exists
+  const attendance = await prisma.attendance.findFirst({
+    where: {
+      userId,
+      date: targetDate
+    }
+  });
+
+  if (attendance) {
+    const startOdo = attendance.startOdometer !== null ? attendance.startOdometer : 0;
+    await prisma.attendance.update({
+      where: { id: attendance.id },
+      data: {
+        startOdometer: startOdo,
+        endOdometer: startOdo + newKm
+      }
+    });
+  }
+
+  sendSuccess(res, null, "Travel distance updated successfully");
 }
 
 

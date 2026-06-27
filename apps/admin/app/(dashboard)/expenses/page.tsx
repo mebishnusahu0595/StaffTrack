@@ -94,15 +94,39 @@ function ExpenseTable({
                 </Dialog>
               </TableCell>
               <TableCell className="text-right px-8">
-                <div className="flex justify-end gap-2">
+                <div className="flex justify-end gap-2 items-center">
                   {expense.approved ? (
-                    <Badge className="bg-emerald-50 text-emerald-600 border-emerald-100 font-bold text-[10px] uppercase px-3 py-1">
-                      Approved
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-emerald-50 text-emerald-600 border-emerald-100 font-bold text-[10px] uppercase px-3 py-1">
+                        Approved
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2 text-slate-400 hover:text-slate-600 font-bold text-xs"
+                        onClick={() => onDecision(expense.id, null as any)}
+                        disabled={isUpdating}
+                        title="Revert to Pending"
+                      >
+                        Undo
+                      </Button>
+                    </div>
                   ) : expense.approvedById ? (
-                    <Badge className="bg-rose-50 text-rose-600 border-rose-100 font-bold text-[10px] uppercase px-3 py-1">
-                      Rejected
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-rose-50 text-rose-600 border-rose-100 font-bold text-[10px] uppercase px-3 py-1">
+                        Rejected
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2 text-slate-400 hover:text-slate-600 font-bold text-xs"
+                        onClick={() => onDecision(expense.id, null as any)}
+                        disabled={isUpdating}
+                        title="Revert to Pending"
+                      >
+                        Undo
+                      </Button>
+                    </div>
                   ) : (
                     <>
                       <Button 
@@ -145,10 +169,13 @@ export default function ExpensesPage() {
   const queryClient = useQueryClient();
   const expensesQuery = useQuery({ queryKey: ["expenses"], queryFn: () => fetchExpenses() });
   const mutation = useMutation({
-    mutationFn: ({ id, approved }: { id: string; approved: boolean }) => approveExpense(id, approved),
+    mutationFn: ({ id, approved }: { id: string; approved: boolean | null }) => approveExpense(id, approved),
     onSuccess: async (_, variables) => {
       await queryClient.invalidateQueries({ queryKey: ["expenses"] });
-      alert(`Expense successfully ${variables.approved ? "approved" : "rejected"}!`);
+      let statusMsg = "reverted to pending";
+      if (variables.approved === true) statusMsg = "approved";
+      else if (variables.approved === false) statusMsg = "rejected";
+      alert(`Expense successfully ${statusMsg}!`);
     },
     onError: (error) => {
       alert(`Failed to update expense: ${error instanceof Error ? error.message : String(error)}`);

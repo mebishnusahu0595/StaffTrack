@@ -17,16 +17,18 @@ import {
   Building2,
   CircleSlash
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
-import { fetchTeamOverview, superFetchManagers } from "@/lib/api";
+import { fetchTeamOverview, superFetchManagers, superUpdateTravelDistance } from "@/lib/api";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 type TeamMember = any;
@@ -42,6 +44,54 @@ export default function TeamOverviewPage() {
   const [search, setSearch] = useState("");
   const [managerId, setManagerId] = useState<string | undefined>(undefined);
   const [selected, setSelected] = useState<TeamMember | null>(null);
+
+  const queryClient = useQueryClient();
+  const [editingTravel, setEditingTravel] = useState<{ date: string; value: number } | null>(null);
+  const [editTravelKm, setEditTravelKm] = useState("");
+  const [savingTravel, setSavingTravel] = useState(false);
+
+  const handleSaveTravelDistance = async () => {
+    if (!selected || !editingTravel) return;
+    setSavingTravel(true);
+    try {
+      const km = parseFloat(editTravelKm);
+      if (isNaN(km) || km < 0) {
+        alert("Please enter a valid non-negative distance");
+        setSavingTravel(false);
+        return;
+      }
+      await superUpdateTravelDistance({
+        userId: selected.user.id,
+        date: editingTravel.date,
+        km
+      });
+      await queryClient.invalidateQueries({ queryKey: ["team-overview"] });
+      
+      // Update selected locally for immediate UI update
+      const updatedByDay = selected.travel.byDay.map((t: any) =>
+        t.date === editingTravel.date ? { ...t, value: km } : t
+      );
+      const totalKm = updatedByDay.reduce((sum: number, t: any) => sum + t.value, 0);
+      setSelected({
+        ...selected,
+        stats: {
+          ...selected.stats,
+          totalKm
+        },
+        travel: {
+          ...selected.travel,
+          totalKm,
+          byDay: updatedByDay
+        }
+      });
+      setEditingTravel(null);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to update travel distance");
+    } finally {
+      setSavingTravel(false);
+    }
+  };
 
   const month = cursor.month() + 1;
   const year = cursor.year();
@@ -293,7 +343,47 @@ export default function TeamOverviewPage() {
         )}
       </div>
 
-      <MemberDetailSheet member={selected} onClose={() => setSelected(null)} />
+      <MemberDetailSheet
+        member={selected}
+        onClose={() => setSelected(null)}
+        onEditTravel={(date, value) => {
+          setEditingTravel({ date, value });
+          setEditTravelKm(value.toString());
+        }}
+      />
+
+      {/* EDIT TRAVEL DISTANCE DIALOG */}
+      <Dialog open={Boolean(editingTravel)} onOpenChange={(o) => !o && setEditingTravel(null)}>
+        <DialogContent className="max-w-md bg-white border-none shadow-2xl rounded-[28px]">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black text-slate-900">Edit Distance Travelled</DialogTitle>
+            <DialogDescription className="text-xs text-slate-500 font-medium">
+              Update travel distance for {selected?.user?.name} on {editingTravel && dayjs(editingTravel.date).format("DD MMM YYYY")}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Distance (KM)</Label>
+              <Input
+                type="number"
+                step="any"
+                className="h-12 rounded-2xl bg-slate-50 border-none focus:bg-white transition-all font-bold text-xs"
+                value={editTravelKm}
+                onChange={(e) => setEditTravelKm(e.target.value)}
+                placeholder="e.g. 12.5"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" className="rounded-xl font-bold text-slate-500" onClick={() => setEditingTravel(null)} disabled={savingTravel}>
+              Cancel
+            </Button>
+            <Button className="rounded-xl bg-blue-600 font-bold hover:bg-blue-700 text-white" onClick={handleSaveTravelDistance} disabled={savingTravel}>
+              {savingTravel ? "Saving..." : "Save Distance"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -314,7 +404,18 @@ function Stat({ label, value, tone }: { label: string; value: React.ReactNode; t
   );
 }
 
-function MemberDetailSheet({ member, onClose }: { member: TeamMember | null; onClose: () => void }) {
+function MemberDetailSheet({
+  member,
+  onClose,
+  onEditTravel
+}: {
+  member: TeamMember | null;
+  onClose: () => void;
+  onEditTravel: (date: string, value: number) => void;
+}) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPERADMIN";
+
   return (
     <Sheet open={!!member} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full sm:max-w-2xl p-0 overflow-y-auto bg-slate-50 border-none">
@@ -365,26 +466,62 @@ function MemberDetailSheet({ member, onClose }: { member: TeamMember | null; onC
               {/* Travel + expense */}
               <Section title="Travel & Expenses">
                 <div className="grid grid-cols-3 gap-3">
-                  <Stat label="Total KM" value={`${(member.stats?.totalKm ?? 0).toFixed(0)}`} tone="indigo" />
+                  <Stat label="Total KM" value={`${(member.stats?.totalKm ?? 0).toFixed(1)} km`} tone="indigo" />
                   <Stat label="Today Exp." value={inr(member.stats?.todayExpense ?? 0)} tone="blue" />
                   <Stat label="Month Exp." value={inr(member.stats?.monthExpense ?? 0)} tone="rose" />
                 </div>
+
+                {/* Daily Travel logs list */}
+                <div className="mt-4 space-y-2">
+                  <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Daily Travel Log</h4>
+                  {member.travel?.byDay && member.travel.byDay.length > 0 ? (
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {member.travel.byDay.map((t: any) => (
+                        <div key={t.date} className="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-100">
+                          <div>
+                            <p className="text-xs font-black text-slate-800">{dayjs(t.date).format("DD MMM YYYY")}</p>
+                            <p className="text-[10px] font-bold text-slate-400">Distance Travelled</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-black text-slate-900">{Number(t.value).toFixed(1)} km</span>
+                            {isAdmin && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 px-2 text-xs text-blue-600 hover:text-blue-700 font-bold"
+                                onClick={() => onEditTravel(t.date, t.value)}
+                              >
+                                Edit
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <Empty label="No travel logs this month" />
+                  )}
+                </div>
+
                 {(member.expenses?.items?.length ?? 0) > 0 && (
-                  <div className="mt-3 space-y-2">
-                    {member.expenses.items.slice(0, 8).map((e: any) => (
-                      <div key={e.id} className="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-100">
-                        <div>
-                          <p className="text-xs font-black text-slate-800">{e.category}</p>
-                          <p className="text-[10px] font-bold text-slate-400">{dayjs(e.date).format("MMM DD")} · {e.description || "—"}</p>
+                  <div className="mt-4 space-y-2">
+                    <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Expenses List</h4>
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {member.expenses.items.slice(0, 8).map((e: any) => (
+                        <div key={e.id} className="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-100">
+                          <div>
+                            <p className="text-xs font-black text-slate-800">{e.category}</p>
+                            <p className="text-[10px] font-bold text-slate-400">{dayjs(e.date).format("MMM DD")} · {e.description || "—"}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-slate-900">{inr(e.amount)}</span>
+                            <Badge className={cn("text-[8px] font-black uppercase rounded", e.approved ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600")}>
+                              {e.approved ? "OK" : "Pending"}
+                            </Badge>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-black text-slate-900">{inr(e.amount)}</span>
-                          <Badge className={cn("text-[8px] font-black uppercase rounded", e.approved ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600")}>
-                            {e.approved ? "OK" : "Pending"}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 )}
               </Section>

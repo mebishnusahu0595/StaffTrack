@@ -2,7 +2,7 @@
  
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download, Battery } from "lucide-react";
+import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download, Battery, CheckCircle2, XCircle, AlertCircle, CalendarX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -73,6 +73,26 @@ export default function AttendancePage() {
  
   const employees = usersQuery.data?.items ?? [];
   const attendanceData = useMemo(() => attendanceQuery.data ?? [], [attendanceQuery.data]);
+  const summaryCounts = useMemo(() => {
+    let present = 0;
+    let absent = 0;
+    let halfDay = 0;
+    let onLeave = 0;
+    attendanceData.forEach((r) => {
+      if (r.status === "PRESENT") present++;
+      else if (r.status === "ABSENT") absent++;
+      else if (r.status === "HALF_DAY") halfDay++;
+      else if (r.status === "ON_LEAVE") onLeave++;
+    });
+    return {
+      present,
+      absent,
+      halfDay,
+      onLeave,
+      total: attendanceData.length
+    };
+  }, [attendanceData]);
+
   const markMutation = useMutation({
     mutationFn: markAttendanceStatus,
     onSuccess: () => {
@@ -230,6 +250,64 @@ export default function AttendancePage() {
         </div>
       </div>
 
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <Card className="border-none shadow-sm ring-1 ring-slate-200/50 bg-white">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total Rostered</p>
+              <h3 className="text-xl font-bold text-slate-900 mt-1">{summaryCounts.total}</h3>
+            </div>
+            <div className="h-10 w-10 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 text-slate-400">
+              <UserIcon className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-none shadow-sm ring-1 ring-slate-200/50 bg-white">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-emerald-500">Present</p>
+              <h3 className="text-xl font-bold text-emerald-600 mt-1">{summaryCounts.present}</h3>
+            </div>
+            <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center border border-emerald-100">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-none shadow-sm ring-1 ring-slate-200/50 bg-white">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-rose-500">Absent</p>
+              <h3 className="text-xl font-bold text-rose-600 mt-1">{summaryCounts.absent}</h3>
+            </div>
+            <div className="h-10 w-10 rounded-xl bg-rose-50 flex items-center justify-center border border-rose-100">
+              <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-none shadow-sm ring-1 ring-slate-200/50 bg-white">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-amber-500">Half Day</p>
+              <h3 className="text-xl font-bold text-amber-600 mt-1">{summaryCounts.halfDay}</h3>
+            </div>
+            <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center border border-amber-100">
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-none shadow-sm ring-1 ring-slate-200/50 bg-white col-span-2 md:col-span-1">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-blue-500">On Leave</p>
+              <h3 className="text-xl font-bold text-blue-600 mt-1">{summaryCounts.onLeave}</h3>
+            </div>
+            <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100">
+              <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card className="border-none shadow-sm shadow-slate-200/60 ring-1 ring-slate-200/50 overflow-hidden">
         <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/30">
            <div className="flex items-center gap-4">
@@ -266,6 +344,7 @@ export default function AttendancePage() {
         <Table>
           <TableHeader className="bg-slate-50/50">
             <TableRow className="hover:bg-transparent border-slate-100">
+              <TableHead className="py-4 px-4 text-[11px] font-black uppercase tracking-wider text-slate-400 text-center w-12">S.No.</TableHead>
               <TableHead className="py-4 px-8 text-[11px] font-black uppercase tracking-wider text-slate-400">Employee</TableHead>
               <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Check In</TableHead>
               <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Check Out</TableHead>
@@ -278,7 +357,7 @@ export default function AttendancePage() {
           <TableBody>
             {attendanceQuery.isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-40 text-center">
+                <TableCell colSpan={8} className="h-40 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <div className="h-6 w-6 border-2 border-blue-600 border-t-transparent animate-spin rounded-full" />
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Fetching records...</span>
@@ -287,7 +366,7 @@ export default function AttendancePage() {
               </TableRow>
             ) : filteredData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-40 text-center">
+                <TableCell colSpan={8} className="h-40 text-center">
                   <div className="flex flex-col items-center gap-2 text-slate-300">
                     <UserIcon className="h-10 w-10 opacity-20" />
                     <span className="text-xs font-bold uppercase tracking-widest">No records found for this date.</span>
@@ -295,12 +374,15 @@ export default function AttendancePage() {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredData.map((record) => (
+              filteredData.map((record, index) => (
                 <TableRow 
                   key={record.id} 
                   className="group hover:bg-blue-50/30 border-slate-50 transition-colors cursor-pointer"
                   onClick={() => setViewingRecord(record)}
                 >
+                  <TableCell className="py-5 px-4 text-center text-xs font-bold text-slate-500">
+                    {index + 1}
+                  </TableCell>
                   <TableCell className="py-5 px-8">
                     <div className="flex items-center gap-3">
                       <Avatar className="h-9 w-9 border border-slate-100 shadow-sm ring-2 ring-white">

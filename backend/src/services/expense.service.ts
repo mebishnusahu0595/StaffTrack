@@ -77,7 +77,7 @@ export async function listExpenses(actor: AuthUser, input: ListExpensesInput) {
   });
 }
 
-export async function approveExpense(actor: AuthUser, expenseId: string, approved: boolean) {
+export async function approveExpense(actor: AuthUser, expenseId: string, approved: boolean | null) {
   const expense = await prisma.expense.findUnique({
     where: { id: expenseId }
   });
@@ -92,24 +92,32 @@ export async function approveExpense(actor: AuthUser, expenseId: string, approve
     forbidden("Employees cannot approve expenses");
   }
 
+  const updateData: Prisma.ExpenseUpdateInput = {};
+  if (approved === null) {
+    updateData.approved = false;
+    updateData.approvedBy = { disconnect: true };
+  } else {
+    updateData.approved = approved;
+    updateData.approvedBy = { connect: { id: actor.id } };
+  }
+
   const updatedExpense = await prisma.expense.update({
     where: { id: expenseId },
-    data: {
-      approved,
-      approvedById: actor.id
-    }
+    data: updateData
   });
 
-  // Create notification
-  try {
-    await notificationService.createNotification(
-      expense.userId,
-      `Expense ${approved ? "Approved" : "Rejected"}`,
-      `Your expense request of ₹${expense.amount} for ${expense.category.toLowerCase().replace(/_/g, " ")} has been ${approved ? "approved" : "rejected"} by ${actor.name}.`,
-      "EXPENSE"
-    );
-  } catch (err) {
-    console.error("Failed to send expense notification:", err);
+  // Create notification only if we're making an approval decision (not resetting to pending)
+  if (approved !== null) {
+    try {
+      await notificationService.createNotification(
+        expense.userId,
+        `Expense ${approved ? "Approved" : "Rejected"}`,
+        `Your expense request of ₹${expense.amount} for ${expense.category.toLowerCase().replace(/_/g, " ")} has been ${approved ? "approved" : "rejected"} by ${actor.name}.`,
+        "EXPENSE"
+      );
+    } catch (err) {
+      console.error("Failed to send expense notification:", err);
+    }
   }
 
   return updatedExpense;

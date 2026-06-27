@@ -265,6 +265,10 @@ export default function SuperDashboardPage() {
         punchType: editAtt.punchType,
         checkInTime: editAtt.checkInTime || null,
         checkOutTime: editAtt.checkOutTime || null,
+        checkInLat: editAtt.checkInLat,
+        checkInLng: editAtt.checkInLng,
+        checkOutLat: editAtt.checkOutLat,
+        checkOutLng: editAtt.checkOutLng,
         startOdometer: editAtt.startOdometer,
         endOdometer: editAtt.endOdometer,
         checkInPhotoUrl: editAtt.checkInPhotoUrl,
@@ -1106,6 +1110,34 @@ export default function SuperDashboardPage() {
                       setEditAtt({ ...editAtt, checkInTime: e.target.value ? new Date(e.target.value).toISOString() : null })
                     }
                   />
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <div>
+                      <Label className="text-[10px] font-bold uppercase text-slate-400">Check-In Lat</Label>
+                      <Input
+                        type="number"
+                        step="any"
+                        placeholder="Latitude"
+                        value={editAtt.checkInLat ?? ""}
+                        onChange={(e) =>
+                          setEditAtt({ ...editAtt, checkInLat: e.target.value === "" ? null : Number(e.target.value) })
+                        }
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] font-bold uppercase text-slate-400">Check-In Lng</Label>
+                      <Input
+                        type="number"
+                        step="any"
+                        placeholder="Longitude"
+                        value={editAtt.checkInLng ?? ""}
+                        onChange={(e) =>
+                          setEditAtt({ ...editAtt, checkInLng: e.target.value === "" ? null : Number(e.target.value) })
+                        }
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <div className="flex justify-between items-center mb-1">
@@ -1119,6 +1151,8 @@ export default function SuperDashboardPage() {
                           setEditAtt({
                             ...editAtt,
                             checkOutTime: null,
+                            checkOutLat: null,
+                            checkOutLng: null,
                             checkOutPhotoUrl: null,
                             endOdometer: null,
                             endOdometerPhotoUrl: null
@@ -1136,6 +1170,34 @@ export default function SuperDashboardPage() {
                       setEditAtt({ ...editAtt, checkOutTime: e.target.value ? new Date(e.target.value).toISOString() : null })
                     }
                   />
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <div>
+                      <Label className="text-[10px] font-bold uppercase text-slate-400">Check-Out Lat</Label>
+                      <Input
+                        type="number"
+                        step="any"
+                        placeholder="Latitude"
+                        value={editAtt.checkOutLat ?? ""}
+                        onChange={(e) =>
+                          setEditAtt({ ...editAtt, checkOutLat: e.target.value === "" ? null : Number(e.target.value) })
+                        }
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] font-bold uppercase text-slate-400">Check-Out Lng</Label>
+                      <Input
+                        type="number"
+                        step="any"
+                        placeholder="Longitude"
+                        value={editAtt.checkOutLng ?? ""}
+                        onChange={(e) =>
+                          setEditAtt({ ...editAtt, checkOutLng: e.target.value === "" ? null : Number(e.target.value) })
+                        }
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <Label className="text-xs font-bold uppercase text-slate-500">Start Odometer (KM)</Label>

@@ -30,5 +30,7 @@ router.get("/tasks", asyncHandler(superadminController.getAllTasks));
 router.patch("/tasks/:id", asyncHandler(superadminController.updateTask));
 router.delete("/tasks/:id", asyncHandler(superadminController.deleteTask));
 
+router.patch("/travel", asyncHandler(superadminController.updateTravelDistance));
+
 export default router;
 

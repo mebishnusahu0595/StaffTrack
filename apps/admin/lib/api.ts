@@ -446,7 +446,7 @@ export async function clearAttendanceStatus(input: { userId: string; date: strin
 
 
 
-export async function approveExpense(id: string, approved: boolean) {
+export async function approveExpense(id: string, approved: boolean | null) {
   const response = await api.patch<{ data: Expense }>(`/expenses/${id}/approve`, { approved });
   return response.data.data;
 }
@@ -727,6 +727,11 @@ export async function setSalarySlipStatus(id: string, status: "DRAFT" | "PUBLISH
 export async function deleteSalarySlip(id: string) {
   const response = await api.delete<{ data: any }>(`/salary-slips/${id}`);
   return response.data.data;
+}
+
+export async function superUpdateTravelDistance(payload: { userId: string; date: string; km: number }) {
+  const response = await api.patch<{ success: boolean }>("/superadmin/travel", payload);
+  return response.data;
 }
 
 

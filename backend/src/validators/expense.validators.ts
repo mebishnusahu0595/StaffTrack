@@ -16,7 +16,7 @@ export const listExpensesQuerySchema = z.object({
 });
 
 export const approveExpenseBodySchema = z.object({
-  approved: z.boolean()
+  approved: z.boolean().nullable()
 });
 
 export const expenseIdParamSchema = idParamSchema;
