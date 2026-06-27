@@ -36,12 +36,9 @@ export async function createLocationLogs(
       return new Date(current.timestamp) > new Date(latest.timestamp) ? current : latest;
     });
 
-    await prisma.user.update({
-      where: { id: actor.id },
-      data: {
-        isLocationOn: true,
-        ...(latestLog.batteryLevel !== undefined && { batteryLevel: latestLog.batteryLevel })
-      }
+    await updateLocationStatus(actor, {
+      isLocationOn: true,
+      batteryLevel: latestLog.batteryLevel
     });
 
     // Notify listeners that location has updated
@@ -73,7 +70,7 @@ export async function updateLocationStatus(
   });
 
   // If location is turned off:
-  if (!input.isLocationOn && !input.isStale) {
+  if (!input.isLocationOn) {
     // 1. Pause working hours by auto-starting break if punched in on FIELD
     const activeAttendance = await prisma.attendance.findFirst({
       where: {
@@ -92,10 +89,12 @@ export async function updateLocationStatus(
       });
 
       if (!activeBreak) {
+        // Use user.locationOffAt or new Date() as break startTime to be precise
+        const breakStartTime = user.locationOffAt || new Date();
         await prisma.break.create({
           data: {
             attendanceId: activeAttendance.id,
-            startTime: new Date()
+            startTime: breakStartTime
           }
         });
 
@@ -108,45 +107,47 @@ export async function updateLocationStatus(
       }
     }
 
-    // 2. Alert manager and admins
-    const batteryInfo = input.batteryLevel !== undefined ? `${input.batteryLevel}%` : "N/A";
-    const alertMessage = `${actor.name} has turned off their location. Battery level: ${batteryInfo}.`;
+    // 2. Alert manager and admins (only if it was manually turned off, i.e., NOT stale)
+    if (!input.isStale) {
+      const batteryInfo = input.batteryLevel !== undefined ? `${input.batteryLevel}%` : "N/A";
+      const alertMessage = `${actor.name} has turned off their location. Battery level: ${batteryInfo}.`;
 
-    if (user.managerId) {
-      await notificationService.createNotification(
-        user.managerId,
-        "Location Alert",
-        alertMessage,
-        "LOCATION_OFF"
-      );
-    }
-
-    const admins = await prisma.user.findMany({
-      where: {
-        companyId: actor.companyId,
-        role: { in: ["ADMIN", "SUPERADMIN"] }
-      },
-      select: { id: true }
-    });
-
-    for (const admin of admins) {
-      if (admin.id !== user.managerId) {
+      if (user.managerId) {
         await notificationService.createNotification(
-          admin.id,
+          user.managerId,
           "Location Alert",
           alertMessage,
           "LOCATION_OFF"
         );
       }
-    }
 
-    // Emit live popup WS event for current logged-in admins
-    getIO().to(`company:${actor.companyId}`).emit("LOCATION_OFF_EVENT", {
-      userId: actor.id,
-      name: actor.name,
-      batteryLevel: input.batteryLevel ?? null,
-      timestamp: new Date().toISOString()
-    });
+      const admins = await prisma.user.findMany({
+        where: {
+          companyId: actor.companyId,
+          role: { in: ["ADMIN", "SUPERADMIN"] }
+        },
+        select: { id: true }
+      });
+
+      for (const admin of admins) {
+        if (admin.id !== user.managerId) {
+          await notificationService.createNotification(
+            admin.id,
+            "Location Alert",
+            alertMessage,
+            "LOCATION_OFF"
+          );
+        }
+      }
+
+      // Emit live popup WS event for current logged-in admins
+      getIO().to(`company:${actor.companyId}`).emit("LOCATION_OFF_EVENT", {
+        userId: actor.id,
+        name: actor.name,
+        batteryLevel: input.batteryLevel ?? null,
+        timestamp: new Date().toISOString()
+      });
+    }
   } else {
     // If location is turned back on, resume working hours by auto-ending break if active
     const activeAttendance = await prisma.attendance.findFirst({
