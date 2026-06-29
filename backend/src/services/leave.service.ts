@@ -3,7 +3,11 @@ const prisma = new PrismaClient();
 import type { AuthUser } from "../types/auth";
 import * as notificationService from "./notification.service";
 
-export async function createLeaveRequest(userId: string, companyId: string, data: { startDate: Date; endDate: Date; reason: string }) {
+export async function createLeaveRequest(
+  userId: string,
+  companyId: string,
+  data: { startDate: Date; endDate: Date; reason: string; status?: LeaveStatus; approvedById?: string }
+) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { name: true, managerId: true }
@@ -16,11 +20,12 @@ export async function createLeaveRequest(userId: string, companyId: string, data
       startDate: new Date(data.startDate),
       endDate: new Date(data.endDate),
       reason: data.reason,
-      status: "PENDING"
+      status: data.status || "PENDING",
+      approvedById: data.status === "APPROVED" ? data.approvedById : null
     }
   });
 
-  if (user?.managerId) {
+  if (user?.managerId && leave.status === "PENDING") {
     try {
       await notificationService.createNotification(
         user.managerId,
@@ -30,6 +35,53 @@ export async function createLeaveRequest(userId: string, companyId: string, data
       );
     } catch (err) {
       console.error("[Leave Service] Failed to send leave request notification:", err);
+    }
+  }
+
+  // If approved, mark attendance as ON_LEAVE for those dates
+  if (leave.status === "APPROVED") {
+    const start = new Date(leave.startDate);
+    const end = new Date(leave.endDate);
+    
+    const dates: Date[] = [];
+    let current = new Date(start);
+    while (current <= end) {
+      dates.push(new Date(current));
+      current.setDate(current.getDate() + 1);
+    }
+
+    for (const date of dates) {
+      const dateStr = date.toISOString().split('T')[0];
+      const startOfDay = new Date(dateStr);
+
+      const existing = await prisma.attendance.findFirst({
+        where: {
+          userId: leave.userId,
+          date: startOfDay
+        },
+        select: { id: true }
+      });
+
+      if (existing) {
+        await prisma.attendance.updateMany({
+          where: {
+            userId: leave.userId,
+            date: startOfDay
+          },
+          data: {
+            status: "ON_LEAVE"
+          }
+        });
+        continue;
+      }
+
+      await prisma.attendance.create({
+        data: {
+          userId: leave.userId,
+          date: startOfDay,
+          status: "ON_LEAVE"
+        }
+      });
     }
   }
 

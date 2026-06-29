@@ -39,7 +39,8 @@ import {
   createHoliday,
   fetchEmployees,
   updateLeaveType,
-  deleteLeaveType
+  deleteLeaveType,
+  submitLeaveRequest
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -134,6 +135,7 @@ export default function LeaveManagementPage() {
   const [assignSelectedUsers, setAssignSelectedUsers] = useState<string[]>([]);
   const [assignCycle, setAssignCycle] = useState<"ONCE" | "WEEKLY" | "MONTHLY">("ONCE");
   const [assignMonthlyDates, setAssignMonthlyDates] = useState<number[]>([]);
+  const [assignStatus, setAssignStatus] = useState<"APPROVED" | "PENDING">("APPROVED");
 
   // Fetch employees
   const employeesQuery = useQuery({
@@ -178,13 +180,30 @@ export default function LeaveManagementPage() {
 
       const targetUserIds = assignSelectedUsers.length > 0 ? assignSelectedUsers : undefined;
 
-      for (const d of dates) {
-        await createHoliday({
-          date: new Date(d),
-          name: assignName,
-          type: assignType,
-          userIds: targetUserIds
-        });
+      if (!targetUserIds || targetUserIds.length === 0) {
+        alert("Please select at least one employee.");
+        return;
+      }
+
+      if (assignType === "PAID_LEAVE") {
+        for (const userId of targetUserIds) {
+          await submitLeaveRequest({
+            startDate: assignStartDate,
+            endDate: assignEndDate,
+            reason: assignName,
+            userId,
+            status: assignStatus
+          });
+        }
+      } else {
+        for (const d of dates) {
+          await createHoliday({
+            date: new Date(d),
+            name: assignName,
+            type: assignType,
+            userIds: targetUserIds
+          });
+        }
       }
 
       alert("Leaves/Holidays assigned successfully!");
@@ -195,6 +214,7 @@ export default function LeaveManagementPage() {
       setAssignSelectedUsers([]);
       
       void queryClient.invalidateQueries({ queryKey: ["holidays"] });
+      void queryClient.invalidateQueries({ queryKey: ["leaves"] });
     } catch (err) {
       console.error(err);
       alert("Failed to assign leaves/holidays");
@@ -523,6 +543,20 @@ export default function LeaveManagementPage() {
                     <option value="FESTIVAL">Festival / Special Day</option>
                  </select>
               </div>
+
+              {assignType === "PAID_LEAVE" && (
+                 <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Status *</Label>
+                    <select 
+                       value={assignStatus}
+                       onChange={(e: any) => setAssignStatus(e.target.value as any)}
+                       className="w-full h-12 px-4 rounded-2xl bg-slate-50 border border-slate-200/60 focus:bg-white transition-all font-bold text-xs outline-none"
+                    >
+                       <option value="APPROVED">Approved</option>
+                       <option value="PENDING">Pending</option>
+                    </select>
+                 </div>
+              )}
 
               <div className="space-y-2">
                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Title / Name *</Label>

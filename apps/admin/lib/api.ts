@@ -568,7 +568,7 @@ export async function updateLeaveStatus(id: string, status: "APPROVED" | "REJECT
   return response.data.data;
 }
 
-export async function submitLeaveRequest(data: { startDate: string; endDate: string; reason: string }) {
+export async function submitLeaveRequest(data: { startDate: string; endDate: string; reason: string; userId?: string; status?: string }) {
   const response = await api.post<{ data: any }>("/leaves", data);
   return response.data.data;
 }

@@ -4,10 +4,19 @@ import { leaveSetupService } from "../services/leave-setup.service";
 import { sendSuccess } from "../lib/response";
 
 export async function createLeaveRequest(req: Request, res: Response) {
+  const isEmployee = req.user!.role === "EMPLOYEE";
+  const targetUserId = (!isEmployee && req.body.userId) ? req.body.userId : req.user!.id;
+  const status = (!isEmployee && req.body.status) ? req.body.status : "PENDING";
+  const approvedById = status === "APPROVED" ? req.user!.id : undefined;
+
   const result = await leaveService.createLeaveRequest(
-    req.user!.id,
+    targetUserId,
     req.user!.companyId,
-    req.body
+    {
+      ...req.body,
+      status,
+      approvedById
+    }
   );
   sendSuccess(res, result, "Leave request submitted", 201);
 }
