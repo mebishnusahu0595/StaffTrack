@@ -355,1299 +355,363 @@ export default function LeaveManagementPage() {
           </h1>
         </div>
 
-        {/* Console Switcher Tab list */}
-        <div className="bg-slate-100 p-1.5 rounded-2xl flex items-center self-start md:self-auto shadow-inner border border-slate-200/40">
-          <button
-            onClick={() => setActiveMainTab("requests")}
-            className={cn(
-              "px-5 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all",
-              activeMainTab === "requests" 
-                ? "bg-white text-blue-600 shadow-sm"
-                : "text-slate-500 hover:text-slate-800"
-            )}
-          >
-            Leave Requests
-          </button>
-          <button
-            onClick={() => setActiveMainTab("calendar")}
-            className={cn(
-              "px-5 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all",
-              activeMainTab === "calendar" 
-                ? "bg-white text-blue-600 shadow-sm"
-                : "text-slate-500 hover:text-slate-800"
-            )}
-          >
-            Leave Calendar
-          </button>
-          <button
-            onClick={() => setActiveMainTab("setup")}
-            className={cn(
-              "px-5 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all",
-              activeMainTab === "setup" 
-                ? "bg-white text-blue-600 shadow-sm"
-                : "text-slate-500 hover:text-slate-800"
-            )}
-          >
-            Leave Setup
-          </button>
+        <Button
+          onClick={() => {
+            setDrawerTab("assign");
+            setIsCreateDrawerOpen(true);
+          }}
+          className="h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold gap-2 px-5 shadow-lg shadow-blue-100 self-start md:self-auto"
+        >
+          <Plus className="h-4.5 w-4.5" />
+          Assign Leave / Off
+        </Button>
+      </div>
+
+      {/* ==================== LEAVE REQUESTS ==================== */}
+      <div className="space-y-8 animate-in fade-in duration-300">
+        <div className="flex flex-col md:flex-row gap-6 items-center justify-between bg-white p-6 rounded-[32px] border border-slate-200/60 shadow-sm">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-auto">
+            <TabsList className="bg-slate-100 p-1 rounded-2xl h-12">
+              <TabsTrigger value="PENDING" className="rounded-xl px-6 font-black text-[10px] uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-blue-600 shadow-none">Pending</TabsTrigger>
+              <TabsTrigger value="APPROVED" className="rounded-xl px-6 font-black text-[10px] uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-emerald-600 shadow-none">Approved</TabsTrigger>
+              <TabsTrigger value="REJECTED" className="rounded-xl px-6 font-black text-[10px] uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-rose-600 shadow-none">Rejected</TabsTrigger>
+              <TabsTrigger value="ALL" className="rounded-xl px-6 font-black text-[10px] uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-slate-600 shadow-none">All</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="relative w-full md:w-80">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input 
+                placeholder="Search by name or reason..." 
+                className="h-12 pl-12 rounded-2xl bg-slate-50 border-none focus:bg-white transition-all font-bold text-xs" 
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <Button 
+              variant="outline" 
+              className="rounded-2xl border-slate-200 bg-white font-bold text-slate-700 gap-2 h-12 shadow-sm px-5 hover:bg-slate-50 text-xs flex-shrink-0"
+              onClick={downloadCSV}
+              disabled={filteredLeaves.length === 0}
+            >
+              <Download className="h-4 w-4 text-slate-500" /> Export
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {leavesQuery.isLoading ? (
+            Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-64 bg-white rounded-[32px] animate-pulse border border-slate-100" />
+            ))
+          ) : filteredLeaves.length === 0 ? (
+            <div className="col-span-full py-24 text-center space-y-4 bg-white rounded-[40px] border-none shadow-sm ring-1 ring-slate-200/60">
+               <div className="h-20 w-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-slate-200">
+                  <Calendar className="h-10 w-10" />
+                </div>
+                <div>
+                   <p className="text-xl font-black text-slate-900">No Applications Found</p>
+                   <p className="text-slate-400 font-bold text-sm">There are no leave requests matching your filters.</p>
+                </div>
+            </div>
+          ) : (
+            filteredLeaves.map((leave: any) => (
+              <Card key={leave.id} className="rounded-[32px] border-none shadow-sm ring-1 ring-slate-200/60 hover:ring-blue-400 transition-all duration-300 group bg-white overflow-hidden text-left">
+                 <CardHeader className="p-6 border-b border-slate-50">
+                    <div className="flex justify-between items-start">
+                       <div className="flex items-center gap-3">
+                          <Avatar className="h-12 w-12 rounded-2xl border-2 border-white shadow-md">
+                             <AvatarImage src={leave.user?.avatarUrl} />
+                             <AvatarFallback className="bg-slate-50 text-slate-400 font-bold">
+                                {leave.user?.name?.[0] || '?'}
+                             </AvatarFallback>
+                          </Avatar>
+                          <div>
+                             <h3 className="font-black text-slate-900 leading-none">{leave.user?.name || 'Unknown'}</h3>
+                             <p className="text-[10px] font-black uppercase text-slate-400 mt-1">{leave.user?.designation || 'Staff'}</p>
+                          </div>
+                       </div>
+                       <Badge className={cn(
+                          "text-[9px] font-black uppercase px-2 py-0.5 rounded-md border",
+                          leave.status === "PENDING" ? "bg-amber-50 text-amber-600 border-amber-100" :
+                          leave.status === "APPROVED" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                          "bg-rose-50 text-rose-600 border-rose-100"
+                       )}>
+                          {leave.status}
+                       </Badge>
+                    </div>
+                 </CardHeader>
+                 <CardContent className="p-6 space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                       <div className="p-3 rounded-2xl bg-slate-50/50 border border-slate-100">
+                          <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Start Date</p>
+                          <p className="text-xs font-black text-slate-700">{dayjs(leave.startDate).format("MMM DD, YYYY")}</p>
+                       </div>
+                       <div className="p-3 rounded-2xl bg-slate-50/50 border border-slate-100">
+                          <p className="text-[9px] font-black uppercase text-slate-400 mb-1">End Date</p>
+                          <p className="text-xs font-black text-slate-700">{dayjs(leave.endDate).format("MMM DD, YYYY")}</p>
+                       </div>
+                    </div>
+
+                    <div className="space-y-2">
+                       <div className="flex items-center gap-2">
+                          <MessageSquare className="h-3 w-3 text-slate-400" />
+                          <span className="text-[9px] font-black uppercase text-slate-400">Reason</span>
+                       </div>
+                       <p className="text-xs font-medium text-slate-600 leading-relaxed bg-slate-50 p-4 rounded-2xl border border-slate-100/50">
+                          {leave.reason}
+                       </p>
+                    </div>
+
+                    {leave.status === "PENDING" && (
+                       <div className="flex gap-3 pt-2">
+                          <Button 
+                            className="flex-1 h-12 bg-emerald-600 hover:bg-emerald-700 rounded-2xl text-white font-black uppercase text-[10px] tracking-widest shadow-lg shadow-emerald-100"
+                            onClick={() => updateLeaveStatusMutation.mutate({ id: leave.id, status: "APPROVED" })}
+                            disabled={updateLeaveStatusMutation.isPending}
+                          >
+                             {updateLeaveStatusMutation.isPending ? "..." : "Approve"}
+                          </Button>
+                          <Button 
+                            variant="ghost"
+                            className="flex-1 h-12 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-2xl font-black uppercase text-[10px] tracking-widest"
+                            onClick={() => updateLeaveStatusMutation.mutate({ id: leave.id, status: "REJECTED" })}
+                            disabled={updateLeaveStatusMutation.isPending}
+                          >
+                             Reject
+                          </Button>
+                       </div>
+                    )}
+
+                    {leave.status !== "PENDING" && (
+                       <div className="pt-2 flex items-center gap-2">
+                          <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center">
+                             <UserIcon className="h-4 w-4 text-slate-400" />
+                          </div>
+                          <p className="text-[10px] font-bold text-slate-400 italic">
+                             {leave.status.toLowerCase()} by {leave.approvedBy?.name || 'Admin'} on {dayjs(leave.updatedAt).format("MMM DD")}
+                          </p>
+                       </div>
+                    )}
+                 </CardContent>
+              </Card>
+            ))
+          )}
         </div>
       </div>
 
-      {/* ==================== TAB 1: LEAVE REQUESTS ==================== */}
-      {activeMainTab === "requests" && (
-        <div className="space-y-8 animate-in fade-in duration-300">
-          <div className="flex flex-col md:flex-row gap-6 items-center justify-between bg-white p-6 rounded-[32px] border border-slate-200/60 shadow-sm">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-auto">
-              <TabsList className="bg-slate-100 p-1 rounded-2xl h-12">
-                <TabsTrigger value="PENDING" className="rounded-xl px-6 font-black text-[10px] uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-blue-600 shadow-none">Pending</TabsTrigger>
-                <TabsTrigger value="APPROVED" className="rounded-xl px-6 font-black text-[10px] uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-emerald-600 shadow-none">Approved</TabsTrigger>
-                <TabsTrigger value="REJECTED" className="rounded-xl px-6 font-black text-[10px] uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-rose-600 shadow-none">Rejected</TabsTrigger>
-                <TabsTrigger value="ALL" className="rounded-xl px-6 font-black text-[10px] uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-slate-600 shadow-none">All</TabsTrigger>
-              </TabsList>
-            </Tabs>
+      {/* Create New Leave Drawer */}
+      <Sheet open={isCreateDrawerOpen} onOpenChange={setIsCreateDrawerOpen}>
+        <SheetContent className="w-full sm:max-w-md p-8 overflow-y-auto bg-white rounded-l-[32px] border-none shadow-2xl flex flex-col justify-between">
+          <div className="space-y-8">
+            <SheetHeader className="text-left">
+              <SheetTitle className="text-2xl font-black text-slate-900">Assign Leave / Off</SheetTitle>
+            </SheetHeader>
 
-            <div className="flex items-center gap-3 w-full md:w-auto">
-              <div className="relative w-full md:w-80">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input 
-                  placeholder="Search by name or reason..." 
-                  className="h-12 pl-12 rounded-2xl bg-slate-50 border-none focus:bg-white transition-all font-bold text-xs" 
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                />
-              </div>
-              <Button 
-                variant="outline" 
-                className="rounded-2xl border-slate-200 bg-white font-bold text-slate-700 gap-2 h-12 shadow-sm px-5 hover:bg-slate-50 text-xs flex-shrink-0"
-                onClick={downloadCSV}
-                disabled={filteredLeaves.length === 0}
-              >
-                <Download className="h-4 w-4 text-slate-500" /> Export
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {leavesQuery.isLoading ? (
-              Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-64 bg-white rounded-[32px] animate-pulse border border-slate-100" />
-              ))
-            ) : filteredLeaves.length === 0 ? (
-              <div className="col-span-full py-24 text-center space-y-4 bg-white rounded-[40px] border-none shadow-sm ring-1 ring-slate-200/60">
-                 <div className="h-20 w-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-slate-200">
-                    <Calendar className="h-10 w-10" />
-                  </div>
-                  <div>
-                     <p className="text-xl font-black text-slate-900">No Applications Found</p>
-                     <p className="text-slate-400 font-bold text-sm">There are no leave requests matching your filters.</p>
-                  </div>
-              </div>
-            ) : (
-              filteredLeaves.map((leave: any) => (
-                <Card key={leave.id} className="rounded-[32px] border-none shadow-sm ring-1 ring-slate-200/60 hover:ring-blue-400 transition-all duration-300 group bg-white overflow-hidden text-left">
-                   <CardHeader className="p-6 border-b border-slate-50">
-                      <div className="flex justify-between items-start">
-                         <div className="flex items-center gap-3">
-                            <Avatar className="h-12 w-12 rounded-2xl border-2 border-white shadow-md">
-                               <AvatarImage src={leave.user?.avatarUrl} />
-                               <AvatarFallback className="bg-slate-50 text-slate-400 font-bold">
-                                  {leave.user?.name?.[0] || '?'}
-                               </AvatarFallback>
-                            </Avatar>
-                            <div>
-                               <h3 className="font-black text-slate-900 leading-none">{leave.user?.name || 'Unknown'}</h3>
-                               <p className="text-[10px] font-black uppercase text-slate-400 mt-1">{leave.user?.designation || 'Staff'}</p>
-                            </div>
-                         </div>
-                         <Badge className={cn(
-                            "text-[9px] font-black uppercase px-2 py-0.5 rounded-md border",
-                            leave.status === "PENDING" ? "bg-amber-50 text-amber-600 border-amber-100" :
-                            leave.status === "APPROVED" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
-                            "bg-rose-50 text-rose-600 border-rose-100"
-                         )}>
-                            {leave.status}
-                         </Badge>
-                      </div>
-                   </CardHeader>
-                   <CardContent className="p-6 space-y-6">
-                      <div className="grid grid-cols-2 gap-4">
-                         <div className="p-3 rounded-2xl bg-slate-50/50 border border-slate-100">
-                            <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Start Date</p>
-                            <p className="text-xs font-black text-slate-700">{dayjs(leave.startDate).format("MMM DD, YYYY")}</p>
-                         </div>
-                         <div className="p-3 rounded-2xl bg-slate-50/50 border border-slate-100">
-                            <p className="text-[9px] font-black uppercase text-slate-400 mb-1">End Date</p>
-                            <p className="text-xs font-black text-slate-700">{dayjs(leave.endDate).format("MMM DD, YYYY")}</p>
-                         </div>
-                      </div>
-
-                      <div className="space-y-2">
-                         <div className="flex items-center gap-2">
-                            <MessageSquare className="h-3 w-3 text-slate-400" />
-                            <span className="text-[9px] font-black uppercase text-slate-400">Reason</span>
-                         </div>
-                         <p className="text-xs font-medium text-slate-600 leading-relaxed bg-slate-50 p-4 rounded-2xl border border-slate-100/50">
-                            {leave.reason}
-                         </p>
-                      </div>
-
-                      {leave.status === "PENDING" && (
-                         <div className="flex gap-3 pt-2">
-                            <Button 
-                              className="flex-1 h-12 bg-emerald-600 hover:bg-emerald-700 rounded-2xl text-white font-black uppercase text-[10px] tracking-widest shadow-lg shadow-emerald-100"
-                              onClick={() => updateLeaveStatusMutation.mutate({ id: leave.id, status: "APPROVED" })}
-                              disabled={updateLeaveStatusMutation.isPending}
-                            >
-                               {updateLeaveStatusMutation.isPending ? "..." : "Approve"}
-                            </Button>
-                            <Button 
-                              variant="ghost"
-                              className="flex-1 h-12 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-2xl font-black uppercase text-[10px] tracking-widest"
-                              onClick={() => updateLeaveStatusMutation.mutate({ id: leave.id, status: "REJECTED" })}
-                              disabled={updateLeaveStatusMutation.isPending}
-                            >
-                               Reject
-                            </Button>
-                         </div>
-                      )}
-
-                      {leave.status !== "PENDING" && (
-                         <div className="pt-2 flex items-center gap-2">
-                            <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center">
-                               <UserIcon className="h-4 w-4 text-slate-400" />
-                            </div>
-                            <p className="text-[10px] font-bold text-slate-400 italic">
-                               {leave.status.toLowerCase()} by {leave.approvedBy?.name || 'Admin'} on {dayjs(leave.updatedAt).format("MMM DD")}
-                            </p>
-                         </div>
-                      )}
-                   </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ==================== TAB 1.5: LEAVE CALENDAR ==================== */}
-      {activeMainTab === "calendar" && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in duration-300">
-           {/* Left Column: Calendar Grid */}
-           <Card className="lg:col-span-8 rounded-[40px] border-none shadow-sm ring-1 ring-slate-200/60 overflow-hidden bg-white p-8 space-y-6">
-              <div className="flex items-center justify-between">
-                 <div className="flex items-center gap-3">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-10 w-10 rounded-xl hover:bg-slate-100"
-                      onClick={() => setCalendarDate(calendarDate.subtract(1, "month"))}
-                    >
-                       <ChevronLeft className="h-5 w-5" />
-                    </Button>
-                    <h2 className="text-xl font-black text-slate-800 min-w-[140px] text-center">
-                       {calendarDate.format("MMMM YYYY")}
-                    </h2>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-10 w-10 rounded-xl hover:bg-slate-100"
-                      onClick={() => setCalendarDate(calendarDate.add(1, "month"))}
-                    >
-                       <ChevronRight className="h-5 w-5" />
-                    </Button>
-                 </div>
-                 <Button 
-                   variant="outline" 
-                   className="h-11 rounded-2xl border-slate-200 font-bold text-xs px-5 hover:bg-slate-50 text-slate-600 shadow-sm"
-                   onClick={() => {
-                      setCalendarDate(dayjs());
-                      setSelectedDate(dayjs());
-                   }}
+            <form onSubmit={handleAssignLeaveHoliday} className="space-y-6">
+              {/* Assign Leave/Holiday Form */}
+              <div className="space-y-2">
+                 <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Type *</Label>
+                 <select 
+                    value={assignType}
+                    onChange={(e: any) => setAssignType(e.target.value)}
+                    className="w-full h-12 px-4 rounded-2xl bg-slate-50 border border-slate-200/60 focus:bg-white transition-all font-bold text-xs outline-none"
                  >
-                    Today
-                 </Button>
+                    <option value="HOLIDAY">Holiday</option>
+                    <option value="PAID_LEAVE">Paid Leave</option>
+                    <option value="FESTIVAL">Festival / Special Day</option>
+                 </select>
               </div>
 
-              <div className="grid grid-cols-7 gap-2">
-                 {/* Weekday headers */}
-                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
-                    <div className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest py-2" key={day}>
-                       {day}
+              <div className="space-y-2">
+                 <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Title / Name *</Label>
+                 <Input 
+                    placeholder="e.g. Sick Leave, General Off" 
+                    required
+                    value={assignName}
+                    onChange={e => setAssignName(e.target.value)}
+                    className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Start Date</Label>
+                    <Input 
+                       type="date"
+                       value={assignStartDate}
+                       onChange={e => setAssignStartDate(e.target.value)}
+                       className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+                    />
+                 </div>
+                 <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">End Date</Label>
+                    <Input 
+                       type="date"
+                       value={assignEndDate}
+                       onChange={e => setAssignEndDate(e.target.value)}
+                       className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
+                    />
+                 </div>
+               </div>
+
+              {/* Cycle Selection */}
+              <div className="space-y-2">
+                 <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Cycle Frequency</Label>
+                 <select 
+                    value={assignCycle}
+                    onChange={(e: any) => setAssignCycle(e.target.value)}
+                    className="w-full h-12 px-4 rounded-2xl bg-slate-50 border border-slate-200/60 focus:bg-white transition-all font-bold text-xs outline-none"
+                 >
+                    <option value="ONCE">Once (Single Range)</option>
+                    <option value="WEEKLY">Weekly Recurring</option>
+                    <option value="MONTHLY">Monthly Recurring</option>
+                 </select>
+              </div>
+
+              {/* Weekday Selection */}
+              {assignCycle === "WEEKLY" && (
+                 <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Select Weekdays</Label>
+                    <div className="flex flex-wrap gap-1.5">
+                       {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, idx) => {
+                          const isSelected = assignWeekdays.includes(idx);
+                          return (
+                             <button
+                                type="button"
+                                key={day}
+                                onClick={() => {
+                                   if (isSelected) {
+                                      setAssignWeekdays(assignWeekdays.filter(w => w !== idx));
+                                   } else {
+                                      setAssignWeekdays([...assignWeekdays, idx]);
+                                   }
+                                }}
+                                className={cn(
+                                   "px-3 py-1.5 rounded-lg text-[10px] font-extrabold uppercase transition-all",
+                                   isSelected 
+                                      ? "bg-blue-600 text-white shadow-sm"
+                                      : "bg-slate-50 text-slate-500 border border-slate-200/60 hover:bg-slate-100"
+                                )}
+                             >
+                                {day}
+                             </button>
+                          );
+                       })}
                     </div>
-                 ))}
+                 </div>
+              )}
 
-                 {/* Day cells */}
-                 {days.map((d, index) => {
-                    const isCurrentMonth = d.isSame(calendarDate, "month");
-                    const isToday = d.isSame(dayjs(), "day");
-                    const isSelected = d.isSame(selectedDate, "day");
+              {/* Monthly Dates Selection */}
+              {assignCycle === "MONTHLY" && (
+                 <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Select Days of Month</Label>
+                    <div className="grid grid-cols-7 gap-1 max-h-32 overflow-y-auto p-1 bg-slate-50 rounded-2xl border border-slate-100">
+                       {Array.from({ length: 31 }, (_, i) => i + 1).map(day => {
+                          const isSelected = assignMonthlyDates.includes(day);
+                          return (
+                             <button
+                                type="button"
+                                key={day}
+                                onClick={() => {
+                                   if (isSelected) {
+                                      setAssignMonthlyDates(assignMonthlyDates.filter(d => d !== day));
+                                   } else {
+                                      setAssignMonthlyDates([...assignMonthlyDates, day]);
+                                   }
+                                }}
+                                className={cn(
+                                   "h-8 w-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center",
+                                   isSelected 
+                                      ? "bg-blue-600 text-white shadow-sm"
+                                      : "hover:bg-slate-200 text-slate-600"
+                                )}
+                             >
+                                {day}
+                             </button>
+                          );
+                       })}
+                    </div>
+                 </div>
+              )}
 
-                    // Filter holidays on this day
-                    const dayHolidays = holidays.filter((h: any) => dayjs(h.date).isSame(d, "day"));
-                    const uniqueDayHolidays = Array.from(new Map(dayHolidays.map((h: any) => [h.name, h])).values());
-
-                    // Filter leaves on this day
-                    const dayLeaves = leaves.filter((l: any) => {
-                       const start = dayjs(l.startDate).startOf("day");
-                       const end = dayjs(l.endDate).endOf("day");
-                       return (d.isAfter(start) || d.isSame(start)) && (d.isBefore(end) || d.isSame(end));
-                    });
-
-                    return (
-                       <div 
-                         key={index} 
-                         onClick={() => setSelectedDate(d)}
-                         className={cn(
-                            "h-28 border border-slate-100 p-2.5 rounded-2xl flex flex-col justify-between transition-all cursor-pointer select-none text-left",
-                            !isCurrentMonth && "opacity-30 bg-slate-50/50",
-                            isToday && "border-blue-600 bg-blue-50/10",
-                            isSelected && "ring-2 ring-blue-600 shadow-md",
-                            "hover:border-slate-300 hover:bg-slate-50/50"
-                         )}
-                       >
-                          <div className="flex justify-between items-center">
-                             <span className={cn(
-                                "text-xs font-black",
-                                isToday ? "text-blue-600" : "text-slate-800"
-                             )}>
-                                {d.date()}
-                             </span>
-                             {isToday && (
-                                <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
-                             )}
-                          </div>
-
-                          <div className="space-y-1 overflow-y-auto max-h-[64px] scrollbar-thin">
-                             {uniqueDayHolidays.map((h: any) => (
-                                <div 
-                                  key={h.id} 
-                                  className="text-[8px] leading-tight font-black bg-amber-50 text-amber-600 border border-amber-100 rounded px-1 py-0.5 truncate"
-                                  title={h.name}
-                                >
-                                   🎉 {h.name}
-                                </div>
-                             ))}
-                             {dayLeaves.map((l: any) => (
-                                <div 
-                                  key={l.id} 
-                                  className={cn(
-                                     "text-[8px] leading-tight font-black rounded px-1 py-0.5 truncate border",
-                                     l.status === "APPROVED" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
-                                     l.status === "REJECTED" ? "bg-rose-50 text-rose-600 border-rose-100" :
-                                     "bg-blue-50 text-blue-600 border-blue-100"
-                                  )}
-                                  title={`${l.user?.name || 'Staff'}: ${l.reason}`}
-                                >
-                                   👤 {l.user?.name?.split(' ')[0] || 'Staff'}
-                                </div>
-                             ))}
-                          </div>
-                       </div>
-                    );
-                 })}
-              </div>
-           </Card>
-
-           {/* Right Column: Daily Details panel & Monthly Stats */}
-           <div className="lg:col-span-4 space-y-6 flex flex-col justify-start">
-              {/* Daily Details Card */}
-              <Card className="rounded-[32px] border-none shadow-sm ring-1 ring-slate-200/60 bg-white p-6 text-left">
-                 <CardHeader className="p-0 pb-4 border-b border-slate-50">
-                    <CardDescription className="text-[10px] font-black text-blue-600 uppercase tracking-wider">Schedule for</CardDescription>
-                    <CardTitle className="text-lg font-black text-slate-900 mt-1">
-                       {selectedDate.format("dddd, DD MMMM YYYY")}
-                    </CardTitle>
-                 </CardHeader>
-                 
-                 <CardContent className="p-0 pt-6 space-y-6">
-                    {/* Holidays on Selected Day */}
-                    {(() => {
-                        const dayHols = holidays.filter((h: any) => dayjs(h.date).isSame(selectedDate, "day"));
-                        const uniqueDayHols = Array.from(new Map(dayHols.map((h: any) => [h.name, h])).values());
-                        return (
-                           <div className="space-y-3">
-                              <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Holidays ({uniqueDayHols.length})</h3>
-                              <div className="space-y-2">
-                                 {uniqueDayHols.map((h: any) => (
-                                    <div key={h.id} className="p-3 bg-amber-50/50 border border-amber-100 rounded-2xl flex items-center justify-between">
-                                       <div>
-                                          <p className="text-xs font-black text-slate-800">{h.name}</p>
-                                          <p className="text-[9px] font-bold text-amber-600 mt-0.5">{h.type.replace("_", " ")}</p>
-                                       </div>
-                                       <span className="text-lg">🎉</span>
-                                    </div>
-                                 ))}
-                                 {uniqueDayHols.length === 0 && (
-                                    <p className="text-xs font-bold text-slate-400 italic">No holidays marked for today.</p>
-                                 )}
-                              </div>
-                           </div>
-                        );
-                     })()}
-
-                    {/* Leaves on Selected Day */}
-                    <div className="space-y-3">
-                       <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Leave Applications ({
-                          leaves.filter((l: any) => {
-                             const start = dayjs(l.startDate).startOf("day");
-                             const end = dayjs(l.endDate).endOf("day");
-                             return (selectedDate.isAfter(start) || selectedDate.isSame(start)) && (selectedDate.isBefore(end) || selectedDate.isSame(end));
-                          }).length
-                       })</h3>
-                       <div className="space-y-3">
-                          {leaves.filter((l: any) => {
-                             const start = dayjs(l.startDate).startOf("day");
-                             const end = dayjs(l.endDate).endOf("day");
-                             return (selectedDate.isAfter(start) || selectedDate.isSame(start)) && (selectedDate.isBefore(end) || selectedDate.isSame(end));
-                          }).map((l: any) => (
-                             <div key={l.id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-3">
+              {/* Select Employees */}
+              <div className="space-y-2">
+                 <div className="flex items-center justify-between">
+                    <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Select Employees *</Label>
+                    <button 
+                       type="button"
+                       onClick={() => {
+                          if (assignSelectedUsers.length === employees.length) {
+                             setAssignSelectedUsers([]);
+                          } else {
+                             setAssignSelectedUsers(employees.map((e: any) => e.id));
+                          }
+                       }}
+                       className="text-[9px] font-black uppercase text-blue-600 hover:text-blue-700 tracking-wider"
+                    >
+                       {assignSelectedUsers.length === employees.length ? "Deselect All" : "Select All"}
+                    </button>
+                 </div>
+                 <div className="border border-slate-200/60 rounded-2xl p-4 bg-slate-50/50 max-h-48 overflow-y-auto space-y-2">
+                    {employeesQuery.isLoading ? (
+                       <p className="text-xs font-bold text-slate-400 text-center py-4">Loading employees...</p>
+                    ) : employees.length === 0 ? (
+                       <p className="text-xs font-bold text-slate-400 text-center py-4">No employees found.</p>
+                    ) : (
+                       employees.map((emp: any) => {
+                          const isSelected = assignSelectedUsers.includes(emp.id);
+                          return (
+                             <div 
+                               key={emp.id} 
+                               onClick={() => {
+                                  if (isSelected) {
+                                     setAssignSelectedUsers(assignSelectedUsers.filter(id => id !== emp.id));
+                                  } else {
+                                     setAssignSelectedUsers([...assignSelectedUsers, emp.id]);
+                                  }
+                               }}
+                               className={cn(
+                                  "flex items-center justify-between p-2 rounded-xl cursor-pointer transition-all hover:bg-slate-100/50",
+                                  isSelected && "bg-white shadow-sm ring-1 ring-slate-200/50"
+                               )}
+                             >
                                 <div className="flex items-center gap-2.5">
-                                   <Avatar className="h-8 w-8 rounded-xl border border-slate-200">
-                                      <AvatarImage src={l.user?.avatarUrl} />
-                                      <AvatarFallback className="bg-white text-slate-400 text-[10px] font-black">
-                                         {l.user?.name?.[0] || '?'}
+                                   <Avatar className="h-7 w-7 rounded-lg">
+                                      <AvatarImage src={emp.avatarUrl} />
+                                      <AvatarFallback className="bg-slate-100 text-[10px] font-black text-slate-400">
+                                         {emp.name?.[0] || '?'}
                                       </AvatarFallback>
                                    </Avatar>
                                    <div>
-                                      <p className="text-xs font-black text-slate-800">{l.user?.name || 'Staff'}</p>
-                                      <p className="text-[9px] font-bold text-slate-400 uppercase">{l.user?.designation || 'Employee'}</p>
+                                      <p className="text-xs font-black text-slate-800 leading-none">{emp.name}</p>
+                                      <p className="text-[8px] font-black uppercase text-slate-400 mt-0.5">{emp.designation || 'Staff'}</p>
                                    </div>
                                 </div>
-                                <div className="space-y-1">
-                                   <p className="text-[9px] font-black uppercase text-slate-400">Reason</p>
-                                   <p className="text-[11px] font-medium text-slate-600 leading-normal bg-white p-2 rounded-xl border border-slate-100">{l.reason || 'No reason provided'}</p>
-                                </div>
-                                <div className="flex items-center justify-between pt-1">
-                                   <Badge className={cn(
-                                      "text-[8px] font-black uppercase rounded",
-                                      l.status === "APPROVED" ? "bg-emerald-50 text-emerald-600" :
-                                      l.status === "REJECTED" ? "bg-rose-50 text-rose-600" :
-                                      "bg-blue-50 text-blue-600"
-                                   )}>
-                                      {l.status}
-                                   </Badge>
-                                   <p className="text-[9px] font-bold text-slate-400 italic">
-                                      {dayjs(l.startDate).format("MMM DD")} - {dayjs(l.endDate).format("MMM DD")}
-                                   </p>
+                                <div className={cn(
+                                   "h-4 w-4 rounded border flex items-center justify-center transition-all",
+                                   isSelected ? "bg-blue-600 border-blue-600 text-white" : "border-slate-300"
+                                )}>
+                                   {isSelected && <Check className="h-2.5 w-2.5 font-bold" />}
                                 </div>
                              </div>
-                          ))}
-                          {leaves.filter((l: any) => {
-                             const start = dayjs(l.startDate).startOf("day");
-                             const end = dayjs(l.endDate).endOf("day");
-                             return (selectedDate.isAfter(start) || selectedDate.isSame(start)) && (selectedDate.isBefore(end) || selectedDate.isSame(end));
-                          }).length === 0 && (
-                             <p className="text-xs font-bold text-slate-400 italic">No leaves active for today.</p>
-                          )}
-                       </div>
-                    </div>
-                 </CardContent>
-              </Card>
-
-              {/* Monthly Stats Summary Card */}
-              <Card className="rounded-[32px] border-none shadow-sm ring-1 ring-slate-200/60 bg-white p-6 text-left space-y-4">
-                 <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Monthly Overview</h3>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 bg-amber-50/30 border border-amber-100/50 rounded-2xl">
-                       <span className="text-[9px] font-black text-amber-600 uppercase tracking-wider block">Holidays</span>
-                       <span className="text-2xl font-black text-slate-800">
-                          {holidays.filter((h: any) => dayjs(h.date).isSame(calendarDate, "month")).length}
-                       </span>
-                    </div>
-                    <div className="p-4 bg-blue-50/30 border border-blue-100/50 rounded-2xl">
-                       <span className="text-[9px] font-black text-blue-600 uppercase tracking-wider block">Leaves Submitted</span>
-                       <span className="text-2xl font-black text-slate-800">
-                          {leaves.filter((l: any) => dayjs(l.startDate).isSame(calendarDate, "month") || dayjs(l.endDate).isSame(calendarDate, "month")).length}
-                       </span>
-                    </div>
+                          );
+                       })
+                    )}
                  </div>
-              </Card>
-           </div>
-        </div>
-      )}
-
-      {/* ==================== TAB 2: LEAVE SETUP ==================== */}
-      {activeMainTab === "setup" && (
-        <div className="space-y-8 animate-in fade-in duration-300">
-          
-
-            <div className="space-y-8 animate-in fade-in duration-300">
-              
-              {/* Header Action Bar */}
-              <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-6 rounded-[32px] border border-slate-200/60 shadow-sm">
-                <div>
-                  <h3 className="text-lg font-black text-slate-800">Leave Categories Setup</h3>
-                  <p className="text-slate-400 text-xs font-semibold mt-0.5">Configure allocate rules, encashment, and carry forward parameters.</p>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                  
-                  {/* Select Leave Cycle Trigger (Screenshot #3) */}
-                  <Dialog open={isCycleModalOpen} onOpenChange={setIsCycleModalOpen}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" className="h-11 rounded-xl border-slate-200 font-bold text-xs gap-2 px-4">
-                        <Sliders className="h-4 w-4 text-slate-500" />
-                        Preferred Leave Cycle: {preferredCycle === "CALENDAR" ? "Calendar Year" : "Financial Year"}
-                      </Button>
-                    </DialogTrigger>
-                    
-                    <DialogContent className="max-w-md p-8 overflow-hidden border-none shadow-2xl bg-white rounded-3xl animate-in zoom-in-95 duration-200">
-                      <DialogHeader className="p-0 text-left">
-                        <div className="flex items-center justify-between mb-4">
-                          <DialogTitle className="text-xl font-black text-slate-900">Create New Leave</DialogTitle>
-                        </div>
-                        <p className="text-slate-500 text-xs font-bold leading-normal">
-                          Select your preferred leave cycle for leave calculations
-                        </p>
-                      </DialogHeader>
-
-                      <div className="space-y-6 pt-6">
-                        
-                        {/* Option 1: Calendar Year */}
-                        <div 
-                          onClick={() => setPreferredCycle("CALENDAR")}
-                          className={cn(
-                            "flex items-start gap-4 p-5 rounded-2xl border-2 cursor-pointer transition-all",
-                            preferredCycle === "CALENDAR" 
-                              ? "border-blue-600 bg-blue-50/20" 
-                              : "border-slate-100 hover:border-slate-200"
-                          )}
-                        >
-                          <div className={cn(
-                            "h-5 w-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5",
-                            preferredCycle === "CALENDAR" ? "border-blue-600" : "border-slate-300"
-                          )}>
-                            {preferredCycle === "CALENDAR" && <div className="h-2.5 w-2.5 rounded-full bg-blue-600" />}
-                          </div>
-                          <div>
-                            <p className="font-extrabold text-slate-800 text-sm">Calendar Year</p>
-                            <p className="text-slate-400 text-xs font-semibold mt-1">January to December timeframe</p>
-                          </div>
-                        </div>
-
-                        {/* Option 2: Financial Year */}
-                        <div 
-                          onClick={() => setPreferredCycle("FINANCIAL")}
-                          className={cn(
-                            "flex items-start gap-4 p-5 rounded-2xl border-2 cursor-pointer transition-all",
-                            preferredCycle === "FINANCIAL" 
-                              ? "border-blue-600 bg-blue-50/20" 
-                              : "border-slate-100 hover:border-slate-200"
-                          )}
-                        >
-                          <div className={cn(
-                            "h-5 w-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5",
-                            preferredCycle === "FINANCIAL" ? "border-blue-600" : "border-slate-300"
-                          )}>
-                            {preferredCycle === "FINANCIAL" && <div className="h-2.5 w-2.5 rounded-full bg-blue-600" />}
-                          </div>
-                          <div>
-                            <p className="font-extrabold text-slate-800 text-sm">Financial Year</p>
-                            <p className="text-slate-400 text-xs font-semibold mt-1">Fiscal year, spanning from April to March</p>
-                          </div>
-                        </div>
-
-                      </div>
-
-                      <DialogFooter className="pt-6">
-                        <Button 
-                          onClick={() => setIsCycleModalOpen(false)}
-                          className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold uppercase tracking-widest text-[10px]"
-                        >
-                          Confirm & Close
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-
-                  {/* Create New Leave Drawer (Screenshot #2) */}
-                  <Sheet open={isCreateDrawerOpen} onOpenChange={setIsCreateDrawerOpen}>
-                    <SheetTrigger asChild>
-                      <Button className="h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold gap-2 px-5 shadow-lg shadow-blue-100">
-                        <Plus className="h-4.5 w-4.5" />
-                        Create New Leave
-                      </Button>
-                    </SheetTrigger>
-                    
-                    <SheetContent className="w-full sm:max-w-md p-8 overflow-y-auto bg-white rounded-l-[32px] border-none shadow-2xl flex flex-col justify-between">
-                      <div className="space-y-8">
-                        <SheetHeader className="text-left">
-                          <SheetTitle className="text-2xl font-black text-slate-900">Create New Leave</SheetTitle>
-                        </SheetHeader>
-
-                        <Tabs value={drawerTab} onValueChange={(v: any) => setDrawerTab(v)} className="w-full">
-                           <TabsList className="grid grid-cols-2 bg-slate-100 p-1 rounded-xl mb-4">
-                              <TabsTrigger value="rules" className="rounded-lg font-bold text-xs">Define Rules</TabsTrigger>
-                              <TabsTrigger value="assign" className="rounded-lg font-bold text-xs">Assign Leave/Holiday</TabsTrigger>
-                           </TabsList>
-
-                           <TabsContent value="rules" className="space-y-6 outline-none">
-                             <form onSubmit={handleCreateLeaveType} className="space-y-6">
-                               {/* Leave Name */}
-                               <div className="space-y-2">
-                                 <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Leave Name *</Label>
-                                 <Input 
-                                   placeholder="e.g. Sick Leave" 
-                                   required
-                                   value={leaveName}
-                                   onChange={e => setLeaveName(e.target.value)}
-                                   className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-                                 />
-                               </div>
-
-                               {/* Alias */}
-                               <div className="space-y-2">
-                                 <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Alias *</Label>
-                                 <Input 
-                                   placeholder="e.g. SL" 
-                                   required
-                                   value={leaveAlias}
-                                   onChange={e => setLeaveAlias(e.target.value)}
-                                   className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-                                 />
-                               </div>
-
-                               {/* Description */}
-                               <div className="space-y-2">
-                                 <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Description</Label>
-                                 <Input 
-                                   placeholder="Short description..." 
-                                   value={leaveDescription}
-                                   onChange={e => setLeaveDescription(e.target.value)}
-                                   className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-                                 />
-                               </div>
-
-                               {/* Number of Auto Allocation Leaves */}
-                               <div className="space-y-4">
-                                 <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Number Of Auto Allocation Leaves *</Label>
-                                 <Input 
-                                   type="number"
-                                   required
-                                   value={autoAllocCount}
-                                   onChange={e => setAutoAllocCount(e.target.value)}
-                                   className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-                                 />
-                                 
-                                 {/* Every Week vs Every Month vs Every Calendar Year radios */}
-                                 <div className="flex flex-wrap items-center gap-6">
-                                   <label className="flex items-center gap-2.5 cursor-pointer">
-                                     <input 
-                                       type="radio" 
-                                       name="autoAllocFreq" 
-                                       checked={autoAllocFreq.startsWith("WEEKLY")}
-                                       onChange={() => setAutoAllocFreq("WEEKLY:1")} // Default to Monday
-                                       className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                                     />
-                                     <span className="text-xs font-bold text-slate-600">Every Week</span>
-                                   </label>
-                                   <label className="flex items-center gap-2.5 cursor-pointer">
-                                     <input 
-                                       type="radio" 
-                                       name="autoAllocFreq" 
-                                       checked={autoAllocFreq.startsWith("MONTHLY")}
-                                       onChange={() => setAutoAllocFreq("MONTHLY:1")} // Default to 1st of month
-                                       className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                                     />
-                                     <span className="text-xs font-bold text-slate-600">Every Month</span>
-                                   </label>
-                                   <label className="flex items-center gap-2.5 cursor-pointer">
-                                     <input 
-                                       type="radio" 
-                                       name="autoAllocFreq" 
-                                       checked={autoAllocFreq === "YEARLY"}
-                                       onChange={() => setAutoAllocFreq("YEARLY")}
-                                       className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                                     />
-                                     <span className="text-xs font-bold text-slate-600">Every Calendar Year</span>
-                                   </label>
-                                 </div>
-
-                                 {/* Conditional Weekdays Select */}
-                                 {autoAllocFreq.startsWith("WEEKLY") && (
-                                   <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                                     <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Weekday for Auto Allocation</Label>
-                                     <Select 
-                                       value={autoAllocFreq.split(":")[1] || "1"} 
-                                       onValueChange={(val) => setAutoAllocFreq(`WEEKLY:${val}`)}
-                                     >
-                                       <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 font-bold text-xs">
-                                         <SelectValue />
-                                       </SelectTrigger>
-                                       <SelectContent className="bg-white border-slate-200 rounded-xl">
-                                         <SelectItem value="0">Sunday</SelectItem>
-                                         <SelectItem value="1">Monday</SelectItem>
-                                         <SelectItem value="2">Tuesday</SelectItem>
-                                         <SelectItem value="3">Wednesday</SelectItem>
-                                         <SelectItem value="4">Thursday</SelectItem>
-                                         <SelectItem value="5">Friday</SelectItem>
-                                         <SelectItem value="6">Saturday</SelectItem>
-                                       </SelectContent>
-                                     </Select>
-                                   </div>
-                                 )}
-
-                                 {/* Conditional Day of Month Select */}
-                                 {autoAllocFreq.startsWith("MONTHLY") && (
-                                   <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                                     <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Day of Month for Auto Allocation</Label>
-                                     <Select 
-                                       value={autoAllocFreq.split(":")[1] || "1"} 
-                                       onValueChange={(val) => setAutoAllocFreq(`MONTHLY:${val}`)}
-                                     >
-                                       <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 font-bold text-xs">
-                                         <SelectValue />
-                                       </SelectTrigger>
-                                       <SelectContent className="bg-white border-slate-200 rounded-xl max-h-48 overflow-y-auto">
-                                         {Array.from({ length: 31 }, (_, i) => (i + 1).toString()).map(date => (
-                                           <SelectItem key={date} value={date}>{date}{date === "1" ? "st" : date === "2" ? "nd" : date === "3" ? "rd" : "th"} of month</SelectItem>
-                                         ))}
-                                       </SelectContent>
-                                     </Select>
-                                   </div>
-                                 )}
-                               </div>
-
-                               {/* Carry Forward */}
-                               <div className="space-y-4">
-                                 <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Carry Forward *</Label>
-                                 <Input 
-                                   type="number"
-                                   required
-                                   value={carryForwardCount}
-                                   onChange={e => setCarryForwardCount(e.target.value)}
-                                   className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-                                 />
-                                 
-                                 {/* End of month vs calendar year */}
-                                 <div className="flex items-center gap-6">
-                                   <label className="flex items-center gap-2.5 cursor-pointer">
-                                     <input 
-                                       type="radio" 
-                                       name="carryForwardFreq" 
-                                       checked={carryForwardFreq === "END_OF_MONTH"}
-                                       onChange={() => setCarryForwardFreq("END_OF_MONTH")}
-                                       className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                                     />
-                                     <span className="text-xs font-bold text-slate-600">End Of Every Month</span>
-                                   </label>
-                                   <label className="flex items-center gap-2.5 cursor-pointer">
-                                     <input 
-                                       type="radio" 
-                                       name="carryForwardFreq" 
-                                       checked={carryForwardFreq === "END_OF_YEAR"}
-                                       onChange={() => setCarryForwardFreq("END_OF_YEAR")}
-                                       className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                                     />
-                                     <span className="text-xs font-bold text-slate-600">End Of Every Calendar Year</span>
-                                   </label>
-                                 </div>
-                               </div>
-
-                               {/* Encashment */}
-                               <div className="space-y-2.5">
-                                 <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400 font-extrabold">Encashment Of Leave</Label>
-                                 <div className="flex items-center gap-6">
-                                   <label className="flex items-center gap-2.5 cursor-pointer">
-                                     <input 
-                                       type="radio" 
-                                       name="encashment" 
-                                       checked={!encashment}
-                                       onChange={() => setEncashment(false)}
-                                       className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                                     />
-                                     <span className="text-xs font-bold text-slate-600">Off</span>
-                                   </label>
-                                   <label className="flex items-center gap-2.5 cursor-pointer">
-                                     <input 
-                                       type="radio" 
-                                       name="encashment" 
-                                       checked={encashment}
-                                       onChange={() => setEncashment(true)}
-                                       className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                                     />
-                                     <span className="text-xs font-bold text-slate-600">On</span>
-                                   </label>
-                                 </div>
-                               </div>
-
-                               <Button 
-                                 type="submit"
-                                 disabled={createLeaveTypeMutation.isPending}
-                                 className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] mt-6"
-                               >
-                                 {createLeaveTypeMutation.isPending ? "Creating..." : "Create Rule"}
-                               </Button>
-                             </form>
-                           </TabsContent>
-
-                           <TabsContent value="assign" className="space-y-6 outline-none">
-                             <form onSubmit={handleAssignLeaveHoliday} className="space-y-6">
-                               {/* Assign Leave/Holiday Form */}
-                               <div className="space-y-2">
-                                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Type *</Label>
-                                  <select 
-                                     value={assignType}
-                                     onChange={(e: any) => setAssignType(e.target.value)}
-                                     className="w-full h-12 px-4 rounded-2xl bg-slate-50 border border-slate-200/60 focus:bg-white transition-all font-bold text-xs outline-none"
-                                  >
-                                     <option value="HOLIDAY">Holiday</option>
-                                     <option value="PAID_LEAVE">Paid Leave</option>
-                                     <option value="FESTIVAL">Festival / Special Day</option>
-                                  </select>
-                               </div>
-
-                               <div className="space-y-2">
-                                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Title / Name *</Label>
-                                  <Input 
-                                     placeholder="e.g. Diwali Festival, General Off" 
-                                     required
-                                     value={assignName}
-                                     onChange={e => setAssignName(e.target.value)}
-                                     className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-                                  />
-                               </div>
-
-                               <div className="grid grid-cols-2 gap-4">
-                                  <div className="space-y-2">
-                                     <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Start Date</Label>
-                                     <Input 
-                                        type="date"
-                                        value={assignStartDate}
-                                        onChange={e => setAssignStartDate(e.target.value)}
-                                        className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-                                     />
-                                  </div>
-                                  <div className="space-y-2">
-                                     <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">End Date</Label>
-                                     <Input 
-                                        type="date"
-                                        value={assignEndDate}
-                                        onChange={e => setAssignEndDate(e.target.value)}
-                                        className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-                                     />
-                                  </div>
-                                </div>
-
-                               {/* Cycle Selection */}
-                               <div className="space-y-2">
-                                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Cycle Frequency</Label>
-                                  <select 
-                                     value={assignCycle}
-                                     onChange={(e: any) => setAssignCycle(e.target.value)}
-                                     className="w-full h-12 px-4 rounded-2xl bg-slate-50 border border-slate-200/60 focus:bg-white transition-all font-bold text-xs outline-none"
-                                  >
-                                     <option value="ONCE">Once (Single Range)</option>
-                                     <option value="WEEKLY">Weekly Recurring</option>
-                                     <option value="MONTHLY">Monthly Recurring</option>
-                                   </select>
-                               </div>
-
-                               {/* Weekday Selection */}
-                               {assignCycle === "WEEKLY" && (
-                                  <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                                     <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Select Weekdays</Label>
-                                     <div className="flex flex-wrap gap-1.5">
-                                        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, idx) => {
-                                           const isSelected = assignWeekdays.includes(idx);
-                                           return (
-                                              <button
-                                                 type="button"
-                                                 key={day}
-                                                 onClick={() => {
-                                                    if (isSelected) {
-                                                       setAssignWeekdays(assignWeekdays.filter(d => d !== idx));
-                                                    } else {
-                                                       setAssignWeekdays([...assignWeekdays, idx]);
-                                                    }
-                                                 }}
-                                                 className={cn(
-                                                    "px-3 py-1.5 text-[10px] font-black rounded-lg border uppercase transition-all",
-                                                    isSelected 
-                                                       ? "bg-blue-600 border-blue-600 text-white shadow-sm"
-                                                       : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
-                                                 )}
-                                              >
-                                                 {day}
-                                              </button>
-                                           );
-                                        })}
-                                     </div>
-                                  </div>
-                               )}
-
-                               {/* Monthly Dates Selection */}
-                               {assignCycle === "MONTHLY" && (
-                                  <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                                     <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Select Dates of Month</Label>
-                                     <div className="grid grid-cols-7 gap-1 bg-slate-50 p-3 rounded-2xl border border-slate-200/60">
-                                        {Array.from({ length: 31 }, (_, i) => i + 1).map(date => {
-                                           const isSelected = assignMonthlyDates.includes(date);
-                                           return (
-                                              <button
-                                                 type="button"
-                                                 key={date}
-                                                 onClick={() => {
-                                                    if (isSelected) {
-                                                       setAssignMonthlyDates(assignMonthlyDates.filter(d => d !== date));
-                                                    } else {
-                                                       setAssignMonthlyDates([...assignMonthlyDates, date]);
-                                                    }
-                                                 }}
-                                                 className={cn(
-                                                    "h-7 w-7 rounded-lg text-[9px] font-bold border transition-all",
-                                                    isSelected 
-                                                       ? "bg-blue-600 border-blue-600 text-white shadow-sm"
-                                                       : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
-                                                 )}
-                                              >
-                                                 {date}
-                                              </button>
-                                           );
-                                        })}
-                                     </div>
-                                  </div>
-                               )}
-
-                               {/* Staff Selection Dropdown / Checklist */}
-                               <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                     <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Assign To Staff</Label>
-                                     <button
-                                        type="button"
-                                        onClick={() => {
-                                           if (assignSelectedUsers.length === employees.length) {
-                                              setAssignSelectedUsers([]);
-                                           } else {
-                                              setAssignSelectedUsers(employees.map(emp => emp.id));
-                                           }
-                                        }}
-                                        className="text-[10px] font-black text-blue-600 hover:underline"
-                                     >
-                                        {assignSelectedUsers.length === employees.length ? "Deselect All" : "Select All"}
-                                     </button>
-                                  </div>
-                                  <div className="max-h-40 overflow-y-auto border border-slate-200/60 rounded-2xl p-3 bg-slate-50 space-y-2">
-                                     {employees.length === 0 ? (
-                                        <p className="text-[10px] font-bold text-slate-400">No employees found.</p>
-                                     ) : (
-                                        employees.map((emp) => {
-                                           const isChecked = assignSelectedUsers.includes(emp.id);
-                                           return (
-                                              <label key={emp.id} className="flex items-center gap-2.5 cursor-pointer">
-                                                 <input
-                                                    type="checkbox"
-                                                    checked={isChecked}
-                                                    onChange={() => {
-                                                       if (isChecked) {
-                                                          setAssignSelectedUsers(assignSelectedUsers.filter(id => id !== emp.id));
-                                                       } else {
-                                                          setAssignSelectedUsers([...assignSelectedUsers, emp.id]);
-                                                       }
-                                                    }}
-                                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                                 />
-                                                 <span className="text-xs font-bold text-slate-700">{emp.name}</span>
-                                              </label>
-                                           );
-                                        })
-                                     )}
-                                  </div>
-                               </div>
-
-
-
-                               <Button 
-                                  type="submit" 
-                                  className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] mt-6"
-                               >
-                                  Confirm & Assign
-                               </Button>
-                             </form>
-                           </TabsContent>
-                        </Tabs>
-                      </div>
-                    </SheetContent>
-                  </Sheet>
-                </div>
               </div>
 
-              {/* Grid of active configurations */}
-              {leaveTypesQuery.isLoading ? (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="h-48 bg-white rounded-3xl animate-pulse border border-slate-100" />
-                  ))}
-                </div>
-              ) : leaveTypes.length === 0 ? (
-                <div className="py-20 text-center space-y-4 bg-white rounded-[32px] border border-slate-200/50 shadow-sm flex flex-col items-center">
-                  <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center text-slate-300">
-                    <Sliders className="h-8 w-8" />
-                  </div>
-                  <div>
-                    <h4 className="text-base font-black text-slate-800">No Custom Leave Categories Created</h4>
-                    <p className="text-slate-400 text-xs font-semibold mt-1">Configure your leave rules using the &quot;Create New Leave&quot; button above.</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {leaveTypes.map((type: any) => (
-                    <Card key={type.id} className="rounded-3xl border-none shadow-sm ring-1 ring-slate-200/50 bg-white hover:ring-blue-400 hover:shadow-xl hover:shadow-slate-100 transition-all duration-300 overflow-hidden">
-                      <CardHeader className="p-6 bg-slate-50/50 border-b border-slate-100 flex flex-row items-center justify-between">
-                        <div>
-                          <h4 className="font-black text-slate-900 text-base">{type.name}</h4>
-                          <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">{type.alias}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge className="bg-blue-50 text-blue-600 font-bold border-none text-[10px] px-2 py-0.5 rounded-md">
-                            Active
-                          </Badge>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-slate-200">
-                                <MoreVertical className="h-4 w-4 text-slate-500" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-white border border-slate-200 rounded-xl p-1 shadow-lg">
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setEditingLeaveType(type);
-                                  setEditLeaveName(type.name);
-                                  setEditLeaveAlias(type.alias);
-                                  setEditLeaveDescription(type.description || "");
-                                  setEditAutoAllocCount(type.autoAllocationCount.toString());
-                                  setEditAutoAllocFreq(type.autoAllocationFreq);
-                                  setEditCarryForwardCount(type.carryForward.toString());
-                                  setEditCarryForwardFreq(type.carryForwardFreq);
-                                  setEditEncashment(type.encashment);
-                                  setIsEditLeaveOpen(true);
-                                }}
-                                className="flex items-center gap-2 text-xs font-bold text-slate-700 hover:bg-slate-50 p-2.5 rounded-lg cursor-pointer"
-                              >
-                                <Settings2 className="h-4 w-4" /> Edit Rules
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setDeletingLeaveType(type);
-                                  setIsDeleteLeaveOpen(true);
-                                }}
-                                className="flex items-center gap-2 text-xs font-bold text-rose-600 hover:bg-rose-50 p-2.5 rounded-lg cursor-pointer"
-                              >
-                                <Trash className="h-4 w-4" /> Delete Category
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="p-6 space-y-4">
-                        <p className="text-slate-500 text-xs font-semibold leading-relaxed">
-                          {type.description || "No description provided."}
-                        </p>
-                        
-                        <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-50">
-                          <div>
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Auto Allocation</span>
-                            <span className="text-xs font-black text-slate-700">
-                              {type.autoAllocationCount} / {(() => {
-                                if (type.autoAllocationFreq.startsWith("WEEKLY:")) {
-                                  const dayIdx = parseInt(type.autoAllocationFreq.split(":")[1] || "1");
-                                  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-                                  return `Week (${days[dayIdx]})`;
-                                } else if (type.autoAllocationFreq.startsWith("MONTHLY:")) {
-                                  const date = type.autoAllocationFreq.split(":")[1] || "1";
-                                  const suffix = date === "1" ? "st" : date === "2" ? "nd" : date === "3" ? "rd" : "th";
-                                  return `Month (${date}${suffix})`;
-                                } else if (type.autoAllocationFreq === "MONTHLY") {
-                                  return "Month";
-                                } else {
-                                  return "Year";
-                                }
-                              })()}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Carry Forward Limit</span>
-                            <span className="text-xs font-black text-slate-700">{type.carryForward} ({type.carryForwardFreq === "END_OF_MONTH" ? "End of Month" : "End of Year"})</span>
-                          </div>
-                        </div>
-
-                        <div className="pt-2 flex items-center justify-between border-t border-slate-50">
-                          <div>
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Encashment Support</span>
-                            <span className="text-xs font-black text-slate-700">{type.encashment ? "Supported" : "Off"}</span>
-                          </div>
-                          <div>
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Leave Cycle</span>
-                            <span className="text-xs font-black text-slate-700">{type.leaveCycle === "CALENDAR" ? "Jan - Dec" : "Apr - Mar"}</span>
-                          </div>
-                        </div>
-
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-
-            </div>
-
-        </div>
-      )}
-
-      {/* Edit Leave Category Dialog */}
-      <Dialog open={isEditLeaveOpen} onOpenChange={setIsEditLeaveOpen}>
-        <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader className="p-8 bg-blue-600 text-white flex-shrink-0">
-            <DialogTitle className="text-2xl font-black">Edit Leave Category</DialogTitle>
-            <p className="text-blue-100 text-xs font-semibold mt-1">Modify rules and allocation parameters for this leave type.</p>
-          </DialogHeader>
-
-          <div className="p-8 space-y-6 overflow-y-auto flex-grow text-left">
-            {/* Leave Name */}
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Leave Name *</Label>
-              <Input 
-                placeholder="e.g. Sick Leave" 
-                required
-                value={editLeaveName}
-                onChange={e => setEditLeaveName(e.target.value)}
-                className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-              />
-            </div>
-
-            {/* Alias */}
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Alias *</Label>
-              <Input 
-                placeholder="e.g. SL" 
-                required
-                value={editLeaveAlias}
-                onChange={e => setEditLeaveAlias(e.target.value)}
-                className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-              />
-            </div>
-
-            {/* Description */}
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Description</Label>
-              <Input 
-                placeholder="Short description..." 
-                value={editLeaveDescription}
-                onChange={e => setEditLeaveDescription(e.target.value)}
-                className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-              />
-            </div>
-
-            {/* Auto Allocation */}
-            <div className="space-y-4">
-              <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Number Of Auto Allocation Leaves *</Label>
-              <Input 
-                type="number"
-                required
-                value={editAutoAllocCount}
-                onChange={e => setEditAutoAllocCount(e.target.value)}
-                className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-              />
-              
-              <div className="flex flex-wrap items-center gap-6">
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input 
-                    type="radio" 
-                    name="editAutoAllocFreq" 
-                    checked={editAutoAllocFreq.startsWith("WEEKLY")}
-                    onChange={() => setEditAutoAllocFreq("WEEKLY:1")}
-                    className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                  />
-                  <span className="text-xs font-bold text-slate-600">Every Week</span>
-                </label>
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input 
-                    type="radio" 
-                    name="editAutoAllocFreq" 
-                    checked={editAutoAllocFreq.startsWith("MONTHLY")}
-                    onChange={() => setEditAutoAllocFreq("MONTHLY:1")}
-                    className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                  />
-                  <span className="text-xs font-bold text-slate-600">Every Month</span>
-                </label>
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input 
-                    type="radio" 
-                    name="editAutoAllocFreq" 
-                    checked={editAutoAllocFreq === "YEARLY"}
-                    onChange={() => setEditAutoAllocFreq("YEARLY")}
-                    className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                  />
-                  <span className="text-xs font-bold text-slate-600">Every Calendar Year</span>
-                </label>
-              </div>
-
-              {editAutoAllocFreq.startsWith("WEEKLY") && (
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Weekday for Auto Allocation</Label>
-                  <Select 
-                    value={editAutoAllocFreq.split(":")[1] || "1"} 
-                    onValueChange={(val) => setEditAutoAllocFreq(`WEEKLY:${val}`)}
-                  >
-                    <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 font-bold text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white border-slate-200 rounded-xl">
-                      <SelectItem value="0">Sunday</SelectItem>
-                      <SelectItem value="1">Monday</SelectItem>
-                      <SelectItem value="2">Tuesday</SelectItem>
-                      <SelectItem value="3">Wednesday</SelectItem>
-                      <SelectItem value="4">Thursday</SelectItem>
-                      <SelectItem value="5">Friday</SelectItem>
-                      <SelectItem value="6">Saturday</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {editAutoAllocFreq.startsWith("MONTHLY") && (
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Day of Month for Auto Allocation</Label>
-                  <Select 
-                    value={editAutoAllocFreq.split(":")[1] || "1"} 
-                    onValueChange={(val) => setEditAutoAllocFreq(`MONTHLY:${val}`)}
-                  >
-                    <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 font-bold text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white border-slate-200 rounded-xl max-h-48 overflow-y-auto">
-                      {Array.from({ length: 31 }, (_, i) => (i + 1).toString()).map(date => (
-                        <SelectItem key={date} value={date}>{date}{date === "1" ? "st" : date === "2" ? "nd" : date === "3" ? "rd" : "th"} of month</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-
-            {/* Carry Forward */}
-            <div className="space-y-4">
-              <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Carry Forward *</Label>
-              <Input 
-                type="number"
-                required
-                value={editCarryForwardCount}
-                onChange={e => setEditCarryForwardCount(e.target.value)}
-                className="h-12 rounded-2xl bg-slate-50 border-slate-200/60 focus:bg-white transition-all font-bold text-xs" 
-              />
-              
-              <div className="flex items-center gap-6">
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input 
-                    type="radio" 
-                    name="editCarryForwardFreq" 
-                    checked={editCarryForwardFreq === "END_OF_MONTH"}
-                    onChange={() => setEditCarryForwardFreq("END_OF_MONTH")}
-                    className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                  />
-                  <span className="text-xs font-bold text-slate-600">End Of Every Month</span>
-                </label>
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input 
-                    type="radio" 
-                    name="editCarryForwardFreq" 
-                    checked={editCarryForwardFreq === "END_OF_YEAR"}
-                    onChange={() => setEditCarryForwardFreq("END_OF_YEAR")}
-                    className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                  />
-                  <span className="text-xs font-bold text-slate-600">End Of Every Calendar Year</span>
-                </label>
-              </div>
-            </div>
-
-            {/* Encashment */}
-            <div className="space-y-2.5">
-              <Label className="text-[10px] font-black uppercase tracking-wider text-slate-400 font-extrabold">Encashment Of Leave</Label>
-              <div className="flex items-center gap-6">
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input 
-                    type="radio" 
-                    name="editEncashment" 
-                    checked={!editEncashment}
-                    onChange={() => setEditEncashment(false)}
-                    className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                  />
-                  <span className="text-xs font-bold text-slate-600">Off</span>
-                </label>
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input 
-                    type="radio" 
-                    name="editEncashment" 
-                    checked={editEncashment}
-                    onChange={() => setEditEncashment(true)}
-                    className="h-4.5 w-4.5 text-blue-600 border-slate-300 focus:ring-blue-500" 
-                  />
-                  <span className="text-xs font-bold text-slate-600">On</span>
-                </label>
-              </div>
-            </div>
+              <Button 
+                type="submit"
+                className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] mt-6"
+              >
+                 Assign Leave / Off
+              </Button>
+            </form>
           </div>
-
-          <DialogFooter className="p-8 border-t border-slate-50 flex-shrink-0">
-            <Button 
-              onClick={() => {
-                if (!editLeaveName || !editLeaveAlias) {
-                  alert("Name and Alias are required.");
-                  return;
-                }
-                updateLeaveTypeMutation.mutate({
-                  id: editingLeaveType.id,
-                  data: {
-                    name: editLeaveName,
-                    alias: editLeaveAlias,
-                    description: editLeaveDescription,
-                    autoAllocationCount: parseFloat(editAutoAllocCount),
-                    autoAllocationFreq: editAutoAllocFreq,
-                    carryForward: parseFloat(editCarryForwardCount),
-                    carryForwardFreq: editCarryForwardFreq,
-                    encashment: editEncashment,
-                    leaveCycle: editingLeaveType.leaveCycle
-                  }
-                });
-              }}
-              disabled={updateLeaveTypeMutation.isPending}
-              className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold uppercase tracking-widest text-[10px]"
-            >
-              {updateLeaveTypeMutation.isPending ? "Updating..." : "Update Rules"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Leave Category Dialog */}
-      <Dialog open={isDeleteLeaveOpen} onOpenChange={setIsDeleteLeaveOpen}>
-        <DialogContent className="max-w-md p-8 overflow-hidden border-none shadow-2xl bg-white rounded-3xl text-left">
-          <DialogHeader className="p-0 text-left">
-            <DialogTitle className="text-xl font-black text-slate-900 font-extrabold">Delete Leave Category</DialogTitle>
-            <p className="text-slate-500 text-xs font-bold leading-normal mt-2">
-              Are you sure you want to delete leave category &quot;{deletingLeaveType?.name}&quot;? This action cannot be undone and will delete all associated setup rules.
-            </p>
-          </DialogHeader>
-
-          <DialogFooter className="pt-8 flex gap-3">
-            <Button 
-              variant="outline"
-              onClick={() => setIsDeleteLeaveOpen(false)}
-              className="flex-1 h-12 rounded-xl text-xs font-extrabold text-slate-700 border-slate-200 uppercase tracking-wider"
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => {
-                deleteLeaveTypeMutation.mutate(deletingLeaveType.id);
-              }}
-              disabled={deleteLeaveTypeMutation.isPending}
-              className="flex-1 h-12 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-extrabold text-xs uppercase tracking-wider"
-            >
-              {deleteLeaveTypeMutation.isPending ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
