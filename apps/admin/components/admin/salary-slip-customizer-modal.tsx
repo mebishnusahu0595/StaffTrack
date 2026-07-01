@@ -100,13 +100,36 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
+  // Predefined custom fields
+  const [hrAllowance, setHrAllowance] = useState<number>(0);
+  const [specialAllowance, setSpecialAllowance] = useState<number>(0);
+  const [medicalAllowance, setMedicalAllowance] = useState<number>(0);
+  const [dailyAllowance, setDailyAllowance] = useState<number>(0);
+  const [incentive, setIncentive] = useState<number>(0);
+  const [pfContribution, setPfContribution] = useState<number>(0);
+
   // Load existing values if they are stored in the report object (passed from backend)
   React.useEffect(() => {
     if (report.earnings && Array.isArray(report.earnings)) {
-      // Parse custom earnings (excluding standard ones)
-      const standardLabels = ["Basic Salary", "Travel Allowance", "Reimbursed Expenses"];
+      // Find standard and predefined earnings
+      const hrObj = report.earnings.find((e: any) => e.label?.toLowerCase() === "hr allowance" || e.label?.toLowerCase() === "hra");
+      if (hrObj) setHrAllowance(Number(hrObj.actual ?? hrObj.calculated ?? 0));
+
+      const specObj = report.earnings.find((e: any) => e.label?.toLowerCase() === "special allowance");
+      if (specObj) setSpecialAllowance(Number(specObj.actual ?? specObj.calculated ?? 0));
+
+      const medObj = report.earnings.find((e: any) => e.label?.toLowerCase() === "medical allowance");
+      if (medObj) setMedicalAllowance(Number(medObj.actual ?? medObj.calculated ?? 0));
+
+      const dailyObj = report.earnings.find((e: any) => e.label?.toLowerCase() === "daily allowance");
+      if (dailyObj) setDailyAllowance(Number(dailyObj.actual ?? dailyObj.calculated ?? 0));
+
+      const incObj = report.earnings.find((e: any) => e.label?.toLowerCase() === "incentive" || e.label?.toLowerCase() === "incentives");
+      if (incObj) setIncentive(Number(incObj.actual ?? incObj.calculated ?? 0));
+
+      const standardLabels = ["Basic Salary", "Travel Allowance", "Reimbursed Expenses", "HR Allowance", "HRA", "Special Allowance", "Medical Allowance", "Daily Allowance", "Incentive", "Incentives"];
       const customEarns = report.earnings
-        .filter((e: any) => !standardLabels.includes(e.label))
+        .filter((e: any) => !standardLabels.map(l => l.toLowerCase()).includes(e.label?.toLowerCase()))
         .map((e: any) => ({
           id: Math.random().toString(),
           name: e.label,
@@ -120,9 +143,12 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
       }
     }
     if (report.deductions && Array.isArray(report.deductions)) {
-      const standardLabels = ["Absence Deduction", "Absence Deductions"];
+      const pfObj = report.deductions.find((d: any) => d.label?.toLowerCase() === "pf contribution" || d.label?.toLowerCase() === "pf");
+      if (pfObj) setPfContribution(Number(pfObj.calculated ?? 0));
+
+      const standardLabels = ["Absence Deduction", "Absence Deductions", "PF Contribution", "PF"];
       const customDeds = report.deductions
-        .filter((d: any) => !standardLabels.includes(d.label))
+        .filter((d: any) => !standardLabels.map(l => l.toLowerCase()).includes(d.label?.toLowerCase()))
         .map((d: any) => ({
           id: Math.random().toString(),
           name: d.label,
@@ -151,12 +177,13 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
   }, [baseSalary, netSalary]);
 
   const totalEarningsSum = useMemo(() => {
-    return customEarnings.reduce((sum, item) => sum + item.amount, 0);
-  }, [customEarnings]);
+    return customEarnings.reduce((sum, item) => sum + item.amount, 0) + 
+      hrAllowance + specialAllowance + medicalAllowance + dailyAllowance + incentive;
+  }, [customEarnings, hrAllowance, specialAllowance, medicalAllowance, dailyAllowance, incentive]);
 
   const totalDeductionsSum = useMemo(() => {
-    return customDeductions.reduce((sum, item) => sum + item.amount, 0);
-  }, [customDeductions]);
+    return customDeductions.reduce((sum, item) => sum + item.amount, 0) + pfContribution;
+  }, [customDeductions, pfContribution]);
 
   const totalPayout = useMemo(() => {
     return netSalary + expenses + travelAllowance + totalEarningsSum - totalDeductionsSum;
@@ -191,16 +218,42 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
   const buildEarnings = () => {
     const items: { label: string; actual: number; calculated: number }[] = [];
     items.push({ label: "Basic Salary", actual: baseSalary, calculated: netSalary });
+    
+    // Predefined fields
+    items.push({ label: "HR Allowance", actual: hrAllowance, calculated: hrAllowance });
+    items.push({ label: "Special Allowance", actual: specialAllowance, calculated: specialAllowance });
+    items.push({ label: "Medical Allowance", actual: medicalAllowance, calculated: medicalAllowance });
+    items.push({ label: "Daily Allowance", actual: dailyAllowance, calculated: dailyAllowance });
+    items.push({ label: "Incentive", actual: incentive, calculated: incentive });
+
     if (travelAllowance > 0) items.push({ label: "Travel Allowance", actual: travelAllowance, calculated: travelAllowance });
     if (expenses > 0) items.push({ label: "Reimbursed Expenses", actual: expenses, calculated: expenses });
-    customEarnings.forEach((e) => items.push({ label: e.name, actual: e.amount, calculated: e.amount }));
+    
+    customEarnings.forEach((e) => {
+      const isPredefined = ["Basic Salary", "HR Allowance", "Special Allowance", "Medical Allowance", "Daily Allowance", "Incentive"].some(
+        p => p.toLowerCase() === e.name.toLowerCase()
+      );
+      if (!isPredefined) {
+        items.push({ label: e.name, actual: e.amount, calculated: e.amount });
+      }
+    });
     return items;
   };
 
   const buildDeductions = () => {
     const items: { label: string; calculated: number }[] = [];
     if (!waiveLeaveDeduction && deductionAmount > 0) items.push({ label: "Absence Deduction", calculated: deductionAmount });
-    customDeductions.forEach((d) => items.push({ label: d.name, calculated: d.amount }));
+    
+    items.push({ label: "PF Contribution", calculated: pfContribution });
+
+    customDeductions.forEach((d) => {
+      const isPredefined = ["PF Contribution", "Absence Deduction"].some(
+        p => p.toLowerCase() === d.name.toLowerCase()
+      );
+      if (!isPredefined) {
+        items.push({ label: d.name, calculated: d.amount });
+      }
+    });
     return items;
   };
 
@@ -590,6 +643,51 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
                          className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800"
                       />
                    </div>
+                   <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">HR Allowance (₹)</label>
+                      <Input 
+                         type="number"
+                         value={hrAllowance || ""}
+                         onChange={e => setHrAllowance(Number(e.target.value))}
+                         className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800"
+                      />
+                   </div>
+                   <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Special Allowance (₹)</label>
+                      <Input 
+                         type="number"
+                         value={specialAllowance || ""}
+                         onChange={e => setSpecialAllowance(Number(e.target.value))}
+                         className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800"
+                      />
+                   </div>
+                   <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Medical Allowance (₹)</label>
+                      <Input 
+                         type="number"
+                         value={medicalAllowance || ""}
+                         onChange={e => setMedicalAllowance(Number(e.target.value))}
+                         className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800"
+                      />
+                   </div>
+                   <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Daily Allowance (₹)</label>
+                      <Input 
+                         type="number"
+                         value={dailyAllowance || ""}
+                         onChange={e => setDailyAllowance(Number(e.target.value))}
+                         className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800"
+                      />
+                   </div>
+                   <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Incentive (₹)</label>
+                      <Input 
+                         type="number"
+                         value={incentive || ""}
+                         onChange={e => setIncentive(Number(e.target.value))}
+                         className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800"
+                      />
+                   </div>
                  </div>
 
                  <div className="border-t border-slate-200/60 pt-4 flex-grow flex flex-col space-y-3">
@@ -637,12 +735,23 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
               {/* Right Column: Deductions */}
               <div className="bg-slate-50 p-6 rounded-3xl space-y-4 border border-slate-100 flex flex-col">
                  <h3 className="text-xs font-black text-rose-500 uppercase tracking-widest">Deductions</h3>
-                 <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">Leave Absence Deduction</p>
-                    <div className="h-10 flex items-center">
-                       <span className="text-sm font-black text-rose-500">
-                          {waiveLeaveDeduction ? "₹0 (Waived)" : `₹${deductionAmount.toLocaleString()}`}
-                       </span>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div>
+                       <p className="text-[10px] font-bold text-slate-400 uppercase">Leave Absence Deduction</p>
+                       <div className="h-10 flex items-center">
+                          <span className="text-sm font-black text-rose-500">
+                             {waiveLeaveDeduction ? "₹0 (Waived)" : `₹${deductionAmount.toLocaleString()}`}
+                          </span>
+                       </div>
+                    </div>
+                    <div>
+                       <label className="text-[10px] font-bold text-slate-400 uppercase">PF Contribution (₹)</label>
+                       <Input 
+                          type="number"
+                          value={pfContribution || ""}
+                          onChange={e => setPfContribution(Number(e.target.value))}
+                          className="bg-white border-slate-200/80 rounded-xl font-bold text-slate-800"
+                       />
                     </div>
                  </div>
 
