@@ -38,6 +38,9 @@ export interface SalarySlipInput {
   deductions?: DeductionItem[];
   remarks?: string;
   logoUrl?: string;
+  orgEmail?: string;
+  orgWebsite?: string;
+  orgPhone?: string;
 }
 
 const slipInclude = {
@@ -79,6 +82,9 @@ export async function upsertSalarySlip(actor: AuthUser, input: SalarySlipInput) 
     orgSubtitle: input.orgSubtitle,
     orgCode: input.orgCode,
     logoUrl: input.logoUrl,
+    orgEmail: input.orgEmail,
+    orgWebsite: input.orgWebsite,
+    orgPhone: input.orgPhone,
     companyCode: input.companyCode,
     bankName: input.bankName,
     bankAccountNo: input.bankAccountNo,
@@ -208,6 +214,13 @@ export function amountInWords(value: number): string {
 export function ensureDefaultFields<T>(slip: T): T {
   if (!slip) return slip;
   
+  const s = slip as any;
+  s.orgName = s.orgName || s.company?.name || "Vaniki Crop Science Pvt Ltd.";
+  s.orgSubtitle = s.orgSubtitle || "Durg office - Shop no. 37, Krishi Upaj Mandi, Dhamdha Road, Durg 491001 (C.G.)";
+  s.orgEmail = s.orgEmail || "vanikicrop@gmail.com";
+  s.orgWebsite = s.orgWebsite || "vanikicrop.com";
+  s.orgPhone = s.orgPhone || "+91 9406160135";
+
   const defaultEarnings = [
     "Basic Salary",
     "HR Allowance",
@@ -221,8 +234,6 @@ export function ensureDefaultFields<T>(slip: T): T {
     "PF Contribution",
     "LWP/Leave"
   ];
-
-  const s = slip as any;
   let currentEarnings: any[] = [];
   if (s.earnings && Array.isArray(s.earnings)) {
     currentEarnings = [...s.earnings];

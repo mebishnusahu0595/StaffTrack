@@ -544,6 +544,9 @@ model SalarySlip {
   orgSubtitle   String?
   orgCode       String?
   logoUrl       String?
+  orgEmail      String?
+  orgWebsite    String?
+  orgPhone      String?
 
   // Bank / trainee detail block
   companyCode    String?

@@ -65,6 +65,7 @@ export function SalarySlipScreen() {
               .org-logo { max-height: 48px; max-width: 96px; object-fit: contain; }
               .org h1 { margin: 0; font-size: 16px; font-weight: 800; }
               .org .sub { font-size: 11px; color: #475569; margin-top: 2px; }
+              .org .contacts { font-size: 9px; color: #64748b; margin-top: 2px; }
               .org .period { font-size: 12px; font-weight: 700; margin-top: 6px; }
               .org .code { font-size: 10px; color: #64748b; margin-top: 2px; }
               .sheet { border: 1px solid #1e293b; margin-top: 12px; }
@@ -92,6 +93,7 @@ export function SalarySlipScreen() {
               <div>
                 <h1>${s.orgName || s.company?.name || "Company"}</h1>
                 ${s.orgSubtitle ? `<div class="sub">${s.orgSubtitle}</div>` : ""}
+                <div class="contacts">Website: ${s.orgWebsite || "vanikicrop.com"} &nbsp;|&nbsp; Email: ${s.orgEmail || "vanikicrop@gmail.com"} &nbsp;|&nbsp; Ph.No: ${s.orgPhone || "+91 9406160135"}</div>
                 <div class="period">Salary slip for the month of ${monthName} ${s.year}</div>
                 ${s.orgCode ? `<div class="code">${s.orgCode}</div>` : ""}
               </div>

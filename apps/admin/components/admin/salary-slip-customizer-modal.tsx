@@ -6,10 +6,11 @@ import {
   Plus, 
   Trash2, 
   Printer, 
-  CheckCircle2 
+  CheckCircle2,
+  Building2
 } from "lucide-react";
 import dayjs from "dayjs";
-import { saveSalarySlip } from "@/lib/api";
+import { saveSalarySlip, uploadFile } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
@@ -85,9 +86,33 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
   const [newDeductionAmount, setNewDeductionAmount] = useState("");
 
   // Organisation header + bank / trainee details (saved with the slip)
-  const [orgName, setOrgName] = useState(report.orgName || report.companyName || "");
-  const [orgSubtitle, setOrgSubtitle] = useState(report.orgSubtitle || "");
-  const [orgCode, setOrgCode] = useState(report.orgCode || "");
+  const [localLogo, setLocalLogo] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      setLocalLogo(localStorage.getItem("payslip_logo") || report.logoUrl || null);
+    }
+  }, [report.logoUrl]);
+
+  const [orgName, setOrgName] = useState(
+    (typeof window !== "undefined" ? localStorage.getItem("payslip_orgName") : null) || report.orgName || report.companyName || "Vaniki Crop Science Pvt Ltd."
+  );
+  const [orgSubtitle, setOrgSubtitle] = useState(
+    (typeof window !== "undefined" ? localStorage.getItem("payslip_orgSubtitle") : null) || report.orgSubtitle || "Durg office - Shop no. 37, Krishi Upaj Mandi, Dhamdha Road, Durg 491001 (C.G.)"
+  );
+  const [orgCode, setOrgCode] = useState(
+    (typeof window !== "undefined" ? localStorage.getItem("payslip_orgCode") : null) || report.orgCode || ""
+  );
+  const [orgEmail, setOrgEmail] = useState(
+    (typeof window !== "undefined" ? localStorage.getItem("payslip_orgEmail") : null) || report.orgEmail || "vanikicrop@gmail.com"
+  );
+  const [orgWebsite, setOrgWebsite] = useState(
+    (typeof window !== "undefined" ? localStorage.getItem("payslip_orgWebsite") : null) || report.orgWebsite || "vanikicrop.com"
+  );
+  const [orgPhone, setOrgPhone] = useState(
+    (typeof window !== "undefined" ? localStorage.getItem("payslip_orgPhone") : null) || report.orgPhone || "+91 9406160135"
+  );
+
   const [companyCode, setCompanyCode] = useState(report.companyCode || "");
   const [bankName, setBankName] = useState(report.bankName || "");
   const [bankAccountNo, setBankAccountNo] = useState(report.bankAccountNo || "");
@@ -110,6 +135,14 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
 
   // Load existing values if they are stored in the report object (passed from backend)
   React.useEffect(() => {
+    if (report.orgName) setOrgName(report.orgName);
+    if (report.orgSubtitle) setOrgSubtitle(report.orgSubtitle);
+    if (report.orgCode) setOrgCode(report.orgCode);
+    if (report.orgEmail) setOrgEmail(report.orgEmail);
+    if (report.orgWebsite) setOrgWebsite(report.orgWebsite);
+    if (report.orgPhone) setOrgPhone(report.orgPhone);
+    if (report.logoUrl) setLocalLogo(report.logoUrl);
+
     if (report.earnings && Array.isArray(report.earnings)) {
       // Find standard and predefined earnings
       const hrObj = report.earnings.find((e: any) => e.label?.toLowerCase() === "hr allowance" || e.label?.toLowerCase() === "hra");
@@ -261,7 +294,21 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
     setSaving(true);
     setSaveMsg(null);
     try {
-      const localLogo = typeof window !== "undefined" ? localStorage.getItem("payslip_logo") : null;
+      const logoUrlToSave = localLogo || report.logoUrl || undefined;
+
+      // Save settings to localStorage so they are predefined for future slips
+      if (typeof window !== "undefined") {
+         localStorage.setItem("payslip_orgName", orgName);
+         localStorage.setItem("payslip_orgSubtitle", orgSubtitle);
+         localStorage.setItem("payslip_orgCode", orgCode);
+         localStorage.setItem("payslip_orgEmail", orgEmail);
+         localStorage.setItem("payslip_orgWebsite", orgWebsite);
+         localStorage.setItem("payslip_orgPhone", orgPhone);
+         if (logoUrlToSave) {
+            localStorage.setItem("payslip_logo", logoUrlToSave);
+         }
+      }
+
       await saveSalarySlip({
         userId: report.userId,
         month: month.month() + 1,
@@ -270,7 +317,10 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
         orgName,
         orgSubtitle,
         orgCode,
-        logoUrl: report.logoUrl || localLogo || undefined,
+        logoUrl: logoUrlToSave,
+        orgEmail,
+        orgWebsite,
+        orgPhone,
         companyCode,
         bankName,
         bankAccountNo,
@@ -376,7 +426,7 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
             <div class="org-info">
               <h1>${orgName || "Vaniki Crop Science Pvt Ltd."}</h1>
               <div class="sub">${orgSubtitle || "Durg office - Shop no. 37, Krishi Upaj Mandi, Dhamdha Road, Durg 491001 (C.G.)"}</div>
-              <div class="contacts">Website: vanikicrop.com &nbsp;|&nbsp; Email: vanikicrop@gmail.com &nbsp;|&nbsp; Ph.No: +91 9406160135</div>
+              <div class="contacts">Website: ${orgWebsite} &nbsp;|&nbsp; Email: ${orgEmail} &nbsp;|&nbsp; Ph.No: ${orgPhone}</div>
             </div>
           </div>
 
@@ -537,8 +587,11 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
              <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Organisation & Bank / Trainee Details</h3>
              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <DetailInput label="Company / Org Name" value={orgName} onChange={setOrgName} placeholder="e.g. Vaniki Crop Science" />
-                <DetailInput label="Org Subtitle" value={orgSubtitle} onChange={setOrgSubtitle} placeholder="e.g. Chemical Crop Care" />
+                <DetailInput label="Org Subtitle (Address)" value={orgSubtitle} onChange={setOrgSubtitle} placeholder="e.g. Shop no. 37, Krishi Upaj Mandi" />
                 <DetailInput label="Org Code" value={orgCode} onChange={setOrgCode} placeholder="e.g. Yashaswi Code : 100175394" />
+                <DetailInput label="Org Website" value={orgWebsite} onChange={setOrgWebsite} placeholder="e.g. vanikicrop.com" />
+                <DetailInput label="Org Email" value={orgEmail} onChange={setOrgEmail} placeholder="e.g. vanikicrop@gmail.com" />
+                <DetailInput label="Org Phone" value={orgPhone} onChange={setOrgPhone} placeholder="e.g. +91 9406160135" />
                 <DetailInput label="Company Code" value={companyCode} onChange={setCompanyCode} />
                 <DetailInput label="Bank Name" value={bankName} onChange={setBankName} />
                 <DetailInput label="Bank A/C No" value={bankAccountNo} onChange={setBankAccountNo} />
@@ -547,6 +600,52 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
                 <DetailInput label="Division Name" value={divisionName} onChange={setDivisionName} placeholder="e.g. Retail_Chhatisgarh" />
                 <DetailInput label="Trainee Type" value={traineeType} onChange={setTraineeType} placeholder="e.g. NAPS" />
                 <DetailInput label="Aadhaar Number" value={aadhaarNumber} onChange={setAadhaarNumber} />
+
+                <div className="flex flex-col space-y-1.5 col-span-1 md:col-span-3 border-t border-slate-200/60 pt-4">
+                   <label className="text-[10px] font-bold text-slate-400 uppercase">Organisation Logo</label>
+                   <div className="flex items-center gap-4 pt-1">
+                      <div className="h-14 w-14 rounded-full border border-slate-350 bg-white flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+                         {localLogo ? (
+                            <img src={localLogo} alt="Logo" className="h-full w-full object-contain" />
+                         ) : (
+                            <Building2 className="h-6 w-6 text-slate-400" />
+                         )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                         <input
+                            type="file"
+                            accept="image/*"
+                            id="customizer-logo-upload"
+                            className="hidden"
+                            onChange={async (e) => {
+                               const file = e.target.files?.[0];
+                               if (file) {
+                                  try {
+                                     const url = await uploadFile(file);
+                                     localStorage.setItem("payslip_logo", url);
+                                     setLocalLogo(url);
+                                  } catch (err) {
+                                     alert("Failed to upload logo");
+                                  }
+                               }
+                            }}
+                         />
+                         <Button variant="outline" size="sm" asChild className="rounded-xl font-bold cursor-pointer bg-white">
+                            <label htmlFor="customizer-logo-upload">
+                               Upload Logo
+                            </label>
+                         </Button>
+                         {localLogo && (
+                            <Button variant="ghost" size="sm" onClick={() => {
+                               localStorage.removeItem("payslip_logo");
+                               setLocalLogo(null);
+                            }} className="rounded-xl font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50">
+                               Clear Logo
+                            </Button>
+                         )}
+                      </div>
+                   </div>
+                </div>
              </div>
           </div>
 

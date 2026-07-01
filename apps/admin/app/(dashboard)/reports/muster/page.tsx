@@ -65,10 +65,14 @@ export default function MusterReportPage() {
 
   const exportToCSV = () => {
     const dayHeaders = days.map((day: string) => dayjs(day).format("DD"));
-    const headers = ["Employee", "Group/Dept", ...dayHeaders];
-    const enrichedHeaders = ["Employee", "Group/Dept", "Monthly Points", ...dayHeaders];
+    const enrichedHeaders = ["Employee", "Group/Dept", "Monthly Points", "Total Leaves", "Total Holidays", "Total Absents", ...dayHeaders];
 
     const rowsData = filteredData.map((item: any) => {
+      const attendanceValues = Object.values(item.attendance || {});
+      const totalLeaves = attendanceValues.filter((v: any) => v === "L").length;
+      const totalHolidays = attendanceValues.filter((v: any) => v === "H").length;
+      const totalAbsents = attendanceValues.filter((v: any) => v === "A").length;
+
       const dayValues = days.map((day: string) => {
         const status = item.attendance[day] || "-";
         const points = Number(item.dailyPoints?.[day] ?? 0);
@@ -78,6 +82,9 @@ export default function MusterReportPage() {
         item.userName || "",
         item.group || "",
         item.monthlyPoints ?? 0,
+        totalLeaves,
+        totalHolidays,
+        totalAbsents,
         ...dayValues
       ];
     });
@@ -173,6 +180,9 @@ export default function MusterReportPage() {
                     <tr className="bg-slate-50/50">
                        <th className="sticky left-0 z-20 bg-slate-50/50 px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest border-r border-slate-100">Employee / Dept</th>
                        <th className="px-4 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[80px] border-r border-slate-100/50">Points</th>
+                       <th className="px-4 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[80px] border-r border-slate-100/50">Leaves</th>
+                       <th className="px-4 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[80px] border-r border-slate-100/50">Holidays</th>
+                       <th className="px-4 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[80px] border-r border-slate-100/50">Absents</th>
                        {days.map((day: string) => (
                           <th key={day} className="px-2 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[45px] border-r border-slate-100/50">
                              {dayjs(day).format("DD")}
@@ -188,11 +198,26 @@ export default function MusterReportPage() {
                              <p className="text-sm font-black text-slate-900 leading-tight">{item.userName}</p>
                              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{item.group}</p>
                           </td>
-                          <td className="px-4 py-4 border-r border-slate-50/50 text-center">
-                            <div className="inline-flex min-w-[52px] items-center justify-center rounded-lg bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">
-                              {item.monthlyPoints ?? 0}
-                            </div>
-                          </td>
+                           <td className="px-4 py-4 border-r border-slate-50/50 text-center">
+                             <div className="inline-flex min-w-[52px] items-center justify-center rounded-lg bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">
+                               {item.monthlyPoints ?? 0}
+                             </div>
+                           </td>
+                           <td className="px-4 py-4 border-r border-slate-50/50 text-center">
+                             <div className="inline-flex min-w-[40px] items-center justify-center rounded-lg bg-indigo-50 px-2 py-1 text-[11px] font-black text-indigo-700">
+                               {Object.values(item.attendance || {}).filter(v => v === "L").length}
+                             </div>
+                           </td>
+                           <td className="px-4 py-4 border-r border-slate-50/50 text-center">
+                             <div className="inline-flex min-w-[40px] items-center justify-center rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-black text-amber-700">
+                               {Object.values(item.attendance || {}).filter(v => v === "H").length}
+                             </div>
+                           </td>
+                           <td className="px-4 py-4 border-r border-slate-50/50 text-center">
+                             <div className="inline-flex min-w-[40px] items-center justify-center rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-black text-rose-700">
+                               {Object.values(item.attendance || {}).filter(v => v === "A").length}
+                             </div>
+                           </td>
                           {days.map((day: string) => {
                              const status = item.attendance[day] || '-';
                              const points = Number(item.dailyPoints?.[day] ?? 0);

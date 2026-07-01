@@ -139,7 +139,7 @@ export function SalarySlipModal({ isOpen, onClose, data, month }: SalarySlipModa
                         </p>
                      )}
                      <p className="text-[10px] font-bold text-slate-500">
-                        Website: vanikicrop.com &nbsp;|&nbsp; Email: vanikicrop@gmail.com &nbsp;|&nbsp; Ph.No: +91 9406160135
+                        Website: {data.orgWebsite || "vanikicrop.com"} &nbsp;|&nbsp; Email: {data.orgEmail || "vanikicrop@gmail.com"} &nbsp;|&nbsp; Ph.No: {data.orgPhone || "+91 9406160135"}
                      </p>
                   </div>
                </div>
