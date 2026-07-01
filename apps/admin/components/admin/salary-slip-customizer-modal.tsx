@@ -255,20 +255,22 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
     const totalActual = earningItems.reduce((s, e) => s + e.actual, 0);
     const totalDed = deductionItems.reduce((s, d) => s + d.calculated, 0);
     const netPay = Math.round(totalEarn - totalDed);
-    const detailRow = (l: string, v: string, l2: string, v2: string) =>
-      `<tr><td class="dk">${l}</td><td class="dv">${v || "-"}</td><td class="dk">${l2}</td><td class="dv">${v2 || "-"}</td></tr>`;
 
-    const earnRows = earningItems
-      .map(
-        (e) =>
-          `<tr><td>${e.label}</td><td class="amt">${e.actual.toLocaleString()}</td><td class="amt">${e.calculated.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>`
-      )
-      .join("");
-    const dedRows = deductionItems.length
-      ? deductionItems
-          .map((d) => `<tr><td>${d.label}</td><td class="amt">${d.calculated.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>`)
-          .join("")
-      : `<tr><td>-</td><td class="amt">0.00</td></tr>`;
+    const maxRows = Math.max(earningItems.length, deductionItems.length, 6);
+    let earnDedRows = "";
+    for (let i = 0; i < maxRows; i++) {
+      const earn = earningItems[i];
+      const ded = deductionItems[i];
+      earnDedRows += `
+        <tr>
+          <td>${earn?.label || ""}</td>
+          <td class="amt">${earn ? earn.actual.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ""}</td>
+          <td class="amt">${earn ? earn.calculated.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ""}</td>
+          <td>${ded?.label || ""}</td>
+          <td class="amt">${ded ? ded.calculated.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ""}</td>
+        </tr>
+      `;
+    }
 
     const html = `
       <html>
@@ -276,83 +278,140 @@ export function SalarySlipCustomizerModal({ report, month, onClose, onSuccess }:
           <title>Salary Slip - ${empName}</title>
           <style>
             * { box-sizing: border-box; }
-            body { font-family: Arial, 'Inter', sans-serif; padding: 32px; color: #1e293b; line-height: 1.45; font-size: 12px; }
-            .org { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 24px; text-align: left; }
-            .org-logo { max-height: 50px; max-width: 100px; object-fit: contain; }
-            .org h1 { margin: 0; font-size: 18px; font-weight: 800; }
-            .org .sub { font-size: 12px; color: #475569; margin-top: 2px; }
-            .org .period { font-size: 13px; font-weight: 700; margin-top: 8px; }
-            .org .code { font-size: 11px; color: #64748b; margin-top: 2px; }
-            .sheet { border: 1px solid #1e293b; margin-top: 14px; }
-            .details { width: 100%; border-collapse: collapse; }
+            body { font-family: Arial, 'Inter', sans-serif; padding: 40px; color: #1e293b; line-height: 1.45; font-size: 11px; }
+            .org { display: flex; align-items: center; gap: 20px; border-bottom: 1px solid #cbd5e1; padding-bottom: 15px; margin-bottom: 20px; text-align: left; }
+            .org-logo-container { width: 64px; height: 64px; border-radius: 50%; border: 2px solid #cbd5e1; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; }
+            .org-logo { max-height: 100%; max-width: 100%; object-fit: contain; }
+            .org-info { flex-grow: 1; }
+            .org-info h1 { margin: 0; font-size: 20px; font-weight: 900; color: #0f172a; }
+            .org-info .sub { font-size: 11px; color: #475569; margin-top: 2px; }
+            .org-info .contacts { font-size: 9px; color: #64748b; margin-top: 2px; }
+            
+            .title-block { text-align: center; margin-bottom: 20px; }
+            .title-block h3 { margin: 0; font-size: 18px; font-weight: 800; text-decoration: underline; color: #0f172a; letter-spacing: 1px; }
+            .title-block .period { font-size: 11px; font-weight: 700; color: #475569; margin-top: 4px; text-transform: uppercase; }
+
+            .details { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
             .details td { border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 11px; }
-            .details .dk { background: #f1f5f9; font-weight: 700; width: 18%; text-transform: capitalize; }
-            .details .dv { width: 32%; }
-            .cols { display: flex; border-top: 2px solid #1e293b; }
-            .col { flex: 1; }
-            .col + .col { border-left: 1px solid #1e293b; }
-            .tbl { width: 100%; border-collapse: collapse; }
-            .tbl th { background: #f1f5f9; font-size: 11px; text-transform: uppercase; padding: 6px 10px; border-bottom: 1px solid #cbd5e1; text-align: left; }
+            .details .dk { background: #f8fafc; font-weight: 700; width: 20%; color: #334155; }
+            .details .dv { width: 30%; color: #0f172a; }
+
+            .tbl { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            .tbl th { background: #f1f5f9; font-size: 10px; font-weight: 800; text-transform: uppercase; padding: 6px 10px; border: 1px solid #cbd5e1; text-align: left; color: #475569; }
             .tbl th.amt, .tbl td.amt { text-align: right; }
-            .tbl td { padding: 6px 10px; border-bottom: 1px solid #eef2f6; font-size: 12px; }
-            .tbl tr.total td { font-weight: 800; border-top: 2px solid #1e293b; background: #f8fafc; }
-            .net { border-top: 2px solid #1e293b; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; }
-            .net .lbl { font-size: 14px; font-weight: 800; }
-            .net .words { font-size: 11px; color: #475569; font-style: italic; }
-            .sysnote { text-align: center; margin-top: 16px; font-size: 10px; color: #64748b; letter-spacing: 0.5px; }
+            .tbl td { padding: 6px 10px; border: 1px solid #cbd5e1; font-size: 11px; color: #0f172a; }
+            .tbl tr.total td { font-weight: 800; background: #f8fafc; color: #0f172a; }
+
+            .formula-box { border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px; background: #f8fafc; text-align: left; margin-bottom: 30px; }
+            .formula-title { font-size: 11px; font-weight: 700; color: #334155; margin: 0 0 5px 0; }
+            .formula-value { font-size: 16px; font-weight: 900; color: #0f172a; margin: 0; text-align: right; }
+            .formula-words { font-size: 11px; font-weight: 700; color: #475569; margin: 5px 0 0 0; font-style: italic; }
+
+            .sigs { display: flex; justify-content: space-between; gap: 80px; margin-top: 50px; }
+            .sig-col { flex: 1; text-align: center; }
+            .sig-line { border-top: 1px solid #cbd5e1; margin-bottom: 8px; }
+            .sig-label { font-size: 10px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; }
+
+            .sysnote { text-align: center; margin-top: 40px; font-size: 9px; color: #94a3b8; letter-spacing: 0.5px; text-transform: uppercase; }
           </style>
         </head>
         <body>
           <div class="org">
-            ${logoUrl ? `<img class="org-logo" src="${logoUrl}" alt="Logo" />` : ""}
-            <div>
-              <h1>${orgName || "Company"}</h1>
-              ${orgSubtitle ? `<div class="sub">${orgSubtitle}</div>` : ""}
-              <div class="period">Salary slip for the month of ${monthName}</div>
-              ${orgCode ? `<div class="code">${orgCode}</div>` : ""}
+            <div class="org-logo-container">
+              ${logoUrl ? `<img class="org-logo" src="${logoUrl}" alt="Logo" />` : `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h2"/><path d="M18 18h2a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>`}
+            </div>
+            <div class="org-info">
+              <h1>${orgName || "Vaniki Crop Science Pvt Ltd."}</h1>
+              <div class="sub">${orgSubtitle || "Durg office - Shop no. 37, Krishi Upaj Mandi, Dhamdha Road, Durg 491001 (C.G.)"}</div>
+              <div class="contacts">Website: vanikicrop.com &nbsp;|&nbsp; Email: vanikicrop@gmail.com &nbsp;|&nbsp; Ph.No: +91 9406160135</div>
             </div>
           </div>
 
-          <div class="sheet">
-            <table class="details">
-              ${detailRow("Company Code", companyCode, "Bank Name", bankName)}
-              ${detailRow("Employee Name", empName, "Bank A/C No", bankAccountNo)}
-              ${detailRow("Department Name", departmentName, "IFSC Code", ifscCode)}
-              ${detailRow("Designation", designation, "Month Days", String(totalDays))}
-              ${detailRow("Division Name", divisionName, "Payable Days", String(calculatedPayableDays))}
-              ${detailRow("Trainee Type", traineeType, "Aadhaar Number", aadhaarNumber)}
-            </table>
+          <div class="title-block">
+            <h3>PAY SLIP</h3>
+            <div class="period">For ${monthName}</div>
+          </div>
 
-            <div class="cols">
-              <div class="col">
-                <table class="tbl">
-                  <thead><tr><th>Earnings</th><th class="amt">Actual</th><th class="amt">Calculated</th></tr></thead>
-                  <tbody>
-                    ${earnRows}
-                    <tr class="total"><td>Total</td><td class="amt">${totalActual.toLocaleString()}</td><td class="amt">${totalEarn.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>
-                  </tbody>
-                </table>
-              </div>
-              <div class="col">
-                <table class="tbl">
-                  <thead><tr><th>Deduction</th><th class="amt">Calculated</th></tr></thead>
-                  <tbody>
-                    ${dedRows}
-                    <tr class="total"><td>Total</td><td class="amt">${totalDed.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>
-                  </tbody>
-                </table>
-              </div>
+          <table class="details">
+            <tr>
+              <td class="dk">Employee Name</td><td class="dv">${empName}</td>
+              <td class="dk">Bank Name</td><td class="dv">${bankName || "-"}</td>
+            </tr>
+            <tr>
+              <td class="dk">Company Code</td><td class="dv">${companyCode || "-"}</td>
+              <td class="dk">Bank A/c No</td><td class="dv">${bankAccountNo || "-"}</td>
+            </tr>
+            <tr>
+              <td class="dk">Department Name</td><td class="dv">${departmentName || "-"}</td>
+              <td class="dk">IFSC Code</td><td class="dv">${ifscCode || "-"}</td>
+            </tr>
+            <tr>
+              <td class="dk">Designation</td><td class="dv">${designation}</td>
+              <td class="dk">Adhar No</td><td class="dv">${aadhaarNumber || "-"}</td>
+            </tr>
+            <tr>
+              <td class="dk">Division Name</td><td class="dv">${divisionName || "-"}</td>
+              <td class="dk">Holiday</td><td class="dv">${holidayDays}</td>
+            </tr>
+            <tr>
+              <td class="dk">Trainee Type</td><td class="dv">${traineeType || "-"}</td>
+              <td class="dk">Leave</td><td class="dv">${absentDays}</td>
+            </tr>
+            <tr>
+              <td class="dk">Month Days</td><td class="dv">${totalDays}</td>
+              <td class="dk">Paid Leave</td><td class="dv">${paidLeaveDays}</td>
+            </tr>
+            <tr>
+              <td class="dk">Payable Days</td><td class="dv">${calculatedPayableDays}</td>
+              <td class="dk">Date of Joining</td><td class="dv">${report.joiningDate ? dayjs(report.joiningDate).format("DD MMM, YYYY") : "-"}</td>
+            </tr>
+          </table>
+
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th style="width: 35%;">Earnings</th>
+                <th class="amt" style="width: 15%;">Actual</th>
+                <th class="amt" style="width: 15%;">Calculated</th>
+                <th style="width: 20%;">Deduction</th>
+                <th class="amt" style="width: 15%;">Calculated</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${earnDedRows}
+              <tr class="total">
+                <td>Total Earnings</td>
+                <td class="amt">${totalActual.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td class="amt">${totalEarn.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td>Total Deductions</td>
+                <td class="amt">${totalDed.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="formula-box">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <p class="formula-title">NET PAY = Total Earnings (₹${totalEarn.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Total Deductions (₹${totalDed.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</p>
+              <h2 class="formula-value">₹${netPay.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
             </div>
+            <p class="formula-words">Total Amount (In Words: ${amountInWords(netPay)})</p>
+          </div>
 
-            <div class="net">
-              <div>
-                <div class="lbl">Total Net Pay Rs.${netPay.toLocaleString()}/-</div>
-                <div class="words">( In Words: ${amountInWords(netPay)} )</div>
+          <div class="sigs">
+            <div class="sig-col">
+              <div class="sig-line"></div>
+              <div class="sig-label">Employee Signature</div>
+            </div>
+            <div class="sig-col">
+              <div class="sig-line"></div>
+              <div class="sig-label">
+                Authorised Signatory<br/>
+                <span style="text-transform: none; font-weight: normal; font-size: 9px; color: #475569; margin-top: 2px; display: block;">${orgName || "Vaniki Crop Science Pvt Ltd."}</span>
               </div>
             </div>
           </div>
 
-          <div class="sysnote">THIS IS SYSTEM GENERATED DOCUMENT, HENCE SIGNATURE IS NOT REQUIRED.</div>
+          <div class="sysnote">THIS IS A COMPUTER GENERATED DOCUMENT AND DOES NOT REQUIRE A PHYSICAL SIGNATURE.</div>
 
           <script>window.onload = function() { window.print(); }</script>
         </body>

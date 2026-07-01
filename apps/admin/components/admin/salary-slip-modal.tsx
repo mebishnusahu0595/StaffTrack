@@ -114,138 +114,181 @@ export function SalarySlipModal({ isOpen, onClose, data, month }: SalarySlipModa
         </div>
 
         <div className="p-8 max-h-[80vh] overflow-y-auto">
-           {/* Printable Area */}
-           <div ref={printRef} className="bg-white p-12 rounded-[24px] shadow-sm border border-slate-200 min-h-[1000px] text-slate-800">
-              {/* Company Header */}
-              <div className="flex justify-between items-start mb-12">
-                 <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                       <div className="h-10 w-10 bg-blue-600 rounded-xl flex items-center justify-center text-white overflow-hidden shrink-0">
-                          {logoToShow ? (
-                             <img src={logoToShow} alt="Logo" className="h-full w-full object-contain" />
-                          ) : (
-                             <Building2 className="h-6 w-6" />
-                          )}
-                       </div>
-                       <h2 className="text-2xl font-black tracking-tight text-slate-900">
-                          {data.orgName || data.companyName || "STAFFTRACK"}
-                       </h2>
-                    </div>
+            {/* Printable Area */}
+            <div ref={printRef} className="bg-white p-12 rounded-[24px] shadow-sm border border-slate-200 min-h-[1000px] text-slate-800">
+               {/* Company Header matching sketch */}
+               <div className="flex items-center gap-6 pb-6 border-b border-slate-300 mb-6">
+                  <div className="h-16 w-16 rounded-full border-2 border-slate-300 flex items-center justify-center overflow-hidden shrink-0">
+                     {logoToShow ? (
+                        <img src={logoToShow} alt="Logo" className="h-full w-full object-contain" />
+                     ) : (
+                        <Building2 className="h-8 w-8 text-slate-400" />
+                     )}
+                  </div>
+                  <div className="flex-grow space-y-1 text-left">
+                     <h2 className="text-2xl font-black tracking-tight text-slate-900 leading-none">
+                        {data.orgName || data.companyName || "Vaniki Crop Science Pvt Ltd."}
+                     </h2>
                      {data.orgSubtitle ? (
-                        <p className="text-xs font-bold text-slate-500 max-w-[250px]">
+                        <p className="text-xs font-bold text-slate-600">
                            {data.orgSubtitle}
-                           {data.orgCode ? <><br />{data.orgCode}</> : null}
                         </p>
-                     ) : data.orgCode ? (
-                        <p className="text-xs font-bold text-slate-500 max-w-[250px]">{data.orgCode}</p>
-                     ) : null}
-                 </div>
-                 <div className="text-right">
-                    <h3 className="text-3xl font-black text-slate-300 uppercase tracking-tighter">Payslip</h3>
-                    <p className="text-xs font-black text-slate-500 uppercase tracking-widest mt-1">
-                       Month: {month.format("MMMM YYYY")}
-                    </p>
-                 </div>
-              </div>
-
-              {/* Employee Details Grid */}
-              <div className="grid grid-cols-2 gap-8 mb-12 p-8 bg-slate-50 rounded-3xl border border-slate-100">
-                 <div className="space-y-4">
-                    <DetailRow icon={<User />} label="Employee Name" value={data.userName} />
-                    <DetailRow icon={<Briefcase />} label="Designation" value={data.designation || "Staff"} />
-                    <DetailRow icon={<CreditCard />} label="Employee ID" value={data.userId.slice(-6).toUpperCase()} />
-                    {data.traineeType ? <DetailRow icon={<Briefcase />} label="Trainee Type" value={data.traineeType} /> : null}
-                    {data.aadhaarNumber ? <DetailRow icon={<CreditCard />} label="Aadhaar Number" value={data.aadhaarNumber} /> : null}
-                 </div>
-                 <div className="space-y-4">
-                    <DetailRow icon={<Calendar />} label="Joining Date" value={data.joiningDate ? dayjs(data.joiningDate).format("DD MMM, YYYY") : "-"} />
-                    <DetailRow icon={<CreditCard />} label="Payment Mode" value="Bank Transfer" />
-                    <DetailRow icon={<CreditCard />} label="Bank Name" value={data.bankName || "Not set"} />
-                    <DetailRow icon={<CreditCard />} label="Bank A/C No" value={data.bankAccountNo || "Not set"} />
-                    {data.ifscCode ? <DetailRow icon={<CreditCard />} label="IFSC Code" value={data.ifscCode} /> : null}
-                    {data.companyCode ? <DetailRow icon={<Building2 />} label="Company Code" value={data.companyCode} /> : null}
-                    {data.divisionName ? <DetailRow icon={<Building2 />} label="Division Name" value={data.divisionName} /> : null}
-                 </div>
-              </div>
-
-               {/* Attendance Summary */}
-               <div className="mb-12 text-left">
-                  <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4 ml-2">Attendance Summary</h4>
-                  <div className="grid grid-cols-5 gap-4">
-                     <StatBox label="Working Days" value={data.monthDays || data.workingDays} />
-                     <StatBox label="Present Days" value={data.presentDays} />
-                     <StatBox label="Paid Leaves" value={data.paidLeaveDays} />
-                     <StatBox label="Net Payable" value={data.payableDays} highlight />
-                     <StatBox label="Total Travel" value={(data.totalKm || 0).toFixed(1) + " KM"} />
+                     ) : (
+                        <p className="text-xs font-bold text-slate-600">
+                           Durg office - Shop no. 37, Krishi Upaj Mandi, Dhamdha Road, Durg 491001 (C.G.)
+                        </p>
+                     )}
+                     <p className="text-[10px] font-bold text-slate-500">
+                        Website: vanikicrop.com &nbsp;|&nbsp; Email: vanikicrop@gmail.com &nbsp;|&nbsp; Ph.No: +91 9406160135
+                     </p>
                   </div>
                </div>
 
-               {/* Earnings & Deductions Table */}
-               <div className="grid grid-cols-2 gap-0 border border-slate-200 rounded-3xl overflow-hidden mb-12 text-left">
-                  {/* Earnings Column */}
-                  <div className="border-r border-slate-200">
-                     <div className="bg-slate-50 px-6 py-3 border-b border-slate-200">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Earnings</p>
-                     </div>
-                     <div className="p-6 space-y-4">
-                        {earningItems.map((earn: any, idx: number) => (
-                           <AmountRow key={idx} label={earn.label} amount={earn.calculated ?? earn.actual ?? 0} />
-                        ))}
-                        <div className="pt-8 mt-8 border-t border-slate-100 flex justify-between items-center">
-                           <p className="font-black text-slate-900">Total Earnings</p>
-                           <p className="font-black text-slate-900">₹{totalEarnings.toLocaleString()}</p>
-                        </div>
-                     </div>
-                  </div>
+               {/* PAY SLIP Centered Title */}
+               <div className="text-center mb-6">
+                  <h3 className="text-xl font-extrabold uppercase tracking-widest text-slate-900 underline">PAY SLIP</h3>
+                  <p className="text-xs font-black text-slate-500 uppercase tracking-widest mt-1">
+                     For {month.format("MMMM YYYY")}
+                  </p>
+               </div>
 
-                  {/* Deductions Column */}
-                  <div>
-                     <div className="bg-slate-50 px-6 py-3 border-b border-slate-200">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Deductions</p>
-                     </div>
-                     <div className="p-6 space-y-4">
-                        {deductionItems.map((ded: any, idx: number) => (
-                           <AmountRow key={idx} label={ded.label} amount={ded.calculated ?? 0} isNegative />
-                        ))}
-                        <div className="pt-8 mt-8 border-t border-slate-100 flex justify-between items-center">
-                           <p className="font-black text-slate-900">Total Deductions</p>
-                           <p className="font-black text-rose-600">₹{totalDeductions.toLocaleString()}</p>
-                        </div>
-                     </div>
+               {/* Employee Details Table matching sketch */}
+               <table className="w-full border-collapse border border-slate-300 text-xs text-left mb-6">
+                  <tbody>
+                     <tr>
+                        <td className="border border-slate-300 px-4 py-2 font-bold bg-slate-50/50 w-1/4">Employee Name</td>
+                        <td className="border border-slate-300 px-4 py-2 w-1/4">{data.userName}</td>
+                        <td className="border border-slate-300 px-4 py-2 font-bold bg-slate-50/50 w-1/4">Bank Name</td>
+                        <td className="border border-slate-300 px-4 py-2 w-1/4">{data.bankName || "-"}</td>
+                     </tr>
+                     <tr>
+                        <td className="border border-slate-300 px-4 py-2 font-bold bg-slate-50/50 w-1/4">Company Code</td>
+                        <td className="border border-slate-300 px-4 py-2 w-1/4">{data.companyCode || "-"}</td>
+                        <td className="border border-slate-300 px-4 py-2 font-bold bg-slate-50/50 w-1/4">Bank A/c No</td>
+                        <td className="border border-slate-300 px-4 py-2 w-1/4">{data.bankAccountNo || "-"}</td>
+                     </tr>
+                     <tr>
+                        <td className="border border-slate-300 px-4 py-2 font-bold bg-slate-50/50 w-1/4">Department Name</td>
+                        <td className="border border-slate-300 px-4 py-2 w-1/4">{data.departmentName || "-"}</td>
+                        <td className="border border-slate-300 px-4 py-2 font-bold bg-slate-50/50 w-1/4">IFSC Code</td>
+                        <td className="border border-slate-300 px-4 py-2 w-1/4">{data.ifscCode || "-"}</td>
+                     </tr>
+                     <tr>
+                        <td className="border border-slate-300 px-4 py-2 font-bold bg-slate-50/50 w-1/4">Designation</td>
+                        <td className="border border-slate-300 px-4 py-2 w-1/4">{data.designation || "-"}</td>
+                        <td className="border border-slate-300 px-4 py-2 font-bold bg-slate-50/50 w-1/4">Adhar No</td>
+                        <td className="border border-slate-300 px-4 py-2 w-1/4">{data.aadhaarNumber || "-"}</td>
+                     </tr>
+                     <tr>
+                        <td className="border border-slate-300 px-4 py-2 font-bold bg-slate-50/50 w-1/4">Division Name</td>
+                        <td className="border border-slate-300 px-4 py-2 w-1/4">{data.divisionName || "-"}</td>
+                        <td className="border border-slate-300 px-4 py-2 font-bold bg-slate-50/50 w-1/4">Holiday</td>
+                        <td className="border border-slate-300 px-4 py-2 w-1/4">{data.holidayDays || data.holidayCount || "0"}</td>
+                     </tr>
+                     <tr>
+                        <td className="border border-slate-300 px-4 py-2 font-bold bg-slate-50/50 w-1/4">Trainee Type</td>
+                        <td className="border border-slate-300 px-4 py-2 w-1/4">{data.traineeType || "-"}</td>
+                        <td className="border border-slate-300 px-4 py-2 font-bold bg-slate-50/50 w-1/4">Leave</td>
+                        <td className="border border-slate-300 px-4 py-2 w-1/4">{data.absentDays || "0"}</td>
+                     </tr>
+                     <tr>
+                        <td className="border border-slate-300 px-4 py-2 font-bold bg-slate-50/50 w-1/4">Month Days</td>
+                        <td className="border border-slate-300 px-4 py-2 w-1/4">{data.monthDays || data.workingDays || "0"}</td>
+                        <td className="border border-slate-300 px-4 py-2 font-bold bg-slate-50/50 w-1/4">Paid Leave</td>
+                        <td className="border border-slate-300 px-4 py-2 w-1/4">{data.paidLeaveDays || "0"}</td>
+                     </tr>
+                     <tr>
+                        <td className="border border-slate-300 px-4 py-2 font-bold bg-slate-50/50 w-1/4">Payable Days</td>
+                        <td className="border border-slate-300 px-4 py-2 w-1/4">{data.payableDays || "0"}</td>
+                        <td className="border border-slate-300 px-4 py-2 font-bold bg-slate-50/50 w-1/4">Date of Joining</td>
+                        <td className="border border-slate-300 px-4 py-2 w-1/4">{data.joiningDate ? dayjs(data.joiningDate).format("DD MMM, YYYY") : "-"}</td>
+                     </tr>
+                  </tbody>
+               </table>
+
+               {/* Earnings & Deductions Table matching sketch */}
+               <table className="w-full border-collapse border border-slate-300 text-xs text-left mb-6">
+                  <thead>
+                     <tr className="bg-slate-100">
+                        <th className="border border-slate-300 px-4 py-2 w-[35%] font-bold">Earnings</th>
+                        <th className="border border-slate-300 px-4 py-2 w-[15%] text-right font-bold">Amount (Monthly)</th>
+                        <th className="border border-slate-300 px-4 py-2 w-[35%] font-bold">Deductions</th>
+                        <th className="border border-slate-300 px-4 py-2 w-[15%] text-right font-bold">Amount</th>
+                     </tr>
+                  </thead>
+                  <tbody>
+                     {(() => {
+                        const maxRows = Math.max(earningItems.length, deductionItems.length, 6);
+                        const rows = [];
+                        for (let i = 0; i < maxRows; i++) {
+                           const earn = earningItems[i];
+                           const ded = deductionItems[i];
+                           rows.push(
+                              <tr key={i}>
+                                 <td className="border border-slate-300 px-4 py-2">{earn?.label || ""}</td>
+                                 <td className="border border-slate-300 px-4 py-2 text-right font-mono">
+                                    {earn ? `₹${Number(earn.calculated ?? earn.actual ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ""}
+                                 </td>
+                                 <td className="border border-slate-300 px-4 py-2">{ded?.label || ""}</td>
+                                 <td className="border border-slate-300 px-4 py-2 text-right font-mono">
+                                    {ded ? `₹${Number(ded.calculated ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ""}
+                                 </td>
+                              </tr>
+                           );
+                        }
+                        return rows;
+                     })()}
+                     <tr className="bg-slate-50 font-bold">
+                        <td className="border border-slate-300 px-4 py-2">Total Earnings</td>
+                        <td className="border border-slate-300 px-4 py-2 text-right font-mono">
+                           ₹{totalEarnings.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="border border-slate-300 px-4 py-2">Total Deductions</td>
+                        <td className="border border-slate-300 px-4 py-2 text-right font-mono">
+                           ₹{totalDeductions.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                     </tr>
+                  </tbody>
+               </table>
+
+               {/* Net Salary Summary matching formula in sketch */}
+               <div className="border border-slate-300 rounded-2xl p-6 bg-slate-50/50 space-y-2 text-left">
+                  <div className="flex justify-between items-center text-sm font-bold text-slate-800">
+                     <p>
+                        NET PAY = Total Earnings (₹{totalEarnings.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Total Deductions (₹{totalDeductions.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                     </p>
+                     <p className="text-xl font-black text-slate-900">
+                        ₹{netPayout.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                     </p>
+                  </div>
+                  <p className="text-xs font-bold text-slate-500 italic mt-2">
+                     Total Amount (In Words: {data.netPayWords || numberToWords(netPayout)} Only)
+                  </p>
+               </div>
+
+               {/* Footer with Signatures */}
+               <div className="mt-16 grid grid-cols-2 gap-24">
+                  <div className="text-center space-y-8">
+                     <div className="h-px bg-slate-300 w-full"></div>
+                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Employee Signature</p>
+                  </div>
+                  <div className="text-center space-y-8">
+                     <div className="h-px bg-slate-300 w-full"></div>
+                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                        Authorised Signatory <br />
+                        <span className="text-[10px] font-black text-slate-600 mt-1 block">
+                           {data.orgName || data.companyName || "Vaniki Crop Science Pvt Ltd."}
+                        </span>
+                     </p>
                   </div>
                </div>
 
-              {/* Net Salary Summary */}
-              <div className="bg-slate-900 rounded-[32px] p-8 flex justify-between items-center text-white shadow-xl shadow-slate-200">
-                 <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-50 mb-1">Total Net Payout</p>
-                    <p className="text-sm font-bold opacity-80">
-                       Rupees {data.netPayWords || numberToWords(netPayout)}
-                    </p>
-                 </div>
-                 <div className="text-right">
-                    <p className="text-4xl font-black tracking-tight">₹{netPayout.toLocaleString()}</p>
-                 </div>
-              </div>
-
-              {/* Footer */}
-              <div className="mt-24 grid grid-cols-2 gap-24">
-                 <div className="text-center space-y-4">
-                    <div className="h-px bg-slate-200 w-full"></div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Employee Signature</p>
-                 </div>
-                 <div className="text-center space-y-4">
-                    <div className="h-px bg-slate-200 w-full"></div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Director Signature</p>
-                 </div>
-              </div>
-
-              <div className="mt-24 pt-8 border-t border-slate-50 text-center">
-                 <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">
-                    This is a computer generated document and does not require a physical signature.
-                 </p>
-              </div>
-           </div>
+               <div className="mt-16 pt-6 border-t border-slate-100 text-center">
+                  <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">
+                     This is a computer generated document and does not require a physical signature.
+                  </p>
+               </div>
+            </div>
         </div>
       </DialogContent>
     </Dialog>

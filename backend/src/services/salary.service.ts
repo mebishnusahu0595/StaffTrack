@@ -98,12 +98,14 @@ export async function upsertSalarySlip(actor: AuthUser, input: SalarySlipInput) 
     createdById: actor.id
   };
 
-  return prisma.salarySlip.upsert({
+  const result = await prisma.salarySlip.upsert({
     where: { userId_month_year: { userId: input.userId, month: input.month, year: input.year } },
     create: { userId: input.userId, month: input.month, year: input.year, ...data },
     update: data,
     include: slipInclude
   });
+
+  return ensureDefaultFields(result);
 }
 
 export async function listSalarySlips(actor: AuthUser, filter: { userId?: string; month?: number; year?: number }) {
@@ -127,11 +129,13 @@ export async function listSalarySlips(actor: AuthUser, filter: { userId?: string
     if (filter.userId) where.userId = filter.userId;
   }
 
-  return prisma.salarySlip.findMany({
+  const slips = await prisma.salarySlip.findMany({
     where,
     include: slipInclude,
     orderBy: [{ year: "desc" }, { month: "desc" }]
   });
+
+  return slips.map(s => ensureDefaultFields(s));
 }
 
 export async function getSalarySlip(actor: AuthUser, id: string) {
@@ -145,14 +149,15 @@ export async function getSalarySlip(actor: AuthUser, id: string) {
   } else {
     await ensureCanAccessUser(actor, slip.userId);
   }
-  return slip;
+  return ensureDefaultFields(slip);
 }
 
 export async function setSalarySlipStatus(actor: AuthUser, id: string, status: SalarySlipStatus) {
   const slip = await prisma.salarySlip.findUnique({ where: { id }, select: { userId: true } });
   if (!slip) notFound("Salary slip not found");
   await ensureCanManageSlipFor(actor, slip.userId);
-  return prisma.salarySlip.update({ where: { id }, data: { status }, include: slipInclude });
+  const result = await prisma.salarySlip.update({ where: { id }, data: { status }, include: slipInclude });
+  return ensureDefaultFields(result);
 }
 
 export async function deleteSalarySlip(actor: AuthUser, id: string) {
@@ -198,4 +203,81 @@ export function amountInWords(value: number): string {
   if (rest) parts.push(threeDigits(rest));
 
   return `${parts.join(" ").trim()} Only`;
+}
+
+export function ensureDefaultFields<T>(slip: T): T {
+  if (!slip) return slip;
+  
+  const defaultEarnings = [
+    "Basic Salary",
+    "HR Allowance",
+    "Special Allowance",
+    "Medical Allowance",
+    "Daily Allowance",
+    "Incentive"
+  ];
+
+  const defaultDeductions = [
+    "PF Contribution",
+    "LWP/Leave"
+  ];
+
+  const s = slip as any;
+  let currentEarnings: any[] = [];
+  if (s.earnings && Array.isArray(s.earnings)) {
+    currentEarnings = [...s.earnings];
+  } else {
+    currentEarnings = [{ label: "Basic Salary", actual: s.netPay || 0, calculated: s.netPay || 0 }];
+  }
+
+  const completedEarnings: any[] = [];
+  for (const label of defaultEarnings) {
+    const existing = currentEarnings.find(e => e.label?.toLowerCase() === label.toLowerCase());
+    if (existing) {
+      completedEarnings.push(existing);
+    } else {
+      completedEarnings.push({ label, actual: 0, calculated: 0 });
+    }
+  }
+
+  for (const e of currentEarnings) {
+    const isDefault = defaultEarnings.some(d => d.toLowerCase() === e.label?.toLowerCase());
+    if (!isDefault) {
+      completedEarnings.push(e);
+    }
+  }
+
+  let currentDeductions: any[] = [];
+  if (s.deductions && Array.isArray(s.deductions)) {
+    currentDeductions = [...s.deductions];
+  }
+
+  const completedDeductions: any[] = [];
+  for (const label of defaultDeductions) {
+    const existing = currentDeductions.find(d => 
+      d.label?.toLowerCase() === label.toLowerCase() || 
+      (label === "LWP/Leave" && d.label?.toLowerCase() === "absence deduction") || 
+      (label === "LWP/Leave" && d.label?.toLowerCase() === "absence deductions")
+    );
+    if (existing) {
+      completedDeductions.push({ label: existing.label, calculated: existing.calculated || 0 });
+    } else {
+      completedDeductions.push({ label, calculated: 0 });
+    }
+  }
+
+  for (const d of currentDeductions) {
+    const isDefault = defaultDeductions.some(def => 
+      def.toLowerCase() === d.label?.toLowerCase() || 
+      (def === "LWP/Leave" && d.label?.toLowerCase() === "absence deduction") ||
+      (def === "LWP/Leave" && d.label?.toLowerCase() === "absence deductions")
+    );
+    if (!isDefault) {
+      completedDeductions.push(d);
+    }
+  }
+
+  s.earnings = completedEarnings;
+  s.deductions = completedDeductions;
+  return s;
 }
