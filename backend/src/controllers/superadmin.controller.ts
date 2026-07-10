@@ -432,6 +432,52 @@ export async function updateLeave(req: Request, res: Response): Promise<void> {
     data
   });
 
+  // If approved, mark attendance as ON_LEAVE for those dates
+  if (updatedLeave.status === LeaveStatus.APPROVED) {
+    const start = new Date(updatedLeave.startDate);
+    const end = new Date(updatedLeave.endDate);
+    
+    const dates: Date[] = [];
+    let current = new Date(start);
+    while (current <= end) {
+      dates.push(new Date(current));
+      current.setDate(current.getDate() + 1);
+    }
+
+    for (const date of dates) {
+      const dateStr = date.toISOString().split('T')[0];
+      const startOfDay = new Date(dateStr);
+
+      const existing = await prisma.attendance.findFirst({
+        where: {
+          userId: updatedLeave.userId,
+          date: startOfDay
+        },
+        select: { id: true }
+      });
+
+      if (existing) {
+        await prisma.attendance.updateMany({
+          where: {
+            userId: updatedLeave.userId,
+            date: startOfDay
+          },
+          data: {
+            status: AttendanceStatus.ON_LEAVE
+          }
+        });
+      } else {
+        await prisma.attendance.create({
+          data: {
+            userId: updatedLeave.userId,
+            date: startOfDay,
+            status: AttendanceStatus.ON_LEAVE
+          }
+        });
+      }
+    }
+  }
+
   sendSuccess(res, updatedLeave, "Leave request updated successfully");
 }
 

@@ -996,7 +996,7 @@ export default function EmployeesPage() {
                                                  </div>
                                               ) : (
                                                  inlineFilteredTasks.map((task) => (
-                                                    <div key={task.id} className="p-4 rounded-2xl bg-white border border-slate-100/80 shadow-sm hover:shadow-md transition-all group">
+                                                    <div key={task.id} className="p-4 rounded-2xl bg-white border border-slate-100/80 shadow-sm hover:shadow-md transition-all group text-left">
                                                        <div className="flex items-start justify-between">
                                                           <div className="space-y-1">
                                                              <h4 className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors">{task.title}</h4>
@@ -1018,6 +1018,67 @@ export default function EmployeesPage() {
                                                              </Badge>
                                                           </div>
                                                        </div>
+
+                                                       {/* Task Completion Details Section */}
+                                                       {task.status === "COMPLETED" && (
+                                                          <div className="mt-3 bg-emerald-50/30 border border-emerald-100/50 rounded-xl p-3 text-left space-y-2">
+                                                             <div className="flex items-center justify-between">
+                                                                <span className="text-[9px] font-black text-emerald-700 uppercase tracking-widest">Completion Info</span>
+                                                                {task.endDate && (
+                                                                   <span className="text-[9px] font-bold text-slate-500">
+                                                                      Completed: {dayjs(task.endDate).format("MMM DD, YYYY hh:mm A")}
+                                                                   </span>
+                                                                )}
+                                                             </div>
+                                                             
+                                                             {task.completionRemarks && (
+                                                                <p className="text-xs font-semibold text-slate-700 bg-white border border-slate-100 p-2 rounded-lg leading-relaxed shadow-sm">
+                                                                   {task.completionRemarks}
+                                                                </p>
+                                                             )}
+
+                                                             {task.completionPhotoUrl && (
+                                                                <div className="pt-1">
+                                                                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">Attached Photo:</p>
+                                                                   <a 
+                                                                      href={task.completionPhotoUrl} 
+                                                                      target="_blank" 
+                                                                      rel="noopener noreferrer"
+                                                                      className="inline-block relative group/img overflow-hidden rounded-lg border border-slate-200"
+                                                                   >
+                                                                      <img 
+                                                                         src={task.completionPhotoUrl} 
+                                                                         alt="Completion attachment" 
+                                                                         className="max-h-36 max-w-full object-cover transition-transform group-hover/img:scale-105" 
+                                                                      />
+                                                                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                                                         <span className="text-[10px] text-white font-bold uppercase tracking-widest">Click to Zoom</span>
+                                                                      </div>
+                                                                   </a>
+                                                                </div>
+                                                             )}
+
+                                                             {task.checklistResponses && Array.isArray(task.checklistResponses) && task.checklistResponses.length > 0 && (
+                                                                <div className="mt-2 space-y-2 pt-2 border-t border-slate-100/80">
+                                                                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Checklist Answers:</p>
+                                                                   <div className="grid grid-cols-1 gap-2">
+                                                                      {task.checklistResponses.map((res: any, idx: number) => (
+                                                                         <div key={idx} className="bg-white p-2.5 rounded-xl border border-slate-100/80 flex flex-col gap-1 text-left shadow-sm">
+                                                                            <span className="text-[9px] font-black text-slate-400 uppercase leading-none">{res.label || `Question ${idx + 1}`}</span>
+                                                                            <span className="text-xs font-bold text-slate-700">{res.value || "No response"}</span>
+                                                                            {res.photoUrl && (
+                                                                               <a href={res.photoUrl} target="_blank" rel="noopener noreferrer" className="mt-1">
+                                                                                  <img src={res.photoUrl} alt="Checklist response attachment" className="max-h-20 rounded-lg object-cover border border-slate-100" />
+                                                                               </a>
+                                                                            )}
+                                                                         </div>
+                                                                      ))}
+                                                                   </div>
+                                                                </div>
+                                                             )}
+                                                          </div>
+                                                       )}
+
                                                        <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between">
                                                           <div className="flex items-center gap-1.5 text-slate-400">
                                                              <Calendar className="h-3.5 w-3.5" />
