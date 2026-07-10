@@ -88,6 +88,7 @@ export default function EmployeesPage() {
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<User | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedMapDate, setSelectedMapDate] = useState(dayjs().format("YYYY-MM-DD"));
+  const [selectedUserDate, setSelectedUserDate] = useState(dayjs().format("YYYY-MM-DD"));
   const [drawerEmployeeId, setDrawerEmployeeId] = useState<string | null>(null);
   const [derDateFilter, setDerDateFilter] = useState<string>("");
   const todayDate = dayjs().format("YYYY-MM-DD");
@@ -118,9 +119,9 @@ export default function EmployeesPage() {
   });
 
   const todayAttendanceQuery = useQuery({
-    queryKey: ["attendance", "overview", todayDate],
-    queryFn: () => fetchAllAttendance(todayDate),
-    refetchInterval: 20_000
+    queryKey: ["attendance", "overview", selectedUserDate],
+    queryFn: () => fetchAllAttendance(selectedUserDate),
+    refetchInterval: selectedUserDate === dayjs().format("YYYY-MM-DD") ? 20_000 : false
   });
 
   const latestTodayAttendanceByUser = useMemo(() => {
@@ -464,6 +465,15 @@ export default function EmployeesPage() {
           <p className="mt-1 text-slate-500">Manage, track and organize your field and office team activity.</p>
         </div>
         <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 mr-2 bg-white px-3 h-10 rounded-xl border border-slate-200 shadow-sm">
+               <Calendar className="h-4 w-4 text-slate-400" />
+               <input 
+                 type="date" 
+                 className="bg-transparent border-none text-xs font-bold text-slate-650 focus:outline-none"
+                 value={selectedUserDate}
+                 onChange={e => setSelectedUserDate(e.target.value || dayjs().format("YYYY-MM-DD"))}
+               />
+            </div>
             <div className="flex items-center gap-2 mr-2">
               <Select value={workModeFilter} onValueChange={(v: any) => setWorkModeFilter(v)}>
                 <SelectTrigger className="h-10 rounded-xl border-slate-200 text-xs font-bold text-slate-600 bg-white shadow-sm w-[140px]">

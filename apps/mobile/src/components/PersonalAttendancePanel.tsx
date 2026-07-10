@@ -257,6 +257,11 @@ export function PersonalAttendancePanel({
                 <View style={[styles.statusDot, { backgroundColor: activeAttendance?.isCheckInPending ? "#F59E0B" : isCheckedIn && !isCheckedOut ? "#A4262C" : "#17633A" }]} />
                 <Text style={styles.statusText}>{currentStatusLabel}</Text>
               </View>
+              {isCheckedIn && (activeAttendance?.checkInTime || todayAttendance?.checkInTime) && (
+                <Text style={{ fontSize: 11, fontWeight: "bold", color: "#64748B", marginTop: 4 }}>
+                  Check-in: {dayjs(activeAttendance?.checkInTime || todayAttendance?.checkInTime).format("hh:mm A")}
+                </Text>
+              )}
             </View>
             <View style={styles.timeColumn}>
               {isCheckedIn ? (

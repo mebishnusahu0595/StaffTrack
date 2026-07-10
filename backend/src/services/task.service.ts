@@ -595,8 +595,10 @@ export async function updateTaskStatus(
 
   if (status === TaskStatus.COMPLETED) {
     data.points = 10;
+    data.completedAt = new Date();
   } else {
     data.points = 0;
+    data.completedAt = null;
   }
 
   if (status === TaskStatus.COMPLETED && completionData) {
@@ -986,7 +988,14 @@ const taskInclude = {
       phone: true,
       role: true,
       companyId: true,
-      managerId: true
+      managerId: true,
+      groupId: true,
+      group: {
+        select: {
+          id: true,
+          name: true
+        }
+      }
     }
   },
   assignedBy: {

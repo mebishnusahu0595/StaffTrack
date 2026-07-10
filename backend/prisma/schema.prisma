@@ -183,6 +183,7 @@ model Task {
   attachmentUrl      String?
   attachmentName     String?
   templateId         String?
+  completedAt        DateTime?
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
   assignedTo         User       @relation("AssignedTasks", fields: [assignedToId], references: [id], onDelete: Cascade)
@@ -281,16 +282,19 @@ model Expense {
 }
 
 model Project {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  status      String   @default("Ongoing") // Ongoing, Scheduled, Completed
-  companyId   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  tasks       Task[]
-  issues      Issue[]
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  status         String   @default("Ongoing") // Ongoing, Scheduled, Completed
+  companyId      String
+  targetClients  Int?
+  employeeBudget Float?
+  expenseBudget  Float?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  tasks          Task[]
+  issues         Issue[]
 
   @@index([companyId])
 }

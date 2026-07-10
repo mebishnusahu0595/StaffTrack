@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import {
   Bell,
   ClipboardList,
@@ -23,6 +23,7 @@ import {
   FileSpreadsheet,
   Library,
   ChevronDown,
+  ChevronUp,
   Wallet,
   Calendar,
   CalendarDays,
@@ -96,6 +97,78 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     timestamp: string;
   };
   const [alerts, setAlerts] = useState<LocationOffAlert[]>([]);
+  const navRef = useRef<HTMLDivElement>(null);
+  const [showScrollUp, setShowScrollUp] = useState(false);
+  const [showScrollDown, setShowScrollDown] = useState(false);
+
+  const checkScroll = useCallback(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const canScroll = el.scrollHeight > el.clientHeight;
+    setShowScrollUp(canScroll && el.scrollTop > 10);
+    setShowScrollDown(canScroll && el.scrollTop + el.clientHeight < el.scrollHeight - 10);
+  }, []);
+
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    el.addEventListener("scroll", checkScroll);
+    checkScroll();
+    window.addEventListener("resize", checkScroll);
+    const timer = setTimeout(checkScroll, 1000);
+
+    return () => {
+      el.removeEventListener("scroll", checkScroll);
+      window.removeEventListener("resize", checkScroll);
+      clearTimeout(timer);
+    };
+  }, [checkScroll]);
+
+  const scrollNav = (direction: "up" | "down") => {
+    const el = navRef.current;
+    if (!el) return;
+    const amount = direction === "up" ? -150 : 150;
+    el.scrollBy({ top: amount, behavior: "smooth" });
+  };
+
+  // Keyboard listener: ESC to go back, ENTER on inputs to submit
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        const hasOpenModal = document.querySelector('[role="dialog"], [aria-modal="true"]');
+        if (!hasOpenModal) {
+          window.history.back();
+        }
+      } else if (e.key === "Enter") {
+        const target = e.target as HTMLElement;
+        if (target && target.tagName === "INPUT" && (target as HTMLInputElement).type !== "button" && (target as HTMLInputElement).type !== "submit") {
+          const parentForm = target.closest("form");
+          if (parentForm) {
+            return;
+          }
+          const container = target.closest('[role="dialog"], .dialog, .card, [class*="DialogContent"], [class*="SheetContent"]');
+          if (container) {
+            const buttons = Array.from(container.querySelectorAll("button"));
+            const submitBtn = buttons.find(btn => {
+              const text = btn.innerText?.toLowerCase() || "";
+              return btn.getAttribute("type") === "submit" || 
+                     text.includes("save") || 
+                     text.includes("submit") || 
+                     text.includes("create") || 
+                     text.includes("update") || 
+                     text.includes("add");
+            });
+            if (submitBtn) {
+              e.preventDefault();
+              submitBtn.click();
+            }
+          }
+        }
+      }
+    };
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, []);
 
   useEffect(() => {
     setCurrentTime(new Date());
@@ -283,37 +356,57 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
 
-        <nav className="flex-1 space-y-1 px-4 overflow-y-auto custom-scrollbar">
-          {navItems
-            .filter((item) => !item.roles || (user?.role && item.roles.includes(user.role as Role)))
-            .map((item) => {
-            const isActive = pathname === item.href;
-            const badge = badgeCounts[item.href] ?? 0;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold",
-                  isActive
-                    ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
-                )}
-              >
-                <item.icon className={cn("h-5 w-5", isActive ? "text-white" : "text-slate-400")} />
-                <span className="flex-1">{item.label}</span>
-                {badge > 0 && (
-                  <span className={cn(
-                    "ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-black",
-                    isActive ? "bg-white text-blue-600" : "bg-rose-500 text-white"
-                  )}>
-                    {badge > 99 ? "99+" : badge}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
+        <div className="flex-1 flex flex-col relative overflow-hidden">
+          {showScrollUp && (
+            <button
+              onClick={() => scrollNav("up")}
+              className="absolute top-1 left-1/2 -translate-x-1/2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-slate-800/80 text-slate-200 hover:bg-slate-700/90 shadow-md hover:scale-105 active:scale-95 transition-all animate-bounce"
+            >
+              <ChevronUp className="h-4 w-4" />
+            </button>
+          )}
+
+          <nav ref={navRef} className="flex-1 space-y-1 px-4 overflow-y-auto custom-scrollbar scroll-smooth">
+            {navItems
+              .filter((item) => !item.roles || (user?.role && item.roles.includes(user.role as Role)))
+              .map((item) => {
+              const isActive = pathname === item.href;
+              const badge = badgeCounts[item.href] ?? 0;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold",
+                    isActive
+                      ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20"
+                      : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                  )}
+                >
+                  <item.icon className={cn("h-5 w-5", isActive ? "text-white" : "text-slate-400")} />
+                  <span className="flex-1">{item.label}</span>
+                  {badge > 0 && (
+                    <span className={cn(
+                      "ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-black",
+                      isActive ? "bg-white text-blue-600" : "bg-rose-500 text-white"
+                    )}>
+                      {badge > 99 ? "99+" : badge}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+
+          {showScrollDown && (
+            <button
+              onClick={() => scrollNav("down")}
+              className="absolute bottom-1 left-1/2 -translate-x-1/2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-slate-800/80 text-slate-200 hover:bg-slate-700/90 shadow-md hover:scale-105 active:scale-95 transition-all animate-bounce"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </button>
+          )}
+        </div>
 
         <div className="p-4 border-t border-slate-800/50">
           <Button

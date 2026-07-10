@@ -187,6 +187,9 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
               { label: "Priority", value: project.priority || "Medium" },
               { label: "Department", value: project.department || "General" },
               { label: "Budget", value: project.budget ? `₹${Number(project.budget).toLocaleString()}` : "—" },
+              { label: "Target Clients", value: project.targetClients ? Number(project.targetClients).toLocaleString() : "—" },
+              { label: "Employee Budget", value: project.employeeBudget ? `₹${Number(project.employeeBudget).toLocaleString()}` : "—" },
+              { label: "Expense Budget", value: project.expenseBudget ? `₹${Number(project.expenseBudget).toLocaleString()}` : "—" },
             ].map(item => (
               <div key={item.label}>
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</p>
@@ -216,6 +219,9 @@ function ProjectFormModal({
     priority:    project?.priority    ?? "Medium",
     department:  project?.department  ?? "",
     budget:      project?.budget      ?? "",
+    targetClients: project?.targetClients ?? "",
+    employeeBudget: project?.employeeBudget ?? "",
+    expenseBudget: project?.expenseBudget ?? "",
     deadline:    project?.deadline    ? new Date(project.deadline).toISOString().split("T")[0] : "",
     tags:        project?.tags        ?? "",
     clientName:  project?.clientName  ?? "",
@@ -233,7 +239,13 @@ function ProjectFormModal({
     setSaving(true);
     setError("");
     try {
-      const payload = { ...form, budget: form.budget ? Number(form.budget) : undefined };
+      const payload = {
+        ...form,
+        budget: form.budget ? Number(form.budget) : undefined,
+        targetClients: form.targetClients ? Number(form.targetClients) : undefined,
+        employeeBudget: form.employeeBudget ? Number(form.employeeBudget) : undefined,
+        expenseBudget: form.expenseBudget ? Number(form.expenseBudget) : undefined,
+      };
       if (mode === "create") await createProject(payload);
       else await updateProject(project.id, payload);
       onSuccess();
@@ -345,6 +357,22 @@ function ProjectFormModal({
             <div className="space-y-1.5">
               <Label className={LABEL_CLS}>Deadline</Label>
               <Input type="date" value={form.deadline} onChange={set("deadline")} className={FIELD_CLS} />
+            </div>
+          </div>
+
+          {/* Row 6.5: Target Clients + Employee Budget + Expense Budget */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <Label className={LABEL_CLS}>Target Clients</Label>
+              <Input type="number" value={form.targetClients} onChange={set("targetClients")} placeholder="e.g. 50" className={FIELD_CLS} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className={LABEL_CLS}>Employee Budget (₹)</Label>
+              <Input type="number" value={form.employeeBudget} onChange={set("employeeBudget")} placeholder="e.g. 100000" className={FIELD_CLS} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className={LABEL_CLS}>Expense Budget (₹)</Label>
+              <Input type="number" value={form.expenseBudget} onChange={set("expenseBudget")} placeholder="e.g. 50000" className={FIELD_CLS} />
             </div>
           </div>
 

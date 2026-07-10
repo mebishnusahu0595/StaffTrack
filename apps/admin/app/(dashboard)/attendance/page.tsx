@@ -2,7 +2,7 @@
  
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download, Battery, CheckCircle2, XCircle, AlertCircle, CalendarX } from "lucide-react";
+import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download, Battery, CheckCircle2, XCircle, AlertCircle, CalendarX, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AttendanceStatusBadge } from "@/components/admin/status-badge";
-import { fetchAllAttendance, fetchUsers, markAttendanceStatus, superUpdateAttendance } from "@/lib/api";
+import { fetchAllAttendance, fetchUsers, markAttendanceStatus, superUpdateAttendance, fetchGroups } from "@/lib/api";
 import { formatTime } from "@/lib/format";
 import { calculateDurations, formatDurationLabel } from "@/lib/timeTracking";
 import { Badge } from "@/components/ui/badge";
@@ -44,12 +44,15 @@ function PhotoViewer({ url, title, children }: { url: string; title: string; chi
 }
  
 export default function AttendancePage() {
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split("T")[0]);
   const [employeeFilter, setEmployeeFilter] = useState("all");
+  const [selectedDepartment, setSelectedDepartment] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [viewingRecord, setViewingRecord] = useState<(AttendanceRecord & { user: User }) | null>(null);
   const [isMarkDialogOpen, setIsMarkDialogOpen] = useState(false);
   const [manualUserId, setManualUserId] = useState("");
-  const [manualDate, setManualDate] = useState(selectedDate);
+  const [manualDate, setManualDate] = useState(startDate);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -62,23 +65,48 @@ export default function AttendancePage() {
   const queryClient = useQueryClient();
   
   const attendanceQuery = useQuery({ 
-    queryKey: ["attendance", selectedDate], 
-    queryFn: () => fetchAllAttendance(selectedDate) 
+    queryKey: ["attendance", startDate, endDate], 
+    queryFn: () => fetchAllAttendance(undefined, startDate, endDate) 
   });
  
   const usersQuery = useQuery({ 
     queryKey: ["users", "attendance"], 
     queryFn: () => fetchUsers({ page: 1, pageSize: 100 }) 
   });
+
+  const groupsQuery = useQuery({
+    queryKey: ["groups", "attendance"],
+    queryFn: fetchGroups
+  });
  
   const employees = usersQuery.data?.items ?? [];
+  const groups = groupsQuery.data ?? [];
   const attendanceData = useMemo(() => attendanceQuery.data ?? [], [attendanceQuery.data]);
+
+  const filteredData = useMemo(() => {
+    let data = attendanceData;
+    if (employeeFilter !== "all") {
+      data = data.filter(record => record.userId === employeeFilter);
+    }
+    if (selectedDepartment !== "all") {
+      data = data.filter(record => record.user?.groupId === selectedDepartment || record.user?.group?.id === selectedDepartment);
+    }
+    if (searchQuery.trim() !== "") {
+      const q = searchQuery.toLowerCase();
+      data = data.filter(record => 
+        record.user?.name?.toLowerCase().includes(q) || 
+        record.user?.email?.toLowerCase().includes(q)
+      );
+    }
+    return data;
+  }, [attendanceData, employeeFilter, selectedDepartment, searchQuery]);
+
   const summaryCounts = useMemo(() => {
     let present = 0;
     let absent = 0;
     let halfDay = 0;
     let onLeave = 0;
-    attendanceData.forEach((r) => {
+    filteredData.forEach((r) => {
       if (r.status === "PRESENT") present++;
       else if (r.status === "ABSENT") absent++;
       else if (r.status === "HALF_DAY") halfDay++;
@@ -89,9 +117,9 @@ export default function AttendancePage() {
       absent,
       halfDay,
       onLeave,
-      total: attendanceData.length
+      total: filteredData.length
     };
-  }, [attendanceData]);
+  }, [filteredData]);
 
   const markMutation = useMutation({
     mutationFn: markAttendanceStatus,
@@ -103,16 +131,13 @@ export default function AttendancePage() {
       alert(err?.response?.data?.message ?? "Failed to update attendance status.");
     }
   });
- 
-  const filteredData = useMemo(() => {
-    if (employeeFilter === "all") return attendanceData;
-    return attendanceData.filter(record => record.userId === employeeFilter);
-  }, [attendanceData, employeeFilter]);
 
   const changeDate = (days: number) => {
-    const d = new Date(selectedDate);
+    const d = new Date(startDate);
     d.setDate(d.getDate() + days);
-    setSelectedDate(d.toISOString().split("T")[0]);
+    const newDateStr = d.toISOString().split("T")[0];
+    setStartDate(newDateStr);
+    setEndDate(newDateStr);
   };
 
   const downloadCSV = () => {
@@ -138,7 +163,7 @@ export default function AttendancePage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Attendance_Report_${selectedDate}.csv`);
+    link.setAttribute("download", `Attendance_Report_${startDate}_to_${endDate}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -157,7 +182,7 @@ export default function AttendancePage() {
           <DialogTrigger asChild>
             <Button
               className="h-11 rounded-xl bg-blue-600 px-4 font-bold shadow-lg shadow-blue-100 hover:bg-blue-700"
-              onClick={() => setManualDate(selectedDate)}
+              onClick={() => setManualDate(startDate)}
             >
               <CalendarPlus className="mr-2 h-4 w-4" />
               Mark Leave
@@ -234,9 +259,21 @@ export default function AttendancePage() {
           </Button>
           <div className="flex items-center gap-2 px-3 border-x border-slate-100">
              <Calendar className="h-4 w-4 text-blue-600" />
-             <span className="font-bold text-slate-700 text-sm">
-                {new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })}
-             </span>
+             <div className="flex items-center gap-1.5 text-xs font-bold text-slate-650">
+               <input 
+                 type="date" 
+                 value={startDate} 
+                 onChange={e => setStartDate(e.target.value || new Date().toISOString().split("T")[0])} 
+                 className="bg-transparent border-none focus:outline-none text-slate-700" 
+               />
+               <span className="text-slate-400">to</span>
+               <input 
+                 type="date" 
+                 value={endDate} 
+                 onChange={e => setEndDate(e.target.value || new Date().toISOString().split("T")[0])} 
+                 className="bg-transparent border-none focus:outline-none text-slate-700" 
+               />
+             </div>
           </div>
           <Button
             variant="ghost"
@@ -309,37 +346,63 @@ export default function AttendancePage() {
       </div>
 
       <Card className="border-none shadow-sm shadow-slate-200/60 ring-1 ring-slate-200/50 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/30">
-           <div className="flex items-center gap-4">
-              <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
-                <SelectTrigger className="w-[180px] h-9 rounded-lg border-slate-200 bg-white text-xs font-semibold shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <Filter className="h-3.5 w-3.5 text-slate-400" />
-                    <SelectValue placeholder="All Employees" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Employees</SelectItem>
-                  {employees.map(e => (
-                    <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="h-9 rounded-lg border-slate-200 bg-white font-bold text-slate-600 gap-2 shadow-sm text-xs"
-                onClick={downloadCSV}
-                disabled={filteredData.length === 0}
-              >
-                <Download className="h-3.5 w-3.5" />
-                Export CSV
-              </Button>
-           </div>
-           <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Showing {filteredData.length} entries
-           </div>
-        </div>
+        <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/30">
+            <div className="flex flex-wrap items-center gap-3">
+               <div className="relative w-48">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                  <Input 
+                    placeholder="Search employees..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-8 h-9 text-xs rounded-lg border-slate-200 bg-white"
+                  />
+               </div>
+
+               <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+                 <SelectTrigger className="w-[160px] h-9 rounded-lg border-slate-200 bg-white text-xs font-semibold shadow-sm">
+                   <div className="flex items-center gap-2">
+                     <Filter className="h-3.5 w-3.5 text-slate-400" />
+                     <SelectValue placeholder="All Departments" />
+                   </div>
+                 </SelectTrigger>
+                 <SelectContent>
+                   <SelectItem value="all">All Departments</SelectItem>
+                   {groups.map((g: any) => (
+                     <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                   ))}
+                 </SelectContent>
+               </Select>
+
+               <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+                 <SelectTrigger className="w-[160px] h-9 rounded-lg border-slate-200 bg-white text-xs font-semibold shadow-sm">
+                   <div className="flex items-center gap-2">
+                     <UserIcon className="h-3.5 w-3.5 text-slate-400" />
+                     <SelectValue placeholder="All Employees" />
+                   </div>
+                 </SelectTrigger>
+                 <SelectContent>
+                   <SelectItem value="all">All Employees</SelectItem>
+                   {employees.map(e => (
+                     <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
+                   ))}
+                 </SelectContent>
+               </Select>
+
+               <Button 
+                 variant="outline" 
+                 size="sm" 
+                 className="h-9 rounded-lg border-slate-200 bg-white font-bold text-slate-600 gap-2 shadow-sm text-xs"
+                 onClick={downloadCSV}
+                 disabled={filteredData.length === 0}
+               >
+                 <Download className="h-3.5 w-3.5" />
+                 Export CSV
+               </Button>
+            </div>
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+               Showing {filteredData.length} entries
+            </div>
+         </div>
 
         <Table>
           <TableHeader className="bg-slate-50/50">
@@ -565,6 +628,82 @@ function AttendanceDetailDialog({
     setIsEditingOdo(false);
   };
 
+  const handlePrintAttendance = (rec: any) => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+    
+    const formattedDate = new Date(rec.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const inTime = rec.checkInTime ? new Date(rec.checkInTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : "--";
+    const outTime = rec.checkOutTime ? new Date(rec.checkOutTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : "Active";
+    const duration = formatDurationLabel(calculateDurations([rec]).officeTimeMs + calculateDurations([rec]).fieldTimeMs);
+    
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Attendance Record - ${rec.user.name} - ${formattedDate}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @page { size: landscape; margin: 20mm; }
+    @media print {
+      body { -webkit-print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body class="bg-white p-8 text-slate-800 font-sans">
+  <div class="max-w-6xl mx-auto border border-slate-200 rounded-3xl p-8 shadow-sm">
+    <div class="flex justify-between items-center border-b border-slate-200 pb-6 mb-6">
+      <div>
+        <h1 class="text-2xl font-black text-slate-900 tracking-tight">ATTENDANCE LOG</h1>
+        <p class="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">StaffTrack Verification Report</p>
+      </div>
+      <div class="text-right">
+        <p class="text-lg font-black text-slate-900">${rec.user.name}</p>
+        <p class="text-xs font-bold text-slate-500 mt-0.5">${rec.user.email}</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-4 gap-4 mb-8">
+      <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Date</p>
+        <p class="text-sm font-black text-slate-800">${formattedDate}</p>
+      </div>
+      <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Check In Time</p>
+        <p class="text-sm font-black text-slate-800">${inTime}</p>
+      </div>
+      <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Check Out Time</p>
+        <p class="text-sm font-black text-slate-800">${outTime}</p>
+      </div>
+      <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Duration</p>
+        <p class="text-sm font-black text-blue-600">${duration}</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-8">
+      <div class="border border-slate-150 rounded-2xl p-6 bg-slate-50/50">
+        <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider mb-4 border-b pb-2">Check In Details</h3>
+        <p class="text-xs font-bold text-slate-500 mb-4">Location: ${rec.checkInLat && rec.checkInLng ? `${rec.checkInLat.toFixed(5)}, ${rec.checkInLng.toFixed(5)}` : "—"}</p>
+        \${rec.checkInPhotoUrl ? \`<img src="\${rec.checkInPhotoUrl}" class="max-h-64 object-contain rounded-xl border border-slate-200" />\` : \`<p class="text-xs text-slate-400">No Photo Uploaded</p>\`}
+      </div>
+
+      <div class="border border-slate-150 rounded-2xl p-6 bg-slate-50/50">
+        <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider mb-4 border-b pb-2">Check Out Details</h3>
+        <p class="text-xs font-bold text-slate-500 mb-4">Location: ${rec.checkOutLat && rec.checkOutLng ? `${rec.checkOutLat.toFixed(5)}, ${rec.checkOutLng.toFixed(5)}` : "—"}</p>
+        \${rec.checkOutPhotoUrl ? \`<img src="\${rec.checkOutPhotoUrl}" class="max-h-64 object-contain rounded-xl border border-slate-200" />\` : \`<p class="text-xs text-slate-400">No Photo Uploaded / Session Active</p>\`}
+      </div>
+    </div>
+  </div>
+  <script>window.onload = () => setTimeout(() => window.print(), 500);</script>
+</body>
+</html>
+    `;
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  };
+
   return (
     <Dialog open={!!propRecord} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl p-0 overflow-hidden border-none shadow-2xl bg-white">
@@ -579,14 +718,24 @@ function AttendanceDetailDialog({
                     <p className="text-xs font-medium text-slate-400">{record.user.email} / {new Date(record.date).toLocaleDateString()}</p>
                  </div>
               </div>
-              <AttendanceStatusBadge 
-                status={record.status} 
-                hasCheckOut={!!record.checkOutTime} 
-                checkInTime={record.checkInTime ?? undefined} 
-                checkOutTime={record.checkOutTime}
-                shiftStart={record.user.shiftStart}
-                shiftEnd={record.user.shiftEnd}
-              />
+              <div className="flex items-center gap-3">
+                 <Button 
+                   variant="outline" 
+                   size="sm" 
+                   className="h-9 border-slate-700 bg-transparent text-white hover:bg-slate-800 hover:text-white font-bold text-xs gap-1.5"
+                   onClick={() => handlePrintAttendance(record)}
+                 >
+                   Print Details (Landscape)
+                 </Button>
+                 <AttendanceStatusBadge 
+                   status={record.status} 
+                   hasCheckOut={!!record.checkOutTime} 
+                   checkInTime={record.checkInTime ?? undefined} 
+                   checkOutTime={record.checkOutTime}
+                   shiftStart={record.user.shiftStart}
+                   shiftEnd={record.user.shiftEnd}
+                 />
+              </div>
            </div>
            
            {/* Durations Row */}

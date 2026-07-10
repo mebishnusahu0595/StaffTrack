@@ -42,7 +42,7 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
-import { fetchTasks, deleteTask, deleteAllTasks, updateTask, createTask as apiCreateTask, fetchUsers, createTemplate, fetchProjects, createProject as apiCreateProject } from "@/lib/api";
+import { fetchTasks, deleteTask, deleteAllTasks, updateTask, createTask as apiCreateTask, fetchUsers, createTemplate, fetchProjects, createProject as apiCreateProject, fetchGroups } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -109,12 +109,13 @@ export default function TasksPage() {
   const [selectedAssignee, setSelectedAssignee] = useState<string>("ALL");
   const [selectedPriority, setSelectedPriority] = useState<string>("ALL");
   const [selectedFrequency, setSelectedFrequency] = useState<string>("ALL");
+  const [selectedDepartment, setSelectedDepartment] = useState<string>("ALL");
   const [sortBy, setSortBy] = useState<string>("CREATED_AT_DESC"); 
   const [viewDensity, setViewDensity] = useState<"COMPACT" | "COZY">("COZY");
 
   useEffect(() => {
     setPage(1);
-  }, [searchQuery, activeFilter, filterDate, selectedAssignee, selectedPriority, selectedFrequency]);
+  }, [searchQuery, activeFilter, filterDate, selectedAssignee, selectedPriority, selectedFrequency, selectedDepartment]);
 
   // Edit Task States
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -139,6 +140,11 @@ export default function TasksPage() {
   const { data: users = { items: [], total: 0 } as any } = useQuery({
     queryKey: ["users-for-tasks"],
     queryFn: () => fetchUsers({ page: 1, pageSize: 100 })
+  });
+
+  const { data: groups = [] } = useQuery({
+    queryKey: ["groups-for-tasks"],
+    queryFn: fetchGroups
   });
 
   const createMutation = useMutation({
@@ -249,13 +255,11 @@ export default function TasksPage() {
             <td style="padding: 10px 14px; text-align:center;">
               <span style="background:${statusColor[task.status] || '#94a3b8'}20; color:${statusColor[task.status] || '#94a3b8'}; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase;">${task.status}</span>
             </td>
-            <td style="padding: 10px 14px; color: #64748b; font-size: 11px; font-weight: 600; text-align:center;">${task.priority || "Medium"}</td>
-            <td style="padding: 10px 14px; color: #64748b; font-size: 11px;">${task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "—"}</td>
-            <td style="padding: 10px 14px; color: #64748b; font-size: 11px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${task.description || "—"}</td>
+            <td style="padding: 10px 14px; color: #64748b; font-size: 11px;">${task.completionRemarks || "—"}</td>
             ${task.attachmentName ? `<td style="padding:10px 14px;"><a href="${task.attachmentUrl}" style="color:#3b82f6; font-size:10px; font-weight:700; text-decoration:none;">📎 ${task.attachmentName.slice(0, 15)}</a></td>` : '<td style="padding:10px 14px; color:#94a3b8; font-size:10px;">—</td>'}
           </tr>
         `).join("");
-
+ 
         return `
           <div style="margin-bottom: 30px; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; page-break-inside: avoid; background: white;">
             <div style="background: #f8fafc; padding: 14px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
@@ -273,9 +277,7 @@ export default function TasksPage() {
                   <tr style="text-align: left; background: #1e293b; color: white;">
                     <th style="padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Task</th>
                     <th style="padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase; text-align: center;">Status</th>
-                    <th style="padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase; text-align: center;">Priority</th>
-                    <th style="padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Due</th>
-                    <th style="padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Description</th>
+                    <th style="padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">User Remarks</th>
                     <th style="padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Attachment</th>
                   </tr>
                 </thead>
@@ -297,13 +299,11 @@ export default function TasksPage() {
           <td style="padding: 12px 16px; text-align:center;">
             <span style="background:${statusColor[task.status] || '#94a3b8'}20; color:${statusColor[task.status] || '#94a3b8'}; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">${task.status}</span>
           </td>
-          <td style="padding: 12px 16px; color: #64748b; font-size: 12px; font-weight: 600; text-align:center;">${task.priority || "Medium"}</td>
-          <td style="padding: 12px 16px; color: #64748b; font-size: 12px;">${task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "—"}</td>
-          <td style="padding: 12px 16px; color: #64748b; font-size: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${task.description || "—"}</td>
+          <td style="padding: 12px 16px; color: #64748b; font-size: 12px;">${task.completionRemarks || "—"}</td>
           ${task.attachmentName ? `<td style="padding:12px 16px;"><a href="${task.attachmentUrl}" style="color:#3b82f6; font-size:11px; font-weight:700; text-decoration:none;">📎 ${task.attachmentName.slice(0, 20)}</a></td>` : '<td style="padding:12px 16px; color:#94a3b8; font-size:11px;">—</td>'}
         </tr>
       `).join("");
-
+ 
       bodyContent = `
         <div class="stats" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 24px 48px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; margin-bottom: 30px;">
           <div class="stat-card" style="background: white; border-radius: 12px; padding: 16px; text-align: center; border: 1px solid #e2e8f0;"><div class="stat-num" style="font-size: 26px; font-weight: 900; color: #1e293b;">${employeeTasks.length}</div><div class="stat-label" style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; margin-top: 2px;">Total Tasks</div></div>
@@ -314,7 +314,7 @@ export default function TasksPage() {
         <div class="content" style="padding: 0 48px 48px;">
           <p class="section-title" style="font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 16px;">Task Breakdown</p>
           <table style="width: 100%; border-collapse: collapse; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0;">
-            <thead><tr style="background: #1e293b; color: white;"><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Task</th><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Status</th><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Priority</th><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Due</th><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Description</th><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Attachment</th></tr></thead>
+            <thead><tr style="background: #1e293b; color: white;"><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Task</th><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Status</th><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">User Remarks</th><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Attachment</th></tr></thead>
             <tbody>${taskRows}</tbody>
           </table>
         </div>
@@ -456,6 +456,9 @@ export default function TasksPage() {
         filtered = filtered.filter(t => t.isRepeating && t.repeatFrequency === selectedFrequency);
       }
     }
+    if (selectedDepartment !== "ALL") {
+      filtered = filtered.filter(t => t.assignedTo?.groupId === selectedDepartment || t.assignedTo?.group?.id === selectedDepartment);
+    }
 
     // Sorting
     filtered = [...filtered].sort((a, b) => {
@@ -481,7 +484,7 @@ export default function TasksPage() {
     });
 
     return filtered;
-  }, [tasks, searchQuery, activeFilter, filterDate, selectedAssignee, selectedPriority, selectedFrequency, sortBy]);
+  }, [tasks, searchQuery, activeFilter, filterDate, selectedAssignee, selectedPriority, selectedFrequency, selectedDepartment, sortBy]);
 
   const paginatedTasks = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -769,12 +772,27 @@ export default function TasksPage() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="h-9 rounded-lg text-slate-500 font-bold gap-2 hover:bg-slate-50 border border-slate-100">
                   <Filter className="h-4 w-4" /> Filter
-                  {(selectedAssignee !== "ALL" || selectedPriority !== "ALL" || selectedFrequency !== "ALL") && (
+                  {(selectedAssignee !== "ALL" || selectedPriority !== "ALL" || selectedFrequency !== "ALL" || selectedDepartment !== "ALL") && (
                     <span className="h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
                   )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56 p-2.5 rounded-2xl space-y-3 bg-white z-50 shadow-xl">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black uppercase text-slate-400">Department</label>
+                  <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+                    <SelectTrigger className="h-9 rounded-xl text-xs font-bold bg-slate-50">
+                      <SelectValue placeholder="All Departments" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl">
+                      <SelectItem value="ALL">All Departments</SelectItem>
+                      {groups?.map((g: any) => (
+                        <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="space-y-1">
                   <label className="text-[9px] font-black uppercase text-slate-400">Assigned To</label>
                   <Select value={selectedAssignee} onValueChange={setSelectedAssignee}>
@@ -3736,10 +3754,15 @@ function ViewTaskDetailsDialog({ task }: any) {
 
             {task.status === "COMPLETED" && (
                <div className="space-y-2 pt-4 border-t border-slate-100">
-                  <Label className="text-[10px] font-black uppercase text-blue-600">Completion Remarks</Label>
-                  <p className="text-sm font-bold text-slate-800 bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50">
-                     {task.completionRemarks || "No remarks provided."}
-                  </p>
+                  <Label className="text-[10px] font-black uppercase text-blue-600">Completion Details</Label>
+                  <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50 space-y-2">
+                     <p className="text-xs text-slate-600 font-medium">
+                       Completed at: <span className="font-bold text-slate-800">{task.completedAt ? format(new Date(task.completedAt), 'dd MMM yyyy, hh:mm a') : (task.updatedAt ? format(new Date(task.updatedAt), 'dd MMM yyyy, hh:mm a') : "—")}</span>
+                     </p>
+                     <p className="text-sm font-bold text-slate-800 pt-1 border-t border-blue-200/50">
+                        {task.completionRemarks || "No remarks provided."}
+                     </p>
+                  </div>
                </div>
             )}
 

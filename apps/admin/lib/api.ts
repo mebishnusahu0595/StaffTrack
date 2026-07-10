@@ -456,8 +456,8 @@ export async function fetchTodayLocation(userId: string, date?: string) {
   return response.data.data;
 }
 
-export async function fetchAllAttendance(date: string) {
-  const response = await api.get<{ data: (AttendanceRecord & { user: User })[] }>("/attendance", { params: { date } });
+export async function fetchAllAttendance(date?: string, startDate?: string, endDate?: string) {
+  const response = await api.get<{ data: (AttendanceRecord & { user: User })[] }>("/attendance", { params: { date, startDate, endDate } });
   return response.data.data;
 }
 

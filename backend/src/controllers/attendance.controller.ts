@@ -64,7 +64,9 @@ export async function getCompanyAttendance(req: Request, res: Response): Promise
 
 export async function getAttendanceByDate(req: Request, res: Response): Promise<void> {
   const dateStr = req.query.date as string;
-  const result = await attendanceService.getAttendanceByDate(req.user!, dateStr);
+  const startDate = req.query.startDate as string;
+  const endDate = req.query.endDate as string;
+  const result = await attendanceService.getAttendanceByDate(req.user!, dateStr, startDate, endDate);
   sendSuccess(res, result, "Attendance by date fetched");
 }
 

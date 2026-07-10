@@ -55,7 +55,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "@/components/ui/sheet";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchIssues, fetchUsers, createIssue, updateIssue, addIssueUpdate, fetchIssue, fetchProjects, uploadFile } from "@/lib/api";
+import { fetchIssues, fetchUsers, createIssue, updateIssue, addIssueUpdate, fetchIssue, fetchProjects, uploadFile, fetchGroups } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -91,6 +91,7 @@ function StatCard({ label, value, icon, color }: any) {
 export default function IssuesPage() {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("All");
+  const [selectedDepartment, setSelectedDepartment] = useState<string>("ALL");
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [assigningIssueId, setAssigningIssueId] = useState<string | null>(null);
@@ -114,6 +115,11 @@ export default function IssuesPage() {
   const projectsQuery = useQuery({
     queryKey: ["projects"],
     queryFn: () => fetchProjects()
+  });
+
+  const groupsQuery = useQuery({
+    queryKey: ["groups-for-issues"],
+    queryFn: fetchGroups
   });
 
   const createMutation = useMutation({
@@ -143,15 +149,32 @@ export default function IssuesPage() {
   });
 
   const issues = useMemo(() => issuesQuery.data ?? [], [issuesQuery.data]);
+  const groups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data]);
+
+  const filteredIssues = useMemo(() => {
+    let filtered = issues;
+    if (selectedDepartment !== "ALL") {
+      filtered = filtered.filter(i => {
+        const issueDept = (i.department || "").toLowerCase();
+        const assigneeDept = (i.assignee?.group?.name || "").toLowerCase();
+        
+        const selectedGroup = groups.find((g: any) => g.id === selectedDepartment);
+        const selectedName = (selectedGroup?.name || "").toLowerCase();
+        
+        return issueDept === selectedName || assigneeDept === selectedName;
+      });
+    }
+    return filtered;
+  }, [issues, selectedDepartment, groups]);
 
   const stats = useMemo(() => {
     return {
-      total: issues.length,
-      open: issues.filter(i => i.status === "Open" || i.status === "In Progress").length,
-      inProgress: issues.filter(i => i.status === "In Progress").length,
-      resolved: issues.filter(i => i.status === "Resolved" || i.status === "Closed").length,
+      total: filteredIssues.length,
+      open: filteredIssues.filter(i => i.status === "Open" || i.status === "In Progress").length,
+      inProgress: filteredIssues.filter(i => i.status === "In Progress").length,
+      resolved: filteredIssues.filter(i => i.status === "Resolved" || i.status === "Closed").length,
     };
-  }, [issues]);
+  }, [filteredIssues]);
 
   const currentAssigningIssue = useMemo(() => {
     return issues.find(i => i.id === assigningIssueId);
@@ -215,14 +238,28 @@ export default function IssuesPage() {
                  </TabsList>
               </Tabs>
 
-              <div className="relative w-full md:w-80">
-                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                 <Input 
-                   placeholder="Search issues..." 
-                   className="h-12 pl-12 rounded-2xl bg-slate-50 border-none focus:bg-white transition-all font-bold" 
-                   value={search}
-                   onChange={e => setSearch(e.target.value)}
-                 />
+              <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                 <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+                    <SelectTrigger className="h-12 w-48 rounded-2xl bg-slate-50 border-none font-bold">
+                       <SelectValue placeholder="All Departments" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl">
+                       <SelectItem value="ALL">All Departments</SelectItem>
+                       {groups?.map((g: any) => (
+                          <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                       ))}
+                    </SelectContent>
+                 </Select>
+
+                 <div className="relative w-full md:w-80">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input 
+                      placeholder="Search issues..." 
+                      className="h-12 pl-12 rounded-2xl bg-slate-50 border-none focus:bg-white transition-all font-bold" 
+                      value={search}
+                      onChange={e => setSearch(e.target.value)}
+                    />
+                 </div>
               </div>
            </div>
         </CardHeader>
@@ -250,14 +287,14 @@ export default function IssuesPage() {
                           Loading issues...
                         </td>
                       </tr>
-                    ) : issues.length === 0 ? (
+                    ) : filteredIssues.length === 0 ? (
                       <tr>
                         <td colSpan={9} className="py-12 text-center text-xs font-bold text-slate-400 uppercase tracking-widest">
                           No issues found
                         </td>
                       </tr>
                     ) : (
-                      issues.map(issue => (
+                      filteredIssues.map(issue => (
                         <tr key={issue.id} className="group hover:bg-slate-50/50 transition-colors">
                            <td className="px-8 py-6">
                               <div className="flex items-center gap-3">

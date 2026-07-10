@@ -444,6 +444,103 @@ export function HomeScreen() {
     .filter((expense) => expense.approved)
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
 
+  const showTasksOnTop = isCheckedIn && todoCount > 0;
+
+  const tasksSection = (
+    <Card mode="contained" style={styles.tasksSectionCard}>
+      <Card.Content style={{ padding: 12 }}>
+        {/* Task Stats Row */}
+        <View style={styles.taskStatsRow}>
+          <TouchableRipple onPress={() => setActiveTab("PENDING")} style={styles.taskStatBox}>
+            <View style={{ alignItems: "center" }}>
+              <Text style={styles.taskStatNumber}>{todoCount}</Text>
+              <Text style={styles.taskStatLabel}>To do</Text>
+            </View>
+          </TouchableRipple>
+          <View style={styles.taskStatsDivider} />
+          <TouchableRipple onPress={() => setActiveTab("COMPLETED")} style={styles.taskStatBox}>
+            <View style={{ alignItems: "center" }}>
+              <Text style={styles.taskStatNumber}>{doneCount}</Text>
+              <Text style={styles.taskStatLabel}>Done</Text>
+            </View>
+          </TouchableRipple>
+          <View style={styles.taskStatsDivider} />
+          <View style={styles.taskStatBox}>
+            <Menu
+              visible={taskMenuVisible}
+              onDismiss={() => setTaskMenuVisible(false)}
+              anchor={
+                <Button 
+                  mode="text" 
+                  compact 
+                  onPress={() => setTaskMenuVisible(true)}
+                  labelStyle={{ fontSize: 11, fontWeight: "700", color: "#4A6583" }}
+                >
+                  Filter: {activeTab}
+                </Button>
+              }
+            >
+              <Menu.Item onPress={() => { setActiveTab("ALL"); setTaskMenuVisible(false); }} title="All" />
+              <Menu.Item onPress={() => { setActiveTab("PENDING"); setTaskMenuVisible(false); }} title="Pending" />
+              <Menu.Item onPress={() => { setActiveTab("COMPLETED"); setTaskMenuVisible(false); }} title="Completed" />
+            </Menu>
+          </View>
+        </View>
+
+        <Divider style={{ marginVertical: 8 }} />
+
+        <View style={styles.dateNavigator}>
+          <IconButton
+            icon={appIconSource("chevron-left")}
+            size={24}
+            onPress={() => setSelectedDate((curr) => curr.subtract(1, "day"))}
+          />
+          <TouchableRipple
+            onPress={() => setSelectedDate(dayjs().startOf("day"))}
+            style={styles.dateDisplay}
+          >
+            <View style={{ alignItems: "center" }}>
+              <Text style={styles.dateTitle}>
+                {selectedDate.isSame(dayjs(), "day") ? "Today's Tasks" : selectedDate.format("DD MMM YYYY")}
+              </Text>
+              <Text style={styles.dateSubtitle}>{selectedDate.format("dddd")}</Text>
+            </View>
+          </TouchableRipple>
+          <IconButton
+            icon={appIconSource("chevron-right")}
+            size={24}
+            onPress={() => setSelectedDate((curr) => curr.add(1, "day"))}
+          />
+        </View>
+
+        <View style={{ marginTop: 8 }}>
+          {filteredTasks.length === 0 ? (
+            <Text style={[styles.emptyText, { marginVertical: 16 }]}>No tasks for this day.</Text>
+          ) : (
+            filteredTasks.map((item) => (
+              <View key={item.id} style={{ marginBottom: 12 }}>
+                <TaskCard disabled={tasksUpdatingStatus} onPress={handleTaskPress} task={item} />
+                {item.attachmentUrl && (
+                  <TouchableOpacity style={styles.attachmentChip} onPress={() => openAttachment(item)}>
+                    <Text style={styles.attachmentChipText}>📎 {item.attachmentName || "View Attachment"}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))
+          )}
+        </View>
+      </Card.Content>
+    </Card>
+  );
+
+  const attendancePanel = (
+    <PersonalAttendancePanel 
+      hideTimeSummary={true} 
+      hideDayEndButton={true} 
+      onNavigateDayEnd={() => navigation.navigate("DayEndReport")} 
+    />
+  );
+
   return (
     <ScrollView contentContainerStyle={styles.content} style={styles.screen}>
       <View style={styles.header}>
@@ -476,98 +573,17 @@ export function HomeScreen() {
         </View>
       </View>
 
-      {/* Personal attendance: punch, odometer photos, KM, day-end report */}
-      <PersonalAttendancePanel 
-        hideTimeSummary={true} 
-        hideDayEndButton={true} 
-        onNavigateDayEnd={() => navigation.navigate("DayEndReport")} 
-      />
-
-      {/* Daily Tasks Section with Date Navigator */}
-      <Card mode="contained" style={styles.tasksSectionCard}>
-        <Card.Content style={{ padding: 12 }}>
-          {/* Task Stats Row */}
-          <View style={styles.taskStatsRow}>
-            <TouchableRipple onPress={() => setActiveTab("PENDING")} style={styles.taskStatBox}>
-              <View style={{ alignItems: "center" }}>
-                <Text style={styles.taskStatNumber}>{todoCount}</Text>
-                <Text style={styles.taskStatLabel}>To do</Text>
-              </View>
-            </TouchableRipple>
-            <View style={styles.taskStatsDivider} />
-            <TouchableRipple onPress={() => setActiveTab("COMPLETED")} style={styles.taskStatBox}>
-              <View style={{ alignItems: "center" }}>
-                <Text style={styles.taskStatNumber}>{doneCount}</Text>
-                <Text style={styles.taskStatLabel}>Done</Text>
-              </View>
-            </TouchableRipple>
-            <View style={styles.taskStatsDivider} />
-            <View style={styles.taskStatBox}>
-              <Menu
-                visible={taskMenuVisible}
-                onDismiss={() => setTaskMenuVisible(false)}
-                anchor={
-                  <Button 
-                    mode="text" 
-                    compact 
-                    onPress={() => setTaskMenuVisible(true)}
-                    labelStyle={{ fontSize: 11, fontWeight: "700", color: "#4A6583" }}
-                  >
-                    Filter: {activeTab}
-                  </Button>
-                }
-              >
-                <Menu.Item onPress={() => { setActiveTab("ALL"); setTaskMenuVisible(false); }} title="All" />
-                <Menu.Item onPress={() => { setActiveTab("PENDING"); setTaskMenuVisible(false); }} title="Pending" />
-                <Menu.Item onPress={() => { setActiveTab("COMPLETED"); setTaskMenuVisible(false); }} title="Completed" />
-              </Menu>
-            </View>
-          </View>
-
-          <Divider style={{ marginVertical: 8 }} />
-
-          <View style={styles.dateNavigator}>
-            <IconButton
-              icon={appIconSource("chevron-left")}
-              size={24}
-              onPress={() => setSelectedDate((curr) => curr.subtract(1, "day"))}
-            />
-            <TouchableRipple
-              onPress={() => setSelectedDate(dayjs().startOf("day"))}
-              style={styles.dateDisplay}
-            >
-              <View style={{ alignItems: "center" }}>
-                <Text style={styles.dateTitle}>
-                  {selectedDate.isSame(dayjs(), "day") ? "Today's Tasks" : selectedDate.format("DD MMM YYYY")}
-                </Text>
-                <Text style={styles.dateSubtitle}>{selectedDate.format("dddd")}</Text>
-              </View>
-            </TouchableRipple>
-            <IconButton
-              icon={appIconSource("chevron-right")}
-              size={24}
-              onPress={() => setSelectedDate((curr) => curr.add(1, "day"))}
-            />
-          </View>
-
-          <View style={{ marginTop: 8 }}>
-            {filteredTasks.length === 0 ? (
-              <Text style={[styles.emptyText, { marginVertical: 16 }]}>No tasks for this day.</Text>
-            ) : (
-              filteredTasks.map((item) => (
-                <View key={item.id} style={{ marginBottom: 12 }}>
-                  <TaskCard disabled={tasksUpdatingStatus} onPress={handleTaskPress} task={item} />
-                  {item.attachmentUrl && (
-                    <TouchableOpacity style={styles.attachmentChip} onPress={() => openAttachment(item)}>
-                      <Text style={styles.attachmentChipText}>📎 {item.attachmentName || "View Attachment"}</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ))
-            )}
-          </View>
-        </Card.Content>
-      </Card>
+      {showTasksOnTop ? (
+        <>
+          {tasksSection}
+          {attendancePanel}
+        </>
+      ) : (
+        <>
+          {attendancePanel}
+          {tasksSection}
+        </>
+      )}
 
       {/* Time Summary Cards Section */}
       <View style={{ gap: 8 }}>
@@ -694,68 +710,7 @@ export function HomeScreen() {
         </Card>
       </View>
 
-      {/* My Team Card */}
-      {user?.group ? (
-        <Card mode="contained" style={{ borderRadius: 12, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E2E8F0", marginTop: 16 }}>
-          <Card.Content style={{ padding: 16 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
-              <Icon source="account-group" size={24} color="#1E3A8A" />
-              <Text style={{ fontSize: 14, fontWeight: "800", color: "#1E3A8A", marginLeft: 8, letterSpacing: 0.5 }}>
-                DEPARTMENT: {user.group.name.toUpperCase()}
-              </Text>
-            </View>
-            <View style={{ gap: 8 }}>
-              {user.group.members && user.group.members.length > 0 ? (
-                user.group.members.map((member) => (
-                  <View
-                    key={member.id}
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      paddingVertical: 8,
-                      paddingHorizontal: 12,
-                      backgroundColor: member.id === user.id ? "#EFF6FF" : "#F8FAFC",
-                      borderRadius: 8,
-                      borderWidth: 1,
-                      borderColor: member.id === user.id ? "#BFDBFE" : "#E2E8F0"
-                    }}
-                  >
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                      <Avatar.Text
-                        size={32}
-                        label={member.name ? member.name.split(" ").map((n: string) => n[0]).join("").substring(0, 2).toUpperCase() : "?"}
-                        style={{ backgroundColor: member.id === user.id ? "#3B82F6" : "#475569" }}
-                        labelStyle={{ fontSize: 12, fontWeight: "700", color: "#FFFFFF" }}
-                      />
-                      <View>
-                        <Text style={{ fontSize: 13, fontWeight: "700", color: "#1E293B" }}>
-                          {member.name} {member.id === user.id ? "(You)" : ""}
-                        </Text>
-                        <Text style={{ fontSize: 11, color: "#64748B" }}>
-                          {member.designation || (member.role === "MANAGER" ? "Manager" : "Staff")}
-                        </Text>
-                      </View>
-                    </View>
-                    <Badge
-                      style={{
-                        backgroundColor: member.role === "MANAGER" ? "#F59E0B" : "#E2E8F0",
-                        color: member.role === "MANAGER" ? "#FFFFFF" : "#475569",
-                        fontWeight: "700",
-                        alignSelf: "center"
-                      }}
-                    >
-                      {member.role}
-                    </Badge>
-                  </View>
-                ))
-              ) : (
-                <Text style={{ fontSize: 12, color: "#64748B", fontStyle: "italic" }}>No other members in this team</Text>
-              )}
-            </View>
-          </Card.Content>
-        </Card>
-      ) : null}
+      {/* Hide department section on mobile app per user request */}
 
       {/* Notifications Modal */}
       <Portal>

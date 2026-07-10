@@ -68,15 +68,12 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
   let isCheckInPending = false;
   let checkInApproved = true;
 
-  if (user.shiftStart && user.shiftStart !== "00:00") {
-    const [hours, minutes] = user.shiftStart.split(":").map(Number);
-    const shiftTime = new Date(now);
-    shiftTime.setHours(hours, minutes, 0, 0);
-    const lateThreshold = new Date(shiftTime.getTime() + 15 * 60 * 1000); // 15 mins buffer
-    if (now > lateThreshold) {
-      isCheckInPending = true;
-      checkInApproved = false;
-    }
+  const localHour = parseInt(now.toLocaleTimeString("en-US", { timeZone: "Asia/Kolkata", hour12: false, hour: "numeric" }));
+  const localMinute = parseInt(now.toLocaleTimeString("en-US", { timeZone: "Asia/Kolkata", hour12: false, minute: "numeric" }));
+
+  if (localHour > 10 || (localHour === 10 && localMinute > 0)) {
+    isCheckInPending = true;
+    checkInApproved = false;
   }
 
   // Check if there is an existing ON_LEAVE record for today
@@ -550,8 +547,25 @@ export async function getCompanyAttendance(
   });
 }
 
-export async function getAttendanceByDate(actor: AuthUser, date: string) {
-  const targetDate = startOfDay(new Date(date));
+export async function getAttendanceByDate(
+  actor: AuthUser, 
+  date?: string, 
+  startDate?: string, 
+  endDate?: string
+) {
+  const targetDate = date ? startOfDay(new Date(date)) : null;
+  const startRange = startDate ? startOfDay(new Date(startDate)) : null;
+  const endRange = endDate ? new Date(startOfDay(new Date(endDate)).getTime() + 24 * 60 * 60 * 1000 - 1) : null;
+
+  const dateFilter = startRange && endRange
+    ? { gte: startRange, lte: endRange }
+    : targetDate
+    ? targetDate
+    : undefined;
+
+  if (!dateFilter) {
+    throw new Error("Either date or both startDate and endDate must be provided");
+  }
 
   const managerGroupId = actor.role === UserRole.MANAGER ? await getManagerGroupId(actor.id) : null;
 
@@ -569,13 +583,13 @@ export async function getAttendanceByDate(actor: AuthUser, date: string) {
         role: { in: [UserRole.EMPLOYEE, UserRole.MANAGER] }
       };
 
-  console.log(`[DEBUG] getAttendanceByDate: actor=${actor.email}, date=${date}, targetDate=${targetDate.toISOString()}`);
+  console.log(`[DEBUG] getAttendanceByDate: actor=${actor.email}, dateFilter=${JSON.stringify(dateFilter)}`);
 
   const [records, users] = await prisma.$transaction([
     prisma.attendance.findMany({
       where: {
         user: userWhere,
-        date: targetDate
+        date: dateFilter
       },
       include: {
         user: {
@@ -610,10 +624,10 @@ export async function getAttendanceByDate(actor: AuthUser, date: string) {
   ]);
 
   const byUserId = new Map(records.map((record) => [record.userId, record]));
-  const includeAbsences = shouldAutoAbsent(targetDate);
+  const includeAbsences = targetDate ? shouldAutoAbsent(targetDate) : false;
   const rows = [...records];
 
-  if (includeAbsences) {
+  if (includeAbsences && targetDate) {
     for (const user of users) {
       if (byUserId.has(user.id) || startOfDay(user.createdAt) > targetDate) {
         continue;
