@@ -271,10 +271,29 @@ export async function listTasks(actor: AuthUser) {
 
         const timingInfo = `[Start: ${startStr} @ ${startTimeStr} - ${dueTimeStr}]`;
         t.description = t.description ? `${timingInfo}\n${t.description}` : timingInfo;
-      }
     }
   }
-
+}
+  // Sort tasks so that PENDING/IN_PROGRESS are at the top, and COMPLETED/CANCELLED/MISSED are at the bottom.
+  const statusPriority: Record<string, number> = {
+    PENDING: 1,
+    IN_PROGRESS: 1,
+    REVIEW: 2,
+    COMPLETED: 3,
+    CANCELLED: 4,
+    MISSED: 4
+  };
+ 
+  tasks.sort((a, b) => {
+    const priorityA = statusPriority[a.status] ?? 2;
+    const priorityB = statusPriority[b.status] ?? 2;
+    if (priorityA !== priorityB) {
+      return priorityA - priorityB;
+    }
+    // Maintain secondary sort order by createdAt descending
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+ 
   return tasks;
 }
 
