@@ -83,6 +83,7 @@ export default function EmployeesPage() {
   const [workModeFilter, setWorkModeFilter] = useState<"ALL" | "FIELD" | "OFFICE">("ALL");
   const [roleFilter, setRoleFilter] = useState<"ALL" | "MANAGER" | "EMPLOYEE">("ALL");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
+  const [departmentFilter, setDepartmentFilter] = useState<string>("ALL");
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<User | null>(null);
@@ -104,6 +105,10 @@ export default function EmployeesPage() {
 
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth(); // Get current user for companyId
+  const groupsQuery = useQuery({
+    queryKey: ["groups"],
+    queryFn: fetchGroups
+  });
  
   const usersQuery = useQuery({
     queryKey: ["users", search, roleFilter],
@@ -167,8 +172,12 @@ export default function EmployeesPage() {
       });
     }
 
+    if (departmentFilter !== "ALL") {
+      items = items.filter((user) => user.groupId === departmentFilter);
+    }
+
     return items;
-  }, [latestTodayAttendanceByUser, usersQuery.data?.items, workModeFilter, statusFilter]);
+  }, [latestTodayAttendanceByUser, usersQuery.data?.items, workModeFilter, statusFilter, departmentFilter]);
 
   const managers = useMemo(() => managersQuery.data?.items ?? [], [managersQuery.data?.items]);
 
@@ -510,6 +519,22 @@ export default function EmployeesPage() {
                   <SelectItem value="ALL">All Statuses</SelectItem>
                   <SelectItem value="ACTIVE">Active (Punch In)</SelectItem>
                   <SelectItem value="INACTIVE">Inactive (Punch Out)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2 mr-4">
+              <Select value={departmentFilter} onValueChange={(v: any) => setDepartmentFilter(v)}>
+                <SelectTrigger className="h-10 rounded-xl border-slate-200 text-xs font-bold text-slate-600 bg-white shadow-sm w-[160px]">
+                  <Users className="h-4 w-4 mr-2 text-slate-400" />
+                  <SelectValue placeholder="Department" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All Departments</SelectItem>
+                  {(groupsQuery.data ?? []).map((group: any) => (
+                    <SelectItem key={group.id} value={group.id}>
+                      {group.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
