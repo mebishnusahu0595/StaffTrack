@@ -704,8 +704,27 @@ async function taskAccessWhere(actor: AuthUser): Promise<Prisma.TaskWhereInput> 
     };
   }
 
+  // Bounded tasks view for employees on mobile app:
+  // Returns all PENDING/IN_PROGRESS tasks, and COMPLETED/CANCELLED tasks due/completed within last 30 days or next 30 days.
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  thirtyDaysAgo.setUTCHours(0, 0, 0, 0);
+
+  const thirtyDaysHence = new Date();
+  thirtyDaysHence.setDate(thirtyDaysHence.getDate() + 30);
+  thirtyDaysHence.setUTCHours(23, 59, 59, 999);
+
   return {
-    assignedToId: actor.id
+    assignedToId: actor.id,
+    OR: [
+      { status: { in: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS] } },
+      {
+        dueDate: {
+          gte: thirtyDaysAgo,
+          lte: thirtyDaysHence
+        }
+      }
+    ]
   };
 }
 

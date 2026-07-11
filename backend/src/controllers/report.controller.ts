@@ -8,7 +8,8 @@ export async function createDayEndReport(req: Request, res: Response): Promise<v
 }
 
 export async function getDayEndReportHistory(req: Request, res: Response): Promise<void> {
-  const result = await reportService.getDayEndReportHistory(req.user!, req.params.userId);
+  const limit = req.query.limit ? parseInt(req.query.limit as string) : 15;
+  const result = await reportService.getDayEndReportHistory(req.user!, req.params.userId, limit);
   sendSuccess(res, result, "Day end reports fetched");
 }
 

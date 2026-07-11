@@ -2,6 +2,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
 import { createServer } from "http";
+import zlib from "zlib";
 import { errorHandler } from "./lib/errors";
 import { auth } from "./middleware/auth";
 import authRoutes from "./routes/auth.routes";
@@ -40,6 +41,57 @@ initSocket(httpServer);
 
 // Start daily/startup auto-checkout scheduler
 startScheduler();
+
+// Native Gzip Compression Middleware
+app.use((req, res, next) => {
+  const acceptEncoding = req.headers["accept-encoding"] || "";
+  if (!acceptEncoding.includes("gzip")) {
+    return next();
+  }
+
+  const oldWrite = res.write;
+  const oldEnd = res.end;
+  const chunks: Buffer[] = [];
+
+  res.write = ((chunk: any) => {
+    if (chunk) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return true;
+  }) as any;
+
+  res.end = ((chunk: any) => {
+    if (chunk) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+
+    const buffer = Buffer.concat(chunks);
+    const contentType = String(res.getHeader("Content-Type") || "");
+
+    if (
+      buffer.length > 1024 &&
+      (contentType.includes("json") || contentType.includes("text") || contentType.includes("javascript"))
+    ) {
+      zlib.gzip(buffer, (err, result) => {
+        if (err) {
+          res.write = oldWrite;
+          res.end = oldEnd;
+          return res.end(buffer);
+        }
+        res.setHeader("Content-Encoding", "gzip");
+        res.setHeader("Content-Length", result.length);
+        (oldWrite as any).call(res, result);
+        (oldEnd as any).call(res);
+      });
+    } else {
+      res.write = oldWrite;
+      res.end = oldEnd;
+      return res.end(buffer);
+    }
+  }) as any;
+
+  next();
+});
 
 app.use(cors({
   origin: true,

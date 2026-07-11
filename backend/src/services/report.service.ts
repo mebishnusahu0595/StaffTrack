@@ -115,12 +115,13 @@ export async function createDayEndReport(actor: AuthUser, input: DayEndReportInp
   };
 }
 
-export async function getDayEndReportHistory(actor: AuthUser, userId: string) {
+export async function getDayEndReportHistory(actor: AuthUser, userId: string, limit: number = 15) {
   await ensureCanAccessUser(actor, userId);
 
   const reports = await prisma.dayEndReport.findMany({
     where: { userId },
-    orderBy: { date: "desc" }
+    orderBy: { date: "desc" },
+    take: limit
   });
 
   return Promise.all(
