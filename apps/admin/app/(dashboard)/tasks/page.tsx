@@ -42,7 +42,7 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
-import { fetchTasks, deleteTask, deleteAllTasks, updateTask, createTask as apiCreateTask, fetchUsers, createTemplate, fetchProjects, createProject as apiCreateProject, fetchGroups } from "@/lib/api";
+import { fetchTasks, deleteTask, bulkDeleteTasks, deleteAllTasks, updateTask, createTask as apiCreateTask, fetchUsers, createTemplate, fetchProjects, createProject as apiCreateProject, fetchGroups } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -127,6 +127,7 @@ export default function TasksPage() {
 
   // Task Creation default date
   const [initialCreateDate, setInitialCreateDate] = useState<string>("");
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
 
   const pageSize = 10;
 
@@ -491,6 +492,49 @@ export default function TasksPage() {
     return filteredTasks.slice(start, start + pageSize);
   }, [filteredTasks, page]);
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: bulkDeleteTasks,
+    onSuccess: (result: { count: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      alert(`Deleted ${result?.count ?? 0} selected task(s).`);
+      setSelectedTaskIds([]);
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message || err?.message || "Failed to delete selected tasks");
+    }
+  });
+
+  const handleToggleSelectTask = (taskId: string) => {
+    setSelectedTaskIds(prev => 
+      prev.includes(taskId) 
+        ? prev.filter(id => id !== taskId) 
+        : [...prev, taskId]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    const paginatedIds = paginatedTasks.map(t => t.id);
+    const allSelected = paginatedIds.length > 0 && paginatedIds.every(id => selectedTaskIds.includes(id));
+    if (allSelected) {
+      setSelectedTaskIds(prev => prev.filter(id => !paginatedIds.includes(id)));
+    } else {
+      setSelectedTaskIds(prev => {
+        const newIds = [...prev];
+        paginatedIds.forEach(id => {
+          if (!newIds.includes(id)) newIds.push(id);
+        });
+        return newIds;
+      });
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedTaskIds.length === 0) return;
+    const confirmDelete = confirm(`Are you sure you want to delete the ${selectedTaskIds.length} selected task(s)? This is permanent and cannot be undone.`);
+    if (!confirmDelete) return;
+    bulkDeleteMutation.mutate(selectedTaskIds);
+  };
+
   // Calendar cells calculation helper
   const calendarDays = useMemo(() => {
     const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
@@ -600,6 +644,16 @@ export default function TasksPage() {
                >
                  <FileText className="h-4 w-4 text-emerald-600" /> Daily PDF
                </Button>
+                {selectedTaskIds.length > 0 && (
+                  <Button
+                    variant="outline"
+                    className="h-10 rounded-lg px-4 font-bold text-xs gap-2 border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100"
+                    onClick={handleBulkDelete}
+                    disabled={bulkDeleteMutation.isPending}
+                  >
+                    <Trash2 className="h-4 w-4" /> {bulkDeleteMutation.isPending ? "Deleting..." : `Delete Selected (${selectedTaskIds.length})`}
+                  </Button>
+                )}
                <Button
                  variant="outline"
                  className="h-10 rounded-lg px-4 font-bold text-xs gap-2 border-rose-200 text-rose-600 hover:bg-rose-50"
@@ -910,7 +964,14 @@ export default function TasksPage() {
             <table className="w-full text-left">
               <thead className="bg-[#f8f9fa] border-y border-slate-50">
                 <tr className="text-[11px] font-black uppercase tracking-wider text-slate-400">
-                  <th className="py-4 px-6 w-12"><input type="checkbox" className="rounded border-slate-300" /></th>
+                  <th className="py-4 px-6 w-12">
+                    <input 
+                      type="checkbox" 
+                      className="rounded border-slate-300 cursor-pointer" 
+                      checked={paginatedTasks.length > 0 && paginatedTasks.every(t => selectedTaskIds.includes(t.id))}
+                      onChange={handleToggleSelectAll}
+                    />
+                  </th>
                   <th className="py-4 px-4 min-w-[250px]">Task Name</th>
                   <th className="py-4 px-4 min-w-[150px]">Assigned to</th>
                   <th className="py-4 px-4 min-w-[150px]">Team</th>
@@ -970,7 +1031,14 @@ export default function TasksPage() {
                                 viewDensity === "COMPACT" ? "h-11" : "h-16"
                               )}
                             >
-                              <td className="py-2 px-6"><input type="checkbox" className="rounded border-slate-300" /></td>
+                              <td className="py-2 px-6">
+                                <input 
+                                  type="checkbox" 
+                                  className="rounded border-slate-300 cursor-pointer" 
+                                  checked={selectedTaskIds.includes(task.id)}
+                                  onChange={() => handleToggleSelectTask(task.id)}
+                                />
+                              </td>
                               <td className="py-2 px-4">
                                 <div className="flex items-center gap-3">
                                    <div className={cn(
@@ -1109,7 +1177,14 @@ export default function TasksPage() {
                         viewDensity === "COMPACT" ? "h-11" : "h-16"
                       )}
                     >
-                      <td className="py-2 px-6"><input type="checkbox" className="rounded border-slate-300" /></td>
+                      <td className="py-2 px-6">
+                        <input 
+                          type="checkbox" 
+                          className="rounded border-slate-300 cursor-pointer" 
+                          checked={selectedTaskIds.includes(task.id)}
+                          onChange={() => handleToggleSelectTask(task.id)}
+                        />
+                      </td>
                       <td className="py-2 px-4">
                         <div className="flex items-center gap-3">
                            <div className={cn(

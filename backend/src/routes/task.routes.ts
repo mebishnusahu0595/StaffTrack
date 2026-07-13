@@ -31,6 +31,11 @@ router.patch(
   validate({ params: taskIdParamSchema, body: taskStatusBodySchema }),
   asyncHandler(taskController.updateTaskStatus)
 );
+router.post(
+  "/bulk-delete",
+  roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER),
+  asyncHandler(taskController.bulkDeleteTasks)
+);
 router.delete(
   "/all",
   roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN),

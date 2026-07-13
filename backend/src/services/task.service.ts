@@ -552,6 +552,75 @@ export async function deleteTask(actor: AuthUser, taskId: string) {
   });
 }
 
+export async function bulkDeleteTasks(actor: AuthUser, taskIds: string[]) {
+  if (actor.role !== UserRole.SUPERADMIN && actor.role !== UserRole.ADMIN && actor.role !== UserRole.MANAGER) {
+    forbidden("Only admins and managers can delete tasks");
+  }
+
+  // Fetch the tasks
+  const tasks = await prisma.task.findMany({
+    where: {
+      id: { in: taskIds }
+    },
+    include: {
+      assignedTo: {
+        select: {
+          id: true,
+          managerId: true,
+          groupId: true,
+          companyId: true
+        }
+      }
+    }
+  });
+
+  // Filter tasks that the actor is allowed to delete
+  let allowedTasks = tasks;
+  if (actor.role === UserRole.MANAGER) {
+    const managerGroupId = await getManagerGroupId(actor.id);
+    allowedTasks = tasks.filter(task => {
+      const isDirectReport = task.assignedTo?.managerId === actor.id;
+      const isInGroup = managerGroupId && task.assignedTo?.groupId === managerGroupId;
+      const isCreator = task.assignedById === actor.id;
+      return isDirectReport || isInGroup || isCreator;
+    });
+  }
+
+  if (actor.role !== UserRole.SUPERADMIN) {
+    // Restrict to company
+    allowedTasks = allowedTasks.filter(task => task.assignedTo?.companyId === actor.companyId);
+  }
+
+  const allowedIds = allowedTasks.map(t => t.id);
+  if (allowedIds.length === 0) {
+    return { count: 0 };
+  }
+
+  // Find repeat parent task IDs to clean up future occurrences of repeat series
+  const parentIds = Array.from(new Set(
+    allowedTasks.map(t => t.parentTaskId || t.id).filter(Boolean) as string[]
+  ));
+
+  if (parentIds.length > 0) {
+    await prisma.task.deleteMany({
+      where: {
+        parentTaskId: { in: parentIds },
+        status: TaskStatus.PENDING,
+        dueDate: { gte: new Date() },
+        id: { notIn: allowedIds }
+      }
+    });
+  }
+
+  const result = await prisma.task.deleteMany({
+    where: {
+      id: { in: allowedIds }
+    }
+  });
+
+  return { count: result.count };
+}
+
 export async function deleteAllTasks(actor: AuthUser) {
   // Only admins/superadmins may wipe tasks in bulk.
   if (actor.role !== UserRole.SUPERADMIN && actor.role !== UserRole.ADMIN) {

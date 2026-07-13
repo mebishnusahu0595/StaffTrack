@@ -218,6 +218,11 @@ export async function deleteTask(id: string) {
   await api.delete(`/tasks/${id}`);
 }
 
+export async function bulkDeleteTasks(ids: string[]) {
+  const response = await api.post<{ data: { count: number } }>("/tasks/bulk-delete", { ids });
+  return response.data.data;
+}
+
 export async function deleteAllTasks() {
   const response = await api.delete<{ data: { count: number } }>(`/tasks/all`);
   return response.data.data;

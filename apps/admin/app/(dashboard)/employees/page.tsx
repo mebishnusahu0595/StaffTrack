@@ -103,6 +103,7 @@ export default function EmployeesPage() {
     return () => clearInterval(t);
   }, []);
 
+  const [currentPage, setCurrentPage] = useState(1);
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth(); // Get current user for companyId
   const groupsQuery = useQuery({
@@ -115,6 +116,8 @@ export default function EmployeesPage() {
     queryFn: () => fetchUsers({
       search,
       role: roleFilter === "ALL" ? undefined : roleFilter,
+      page: 1,
+      pageSize: 1000 // Fetch all matching users for correct client-side filtering and pagination
     }),
     // Live location status (isLocationOn) and batteryLevel ride on the user
     // record and change with every device ping. Poll so the online dot and
@@ -178,6 +181,19 @@ export default function EmployeesPage() {
 
     return items;
   }, [latestTodayAttendanceByUser, usersQuery.data?.items, workModeFilter, statusFilter, departmentFilter]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, roleFilter, departmentFilter, statusFilter, workModeFilter]);
+
+  useEffect(() => {
+    setSelectedMapDate(selectedUserDate);
+  }, [selectedUserDate]);
+
+  const paginatedUsers = useMemo(() => {
+    const start = (currentPage - 1) * 25;
+    return filteredUsers.slice(start, start + 25);
+  }, [filteredUsers, currentPage]);
 
   const managers = useMemo(() => managersQuery.data?.items ?? [], [managersQuery.data?.items]);
 
@@ -287,139 +303,296 @@ export default function EmployeesPage() {
 
   const handleDownloadDER = (report: any, employee: any) => {
     if (!employee || !report) return;
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      alert("Please allow popups to download/print reports.");
-      return;
-    }
     const formattedDate = dayjs(report.date).format("DD MMM YYYY");
     const formattedSubmittedAt = dayjs(report.submittedAt).format("DD MMM YYYY hh:mm A");
+    const reportDateStr = dayjs(report.date).format("YYYY-MM-DD");
+
+    // Filter tasks for this employee on this day
+    const dayTasks = (tasksQuery.data ?? []).filter((t: any) => 
+      t.assignedToId === employee.id &&
+      dayjs(t.dueDate).format("YYYY-MM-DD") === reportDateStr
+    );
+    const completedTasks = dayTasks.filter((t: any) => t.status === "COMPLETED");
+    const pendingTasks = dayTasks.filter((t: any) => t.status === "PENDING" || t.status === "IN_PROGRESS");
+
+    // Calculate month-to-date distance
+    const startOfMonth = dayjs(report.date).startOf("month");
+    const currentDay = dayjs(report.date);
+    const mtdReports = (reportsQuery.data ?? []).filter((r: any) => {
+      const d = dayjs(r.date);
+      return r.userId === employee.id &&
+        (d.isAfter(startOfMonth) || d.isSame(startOfMonth, 'day')) &&
+        (d.isBefore(currentDay) || d.isSame(currentDay, 'day'));
+    });
+    const monthToDateKm = mtdReports.reduce((sum: number, r: any) => sum + (r.kmTravelled ?? r.totalKmTravelled ?? 0), 0);
+
+    // Calculate durations
+    const dayAttendanceSessions = (attendanceQuery.data ?? []).filter((session: any) => {
+      return dayjs(session.checkInTime).format("YYYY-MM-DD") === reportDateStr;
+    });
+    const { officeTimeMs, fieldTimeMs, breakTimeMs } = calculateDurations(dayAttendanceSessions);
+    const workTimeMs = officeTimeMs + fieldTimeMs;
+    const workTimeLabel = workTimeMs > 0 ? formatDurationLabel(workTimeMs) : "0h 0m";
+    const breakTimeLabel = breakTimeMs > 0 ? formatDurationLabel(breakTimeMs) : "0h 0m";
+
+    // Generate tasks HTML dynamically
+    const completedTasksHtml = completedTasks.length > 0 
+      ? completedTasks.map((t: any) => `
+          <div style="padding: 10px; margin-bottom: 8px; border-radius: 10px; border: 1px solid #e2e8f0; background-color: #f8fafc;">
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 4px;">
+              <span style="font-weight: bold; color: #1e293b; font-size: 12px; line-height: 1.2;">✅ ${t.title}</span>
+              <span style="font-size: 10px; font-weight: 800; color: #16a34a; background-color: #f0fdf4; padding: 1px 6px; border-radius: 999px; white-space: nowrap;">${t.points ?? 0} pts</span>
+            </div>
+            ${t.description ? `<p style="font-size: 11px; color: #64748b; margin: 2px 0 0 0; line-height: 1.3;">${t.description}</p>` : ""}
+            ${t.completionRemarks ? `<p style="font-size: 11px; color: #475569; margin: 4px 0 0 0; font-style: italic; line-height: 1.3;">Remarks: ${t.completionRemarks}</p>` : ""}
+          </div>
+        `).join("")
+      : `<p style="font-size: 11px; color: #94a3b8; font-style: italic; margin: 0;">No completed tasks today.</p>`;
+
+    const pendingTasksHtml = pendingTasks.length > 0
+      ? pendingTasks.map((t: any) => `
+          <div style="padding: 10px; margin-bottom: 8px; border-radius: 10px; border: 1px solid #e2e8f0; background-color: #f8fafc;">
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 4px;">
+              <span style="font-weight: bold; color: #1e293b; font-size: 12px; line-height: 1.2;">⏳ ${t.title}</span>
+              <span style="font-size: 10px; font-weight: 800; color: #d97706; background-color: #fffbeb; padding: 1px 6px; border-radius: 999px; white-space: nowrap;">${t.points ?? 0} pts</span>
+            </div>
+            ${t.description ? `<p style="font-size: 11px; color: #64748b; margin: 2px 0 0 0; line-height: 1.3;">${t.description}</p>` : ""}
+          </div>
+        `).join("")
+      : `<p style="font-size: 11px; color: #94a3b8; font-style: italic; margin: 0;">No pending tasks today.</p>`;
 
     const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Day End Report - ${employee.name} - ${formattedDate}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    @media print {
-      body { -webkit-print-color-adjust: exact; }
-    }
-  </style>
-</head>
-<body class="bg-white p-8 text-slate-800 font-sans">
-  <div class="max-w-3xl mx-auto border border-slate-200 rounded-3xl p-8 shadow-sm">
-    <!-- Header -->
-    <div class="flex justify-between items-start border-b border-slate-200 pb-6 mb-6">
-      <div>
-        <h1 class="text-2xl font-black text-slate-900 tracking-tight">DAY END REPORT</h1>
-        <p class="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">StaffTrack Activity Log</p>
-      </div>
-      <div class="text-right">
-        <p class="text-sm font-black text-slate-900">${employee.name}</p>
-        <p class="text-xs font-bold text-slate-500 mt-0.5">${employee.designation || 'Field Staff'}</p>
-        <p class="text-[10px] font-bold text-slate-400 mt-0.5">${employee.email}</p>
-      </div>
-    </div>
+<div style="font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155; padding: 30px; background: #ffffff; box-sizing: border-box;">
+  
+  <!-- Header Bar -->
+  <div style="height: 6px; background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%); border-radius: 3px; margin-bottom: 25px;"></div>
 
-    <!-- Meta Grid -->
-    <div class="grid grid-cols-3 gap-4 mb-8">
-      <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
-        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Report Date</p>
-        <p class="text-sm font-black text-slate-800">${formattedDate}</p>
-      </div>
-      <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
-        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Distance</p>
-        <p class="text-sm font-black text-blue-600">${report.kmTravelled} KM</p>
-      </div>
-      <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
-        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Submitted At</p>
-        <p class="text-sm font-black text-slate-800">${formattedSubmittedAt}</p>
-      </div>
-    </div>
+  <!-- Main Header Table -->
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+    <tr>
+      <td style="vertical-align: top;">
+        <h1 style="font-size: 26px; font-weight: 800; color: #1e293b; margin: 0; letter-spacing: -0.5px;">DAY END REPORT</h1>
+        <p style="font-size: 10px; font-weight: 700; color: #2563eb; margin: 4px 0 0 0; text-transform: uppercase; letter-spacing: 1px;">Vaniki Crop Science Pvt Ltd</p>
+      </td>
+      <td style="vertical-align: top; text-align: right;">
+        <h2 style="font-size: 15px; font-weight: 700; color: #0f172a; margin: 0;">${employee.name}</h2>
+        <p style="font-size: 11px; font-weight: 600; color: #64748b; margin: 2px 0 0 0;">${employee.designation || 'Field Representative'}</p>
+        <p style="font-size: 9px; color: #94a3b8; margin: 2px 0 0 0;">${employee.email}</p>
+      </td>
+    </tr>
+  </table>
 
-    <!-- Metrics -->
-    <div class="grid grid-cols-2 gap-4 mb-8">
-      <div class="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 flex justify-between items-center">
-        <div>
-          <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Orders Booked</p>
-          <p class="text-2xl font-black text-emerald-800 mt-1">${report.ordersTaken}</p>
+  <!-- Meta Stats Row -->
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+    <tr>
+      <td style="width: 25%; padding-right: 8px;">
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; text-align: center; box-sizing: border-box;">
+          <p style="font-size: 8px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 4px 0; letter-spacing: 0.5px;">Report Date</p>
+          <p style="font-size: 12px; font-weight: 800; color: #1e293b; margin: 0;">${formattedDate}</p>
         </div>
-      </div>
-      <div class="p-4 rounded-2xl bg-rose-50 border border-rose-100 flex justify-between items-center">
-        <div>
-          <p class="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Orders Cancelled</p>
-          <p class="text-2xl font-black text-rose-800 mt-1">${report.ordersCancelled}</p>
+      </td>
+      <td style="width: 25%; padding-right: 8px; padding-left: 8px;">
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; text-align: center; box-sizing: border-box;">
+          <p style="font-size: 8px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 4px 0; letter-spacing: 0.5px;">Today Distance</p>
+          <p style="font-size: 12px; font-weight: 800; color: #2563eb; margin: 0;">${report.kmTravelled ?? report.totalKmTravelled ?? 0} KM</p>
         </div>
-      </div>
-    </div>
+      </td>
+      <td style="width: 25%; padding-right: 8px; padding-left: 8px;">
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 12px; text-align: center; box-sizing: border-box;">
+          <p style="font-size: 8px; font-weight: 700; color: #1e40af; text-transform: uppercase; margin: 0 0 4px 0; letter-spacing: 0.5px;">Month to Date (MTD)</p>
+          <p style="font-size: 12px; font-weight: 800; color: #1d4ed8; margin: 0;">${monthToDateKm} KM</p>
+        </div>
+      </td>
+      <td style="width: 25%; padding-left: 8px;">
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; text-align: center; box-sizing: border-box;">
+          <p style="font-size: 8px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 4px 0; letter-spacing: 0.5px;">Submitted At</p>
+          <p style="font-size: 11px; font-weight: 800; color: #1e293b; margin: 0;">${formattedSubmittedAt}</p>
+        </div>
+      </td>
+    </tr>
+  </table>
 
-    <!-- Odometer readings -->
-    \${report.startOdometer !== null || report.endOdometer !== null ? \`
-    <div class="border border-slate-100 rounded-2xl p-5 mb-8 bg-slate-50/50">
-      <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider mb-3">Odometer Readings</h3>
-      <div class="grid grid-cols-2 gap-6">
-        <div>
-          <p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Start Odometer</p>
-          <p class="text-sm font-black text-slate-800">\${report.startOdometer !== null ? report.startOdometer + ' km' : '--'}</p>
+  <!-- Orders Metrics -->
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+    <tr>
+      <td style="width: 50%; padding-right: 10px;">
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 15px; box-sizing: border-box;">
+          <p style="font-size: 10px; font-weight: 700; color: #166534; text-transform: uppercase; margin: 0; letter-spacing: 0.5px;">Orders Booked</p>
+          <p style="font-size: 22px; font-weight: 800; color: #14532d; margin: 6px 0 0 0;">${report.ordersTaken ?? 0}</p>
         </div>
-        <div>
-          <p class="text-[10px] font-bold text-slate-400 uppercase mb-1">End Odometer</p>
-          <p class="text-sm font-black text-slate-800">\${report.endOdometer !== null ? report.endOdometer + ' km' : '--'}</p>
+      </td>
+      <td style="width: 50%; padding-left: 10px;">
+        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 15px; box-sizing: border-box;">
+          <p style="font-size: 10px; font-weight: 700; color: #991b1b; text-transform: uppercase; margin: 0; letter-spacing: 0.5px;">Orders Cancelled</p>
+          <p style="font-size: 22px; font-weight: 800; color: #7f1d1d; margin: 6px 0 0 0;">${report.ordersCancelled ?? 0}</p>
         </div>
-      </div>
-    </div>
-    \` : ''}
+      </td>
+    </tr>
+  </table>
 
-    <!-- Work Summary -->
-    <div class="mb-8">
-      <h3 class="text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Work Summary</h3>
-      <div class="p-5 rounded-2xl border border-slate-100 bg-white shadow-sm leading-relaxed text-sm text-slate-700">
-        \${report.visitsSummary}
-      </div>
-    </div>
-
-    <!-- Remarks -->
-    \${report.remarks ? \`
-    <div class="mb-8">
-      <h3 class="text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Additional Remarks</h3>
-      <div class="p-5 rounded-2xl border border-slate-100 bg-white shadow-sm italic text-sm text-slate-500 leading-relaxed">
-        \${report.remarks}
-      </div>
-    </div>
-    \` : ''}
-
-    <!-- Photos -->
-    \${report.startOdometerPhotoUrl || report.kmPhotoUrl ? \`
-    <div class="border-t border-slate-200 pt-6 mt-6">
-      <h3 class="text-xs font-black text-slate-400 uppercase tracking-wider mb-4">Verification Media</h3>
-      <div class="grid grid-cols-2 gap-4">
-        \${report.startOdometerPhotoUrl ? \`
-        <div class="border border-slate-100 rounded-2xl p-2 bg-slate-50 text-center">
-          <p class="text-[9px] font-bold text-slate-400 uppercase mb-2">Start Odometer Photo</p>
-          <img src="\${report.startOdometerPhotoUrl}" class="max-h-64 object-contain mx-auto rounded-lg" />
-        </div>
-        \` : ''}
-        \${report.kmPhotoUrl ? \`
-        <div class="border border-slate-100 rounded-2xl p-2 bg-slate-50 text-center">
-          <p class="text-[9px] font-bold text-slate-400 uppercase mb-2">End Odometer Photo</p>
-          <img src="\${report.kmPhotoUrl}" class="max-h-64 object-contain mx-auto rounded-lg" />
-        </div>
-        \` : ''}
-      </div>
-    </div>
-    \` : ''}
+  <!-- Odometer Readings -->
+  ${(report.startOdometer !== null && report.startOdometer !== undefined) || (report.endOdometer !== null && report.endOdometer !== undefined) ? `
+  <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom: 25px; box-sizing: border-box;">
+    <h3 style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; margin: 0 0 10px 0; letter-spacing: 0.5px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 6px;">Odometer Readings</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr>
+        <td style="width: 50%;">
+          <p style="font-size: 9px; font-weight: 600; color: #64748b; margin: 0 0 2px 0; text-transform: uppercase;">Start Odometer</p>
+          <p style="font-size: 14px; font-weight: 800; color: #1e293b; margin: 0;">${report.startOdometer !== null && report.startOdometer !== undefined ? report.startOdometer + ' km' : '--'}</p>
+        </td>
+        <td style="width: 50%;">
+          <p style="font-size: 9px; font-weight: 600; color: #64748b; margin: 0 0 2px 0; text-transform: uppercase;">End Odometer</p>
+          <p style="font-size: 14px; font-weight: 800; color: #1e293b; margin: 0;">${report.endOdometer !== null && report.endOdometer !== undefined ? report.endOdometer + ' km' : '--'}</p>
+        </td>
+      </tr>
+    </table>
   </div>
-</body>
-</html>
+  ` : ''}
+
+  <!-- Attendance & Break Info -->
+  <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom: 25px; box-sizing: border-box;">
+    <h3 style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; margin: 0 0 10px 0; letter-spacing: 0.5px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 6px;">Attendance & Break Info</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr>
+        <td style="width: 50%;">
+          <p style="font-size: 9px; font-weight: 600; color: #64748b; margin: 0 0 2px 0; text-transform: uppercase;">Total Working Time</p>
+          <p style="font-size: 14px; font-weight: 800; color: #166534; margin: 0;">${workTimeLabel}</p>
+        </td>
+        <td style="width: 50%;">
+          <p style="font-size: 9px; font-weight: 600; color: #64748b; margin: 0 0 2px 0; text-transform: uppercase;">Total Break Time</p>
+          <p style="font-size: 14px; font-weight: 800; color: #b45309; margin: 0;">${breakTimeLabel}</p>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Tasks Breakdown -->
+  <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom: 25px; box-sizing: border-box;">
+    <table style="width: 100%; border-collapse: collapse; border-bottom: 1px dashed #cbd5e1; margin-bottom: 12px; padding-bottom: 8px;">
+      <tr>
+        <td>
+          <h3 style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; margin: 0; letter-spacing: 0.5px;">Tasks Breakdown</h3>
+        </td>
+        <td style="text-align: right;">
+          <span style="font-size: 10px; font-weight: 700; color: #64748b;">Total: ${dayTasks.length} | Completed: ${completedTasks.length} | Pending: ${pendingTasks.length}</span>
+        </td>
+      </tr>
+    </table>
+    
+    <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+      <tr>
+        <td style="width: 50%; vertical-align: top; padding-right: 10px;">
+          <h4 style="font-size: 10px; font-weight: 800; color: #166534; text-transform: uppercase; margin: 0 0 8px 0; letter-spacing: 0.5px;">Completed Tasks (${completedTasks.length})</h4>
+          ${completedTasksHtml}
+        </td>
+        <td style="width: 50%; vertical-align: top; padding-left: 10px;">
+          <h4 style="font-size: 10px; font-weight: 800; color: #b45309; text-transform: uppercase; margin: 0 0 8px 0; letter-spacing: 0.5px;">Pending Tasks (${pendingTasks.length})</h4>
+          ${pendingTasksHtml}
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Work Summary -->
+  <div style="margin-bottom: 25px; box-sizing: border-box;">
+    <h3 style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 8px 0; letter-spacing: 0.5px;">Work Summary</h3>
+    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; font-size: 12px; line-height: 1.5; color: #334155; box-sizing: border-box;">
+      ${report.visitsSummary || "Field Work Mode"}
+    </div>
+  </div>
+
+  <!-- Remarks -->
+  ${report.remarks ? `
+  <div style="margin-bottom: 25px; box-sizing: border-box;">
+    <h3 style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 8px 0; letter-spacing: 0.5px;">Additional Remarks</h3>
+    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; font-size: 12px; font-style: italic; line-height: 1.5; color: #64748b; box-sizing: border-box;">
+      ${report.remarks}
+    </div>
+  </div>
+  ` : ''}
+
+  <!-- Verification Media -->
+  ${report.startOdometerPhotoUrl || report.kmPhotoUrl ? `
+  <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 10px; box-sizing: border-box;">
+    <h3 style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 12px 0; letter-spacing: 0.5px;">Verification Photos</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr>
+        ${report.startOdometerPhotoUrl ? `
+        <td style="width: 50%; padding-right: 10px; text-align: center; vertical-align: top;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; box-sizing: border-box;">
+            <p style="font-size: 9px; font-weight: 700; color: #64748b; margin: 0 0 8px 0; text-transform: uppercase;">Start Odometer</p>
+            <img src="${report.startOdometerPhotoUrl}" style="max-width: 100%; max-height: 180px; border-radius: 6px; object-fit: contain;" />
+          </div>
+        </td>
+        ` : ''}
+        ${report.kmPhotoUrl ? `
+        <td style="width: 50%; padding-left: 10px; text-align: center; vertical-align: top;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; box-sizing: border-box;">
+            <p style="font-size: 9px; font-weight: 700; color: #64748b; margin: 0 0 8px 0; text-transform: uppercase;">End Odometer</p>
+            <img src="${report.kmPhotoUrl}" style="max-width: 100%; max-height: 180px; border-radius: 6px; object-fit: contain;" />
+          </div>
+        </td>
+        ` : ''}
+      </tr>
+    </table>
+  </div>
+  ` : ''}
+</div>
     `;
 
-    printWindow.document.write(htmlContent);
+    // Open a new popup window and use the browser's native print-to-PDF
+    const printWindow = window.open("", "_blank", "width=900,height=700");
+    if (!printWindow) {
+      alert("Popup blocked! Please allow popups for this site to download the DER.");
+      return;
+    }
+
+    const filename = `Day_End_Report_${employee.name.replace(/\s+/g, '_')}_${reportDateStr}`;
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${filename}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #fff; color: #334155; }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .no-print { display: none !important; }
+      @page { margin: 12mm; size: A4; }
+    }
+    .print-btn {
+      display: block;
+      margin: 16px auto 0;
+      padding: 10px 32px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+    }
+    .print-btn:hover { background: #1d4ed8; }
+  </style>
+</head>
+<body>
+${htmlContent}
+<div class="no-print" style="text-align:center; padding: 16px 0 24px;">
+  <button class="print-btn" onclick="window.print()">⬇ Save as PDF / Print</button>
+</div>
+<script>
+  // Auto-trigger print after images load
+  window.onload = function() {
+    setTimeout(function() { window.print(); }, 600);
+  };
+<\/script>
+</body>
+</html>`);
     printWindow.document.close();
-    printWindow.onload = function() {
-      printWindow.focus();
-      printWindow.print();
-    };
   };
 
   const handleForceCheckout = async (userId: string) => {
@@ -621,12 +794,13 @@ export default function EmployeesPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredUsers.map((user) => {
+              {paginatedUsers.map((user) => {
                 const isExpanded = expandedId === user.id;
-                const latestUserAttendance = latestTodayAttendanceByUser.get(user.id);
+                const userSessions = (todayAttendanceQuery.data ?? []).filter(r => r.userId === user.id && r.checkInTime);
+                const latestUserAttendance = userSessions.slice().sort(sortAttendanceByLatestEventDesc)[0];
                 const displayedWorkMode = resolveDisplayedWorkMode(user.workMode, latestUserAttendance);
                 const isPunchedIn = Boolean(latestUserAttendance && latestUserAttendance.checkInTime && !latestUserAttendance.checkOutTime);
-                const todayBreakMs = latestUserAttendance ? calculateDurations([latestUserAttendance]).breakTimeMs : 0;
+                const todayBreakMs = calculateDurations(userSessions).breakTimeMs;
                 return (
                   <Fragment key={user.id}>
                     <tr className={cn(
@@ -655,21 +829,52 @@ export default function EmployeesPage() {
                               >
                                 {user.name}
                               </span>
-                              {isPunchedIn ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/50 shadow-sm">
-                                  Active
-                                </span>
+                              {selectedUserDate === todayDate ? (
+                                isPunchedIn ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/50 shadow-sm">
+                                    Active
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200/50 shadow-sm">
+                                    Inactive
+                                  </span>
+                                )
                               ) : (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200/50 shadow-sm">
-                                  Inactive
-                                </span>
+                                (() => {
+                                  const status = latestUserAttendance?.status ?? "ABSENT";
+                                  if (status === "PRESENT") {
+                                    return (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/50 shadow-sm">
+                                        Present
+                                      </span>
+                                    );
+                                  } else if (status === "HALF_DAY") {
+                                    return (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200/50 shadow-sm">
+                                        Half Day
+                                      </span>
+                                    );
+                                  } else if (status === "ON_LEAVE") {
+                                    return (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/50 shadow-sm">
+                                        On Leave
+                                      </span>
+                                    );
+                                  } else {
+                                    return (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200/50 shadow-sm">
+                                        Absent
+                                      </span>
+                                    );
+                                  }
+                                })()
                               )}
-                              {latestUserAttendance && todayBreakMs > 0 && (
+                              {todayBreakMs > 0 && (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200/50 shadow-sm ml-2">
                                   Break: {formatDurationLabel(todayBreakMs)}
                                 </span>
                               )}
-                              {user.batteryLevel !== undefined && user.batteryLevel !== null && (
+                              {selectedUserDate === todayDate && user.batteryLevel !== undefined && user.batteryLevel !== null && (
                                 <div className={cn(
                                   "flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded-md border",
                                   user.batteryLevel >= 50 ? "text-emerald-700 bg-emerald-50 border-emerald-200/50"
@@ -685,7 +890,7 @@ export default function EmployeesPage() {
                                   <span>{Math.round(user.batteryLevel)}%</span>
                                 </div>
                               )}
-                              {user.isLocationOn !== undefined && (
+                              {selectedUserDate === todayDate && user.isLocationOn !== undefined && (
                                 <span 
                                   className={cn(
                                     "h-2 w-2 rounded-full ring-2 ring-white shadow-sm",
@@ -737,8 +942,28 @@ export default function EmployeesPage() {
                       </td>
                       <td className="py-5 px-6">
                         <div className="flex flex-col">
-                           <span className="text-xs font-bold text-slate-600">{isExpanded && latestLocation ? formatTime(latestLocation.timestamp) : "Expand row"}</span>
-                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{isExpanded && latestLocation ? `${latestLocation.lat.toFixed(4)}, ${latestLocation.lng.toFixed(4)}` : "for live location"}</span>
+                           {isExpanded && latestLocation ? (
+                             <>
+                               <span className="text-xs font-bold text-slate-600">{formatTime(latestLocation.timestamp)}</span>
+                               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{`${latestLocation.lat.toFixed(4)}, ${latestLocation.lng.toFixed(4)}`}</span>
+                             </>
+                           ) : latestUserAttendance && latestUserAttendance.checkInTime ? (
+                             <>
+                               <span className="text-xs font-bold text-slate-650">
+                                 In: {dayjs(latestUserAttendance.checkInTime).format("hh:mm A")}
+                               </span>
+                               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">
+                                 {latestUserAttendance.checkOutTime 
+                                   ? `Out: ${dayjs(latestUserAttendance.checkOutTime).format("hh:mm A")}`
+                                   : "Active"}
+                               </span>
+                             </>
+                           ) : (
+                             <>
+                               <span className="text-xs font-bold text-slate-400">Expand row</span>
+                               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">for live location</span>
+                             </>
+                           )}
                         </div>
                       </td>
                       <td className="py-5 px-8 text-right">
@@ -1412,11 +1637,47 @@ export default function EmployeesPage() {
  
         <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/10">
            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Showing {filteredUsers.length} of {usersQuery.data?.total ?? filteredUsers.length} entries
+              Showing {filteredUsers.length === 0 ? 0 : (currentPage - 1) * 25 + 1} to {Math.min(filteredUsers.length, currentPage * 25)} of {filteredUsers.length} entries
            </div>
-           <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400"><ChevronLeft className="h-4 w-4" /></Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400"><ChevronRight className="h-4 w-4" /></Button>
+           <div className="flex items-center gap-2">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                className="h-8 text-xs font-bold text-slate-600 border border-slate-150 px-3 rounded-lg hover:bg-slate-50/80"
+              >
+                Previous
+              </Button>
+              {Array.from({ length: Math.ceil(filteredUsers.length / 25) }).map((_, i) => {
+                const pageNum = i + 1;
+                const isCurrent = pageNum === currentPage;
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={isCurrent ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={cn(
+                      "h-8 w-8 text-xs font-bold rounded-lg border",
+                      isCurrent 
+                        ? "bg-blue-600 border-blue-600 text-white hover:bg-blue-700" 
+                        : "text-slate-600 border-slate-150 hover:bg-slate-50/80"
+                    )}
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                disabled={currentPage >= Math.ceil(filteredUsers.length / 25)}
+                onClick={() => setCurrentPage(prev => Math.min(Math.ceil(filteredUsers.length / 25), prev + 1))}
+                className="h-8 text-xs font-bold text-slate-600 border border-slate-150 px-3 rounded-lg hover:bg-slate-50/80"
+              >
+                Next
+              </Button>
            </div>
         </div>
       </Card>
