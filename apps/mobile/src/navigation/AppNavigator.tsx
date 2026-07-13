@@ -201,6 +201,10 @@ function CustomDrawerContent(props: any) {
         <AppIcon name="logout" size={20} color="#DC2626" />
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
+
+      <View style={{ padding: 16, alignItems: "center" }}>
+        <Text style={{ fontSize: 11, color: "#94A3B8", fontWeight: "600" }}>Version 1.0.7</Text>
+      </View>
     </DrawerContentScrollView>
   );
 }
