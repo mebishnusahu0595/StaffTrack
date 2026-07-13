@@ -61,7 +61,7 @@ export function TasksScreen() {
     const result = await ImagePicker.launchCameraAsync({ 
       allowsEditing: true, 
       aspect: [4, 3], 
-      quality: 0.7 
+      quality: 0.5 
     });
     if (!result.canceled && result.assets?.[0]) {
       const asset = result.assets[0];
@@ -91,7 +91,7 @@ export function TasksScreen() {
     const result = await ImagePicker.launchCameraAsync({ 
       mediaTypes: ImagePicker.MediaTypeOptions.Videos,
       allowsEditing: true, 
-      quality: 0.7 
+      quality: 0.5 
     });
     if (!result.canceled && result.assets?.[0]) {
       const asset = result.assets[0];
@@ -199,7 +199,7 @@ export function TasksScreen() {
       Alert.alert("Permission required", "Camera access is needed to complete the task.");
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [4, 3], quality: 0.7 });
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [4, 3], quality: 0.5 });
     if (!result.canceled) {
       setCompletionPhoto(result.assets[0]);
     }

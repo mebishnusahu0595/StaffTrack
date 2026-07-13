@@ -105,7 +105,10 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: "10mb" }));
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+app.use("/uploads", express.static(path.join(__dirname, "../uploads"), {
+  maxAge: "30d",
+  immutable: true
+}));
 
 app.use("/api/auth", authRoutes);
 

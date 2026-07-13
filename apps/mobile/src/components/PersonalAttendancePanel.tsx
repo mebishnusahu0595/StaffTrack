@@ -142,7 +142,7 @@ export function PersonalAttendancePanel({
         `Please take a clear photo of the vehicle odometer for the ${type === "Start" ? "start" : "end"} of your field day.`,
         [
           { text: "Cancel", onPress: () => resolve(null), style: "cancel" },
-          { text: "Take Photo", onPress: async () => resolve(await pickVerificationImage({ quality: 0.3 })) }
+          { text: "Take Photo", onPress: async () => resolve(await pickVerificationImage({ quality: 0.5 })) } // quality 0.5 ensures clear numbers
         ],
         { cancelable: false }
       );
@@ -189,7 +189,7 @@ export function PersonalAttendancePanel({
         }
       }
 
-      const asset = await pickVerificationImage({ quality: 0.3 });
+      const asset = await pickVerificationImage({ quality: 0.4 }); // quality 0.4 for attendance face photo
       if (!asset) return;
 
       let startOdometerPhotoUrl: string | undefined;
@@ -218,7 +218,7 @@ export function PersonalAttendancePanel({
 
   async function handleCheckOut() {
     try {
-      const asset = await pickVerificationImage({ quality: 0.3 });
+      const asset = await pickVerificationImage({ quality: 0.4 }); // quality 0.4 for attendance face photo
       if (!asset) return;
 
       const isField = activeAttendance?.punchType === "FIELD";
