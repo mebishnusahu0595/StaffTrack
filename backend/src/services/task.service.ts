@@ -761,13 +761,18 @@ export async function updateTaskStatus(
 }
 
 async function taskAccessWhere(actor: AuthUser): Promise<Prisma.TaskWhereInput> {
-  const todayStart = getStartOfDayIST();
-  const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  thirtyDaysAgo.setUTCHours(0, 0, 0, 0);
+
+  const thirtyDaysHence = new Date();
+  thirtyDaysHence.setDate(thirtyDaysHence.getDate() + 30);
+  thirtyDaysHence.setUTCHours(23, 59, 59, 999);
 
   const dateFilter = {
     dueDate: {
-      gte: todayStart,
-      lt: tomorrowStart
+      gte: thirtyDaysAgo,
+      lte: thirtyDaysHence
     }
   };
 
@@ -784,7 +789,7 @@ async function taskAccessWhere(actor: AuthUser): Promise<Prisma.TaskWhereInput> 
     };
   }
 
-  // Employees see only today's tasks (IST).
+  // Employees see tasks within the 60-day window (+/- 30 days) to allow date navigation.
   return {
     assignedToId: actor.id,
     ...dateFilter
