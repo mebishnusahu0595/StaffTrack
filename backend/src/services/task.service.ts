@@ -152,12 +152,12 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
   return task;
 }
 
-export async function listTasks(actor: AuthUser) {
+export async function listTasks(actor: AuthUser, dateStr?: string) {
   // Automatically rollover overdue pending / in_progress tasks
   await rolloverOverdueTasks();
 
   const tasks = await prisma.task.findMany({
-    where: await taskAccessWhere(actor),
+    where: await taskAccessWhere(actor, dateStr),
     include: taskInclude,
     orderBy: { createdAt: "desc" }
   });
@@ -760,21 +760,37 @@ export async function updateTaskStatus(
   return updatedTask;
 }
 
-async function taskAccessWhere(actor: AuthUser): Promise<Prisma.TaskWhereInput> {
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  thirtyDaysAgo.setUTCHours(0, 0, 0, 0);
+async function taskAccessWhere(actor: AuthUser, dateStr?: string): Promise<Prisma.TaskWhereInput> {
+  let dateFilter: any;
 
-  const thirtyDaysHence = new Date();
-  thirtyDaysHence.setDate(thirtyDaysHence.getDate() + 30);
-  thirtyDaysHence.setUTCHours(23, 59, 59, 999);
+  if (dateStr) {
+    // If a specific date is requested (e.g. from calendar navigation), filter to that single day in IST
+    const requestedDate = new Date(dateStr);
+    const start = getStartOfDayIST(requestedDate);
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
+    dateFilter = {
+      dueDate: {
+        gte: start,
+        lte: end
+      }
+    };
+  } else {
+    // Fallback: 60-day bounded window (+/- 30 days) to prevent clogging while allowing date navigation
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    thirtyDaysAgo.setUTCHours(0, 0, 0, 0);
 
-  const dateFilter = {
-    dueDate: {
-      gte: thirtyDaysAgo,
-      lte: thirtyDaysHence
-    }
-  };
+    const thirtyDaysHence = new Date();
+    thirtyDaysHence.setDate(thirtyDaysHence.getDate() + 30);
+    thirtyDaysHence.setUTCHours(23, 59, 59, 999);
+
+    dateFilter = {
+      dueDate: {
+        gte: thirtyDaysAgo,
+        lte: thirtyDaysHence
+      }
+    };
+  }
 
   if (actor.role === UserRole.SUPERADMIN) {
     return dateFilter;
@@ -789,7 +805,7 @@ async function taskAccessWhere(actor: AuthUser): Promise<Prisma.TaskWhereInput> 
     };
   }
 
-  // Employees see tasks within the 60-day window (+/- 30 days) to allow date navigation.
+  // Employees see tasks within the selected window to allow date navigation.
   return {
     assignedToId: actor.id,
     ...dateFilter

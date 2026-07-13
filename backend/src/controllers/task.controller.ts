@@ -16,7 +16,8 @@ export async function createTask(req: Request, res: Response): Promise<void> {
 }
 
 export async function listTasks(req: Request, res: Response): Promise<void> {
-  const result = await taskService.listTasks(req.user!);
+  const dateStr = req.query.date as string | undefined;
+  const result = await taskService.listTasks(req.user!, dateStr);
   sendSuccess(res, result, "Tasks fetched");
 }
 
