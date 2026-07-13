@@ -287,13 +287,13 @@ export function PersonalAttendancePanel({
 
           {!isCheckedIn ? (
             <View style={styles.punchButtonsRow}>
-              <TouchableRipple disabled={isBusy} onPress={() => void handleCheckIn("OFFICE")} style={[styles.punchButton, { borderWidth: 1, borderColor: "#E0E0E0" }]}>
+              <TouchableRipple disabled={isBusy} onPress={() => void handleCheckIn("OFFICE")} style={[styles.punchButton, { borderWidth: 1, borderColor: "#E0E0E0", backgroundColor: "#FFFFFF" }]}>
                 <View style={styles.punchButtonContent}>
                   <AppIcon color="#4A6583" name="office-building" size={32} />
                   <Text style={styles.punchButtonLabel}>OFFICE</Text>
                 </View>
               </TouchableRipple>
-              <TouchableRipple disabled={isBusy} onPress={() => void handleCheckIn("FIELD")} style={[styles.punchButton, { borderWidth: 1, borderColor: "#E0E0E0" }]}>
+              <TouchableRipple disabled={isBusy} onPress={() => void handleCheckIn("FIELD")} style={[styles.punchButton, { borderWidth: 1, borderColor: "#E0E0E0", backgroundColor: "#FFFFFF" }]}>
                 <View style={styles.punchButtonContent}>
                   <AppIcon color="#4A6583" name="map-marker-outline" size={32} />
                   <Text style={styles.punchButtonLabel}>FIELD</Text>

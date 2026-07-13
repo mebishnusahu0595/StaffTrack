@@ -36,6 +36,7 @@ export type User = {
     members: User[];
   } | null;
   createdAt?: string;
+  trackingInterval?: number;
 };
 
 export type AuthResponse = {

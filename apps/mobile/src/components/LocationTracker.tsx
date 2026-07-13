@@ -91,7 +91,7 @@ async function syncOfflineQueue() {
 }
 
 export function LocationTracker() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { activeAttendance, activeBreak, startBreak } = useAttendance();
   const isCheckedIn = Boolean(activeAttendance);
   const isCheckedOut = false; // By definition, if activeAttendance exists, it's not checked out
@@ -180,7 +180,8 @@ export function LocationTracker() {
         return;
       }
 
-      console.log("[LocationTracker] Syncing tracking status... Interval: 20s");
+      const trackingInterval = user?.trackingInterval ?? 60 * 1000; // Default to 60s
+      console.log(`[LocationTracker] Syncing tracking status... Interval: ${trackingInterval / 1000}s`);
       if (Platform.OS === "web") {
         // Web location tracking logic
         const trackWeb = () => {
@@ -210,11 +211,11 @@ export function LocationTracker() {
 
         trackWeb();
         if (!foregroundInterval) {
-          foregroundInterval = setInterval(trackWeb, TRACKING_INTERVAL);
+          foregroundInterval = setInterval(trackWeb, trackingInterval);
         }
       } else {
         console.log("[LocationTracker] Starting mobile background tracking...");
-        await startBackgroundLocationTracking().catch((error) => {
+        await startBackgroundLocationTracking(user).catch((error) => {
           console.warn("[LocationTracker] Failed to start tracking", error);
           return false;
         });
@@ -260,7 +261,7 @@ export function LocationTracker() {
         if (!foregroundInterval) {
           foregroundInterval = setInterval(() => {
             void trackMobileForeground();
-          }, TRACKING_INTERVAL);
+          }, trackingInterval);
         }
       }
     }
@@ -268,22 +269,24 @@ export function LocationTracker() {
     void syncTracking();
     const interval = setInterval(() => {
       void syncTracking();
-    }, 20 * 1000);
+    }, (user?.trackingInterval ?? 60 * 1000));
 
     return () => {
       mounted = false;
       if (foregroundInterval) clearInterval(foregroundInterval);
       clearInterval(interval);
     };
-  }, [isAuthenticated, isCheckedIn, isCheckedOut, isFieldPunch, activeBreak, startBreak]);
+  }, [isAuthenticated, user, isCheckedIn, isCheckedOut, isFieldPunch, activeBreak, startBreak]);
 
   return null;
 }
 
-export async function startBackgroundLocationTracking(): Promise<boolean> {
+export async function startBackgroundLocationTracking(user?: any): Promise<boolean> {
   if (Platform.OS === "web") {
     return false;
   }
+
+  const trackingInterval = user?.trackingInterval ?? 60 * 1000; // Default to 60s (1 min)
 
   try {
     const foreground = await Location.requestForegroundPermissionsAsync();
@@ -302,15 +305,11 @@ export async function startBackgroundLocationTracking(): Promise<boolean> {
 
     const alreadyStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
 
-    if (alreadyStarted) {
-      return true;
-    }
-
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-      accuracy: Location.Accuracy.High,
+      accuracy: Location.Accuracy.Balanced, // Balanced accuracy is much more battery optimized
       activityType: Location.ActivityType.AutomotiveNavigation,
-      deferredUpdatesInterval: TRACKING_INTERVAL,
-      distanceInterval: 10, // decreased from 25 for better 15s accuracy
+      deferredUpdatesInterval: trackingInterval,
+      distanceInterval: 15, // increased from 10 to reduce micro-movement noise and save battery
       foregroundService: {
         notificationTitle: "StaffTrack is tracking your location",
         notificationBody: "Live location tracking is active.",
@@ -318,7 +317,7 @@ export async function startBackgroundLocationTracking(): Promise<boolean> {
       },
       pausesUpdatesAutomatically: false,
       showsBackgroundLocationIndicator: true,
-      timeInterval: TRACKING_INTERVAL
+      timeInterval: trackingInterval
     });
 
     return true;

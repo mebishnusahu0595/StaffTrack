@@ -59,11 +59,19 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
     conflict("Already checked in. Please check out first.");
   }
 
-  // Load user shiftStart to check for lateness
+  // Load user shiftStart + workMode to check for lateness and punchType restriction
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: actor.id },
-    select: { shiftStart: true, managerId: true, name: true }
+    select: { shiftStart: true, managerId: true, name: true, workMode: true }
   });
+
+  // Validate punchType against user's workMode
+  if (user.workMode === WorkMode.OFFICE && input.punchType === PunchType.FIELD) {
+    conflict("You are assigned to OFFICE work mode and cannot check in as FIELD.");
+  }
+  if (user.workMode === WorkMode.FIELD && input.punchType === PunchType.OFFICE) {
+    conflict("You are assigned to FIELD work mode and cannot check in as OFFICE.");
+  }
 
   let isCheckInPending = false;
   let checkInApproved = true;

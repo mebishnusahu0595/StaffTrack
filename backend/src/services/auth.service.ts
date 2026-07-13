@@ -3,6 +3,7 @@ import jwt, { type JwtPayload } from "jsonwebtoken";
 import { AppError, unauthorized } from "../lib/errors";
 import { prisma } from "../lib/prisma";
 import type { AuthUser } from "../types/auth";
+import { extendUserWithConfig } from "./user.service";
 
 const ACCESS_TOKEN_TTL = "7d";
 const REFRESH_TOKEN_TTL = "30d";
@@ -66,7 +67,7 @@ export async function login(email: string, password: string) {
   });
 
   return {
-    user: publicUser,
+    user: extendUserWithConfig(publicUser),
     accessToken: signAccessToken(authUser),
     refreshToken: signRefreshToken(authUser)
   };

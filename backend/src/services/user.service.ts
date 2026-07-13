@@ -6,6 +6,14 @@ import { prisma } from "../lib/prisma";
 
 const PASSWORD_ROUNDS = 12;
 
+export function extendUserWithConfig(user: any) {
+  if (!user) return user;
+  return {
+    ...user,
+    trackingInterval: Number(process.env.TRACKING_INTERVAL || 60000)
+  };
+}
+
 const publicUserSelect = {
   id: true,
   name: true,
@@ -104,7 +112,7 @@ export async function listUsers(
   ]);
 
   return {
-    items,
+    items: items.map(extendUserWithConfig),
     total,
     page,
     pageSize
@@ -114,7 +122,7 @@ export async function listUsers(
 export async function createUser(input: CreateUserInput) {
   const passwordHash = await bcrypt.hash(input.password, PASSWORD_ROUNDS);
 
-  return prisma.user.create({
+  const createdUser = await prisma.user.create({
     data: {
       name: input.name,
       email: input.email,
@@ -134,12 +142,14 @@ export async function createUser(input: CreateUserInput) {
     },
     select: publicUserSelect
   });
+
+  return extendUserWithConfig(createdUser);
 }
 
 export async function getUser(actor: AuthUser, id: string) {
   await ensureCanAccessUser(actor, id);
 
-  return prisma.user.findUniqueOrThrow({
+  const fetchedUser = await prisma.user.findUniqueOrThrow({
     where: { id },
     select: {
       ...publicUserSelect,
@@ -161,6 +171,8 @@ export async function getUser(actor: AuthUser, id: string) {
       }
     }
   });
+
+  return extendUserWithConfig(fetchedUser);
 }
 
 export async function updateUser(actor: AuthUser, id: string, input: UpdateUserInput) {
@@ -168,11 +180,13 @@ export async function updateUser(actor: AuthUser, id: string, input: UpdateUserI
 
   const data = await buildUpdateData(actor, input);
 
-  return prisma.user.update({
+  const updatedUser = await prisma.user.update({
     where: { id },
     data,
     select: publicUserSelect
   });
+
+  return extendUserWithConfig(updatedUser);
 }
 
 async function buildUpdateData(
