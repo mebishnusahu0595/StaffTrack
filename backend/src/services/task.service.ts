@@ -761,34 +761,33 @@ export async function updateTaskStatus(
 }
 
 async function taskAccessWhere(actor: AuthUser): Promise<Prisma.TaskWhereInput> {
+  const todayStart = getStartOfDayIST();
+  const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+  const dateFilter = {
+    dueDate: {
+      gte: todayStart,
+      lt: tomorrowStart
+    }
+  };
+
   if (actor.role === UserRole.SUPERADMIN) {
-    return {};
+    return dateFilter;
   }
 
   if (actor.role === UserRole.ADMIN || actor.role === UserRole.MANAGER) {
     return {
       assignedTo: {
         companyId: actor.companyId
-      }
+      },
+      ...dateFilter
     };
   }
 
   // Employees see only today's tasks (IST).
-  // rolloverOverdueTasks() has already run by this point — it moves all
-  // overdue PENDING/IN_PROGRESS tasks to todayStart — so a simple
-  // dueDate-equals-today filter correctly captures:
-  //   • Tasks actually scheduled for today
-  //   • Rolled-over tasks from previous days (carry-forward)
-  // Future recurring instances are excluded.
-  const todayStart = getStartOfDayIST();
-  const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
-
   return {
     assignedToId: actor.id,
-    dueDate: {
-      gte: todayStart,
-      lt: tomorrowStart
-    }
+    ...dateFilter
   };
 }
 
@@ -1154,28 +1153,57 @@ export function getStartOfDayIST(date: Date = new Date()): Date {
 export async function rolloverOverdueTasks() {
   const todayStart = getStartOfDayIST();
 
-  const overdueTasks = await prisma.task.findMany({
+  // 1. One-off tasks (isRepeating = false): roll them over to todayStart.
+  const overdueOneOffTasks = await prisma.task.findMany({
     where: {
       status: {
         in: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS]
       },
+      isRepeating: false,
       dueDate: {
         lt: todayStart
       }
     }
   });
 
-  if (overdueTasks.length > 0) {
-    console.log(`[Task Rollover] Found ${overdueTasks.length} overdue tasks. Rolling over to ${todayStart.toISOString()} and resetting points to 0.`);
+  if (overdueOneOffTasks.length > 0) {
+    console.log(`[Task Rollover] Found ${overdueOneOffTasks.length} overdue one-off tasks. Rolling over to ${todayStart.toISOString()} and resetting points to 0.`);
     await prisma.task.updateMany({
       where: {
         id: {
-          in: overdueTasks.map(t => t.id)
+          in: overdueOneOffTasks.map(t => t.id)
         }
       },
       data: {
         dueDate: todayStart,
         points: 0
+      }
+    });
+  }
+
+  // 2. Repeating tasks (isRepeating = true): mark them as CANCELLED instead of rolling over to avoid clogging.
+  const overdueRepeatingTasks = await prisma.task.findMany({
+    where: {
+      status: {
+        in: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS]
+      },
+      isRepeating: true,
+      dueDate: {
+        lt: todayStart
+      }
+    }
+  });
+
+  if (overdueRepeatingTasks.length > 0) {
+    console.log(`[Task Rollover] Found ${overdueRepeatingTasks.length} overdue repeating tasks. Marking as CANCELLED.`);
+    await prisma.task.updateMany({
+      where: {
+        id: {
+          in: overdueRepeatingTasks.map(t => t.id)
+        }
+      },
+      data: {
+        status: TaskStatus.CANCELLED
       }
     });
   }
