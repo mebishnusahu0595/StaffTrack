@@ -102,9 +102,13 @@ export function FormsScreen() {
     setIsUploading(true);
     let coords = null;
     try {
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
+      let location = await Location.getLastKnownPositionAsync().catch(() => null);
+      const fiveMinutes = 5 * 60 * 1000;
+      if (!location || (Date.now() - location.timestamp) > fiveMinutes) {
+        location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+      }
       coords = {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude

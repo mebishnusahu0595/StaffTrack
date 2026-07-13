@@ -28,11 +28,21 @@ export function useLocation() {
 
     try {
       await requestForegroundPermission();
-      console.log("[Location] Permission granted, getting position...");
-      const currentLocation = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced
-      });
-      console.log("[Location] Position fetched successfully:", currentLocation.coords);
+      console.log("[Location] Permission granted, checking last known position...");
+      
+      let currentLocation = await Location.getLastKnownPositionAsync().catch(() => null);
+      const fiveMinutes = 5 * 60 * 1000;
+      
+      if (!currentLocation || (Date.now() - currentLocation.timestamp) > fiveMinutes) {
+        console.log("[Location] No fresh cached location. Getting current position...");
+        currentLocation = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced
+        });
+      } else {
+        console.log("[Location] Using cached last known position.");
+      }
+      
+      console.log("[Location] Position resolved successfully:", currentLocation.coords);
       setLocation(currentLocation);
       return currentLocation;
     } catch (locationError) {

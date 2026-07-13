@@ -199,11 +199,17 @@ export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
         <Card.Actions style={styles.actions}>
           <Button
             disabled={disabled}
-            mode="contained-tonal"
+            loading={disabled}
+            mode="contained"
             onPress={() => onPress?.(task)}
-            style={styles.actionButton}
+            style={[
+              styles.actionButton,
+              disabled 
+                ? { backgroundColor: "#E2E8F0" } 
+                : (task.status === "PENDING" ? { backgroundColor: "#10B981" } : { backgroundColor: "#2196F3" })
+            ]}
             contentStyle={{ height: 36 }}
-            labelStyle={{ fontSize: 12, fontWeight: "700" }}
+            labelStyle={{ fontSize: 12, fontWeight: "700", color: disabled ? "#94A3B8" : "#FFFFFF" }}
           >
             {actionLabel}
           </Button>
