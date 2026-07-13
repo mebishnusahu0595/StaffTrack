@@ -304,7 +304,7 @@ export async function getMonthlyPerformanceReport(actor: AuthUser, userId: strin
     let status = "ABSENT";
 
     const dayOfWeek = dayDate.getDay(); // 0 = Sunday, 6 = Saturday
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const isWeekend = dayOfWeek === 0; // Only Sunday is a weekend
 
     if (rows.length > 0) {
       status = resolveDayStatus(rows);

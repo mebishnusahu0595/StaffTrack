@@ -148,7 +148,7 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
           unpaidLeaveDays++;
           status = "ON_LEAVE";
         }
-      } else if (isWeekend(day)) {
+      } else if (day.getDay() === 0) { // Only Sunday is a weekend
         status = "WEEKEND";
         payable = false;
       } else if (dayDate > today) {
@@ -373,7 +373,7 @@ export async function calculateMusterReport(companyId: string, month: number, ye
       const dayDate = startOfDate(day);
       let status = "A";
 
-      if (isWeekend(day)) status = "W";
+      if (day.getDay() === 0) status = "W"; // Only Sunday is a weekend
 
       const applicableHoliday = findHolidayForUser(holidays, user, day);
       if (applicableHoliday) {
