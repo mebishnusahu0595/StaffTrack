@@ -123,6 +123,14 @@ export function LocationTracker() {
 
         if (lastLocationState === null) {
           lastLocationState = locationIsOn;
+
+          // Report initial state to backend on startup/resume
+          const level = await Battery.getBatteryLevelAsync().catch(() => -1);
+          const batteryLevel = level >= 0 ? Math.round(level * 100) : undefined;
+          await updateLocationStatus({ isLocationOn: locationIsOn, batteryLevel }).catch((err) => {
+            console.warn("[LocationTracker] Failed to update initial location status on backend:", err);
+          });
+
           if (!locationIsOn && !isAlertOpen && isCheckedIn && isFieldPunch) {
             isAlertOpen = true;
             Alert.alert(
