@@ -608,7 +608,8 @@ export async function getAttendanceByDate(
             role: true,
             shiftStart: true,
             shiftEnd: true,
-            workMode: true
+            workMode: true,
+            groupId: true
           }
         },
         breaks: true
@@ -625,7 +626,8 @@ export async function getAttendanceByDate(
         shiftStart: true,
         shiftEnd: true,
         workMode: true,
-        createdAt: true
+        createdAt: true,
+        groupId: true
       },
       orderBy: { name: "asc" }
     })
@@ -670,7 +672,8 @@ export async function getAttendanceByDate(
           role: user.role,
           shiftStart: user.shiftStart,
           shiftEnd: user.shiftEnd,
-          workMode: user.workMode
+          workMode: user.workMode,
+          groupId: user.groupId
         },
         breaks: []
       });

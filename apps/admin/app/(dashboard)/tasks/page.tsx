@@ -381,19 +381,15 @@ export default function TasksPage() {
       const getLocalDateStr = (d: any) => {
         if (!d) return "";
         try {
-          const dateObj = new Date(d);
-          if (isNaN(dateObj.getTime())) return "";
-          return format(dateObj, "yyyy-MM-dd");
+          const utcTime = new Date(d).getTime();
+          const istDate = new Date(utcTime + 5.5 * 60 * 60 * 1000);
+          return istDate.toISOString().split("T")[0];
         } catch {
           return "";
         }
       };
       filtered = filtered.filter(t => {
         const taskDueStr = getLocalDateStr(t.dueDate);
-        if (t.startDate) {
-          const taskStartStr = getLocalDateStr(t.startDate);
-          return filterDate >= taskStartStr && filterDate <= taskDueStr;
-        }
         return filterDate === taskDueStr;
       });
     }

@@ -227,9 +227,13 @@ async function buildUpdateData(
     data.email = input.email;
   }
 
-  if (actor.role === UserRole.SUPERADMIN || actor.role === UserRole.ADMIN) {
+  if (actor.role === UserRole.SUPERADMIN || actor.role === UserRole.ADMIN || actor.role === UserRole.MANAGER) {
     if (input.role !== undefined) {
-      data.role = input.role;
+      if (actor.role === UserRole.MANAGER && (input.role === UserRole.ADMIN || input.role === UserRole.SUPERADMIN)) {
+        // Managers cannot assign ADMIN or SUPERADMIN roles
+      } else {
+        data.role = input.role;
+      }
     }
 
     if (input.workMode !== undefined) {

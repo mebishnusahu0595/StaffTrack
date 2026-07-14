@@ -83,7 +83,7 @@ model User {
   passwordHash    String
   phone           String
   role            UserRole
-  workMode        WorkMode       @default(FIELD)
+  workMode        WorkMode       @default(BOTH)
   designation     String?
   joiningDate     DateTime       @default(now())
   avatarUrl       String?

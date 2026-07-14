@@ -71,7 +71,7 @@ export default function AttendancePage() {
  
   const usersQuery = useQuery({ 
     queryKey: ["users", "attendance"], 
-    queryFn: () => fetchUsers({ page: 1, pageSize: 100 }) 
+    queryFn: () => fetchUsers({ page: 1, pageSize: 1000 }) 
   });
 
   const groupsQuery = useQuery({

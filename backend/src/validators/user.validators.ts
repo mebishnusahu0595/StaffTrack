@@ -14,7 +14,7 @@ export const createUserBodySchema = z.object({
   password: z.string().min(8),
   phone: z.string().min(7),
   role: z.enum([UserRole.EMPLOYEE, UserRole.MANAGER]).default(UserRole.EMPLOYEE),
-  workMode: z.nativeEnum(WorkMode).default(WorkMode.FIELD),
+  workMode: z.nativeEnum(WorkMode).default(WorkMode.BOTH),
   companyId: z.string().min(1),
   managerId: z.string().optional(),
   avatarUrl: z.string().optional(),
