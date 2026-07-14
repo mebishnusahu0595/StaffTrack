@@ -205,7 +205,7 @@ export async function getTodayLocationLogs(actor: AuthUser, userId: string, date
 
 export async function checkStaleLocations() {
   const now = new Date();
-  const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+  const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes — increased from 10 to handle OS background throttling and stationary users
 
   try {
     const activeUsers = await prisma.user.findMany({

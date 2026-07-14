@@ -317,7 +317,7 @@ export async function startBackgroundLocationTracking(user?: any): Promise<boole
       accuracy: Location.Accuracy.Balanced, // Balanced accuracy is much more battery optimized
       activityType: Location.ActivityType.AutomotiveNavigation,
       deferredUpdatesInterval: trackingInterval,
-      distanceInterval: 15, // increased from 10 to reduce micro-movement noise and save battery
+      distanceInterval: 0, // No distance gate — send pings on time basis so stationary users aren't falsely marked offline
       foregroundService: {
         notificationTitle: "StaffTrack is tracking your location",
         notificationBody: "Live location tracking is active.",
