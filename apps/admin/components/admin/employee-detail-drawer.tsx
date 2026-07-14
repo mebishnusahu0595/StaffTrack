@@ -7,7 +7,8 @@ import {
   X, CalendarDays, Battery, MapPin, Navigation, Smartphone, 
   ChevronLeft, ChevronRight, CheckCircle, Clock, FileText, 
   ClipboardList, Plus, Search, Calendar, Landmark, AlertCircle,
-  Briefcase, MessageSquare, Shield, TrendingUp, Compass, Award, ExternalLink
+  Briefcase, MessageSquare, Shield, TrendingUp, Compass, Award, ExternalLink,
+  Mail, Phone, User
 } from "lucide-react";
 import { 
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription 
@@ -267,7 +268,7 @@ export function EmployeeDetailDrawer({
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent className="sm:max-w-3xl w-full h-full flex flex-col p-0 border-l border-slate-200/80 bg-white overflow-hidden shadow-2xl">
+      <SheetContent className="sm:max-w-5xl w-full h-full flex flex-col p-0 border-l border-slate-200/80 bg-white overflow-hidden shadow-2xl">
         {/* Header Profile Section */}
         <div className="p-6 bg-slate-50 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -298,7 +299,7 @@ export function EmployeeDetailDrawer({
                     <span>Location {employee.isLocationOn ? "ON" : "OFF"}</span>
                   </div>
                 )}
-                {employee?.batteryLevel !== undefined && (
+                {employee?.batteryLevel !== undefined && employee?.batteryLevel !== null && (
                   <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[9px] font-black bg-slate-100 text-slate-600 border-slate-200">
                     <Battery className="h-3 w-3 text-slate-400" />
                     <span>{Math.round(employee.batteryLevel)}%</span>
@@ -363,6 +364,68 @@ export function EmployeeDetailDrawer({
                   <span className="text-[10px] font-black uppercase text-blue-700/60 tracking-wider">Monthly Odo</span>
                   <div className="text-2xl font-black text-blue-700 mt-1">{stats.totalOdo.toFixed(1)} KM</div>
                   <span className="text-[10px] text-blue-600/80 mt-1 block">Sum of odometer logs</span>
+                </div>
+              </div>
+
+              {/* Employee Info Card */}
+              <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
+                <h4 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-50 pb-2">
+                  <User className="h-4 w-4 text-blue-500" /> Employee Profile Details
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
+                  <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100 flex items-start gap-2.5">
+                    <Mail className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-wide">Email Address</span>
+                      <p className="font-bold text-slate-700 mt-0.5 break-all">{employee?.email || "—"}</p>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100 flex items-start gap-2.5">
+                    <Phone className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-wide">Phone Number</span>
+                      <p className="font-bold text-slate-700 mt-0.5">{employee?.phone || "—"}</p>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100 flex items-start gap-2.5">
+                    <Briefcase className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-wide">Work Mode</span>
+                      <p className="font-bold text-slate-700 mt-0.5 uppercase">{employee?.workMode || "—"}</p>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100 flex items-start gap-2.5">
+                    <Shield className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-wide">System Role</span>
+                      <p className="font-bold text-slate-700 mt-0.5 uppercase">{employee?.role || "—"}</p>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100 flex items-start gap-2.5">
+                    <User className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-wide">Reporting Manager</span>
+                      <p className="font-bold text-slate-700 mt-0.5">{employee?.manager?.name || "No Manager Assigned"}</p>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100 flex items-start gap-2.5">
+                    <Calendar className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-wide">Joining Date</span>
+                      <p className="font-bold text-slate-700 mt-0.5">
+                        {employee?.joiningDate ? dayjs(employee.joiningDate).format("DD MMM, YYYY") : "—"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100 flex items-start gap-2.5">
+                    <Landmark className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-wide">Base Salary</span>
+                      <p className="font-bold text-slate-700 mt-0.5">
+                        {employee?.baseSalary ? `₹${employee.baseSalary.toLocaleString()}` : "—"}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
