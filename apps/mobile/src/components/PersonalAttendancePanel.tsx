@@ -519,20 +519,65 @@ function toRadians(value: number) {
 }
 
 async function pickVerificationImage(options?: { quality?: number }): Promise<ImagePicker.ImagePickerAsset | null> {
-  const permission = await ImagePicker.requestCameraPermissionsAsync();
+  return new Promise((resolve) => {
+    Alert.alert(
+      "Verification Photo",
+      "Take a new photo or choose an existing one from the gallery:",
+      [
+        {
+          text: "Cancel",
+          onPress: () => resolve(null),
+          style: "cancel"
+        },
+        {
+          text: "Take Photo (Camera)",
+          onPress: async () => {
+            const permission = await ImagePicker.requestCameraPermissionsAsync();
+            if (!permission.granted) {
+              Alert.alert("Permission denied", "Camera access is required for verification.");
+              resolve(null);
+              return;
+            }
+            try {
+              const result = await ImagePicker.launchCameraAsync({ 
+                allowsEditing: false, // Disabling editing intent prevents memory crashes on low-end/budget phones
+                quality: options?.quality ?? 0.4 
+              });
+              resolve(result.canceled ? null : result.assets[0]);
+            } catch (cameraErr) {
+              console.error("[Camera] launchCameraAsync failed:", cameraErr);
+              Alert.alert("Camera Error", "Failed to launch camera. Opening gallery instead...");
+              resolve(await pickFromGallery(options));
+            }
+          }
+        },
+        {
+          text: "Choose from Gallery",
+          onPress: async () => {
+            resolve(await pickFromGallery(options));
+          }
+        }
+      ],
+      { cancelable: true }
+    );
+  });
+}
+
+async function pickFromGallery(options?: { quality?: number }): Promise<ImagePicker.ImagePickerAsset | null> {
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) {
-    Alert.alert("Permission denied", "Camera access is required for verification.");
+    Alert.alert("Permission denied", "Gallery access is required.");
     return null;
   }
   try {
-    const result = await ImagePicker.launchCameraAsync({ 
-      allowsEditing: false, // Disabling editing intent prevents memory crashes on low-end/budget phones
-      quality: options?.quality ?? 0.4 
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: false,
+      quality: options?.quality ?? 0.4
     });
     return result.canceled ? null : result.assets[0];
-  } catch (cameraErr) {
-    console.error("[Camera] launchCameraAsync failed:", cameraErr);
-    Alert.alert("Camera Error", "Failed to launch camera. Please restart the app or check if another app is using the camera.");
+  } catch (err) {
+    console.error("[Gallery] launchImageLibraryAsync failed:", err);
+    Alert.alert("Error", "Failed to open gallery.");
     return null;
   }
 }
