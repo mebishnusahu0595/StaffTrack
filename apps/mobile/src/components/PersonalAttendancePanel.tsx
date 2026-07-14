@@ -524,8 +524,17 @@ async function pickVerificationImage(options?: { quality?: number }): Promise<Im
     Alert.alert("Permission denied", "Camera access is required for verification.");
     return null;
   }
-  const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: options?.quality ?? 0.6 });
-  return result.canceled ? null : result.assets[0];
+  try {
+    const result = await ImagePicker.launchCameraAsync({ 
+      allowsEditing: false, // Disabling editing intent prevents memory crashes on low-end/budget phones
+      quality: options?.quality ?? 0.4 
+    });
+    return result.canceled ? null : result.assets[0];
+  } catch (cameraErr) {
+    console.error("[Camera] launchCameraAsync failed:", cameraErr);
+    Alert.alert("Camera Error", "Failed to launch camera. Please restart the app or check if another app is using the camera.");
+    return null;
+  }
 }
 
 function PanelImage({ source, style }: { source: any; style: any }) {

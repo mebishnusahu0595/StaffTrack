@@ -60,12 +60,6 @@ api.interceptors.response.use(
 
     const originalRequest = error.config as RetriableRequest | undefined;
 
-    if (status === 401 && originalRequest && originalRequest._retry) {
-      await clearAuthStorage();
-      unauthorizedHandler?.();
-      return Promise.reject(error);
-    }
-
     if (
       status !== 401 ||
       !originalRequest ||

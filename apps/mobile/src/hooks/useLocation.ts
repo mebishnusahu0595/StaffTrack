@@ -35,9 +35,23 @@ export function useLocation() {
       
       if (!currentLocation || (Date.now() - currentLocation.timestamp) > fiveMinutes) {
         console.log("[Location] No fresh cached location. Getting current position...");
-        currentLocation = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced
-        });
+        try {
+          // 15-second timeout to prevent hanging forever on buggy devices
+          const positionPromise = Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced
+          });
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Location request timed out")), 15000)
+          );
+          
+          currentLocation = await Promise.race([positionPromise, timeoutPromise]);
+        } catch (gpsError) {
+          console.warn("[Location] getCurrentPositionAsync failed or timed out. Falling back to last known position...", gpsError);
+          currentLocation = currentLocation || await Location.getLastKnownPositionAsync().catch(() => null);
+          if (!currentLocation) {
+            throw new Error("GPS signal is weak or not available. Please go to an open area, restart location services, and try again.");
+          }
+        }
       } else {
         console.log("[Location] Using cached last known position.");
       }
