@@ -153,8 +153,11 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
 }
 
 export async function listTasks(actor: AuthUser, dateStr?: string) {
-  // Automatically rollover overdue pending / in_progress tasks
-  await rolloverOverdueTasks();
+  // Automatically rollover overdue pending / in_progress tasks — fire-and-forget
+  // so it doesn't block the response. Errors are logged but not surfaced.
+  rolloverOverdueTasks().catch(err =>
+    console.error("[Task Rollover] background rollover failed:", err)
+  );
 
   const tasks = await prisma.task.findMany({
     where: await taskAccessWhere(actor, dateStr),
@@ -162,93 +165,67 @@ export async function listTasks(actor: AuthUser, dateStr?: string) {
     orderBy: { createdAt: "desc" }
   });
 
-  // Check for tasks due today and create notifications if they don't exist
+  // Fire-and-forget: check & send task notifications without blocking the response.
+  // All N+1 DB notification lookups are batched into one query per type.
   if (actor.role === UserRole.EMPLOYEE) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    (async () => {
+      try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const dueToday = tasks.filter(t => 
-      t.status === TaskStatus.PENDING && 
-      t.dueDate >= today && 
-      t.dueDate < tomorrow
-    );
-
-    for (const task of dueToday) {
-      // Check if notification already exists for this task today
-      const existing = await prisma.notification.findFirst({
-        where: {
-          userId: actor.id,
-          type: "TASK_DUE_TODAY",
-          message: { contains: task.title },
-          createdAt: { gte: today }
-        }
-      });
-
-      if (!existing) {
-        await notificationService.createNotification(
-          actor.id,
-          "Task Due Today",
-          `Your task "${task.title}" is due today. Please complete it.`,
-          "TASK_DUE_TODAY"
+        const dueToday = tasks.filter(t => 
+          t.status === TaskStatus.PENDING && 
+          t.dueDate >= today && 
+          t.dueDate < tomorrow
         );
-      }
-    }
-
-    const startingToday = tasks.filter(t => 
-      t.status === TaskStatus.PENDING && 
-      t.startDate && 
-      t.startDate >= today && 
-      t.startDate < tomorrow
-    );
-
-    for (const task of startingToday) {
-      const existing = await prisma.notification.findFirst({
-        where: {
-          userId: actor.id,
-          type: "TASK_STARTED_TODAY",
-          message: { contains: task.title },
-          createdAt: { gte: today }
-        }
-      });
-
-      if (!existing) {
-        await notificationService.createNotification(
-          actor.id,
-          "New Task Started",
-          `Your task "${task.title}" has started today. Please complete it.`,
-          "TASK_STARTED_TODAY"
+        const startingToday = tasks.filter(t => 
+          t.status === TaskStatus.PENDING && 
+          t.startDate && 
+          t.startDate >= today && 
+          t.startDate < tomorrow
         );
-      }
-    }
-
-    const carryForwardTasks = tasks.filter(
-      (task) =>
-        task.status !== TaskStatus.COMPLETED &&
-        task.status !== TaskStatus.CANCELLED &&
-        task.dueDate < today
-    );
-
-    for (const task of carryForwardTasks) {
-      const existing = await prisma.notification.findFirst({
-        where: {
-          userId: actor.id,
-          type: "TASK_PENDING_CARRY_FORWARD",
-          message: { contains: task.title },
-          createdAt: { gte: today }
-        }
-      });
-
-      if (!existing) {
-        await notificationService.createNotification(
-          actor.id,
-          "Pending Task From Yesterday",
-          `Your task "${task.title}" is still pending from yesterday and has been carried forward.`,
-          "TASK_PENDING_CARRY_FORWARD"
+        const carryForwardTasks = tasks.filter(
+          (task) =>
+            task.status !== TaskStatus.COMPLETED &&
+            task.status !== TaskStatus.CANCELLED &&
+            task.dueDate < today
         );
+
+        // Batch fetch all today's notifications for this user in one query
+        const todayNotifs = await prisma.notification.findMany({
+          where: {
+            userId: actor.id,
+            type: { in: ["TASK_DUE_TODAY", "TASK_STARTED_TODAY", "TASK_PENDING_CARRY_FORWARD"] },
+            createdAt: { gte: today }
+          },
+          select: { type: true, message: true }
+        });
+        const notifSet = new Set(todayNotifs.map(n => `${n.type}||${n.message}`));
+
+        for (const task of dueToday) {
+          const msg = `Your task "${task.title}" is due today. Please complete it.`;
+          if (!notifSet.has(`TASK_DUE_TODAY||${msg}`)) {
+            await notificationService.createNotification(actor.id, "Task Due Today", msg, "TASK_DUE_TODAY");
+          }
+        }
+        for (const task of startingToday) {
+          const msg = `Your task "${task.title}" has started today. Please complete it.`;
+          if (!notifSet.has(`TASK_STARTED_TODAY||${msg}`)) {
+            await notificationService.createNotification(actor.id, "New Task Started", msg, "TASK_STARTED_TODAY");
+          }
+        }
+        for (const task of carryForwardTasks) {
+          const msg = `Your task "${task.title}" is still pending from yesterday and has been carried forward.`;
+          if (!notifSet.has(`TASK_PENDING_CARRY_FORWARD||${msg}`)) {
+            await notificationService.createNotification(actor.id, "Pending Task From Yesterday", msg, "TASK_PENDING_CARRY_FORWARD");
+          }
+        }
+      } catch (err) {
+        console.error("[listTasks] background notification check failed:", err);
       }
-    }
+    })();
   }
 
   if (actor.role === UserRole.EMPLOYEE) {
