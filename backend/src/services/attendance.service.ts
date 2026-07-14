@@ -56,7 +56,24 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
   });
 
   if (active) {
-    conflict("Already checked in. Please check out first.");
+    // If the stale open session is from a PREVIOUS day, auto-close it with an end-of-day timestamp
+    // so it doesn't block today's fresh check-in
+    const activeDate = startOfDay(active.date);
+    if (activeDate.getTime() < date.getTime()) {
+      console.warn(`[Auto-Close] User ${actor.id} has a stale open session from ${active.date.toISOString().slice(0, 10)}, auto-closing it to allow today's check-in.`);
+      const autoCloseTime = new Date(activeDate);
+      autoCloseTime.setHours(18, 30, 0, 0); // auto-close at 6:30 PM of that day
+      await prisma.attendance.update({
+        where: { id: active.id },
+        data: {
+          checkOutTime: autoCloseTime,
+          checkOutLat: active.checkInLat,
+          checkOutLng: active.checkInLng,
+        }
+      });
+    } else {
+      conflict("Already checked in. Please check out first.");
+    }
   }
 
   // Load user shiftStart + workMode to check for lateness and punchType restriction
