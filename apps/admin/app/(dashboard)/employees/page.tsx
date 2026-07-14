@@ -164,7 +164,7 @@ export default function EmployeesPage() {
     );
 
     if (workModeFilter !== "ALL") {
-      items = items.filter((user) => resolveDisplayedWorkMode(user.workMode, latestTodayAttendanceByUser.get(user.id)) === workModeFilter);
+      items = items.filter((user) => user.workMode === workModeFilter);
     }
 
     if (statusFilter !== "ALL") {
@@ -931,13 +931,13 @@ ${htmlContent}
                       <td className="py-5 px-6 text-center">
                          <div className={cn(
                            "flex items-center justify-center gap-2 px-3 py-1 rounded-full border w-fit mx-auto",
-                           displayedWorkMode === "FIELD"
+                           user.workMode === "FIELD"
                              ? "bg-blue-50 text-blue-600 border-blue-100"
-                             : displayedWorkMode === "BOTH"
+                             : user.workMode === "BOTH"
                              ? "bg-violet-50 text-violet-600 border-violet-100"
                              : "bg-indigo-50 text-indigo-600 border-indigo-100"
                          )}>
-                            <span className="text-[10px] font-black uppercase tracking-wider">{displayedWorkMode}</span>
+                            <span className="text-[10px] font-black uppercase tracking-wider">{user.workMode}</span>
                          </div>
                       </td>
                       <td className="py-5 px-6">
