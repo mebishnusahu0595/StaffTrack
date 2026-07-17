@@ -2,7 +2,7 @@
  
 import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, XCircle, FileText, ExternalLink, Wallet, ListChecks, Timer, Filter, Fuel, Utensils, Plane, Package, Download, X, ChevronDown, ChevronUp } from "lucide-react";
+import { CheckCircle2, XCircle, FileText, ExternalLink, Wallet, ListChecks, Timer, Filter, Fuel, Utensils, Plane, Package, Download, X, ChevronDown, ChevronUp, CalendarDays } from "lucide-react";
 import { PageHeader } from "@/components/admin/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,12 +35,28 @@ function ExpenseTable({
   isUpdating: boolean;
 }) {
   const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>({});
+  const queryClient = useQueryClient();
 
   const toggleUser = (userId: string) => {
     setExpandedUsers((prev) => ({
       ...prev,
       [userId]: !prev[userId],
     }));
+  };
+
+  const handleApproveAll = async (expenses: any[]) => {
+    const pendingExpenses = expenses.filter(e => !e.approved && !e.approvedById);
+    if (pendingExpenses.length === 0) return;
+    const confirmApprove = confirm(`Are you sure you want to approve all ${pendingExpenses.length} pending expenses for this employee?`);
+    if (!confirmApprove) return;
+    
+    try {
+      await Promise.all(pendingExpenses.map(e => approveExpense(e.id, true)));
+      await queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      alert("All pending expenses approved successfully!");
+    } catch (err) {
+      alert("Failed to approve some expenses.");
+    }
   };
 
   const groupedRows = useMemo(() => {
@@ -75,6 +91,7 @@ function ExpenseTable({
           groupedRows.map((group) => {
             const userId = group.user.id;
             const isExpanded = !!expandedUsers[userId];
+            const hasPending = group.expenses.some(e => !e.approved && !e.approvedById);
             return (
               <React.Fragment key={userId}>
                 {/* Main User Row */}
@@ -114,9 +131,23 @@ function ExpenseTable({
                   <TableRow className="bg-slate-50/30 hover:bg-slate-50/30 border-none">
                     <TableCell colSpan={4} className="p-4 px-8 bg-slate-50/40">
                       <div className="rounded-xl border border-slate-100 bg-white shadow-sm overflow-hidden p-4 space-y-4">
-                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
-                          Expense Details for {group.user.name}
-                        </h3>
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                            Expense Details for {group.user.name}
+                          </h3>
+                          {hasPending && (
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-8 px-3.5 font-bold text-[10px] gap-1.5 flex items-center shadow-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleApproveAll(group.expenses);
+                              }}
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" /> Approve All
+                            </Button>
+                          )}
+                        </div>
                         <Table>
                           <TableHeader className="bg-slate-50/70 border-none">
                             <TableRow className="hover:bg-transparent border-slate-100">
@@ -260,6 +291,8 @@ function ExpenseTable({
  
 export default function ExpensesPage() {
   const queryClient = useQueryClient();
+  const [selectedDate, setSelectedDate] = useState<string>("");
+
   const expensesQuery = useQuery({ queryKey: ["expenses"], queryFn: () => fetchExpenses() });
   const mutation = useMutation({
     mutationFn: ({ id, approved }: { id: string; approved: boolean | null }) => approveExpense(id, approved),
@@ -274,15 +307,42 @@ export default function ExpensesPage() {
       alert(`Failed to update expense: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
+
+  const getLocalDateStr = (d: string) => {
+    try {
+      const utcTime = new Date(d).getTime();
+      const istDate = new Date(utcTime);
+      return istDate.toISOString().split("T")[0];
+    } catch {
+      return "";
+    }
+  };
  
   const pending = useMemo(() => (expensesQuery.data ?? []).filter((expense) => !expense.approved && !expense.approvedById), [expensesQuery.data]);
   const allExpenses = expensesQuery.data ?? [];
-  const totalAmount = useMemo(() => pending.reduce((sum, e) => sum + e.amount, 0), [pending]);
+
+  const filteredPending = useMemo(() => {
+    let list = pending;
+    if (selectedDate) {
+      list = list.filter((e) => getLocalDateStr(e.date) === selectedDate);
+    }
+    return list;
+  }, [pending, selectedDate]);
+
+  const filteredAllExpenses = useMemo(() => {
+    let list = allExpenses;
+    if (selectedDate) {
+      list = list.filter((e) => getLocalDateStr(e.date) === selectedDate);
+    }
+    return list;
+  }, [allExpenses, selectedDate]);
+
+  const totalAmount = useMemo(() => filteredPending.reduce((sum, e) => sum + e.amount, 0), [filteredPending]);
 
   const downloadCSV = () => {
-    if (allExpenses.length === 0) return;
+    if (filteredAllExpenses.length === 0) return;
     const headers = ["Employee Name", "Category", "Date", "Amount", "Description", "Status"];
-    const rows = allExpenses.map((e: any) => [
+    const rows = filteredAllExpenses.map((e: any) => [
       e.user?.name || "--",
       e.category || "",
       formatDate(e.date),
@@ -335,7 +395,7 @@ export default function ExpensesPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Requests</p>
-                <p className="text-2xl font-black text-slate-900">{pending.length}</p>
+                <p className="text-2xl font-black text-slate-900">{filteredPending.length}</p>
               </div>
               <div className="h-10 w-10 bg-indigo-50 rounded-xl flex items-center justify-center">
                 <ListChecks className="h-5 w-5 text-indigo-600" />
@@ -375,23 +435,33 @@ export default function ExpensesPage() {
             <Button 
               variant="outline" 
               size="sm" 
-              className="h-10 rounded-xl border-slate-200 px-4 text-slate-600 shadow-sm gap-2 text-[10px] font-bold uppercase hover:bg-slate-50 transition-all mr-2"
+              className="h-10 rounded-xl border-slate-200 px-4 text-slate-600 shadow-sm gap-2 text-[10px] font-bold uppercase hover:bg-slate-50 transition-all"
               onClick={downloadCSV}
-              disabled={allExpenses.length === 0}
+              disabled={filteredAllExpenses.length === 0}
             >
               <Download className="h-4 w-4 text-slate-500" /> Export CSV
             </Button>
-            <Button variant="outline" size="sm" className="h-10 rounded-xl border-slate-200 px-4 text-slate-400">
-               <Filter className="h-4 w-4 mr-2" />
-               <span className="text-[10px] font-bold uppercase text-slate-600">Filter</span>
-            </Button>
+            <div className="flex items-center gap-2 px-3 py-1 bg-white rounded-xl border border-slate-200 h-10 shadow-sm">
+              <CalendarDays className="h-4 w-4 text-slate-400" />
+              <input 
+                type="date" 
+                className="bg-transparent border-none text-[10px] font-bold text-slate-600 focus:outline-none"
+                value={selectedDate}
+                onChange={e => setSelectedDate(e.target.value)}
+              />
+              {selectedDate && (
+                <button onClick={() => setSelectedDate("")} className="text-slate-400 hover:text-slate-600">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
         
         <TabsContent value="pending" className="mt-0">
           <Card className="border-none shadow-sm shadow-slate-200/60 ring-1 ring-slate-200/50 overflow-hidden">
             <ExpenseTable
-              rows={pending}
+              rows={filteredPending}
               onDecision={(id, approved) => mutation.mutate({ id, approved })}
               isUpdating={mutation.isPending}
             />
@@ -401,7 +471,7 @@ export default function ExpensesPage() {
         <TabsContent value="all" className="mt-0">
           <Card className="border-none shadow-sm shadow-slate-200/60 ring-1 ring-slate-200/50 overflow-hidden">
             <ExpenseTable
-              rows={allExpenses}
+              rows={filteredAllExpenses}
               onDecision={(id, approved) => mutation.mutate({ id, approved })}
               isUpdating={mutation.isPending}
             />
