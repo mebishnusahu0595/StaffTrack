@@ -969,7 +969,6 @@ export default function TasksPage() {
                     />
                   </th>
                   <th className="py-4 px-4 min-w-[250px]">Task Name</th>
-                  <th className="py-4 px-4 min-w-[150px]">Assigned to</th>
                   <th className="py-4 px-4 min-w-[150px]">Team</th>
                   <th className="py-4 px-4 text-center">Status</th>
                   <th className="py-4 px-4 text-center">Points</th>
@@ -983,7 +982,7 @@ export default function TasksPage() {
                 {isLoading ? (
                   Array(5).fill(0).map((_, i) => (
                     <tr key={i} className="animate-pulse">
-                      <td colSpan={10} className="p-8"><div className="h-10 bg-slate-100 rounded-xl" /></td>
+                      <td colSpan={9} className="p-8"><div className="h-10 bg-slate-100 rounded-xl" /></td>
                     </tr>
                   ))
                                 ) : (() => {
@@ -1006,7 +1005,7 @@ export default function TasksPage() {
                       return (
                         <React.Fragment key={userId}>
                           <tr className="bg-slate-50/70 hover:bg-slate-100/50 transition-colors">
-                            <td colSpan={10} className="py-2.5 px-6">
+                            <td colSpan={9} className="py-2.5 px-6">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-black text-slate-800">👤 {group.user.name}</span>
@@ -1063,17 +1062,7 @@ export default function TasksPage() {
                                    </div>
                                 </div>
                               </td>
-                              <td className="py-2 px-4">
-                                <div className="flex items-center gap-2">
-                                  <Avatar className="h-7 w-7 rounded-full border border-slate-100">
-                                    <AvatarImage src={task.assignedTo?.avatarUrl} />
-                                    <AvatarFallback className="bg-blue-600 text-white text-[9px] font-black">
-                                      {task.assignedTo?.name?.slice(0, 1).toUpperCase()}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <span className="text-xs font-bold text-slate-600">{task.assignedTo?.name}</span>
-                                </div>
-                              </td>
+                              
                               <td className="py-2 px-4">
                                 <span className="text-xs font-bold text-slate-500">{task.assignedTo?.workMode || "Unassigned"}</span>
                               </td>
@@ -1209,17 +1198,7 @@ export default function TasksPage() {
                            </div>
                         </div>
                       </td>
-                      <td className="py-2 px-4">
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-7 w-7 rounded-full border border-slate-100">
-                            <AvatarImage src={task.assignedTo?.avatarUrl} />
-                            <AvatarFallback className="bg-blue-600 text-white text-[9px] font-black">
-                              {task.assignedTo?.name?.slice(0, 1).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-xs font-bold text-slate-600">{task.assignedTo?.name}</span>
-                        </div>
-                      </td>
+                      
                       <td className="py-2 px-4">
                         <span className="text-xs font-bold text-slate-500">{task.assignedTo?.workMode || "Unassigned"}</span>
                       </td>

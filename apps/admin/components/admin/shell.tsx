@@ -48,7 +48,8 @@ import {
   fetchLeaves,
   fetchExpenses,
   fetchAllAttendance,
-  fetchUsers
+  fetchUsers,
+  fetchIssues
 } from "@/lib/api";
 import {
   DropdownMenu,
@@ -225,11 +226,20 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     refetchInterval: 60_000
   });
 
+  const { data: allIssues = [] } = useQuery({
+    queryKey: ["issues", "sidebar"],
+    queryFn: () => fetchIssues(),
+    enabled: enabledBadges,
+    refetchInterval: 60_000
+  });
+ 
   const pendingExpenses = (allExpenses as any[]).filter((e) => !e.approved && !e.approvedById).length;
+  const pendingIssues = (allIssues as any[]).filter((i) => i.status === "Open" || i.status === "In Progress").length;
   const badgeCounts: Record<string, number> = {
     "/payroll/approval-requests": (lateCheckIns as any[]).length + (pendingAdjustments as any[]).length,
     "/leaves": (pendingLeaves as any[]).length,
-    "/expenses": pendingExpenses
+    "/expenses": pendingExpenses,
+    "/issues": pendingIssues
   };
 
   // Live Location Warnings and Today's Attendance Query

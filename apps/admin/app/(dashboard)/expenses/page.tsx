@@ -1,8 +1,8 @@
 "use client";
  
-import { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, XCircle, FileText, ExternalLink, Wallet, ListChecks, Timer, Filter, Fuel, Utensils, Plane, Package, Download, X } from "lucide-react";
+import { CheckCircle2, XCircle, FileText, ExternalLink, Wallet, ListChecks, Timer, Filter, Fuel, Utensils, Plane, Package, Download, X, ChevronDown, ChevronUp } from "lucide-react";
 import { PageHeader } from "@/components/admin/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,128 +34,221 @@ function ExpenseTable({
   onDecision: (id: string, approved: boolean) => void;
   isUpdating: boolean;
 }) {
+  const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>({});
+
+  const toggleUser = (userId: string) => {
+    setExpandedUsers((prev) => ({
+      ...prev,
+      [userId]: !prev[userId],
+    }));
+  };
+
+  const groupedRows = useMemo(() => {
+    const groups: Record<string, { user: any; expenses: any[]; totalAmount: number }> = {};
+    rows.forEach((expense) => {
+      const userId = expense.user.id;
+      if (!groups[userId]) {
+        groups[userId] = {
+          user: expense.user,
+          expenses: [],
+          totalAmount: 0,
+        };
+      }
+      groups[userId].expenses.push(expense);
+      groups[userId].totalAmount += expense.amount;
+    });
+    return Object.values(groups);
+  }, [rows]);
+
   return (
     <Table>
       <TableHeader className="bg-slate-50/50">
         <TableRow className="hover:bg-transparent border-slate-100">
-          <TableHead className="py-4 px-8 text-[11px] font-bold tracking-wider text-slate-400 uppercase">Employee</TableHead>
-          <TableHead className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Category</TableHead>
-          <TableHead className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Date</TableHead>
-          <TableHead className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Amount</TableHead>
-          <TableHead className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Purpose</TableHead>
-          <TableHead className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Receipt</TableHead>
-          <TableHead className="text-right px-8 text-[11px] font-bold tracking-wider text-slate-400 uppercase">Actions</TableHead>
+          <TableHead className="py-4 px-8 text-[11px] font-bold tracking-wider text-slate-400 uppercase w-12"></TableHead>
+          <TableHead className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Employee</TableHead>
+          <TableHead className="text-[11px] font-bold tracking-wider text-slate-400 uppercase text-center">Requests</TableHead>
+          <TableHead className="text-right px-8 text-[11px] font-bold tracking-wider text-slate-400 uppercase">Total Amount</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.length > 0 ? (
-          rows.map((expense) => (
-            <TableRow key={expense.id} className="border-slate-50 hover:bg-slate-50/30 transition-colors">
-              <TableCell className="py-4 px-8">
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-9 w-9 border border-slate-100 shadow-sm">
-                    <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${expense.user.email}`} />
-                    <AvatarFallback>{expense.user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex flex-col">
-                    <span className="font-bold text-slate-900 text-sm">{expense.user.name}</span>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Field Representative</span>
-                  </div>
-                </div>
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <CategoryIcon category={expense.category} />
-                  <span className="text-xs font-semibold text-slate-600 capitalize">{expense.category.toLowerCase()}</span>
-                </div>
-              </TableCell>
-              <TableCell className="font-semibold text-slate-500 text-xs">{formatDate(expense.date)}</TableCell>
-              <TableCell className="font-black text-slate-900 text-sm">{formatCurrency(expense.amount)}</TableCell>
-              <TableCell className="max-w-[200px]">
-                <span className="text-[11px] font-semibold text-slate-500 line-clamp-2 leading-relaxed">
-                  {expense.description}
-                </span>
-              </TableCell>
-              <TableCell>
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <button className="block w-10 h-10 rounded-lg overflow-hidden border border-slate-200 hover:opacity-80 transition-opacity cursor-pointer focus:outline-none">
-                      <img src={expense.receiptUrl} alt="Receipt" className="w-full h-full object-cover grayscale opacity-60" />
-                    </button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-3xl p-0 overflow-hidden border-none bg-slate-950 rounded-2xl shadow-2xl hide-close">
-                    <DialogClose className="absolute right-4 top-4 z-50 rounded-full bg-black/40 p-2 text-white hover:bg-black/60 transition-all outline-none border border-white/10">
-                      <X className="h-5 w-5" />
-                    </DialogClose>
-                    <div className="w-full max-h-[80vh] flex items-center justify-center p-4">
-                      <img src={expense.receiptUrl} alt="Receipt" className="max-w-full max-h-[75vh] object-contain rounded-lg" />
+        {groupedRows.length > 0 ? (
+          groupedRows.map((group) => {
+            const userId = group.user.id;
+            const isExpanded = !!expandedUsers[userId];
+            return (
+              <React.Fragment key={userId}>
+                {/* Main User Row */}
+                <TableRow 
+                  className="border-slate-50 hover:bg-slate-50/30 transition-colors cursor-pointer"
+                  onClick={() => toggleUser(userId)}
+                >
+                  <TableCell className="py-4 px-8 text-center" onClick={(e) => { e.stopPropagation(); toggleUser(userId); }}>
+                    {isExpanded ? (
+                      <ChevronUp className="h-5 w-5 text-slate-400" />
+                    ) : (
+                      <ChevronDown className="h-5 w-5 text-slate-400" />
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-9 w-9 border border-slate-100 shadow-sm">
+                        <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${group.user.email}`} />
+                        <AvatarFallback>{group.user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col">
+                        <span className="font-bold text-slate-900 text-sm">{group.user.name}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Field Representative</span>
+                      </div>
                     </div>
-                  </DialogContent>
-                </Dialog>
-              </TableCell>
-              <TableCell className="text-right px-8">
-                <div className="flex justify-end gap-2 items-center">
-                  {expense.approved ? (
-                    <div className="flex items-center gap-2">
-                      <Badge className="bg-emerald-50 text-emerald-600 border-emerald-100 font-bold text-[10px] uppercase px-3 py-1">
-                        Approved
-                      </Badge>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 px-2 text-slate-400 hover:text-slate-600 font-bold text-xs"
-                        onClick={() => onDecision(expense.id, null as any)}
-                        disabled={isUpdating}
-                        title="Revert to Pending"
-                      >
-                        Undo
-                      </Button>
-                    </div>
-                  ) : expense.approvedById ? (
-                    <div className="flex items-center gap-2">
-                      <Badge className="bg-rose-50 text-rose-600 border-rose-100 font-bold text-[10px] uppercase px-3 py-1">
-                        Rejected
-                      </Badge>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 px-2 text-slate-400 hover:text-slate-600 font-bold text-xs"
-                        onClick={() => onDecision(expense.id, null as any)}
-                        disabled={isUpdating}
-                        title="Revert to Pending"
-                      >
-                        Undo
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      <Button 
-                        size="sm" 
-                        variant="ghost"
-                        className="h-8 px-3 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 font-bold text-xs"
-                        onClick={() => onDecision(expense.id, true)} 
-                        disabled={isUpdating}
-                      >
-                        Approve
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="ghost"
-                        className="h-8 px-3 text-rose-600 hover:text-rose-700 hover:bg-rose-50 font-bold text-xs"
-                        onClick={() => onDecision(expense.id, false)} 
-                        disabled={isUpdating}
-                      >
-                        Reject
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </TableCell>
-            </TableRow>
-          ))
+                  </TableCell>
+                  <TableCell className="text-center font-semibold text-slate-600 text-xs">
+                    {group.expenses.length} request(s)
+                  </TableCell>
+                  <TableCell className="text-right px-8 font-black text-slate-900 text-sm">
+                    {formatCurrency(group.totalAmount)}
+                  </TableCell>
+                </TableRow>
+
+                {/* Expanded Details Row */}
+                {isExpanded && (
+                  <TableRow className="bg-slate-50/30 hover:bg-slate-50/30 border-none">
+                    <TableCell colSpan={4} className="p-4 px-8 bg-slate-50/40">
+                      <div className="rounded-xl border border-slate-100 bg-white shadow-sm overflow-hidden p-4 space-y-4">
+                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                          Expense Details for {group.user.name}
+                        </h3>
+                        <Table>
+                          <TableHeader className="bg-slate-50/70 border-none">
+                            <TableRow className="hover:bg-transparent border-slate-100">
+                              <TableHead className="text-[10px] font-bold tracking-wider text-slate-400 uppercase py-2">Category</TableHead>
+                              <TableHead className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Date</TableHead>
+                              <TableHead className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Purpose</TableHead>
+                              <TableHead className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Receipt</TableHead>
+                              <TableHead className="text-[10px] font-bold tracking-wider text-slate-400 uppercase text-right">Amount</TableHead>
+                              <TableHead className="text-[10px] font-bold tracking-wider text-slate-400 uppercase text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {group.expenses.map((expense) => (
+                              <TableRow key={expense.id} className="border-slate-50 hover:bg-slate-50/10">
+                                <TableCell className="py-3">
+                                  <div className="flex items-center gap-2">
+                                    <CategoryIcon category={expense.category} />
+                                    <span className="text-xs font-semibold text-slate-600 capitalize">
+                                      {expense.category.toLowerCase()}
+                                    </span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="font-semibold text-slate-500 text-xs">
+                                  {formatDate(expense.date)}
+                                </TableCell>
+                                <TableCell className="max-w-[200px]">
+                                  <span className="text-[11px] font-semibold text-slate-500 line-clamp-2 leading-relaxed">
+                                    {expense.description}
+                                  </span>
+                                </TableCell>
+                                <TableCell>
+                                  <Dialog>
+                                    <DialogTrigger asChild>
+                                      <button className="block w-9 h-9 rounded-lg overflow-hidden border border-slate-200 hover:opacity-80 transition-opacity cursor-pointer focus:outline-none">
+                                        <img src={expense.receiptUrl} alt="Receipt" className="w-full h-full object-cover grayscale opacity-60" />
+                                      </button>
+                                    </DialogTrigger>
+                                    <DialogContent className="max-w-3xl p-0 overflow-hidden border-none bg-slate-950 rounded-2xl shadow-2xl hide-close">
+                                      <DialogClose className="absolute right-4 top-4 z-50 rounded-full bg-black/40 p-2 text-white hover:bg-black/60 transition-all outline-none border border-white/10">
+                                        <X className="h-5 w-5" />
+                                      </DialogClose>
+                                      <div className="w-full max-h-[80vh] flex items-center justify-center p-4">
+                                        <img src={expense.receiptUrl} alt="Receipt" className="max-w-full max-h-[75vh] object-contain rounded-lg" />
+                                      </div>
+                                    </DialogContent>
+                                  </Dialog>
+                                </TableCell>
+                                <TableCell className="text-right font-bold text-slate-800 text-xs">
+                                  {formatCurrency(expense.amount)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex justify-end gap-2 items-center" onClick={(e) => e.stopPropagation()}>
+                                    {expense.approved ? (
+                                      <div className="flex items-center gap-2">
+                                        <Badge className="bg-emerald-50 text-emerald-600 border-emerald-100 font-bold text-[9px] uppercase px-2 py-0.5">
+                                          Approved
+                                        </Badge>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 px-1.5 text-slate-400 hover:text-slate-600 font-bold text-[10px]"
+                                          onClick={() => onDecision(expense.id, null as any)}
+                                          disabled={isUpdating}
+                                          title="Revert to Pending"
+                                        >
+                                          Undo
+                                        </Button>
+                                      </div>
+                                    ) : expense.approvedById ? (
+                                      <div className="flex items-center gap-2">
+                                        <Badge className="bg-rose-50 text-rose-600 border-rose-100 font-bold text-[9px] uppercase px-2 py-0.5">
+                                          Rejected
+                                        </Badge>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 px-1.5 text-slate-400 hover:text-slate-600 font-bold text-[10px]"
+                                          onClick={() => onDecision(expense.id, null as any)}
+                                          disabled={isUpdating}
+                                          title="Revert to Pending"
+                                        >
+                                          Undo
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <Button 
+                                          size="sm" 
+                                          variant="ghost"
+                                          className="h-7 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 font-bold text-[11px]"
+                                          onClick={() => onDecision(expense.id, true)} 
+                                          disabled={isUpdating}
+                                        >
+                                          Approve
+                                        </Button>
+                                        <Button 
+                                          size="sm" 
+                                          variant="ghost"
+                                          className="h-7 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 font-bold text-[11px]"
+                                          onClick={() => onDecision(expense.id, false)} 
+                                          disabled={isUpdating}
+                                        >
+                                          Reject
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {/* Sub-table footer with total of this user */}
+                            <TableRow className="bg-slate-50/30 hover:bg-slate-50/30 border-t border-slate-100">
+                              <TableCell colSpan={4} className="py-2.5 font-bold text-slate-600 text-xs">
+                                Total Expenses
+                              </TableCell>
+                              <TableCell className="text-right py-2.5 font-black text-slate-900 text-sm">
+                                {formatCurrency(group.totalAmount)}
+                              </TableCell>
+                              <TableCell></TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </React.Fragment>
+            );
+          })
         ) : (
           <TableRow>
-            <TableCell colSpan={6} className="h-32 text-center text-slate-400 font-medium text-xs">
+            <TableCell colSpan={4} className="h-32 text-center text-slate-400 font-medium text-xs">
               No expenses found in this queue.
             </TableCell>
           </TableRow>
