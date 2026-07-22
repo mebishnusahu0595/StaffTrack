@@ -1826,6 +1826,7 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
     repeatDays: [] as number[],
     repeatDates: [] as number[],
     skipHolidays: false,
+    attachmentUrl: null as string | null,
     attachmentName: null as string | null,
     taskType: "NORMAL",
     validations: [] as string[],
