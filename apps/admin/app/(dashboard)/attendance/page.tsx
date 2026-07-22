@@ -1248,6 +1248,18 @@ function AttendanceEditSheet({
   const handleDateChange = (newDate: string) => {
     setSelectedDate(newDate);
     loadDateLogs(newDate);
+    setEditingEmpId(null);
+    setEditForm(null);
+  };
+
+  const changeSheetDate = (days: number) => {
+    const d = new Date(selectedDate + "T00:00:00");
+    d.setDate(d.getDate() + days);
+    const newDateStr = d.toISOString().split("T")[0];
+    setSelectedDate(newDateStr);
+    loadDateLogs(newDateStr);
+    setEditingEmpId(null);
+    setEditForm(null);
   };
 
   const handleStartEdit = (emp: User, existingRecord?: any) => {
@@ -1353,17 +1365,53 @@ function AttendanceEditSheet({
               </div>
             </div>
           </div>
-          <div className="mt-4 flex items-center gap-3 bg-slate-800/80 p-2 rounded-xl border border-slate-700">
-            <Calendar className="h-4 w-4 text-amber-400 shrink-0" />
-            <Label htmlFor="sheet-date" className="text-xs font-bold text-slate-300 shrink-0">Date:</Label>
-            <Input
-              id="sheet-date"
-              type="date"
-              value={selectedDate}
-              onChange={(e) => handleDateChange(e.target.value)}
-              className="bg-slate-900 border-slate-700 text-white h-8 text-xs rounded-lg"
-            />
-            {loadingLogs && <Loader2 className="h-4 w-4 text-amber-400 animate-spin ml-auto" />}
+          <div className="mt-4 flex items-center justify-between bg-slate-800/90 p-2.5 rounded-xl border border-slate-700/80 shadow-inner">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-amber-400 hover:bg-slate-700 hover:text-amber-300"
+                onClick={() => changeSheetDate(-1)}
+                title="Previous Day"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <div className="flex items-center gap-2 px-2">
+                <Calendar className="h-4 w-4 text-amber-400 shrink-0" />
+                <Input
+                  id="sheet-date"
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => handleDateChange(e.target.value)}
+                  className="bg-slate-950 border-slate-700 text-amber-400 font-bold h-8 text-xs rounded-lg px-2 shadow-inner [color-scheme:dark]"
+                />
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-amber-400 hover:bg-slate-700 hover:text-amber-300"
+                onClick={() => changeSheetDate(1)}
+                title="Next Day"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-2 pr-2">
+              {loadingLogs ? (
+                <span className="flex items-center gap-1.5 text-xs text-amber-400 font-bold">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading...
+                </span>
+              ) : (
+                <span className="text-xs font-bold text-slate-300">
+                  {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-US", {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric"
+                  })}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
