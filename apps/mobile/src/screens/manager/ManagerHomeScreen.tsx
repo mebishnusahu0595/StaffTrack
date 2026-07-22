@@ -1,13 +1,17 @@
 import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View, RefreshControl, Dimensions } from "react-native";
-import { Text, Card, Avatar, ActivityIndicator } from "react-native-paper";
+import { Text, Card, Avatar, ActivityIndicator, Portal, Dialog, Button, TouchableRipple, IconButton } from "react-native-paper";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigation } from "@react-navigation/native";
 import type { DrawerNavigationProp } from "@react-navigation/drawer";
 import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
+
+dayjs.extend(relativeTime);
+
 import { useAuth } from "../../auth/AuthContext";
-import { fetchAttendanceByDate, fetchMonthlyPerformanceReport } from "../../api";
-import { AppIcon } from "../../components/AppIcon";
+import { fetchAttendanceByDate, fetchMonthlyPerformanceReport, fetchNotifications, markNotificationAsRead, markAllNotificationsAsRead } from "../../api";
+import { AppIcon, appIconSource } from "../../components/AppIcon";
 import { PersonalAttendancePanel } from "../../components/PersonalAttendancePanel";
 import type { ManagerDrawerParamList } from "../../navigation/AppNavigator";
 
@@ -17,6 +21,7 @@ export function ManagerHomeScreen() {
   const { user } = useAuth();
   const navigation = useNavigation<DrawerNavigationProp<ManagerDrawerParamList, "ManagerHome">>();
   const [refreshing, setRefreshing] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const todayStr = useMemo(() => dayjs().format("YYYY-MM-DD"), []);
 
   const todayAttendanceQuery = useQuery({
@@ -30,6 +35,16 @@ export function ManagerHomeScreen() {
     queryKey: ["monthlyReportHome", user?.id],
     queryFn: () => fetchMonthlyPerformanceReport(user!.id, dayjs().month() + 1, dayjs().year())
   });
+
+  const notificationsQuery = useQuery({
+    enabled: Boolean(user?.id),
+    queryKey: ["notifications", user?.id],
+    queryFn: fetchNotifications,
+    refetchInterval: 30_000
+  });
+
+  const notifications = notificationsQuery.data ?? [];
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -93,12 +108,27 @@ export function ManagerHomeScreen() {
             </View>
           </View>
         </View>
-        <Avatar.Text 
-          size={50} 
-          label={user?.name ? user.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "M"} 
-          style={styles.avatar} 
-          labelStyle={styles.avatarLabel}
-        />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <View style={styles.notificationWrapper}>
+            <IconButton
+              icon={appIconSource(unreadCount > 0 ? "bell-badge" : "bell-outline")}
+              iconColor={unreadCount > 0 ? "#A4262C" : "#4A6583"}
+              size={26}
+              onPress={() => setShowNotifications(true)}
+            />
+            {unreadCount > 0 && (
+              <View style={styles.badgeCount}>
+                <Text style={styles.badgeText}>{unreadCount}</Text>
+              </View>
+            )}
+          </View>
+          <Avatar.Text 
+            size={46} 
+            label={user?.name ? user.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "M"} 
+            style={styles.avatar} 
+            labelStyle={styles.avatarLabel}
+          />
+        </View>
       </View>
 
       {/* Manager's own attendance / odometer / KM (same as staff app) */}
@@ -253,6 +283,71 @@ export function ManagerHomeScreen() {
           );
         })
       )}
+      {/* Notifications Modal */}
+      <Portal>
+        <Dialog visible={showNotifications} onDismiss={() => setShowNotifications(false)} style={styles.notificationDialog}>
+          <View style={styles.dialogHeaderRow}>
+            <Dialog.Title style={styles.dialogTitle}>Notifications</Dialog.Title>
+            {unreadCount > 0 && (
+              <Button
+                compact
+                mode="text"
+                onPress={async () => {
+                  try {
+                    await markAllNotificationsAsRead();
+                    notificationsQuery.refetch();
+                  } catch (err) {
+                    console.error("[Notifications] Failed to mark all as read:", err);
+                  }
+                }}
+                labelStyle={{ fontSize: 12, fontWeight: "700", color: "#A4262C" }}
+              >
+                Mark all read
+              </Button>
+            )}
+          </View>
+          <Dialog.Content style={{ maxHeight: 400 }}>
+            <ScrollView>
+              {notifications.length === 0 ? (
+                <Text style={styles.emptyTextNotifications}>No notifications yet.</Text>
+              ) : (
+                notifications.map((n) => (
+                  <TouchableRipple
+                    key={n.id}
+                    onPress={async () => {
+                      if (!n.isRead) {
+                        await markNotificationAsRead(n.id);
+                        notificationsQuery.refetch();
+                      }
+                      setShowNotifications(false);
+                      if (n.type && n.type.startsWith("TASK_")) {
+                        navigation.navigate("ManagerTasks");
+                      } else if (n.type === "DAY_END_REPORT") {
+                        navigation.navigate("ManagerReports");
+                      } else {
+                        navigation.navigate("ManagerHome");
+                      }
+                    }}
+                    style={[styles.notificationItem, !n.isRead && styles.unreadItem]}
+                  >
+                    <View>
+                      <View style={styles.notificationHeader}>
+                        <Text style={styles.notificationTitle}>{n.title}</Text>
+                        {!n.isRead && <View style={styles.unreadDot} />}
+                      </View>
+                      <Text style={styles.notificationMsg}>{n.message}</Text>
+                      <Text style={styles.notificationTime}>{dayjs(n.createdAt).fromNow()}</Text>
+                    </View>
+                  </TouchableRipple>
+                ))
+              )}
+            </ScrollView>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowNotifications(false)}>Close</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </ScrollView>
   );
 }
@@ -504,5 +599,82 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#475569",
     marginLeft: 6,
+  },
+  notificationWrapper: {
+    position: "relative"
+  },
+  badgeCount: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    backgroundColor: "#A4262C",
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4
+  },
+  badgeText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "bold"
+  },
+  notificationDialog: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    marginHorizontal: 20
+  },
+  dialogHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingRight: 12
+  },
+  dialogTitle: {
+    fontWeight: "800",
+    color: "#24312D"
+  },
+  notificationItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0"
+  },
+  unreadItem: {
+    backgroundColor: "#F8F9FA"
+  },
+  notificationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4
+  },
+  notificationTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#24312D"
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#A4262C"
+  },
+  notificationMsg: {
+    fontSize: 12,
+    color: "#66736F",
+    lineHeight: 18
+  },
+  notificationTime: {
+    fontSize: 10,
+    color: "#9BA3A1",
+    marginTop: 6,
+    fontWeight: "600"
+  },
+  emptyTextNotifications: {
+    textAlign: "center",
+    color: "#66736F",
+    marginVertical: 20
   }
 });

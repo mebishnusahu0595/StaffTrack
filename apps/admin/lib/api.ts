@@ -199,6 +199,9 @@ export async function createTask(input: {
   subtasks?: any[];
   projectId?: string | null;
   templateId?: string | null;
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
+  taskType?: string;
 }) {
   const response = await api.post<{ data: Task }>("/tasks", input);
   return response.data.data;
@@ -287,6 +290,11 @@ export async function updateProject(id: string, data: { name?: string; descripti
 
 export async function deleteProject(id: string) {
   await api.delete(`/projects/${id}`);
+}
+
+export async function updatePeriodProgress(periodId: string, input: { completedIncrement?: number; completedCount?: number }) {
+  const response = await api.patch<{ data: any }>(`/projects/periods/${periodId}/progress`, input);
+  return response.data.data;
 }
 
 // Issues

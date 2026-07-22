@@ -50,6 +50,7 @@ export type Task = {
   title: string;
   description?: string;
   status: TaskStatus;
+  taskType?: "NORMAL" | "DEALER" | "FARMER" | string;
   dueDate: string;
   lat?: number | null;
   lng?: number | null;
@@ -476,6 +477,10 @@ export async function markNotificationAsRead(id: string): Promise<void> {
   await api.patch(`/notifications/${id}/read`);
 }
 
+export async function markAllNotificationsAsRead(): Promise<void> {
+  await api.patch("/notifications/read-all");
+}
+
 // Forms
 export type FormField = {
   id: string;
@@ -722,5 +727,50 @@ export async function sendForgotPasswordOtp(payload: { identifier: string }): Pr
 
 export async function resetPassword(payload: { identifier: string; verificationId: string; code: string; newPassword: string }): Promise<{ success: boolean; message: string }> {
   return unwrap(await api.post<ApiEnvelope<{ success: boolean; message: string }>>("/auth/forgot-password/reset", payload));
+}
+
+// Projects & Target Management
+export type ProjectPeriodProgress = {
+  id: string;
+  assignmentId: string;
+  periodType: string;
+  periodIndex: number;
+  periodName: string;
+  startDate: string;
+  endDate: string;
+  baseTarget: number;
+  carryover: number;
+  effectiveTarget: number;
+  completedCount: number;
+  isCompleted: boolean;
+};
+
+export type UserProjectAssignment = {
+  assignmentId: string;
+  targetQuantity: number;
+  completedCount: number;
+  project: {
+    id: string;
+    name: string;
+    description?: string | null;
+    status: string;
+    priority: string;
+    targetType: string;
+    startDate?: string | null;
+    endDate?: string | null;
+    department?: string | null;
+  };
+  periods: ProjectPeriodProgress[];
+};
+
+export async function fetchMyProjects(): Promise<UserProjectAssignment[]> {
+  return unwrap(await api.get<ApiEnvelope<UserProjectAssignment[]>>("/projects/my-projects"));
+}
+
+export async function updateProjectPeriodProgress(
+  periodId: string,
+  payload: { completedIncrement?: number; completedCount?: number }
+): Promise<any> {
+  return unwrap(await api.patch<ApiEnvelope<any>>(`/projects/periods/${periodId}/progress`, payload));
 }
 

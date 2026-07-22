@@ -26,6 +26,7 @@ import { MonthlyReportScreen } from "../screens/MonthlyReportScreen";
 import { IssuesScreen } from "../screens/IssuesScreen";
 import { LeaveRequestScreen } from "../screens/LeaveRequestScreen";
 import { SalarySlipScreen } from "../screens/SalarySlipScreen";
+import { ProjectsScreen } from "../screens/ProjectsScreen";
 
 // Manager Screens
 import { ManagerHomeScreen } from "../screens/manager/ManagerHomeScreen";
@@ -43,6 +44,7 @@ export type RootStackParamList = {
 
 export type MainDrawerParamList = {
   Home: undefined;
+  Projects: undefined;
   Tasks: undefined;
   Forms: undefined;
   Issues: undefined;
@@ -65,6 +67,7 @@ export type ManagerDrawerParamList = {
   ManagerHome: undefined;
   ManagerTeam: undefined;
   ManagerAttendance: undefined;
+  Projects: undefined;
   Attendance: undefined;
   DayEndReport: undefined;
   ManagerTasks: undefined;
@@ -240,6 +243,14 @@ function MainDrawer() {
         }} 
       />
       <Drawer.Screen 
+        component={ProjectsScreen} 
+        name="Projects" 
+        options={{ 
+          title: "Projects / Targets",
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="target" size={size} /> 
+        }} 
+      />
+      <Drawer.Screen 
         component={TasksScreen} 
         name="Tasks" 
         options={{ 
@@ -348,6 +359,14 @@ function ManagerDrawer() {
         options={{ 
           title: "Home",
           drawerIcon: ({ color, size }) => <AppIcon color={color} name="home" size={size} /> 
+        }} 
+      />
+      <ManagerDrawerNavigator.Screen 
+        component={ProjectsScreen} 
+        name="Projects" 
+        options={{ 
+          title: "My Projects / Targets",
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="target" size={size} /> 
         }} 
       />
       <ManagerDrawerNavigator.Screen

@@ -38,6 +38,7 @@ interface CreateTaskInput {
   attachmentUrl?: string | null;
   attachmentName?: string | null;
   templateId?: string | null;
+  taskType?: string;
 }
 
 export async function createTask(actor: AuthUser, input: CreateTaskInput) {
@@ -106,7 +107,8 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
       projectId: input.projectId || null,
       attachmentUrl: input.attachmentUrl,
       attachmentName: input.attachmentName,
-      templateId: input.templateId || null
+      templateId: input.templateId || null,
+      taskType: input.taskType || "NORMAL"
     },
     include: taskInclude
   });
@@ -362,7 +364,8 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
       reminder: input.reminder,
       projectId: input.projectId !== undefined ? input.projectId : undefined,
       attachmentUrl: input.attachmentUrl,
-      attachmentName: input.attachmentName
+      attachmentName: input.attachmentName,
+      taskType: input.taskType !== undefined ? input.taskType : undefined
     },
     include: taskInclude
   });

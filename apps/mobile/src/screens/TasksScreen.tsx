@@ -33,6 +33,12 @@ export function TasksScreen() {
   const [checklistResponses, setChecklistResponses] = useState<Record<string, { text?: string; dropdown?: string; image?: string; video?: string; audio?: string; file?: { url: string; name: string }; geotag?: { lat: number; lng: number } }>>({});
 
   const isChecklistComplete = useMemo(() => {
+    if (selectedTask?.taskType === "DEALER" || selectedTask?.taskType === "FARMER") {
+      const hasPhoto = Boolean(completionPhoto || selectedTask?.completionPhotoUrl);
+      const hasRemarks = Boolean(completionRemarks.trim());
+      if (!hasPhoto || !hasRemarks) return false;
+    }
+
     if (!selectedTask?.checklist) return true;
     const checklist = selectedTask.checklist as any[];
     for (const item of checklist) {
@@ -50,7 +56,7 @@ export function TasksScreen() {
       }
     }
     return true;
-  }, [selectedTask, checklistResponses]);
+  }, [selectedTask, checklistResponses, completionPhoto, completionRemarks]);
 
   async function captureChecklistImage(itemId: string) {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -560,6 +566,24 @@ export function TasksScreen() {
             </Text>
 
             <Divider style={styles.divider} />
+
+            {selectedTask?.taskType === "DEALER" && (
+              <View style={{ backgroundColor: "#E0F2FE", padding: 12, borderRadius: 14, marginBottom: 14, borderWidth: 1, borderColor: "#BAE6FD" }}>
+                <Text style={{ fontWeight: "800", color: "#0369A1", fontSize: 13 }}>🤝 DEALER VISIT TASK</Text>
+                <Text style={{ fontSize: 11, color: "#0284C7", marginTop: 2 }}>
+                  All Dealer details (Dealer Name, Contact No., Location, Product Discussed, Photo, User Remarks) are compulsory.
+                </Text>
+              </View>
+            )}
+
+            {selectedTask?.taskType === "FARMER" && (
+              <View style={{ backgroundColor: "#DCFCE7", padding: 12, borderRadius: 14, marginBottom: 14, borderWidth: 1, borderColor: "#BBF7D0" }}>
+                <Text style={{ fontWeight: "800", color: "#15803D", fontSize: 13 }}>🌾 FARMER VISIT TASK</Text>
+                <Text style={{ fontSize: 11, color: "#166534", marginTop: 2 }}>
+                  All Farmer details (Farmer Name, Contact No., Village, Farm Land, Crop Name, Photo, User Remarks) are compulsory.
+                </Text>
+              </View>
+            )}
 
             {/* Checklist Section */}
             {selectedTask?.checklist && (selectedTask.checklist as any[]).length > 0 && (

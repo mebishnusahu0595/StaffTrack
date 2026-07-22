@@ -124,6 +124,7 @@ model User {
   locationOffAt      DateTime?
   salarySlips        SalarySlip[]   @relation("UserSalarySlips")
   createdTemplates   Template[]     @relation("CreatedTemplates")
+  projectAssignments ProjectAssignment[]
 
   @@index([companyId])
   @@index([managerId])
@@ -152,6 +153,7 @@ model Task {
   title              String
   description        String?
   status             TaskStatus @default(PENDING)
+  taskType           String     @default("NORMAL") // NORMAL, DEALER, FARMER
   assignedToId       String
   assignedById       String
   dueDate            DateTime
@@ -282,21 +284,70 @@ model Expense {
 }
 
 model Project {
-  id             String   @id @default(cuid())
+  id             String              @id @default(cuid())
   name           String
   description    String?
-  status         String   @default("Ongoing") // Ongoing, Scheduled, Completed
+  status         String              @default("Ongoing") // Ongoing, Scheduled, Completed
+  priority       String              @default("Medium") // High, Medium, Low, Critical
+  targetType     String              @default("YEARLY") // YEARLY, MONTHLY, WEEKLY
+  targetQuantity Int                 @default(0)
+  startDate      DateTime?
+  endDate        DateTime?
+  department     String?
+  clientName     String?
+  objectives     String?
+  tags           String?
+  budget         Float?
+  deadline       DateTime?
   companyId      String
   targetClients  Int?
   employeeBudget Float?
   expenseBudget  Float?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   tasks          Task[]
   issues         Issue[]
+  assignments    ProjectAssignment[]
 
   @@index([companyId])
+}
+
+model ProjectAssignment {
+  id             String                  @id @default(cuid())
+  projectId      String
+  userId         String
+  targetQuantity Int                     @default(0)
+  completedCount Int                     @default(0)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  project        Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user           User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  periods        ProjectPeriodProgress[]
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+}
+
+model ProjectPeriodProgress {
+  id              String            @id @default(cuid())
+  assignmentId    String
+  periodType      String            // MONTHLY, WEEKLY
+  periodIndex     Int               // 1..12 or 1..4 or 1
+  periodName      String            // e.g. "Jan 2026", "Week 1"
+  startDate       DateTime
+  endDate         DateTime
+  baseTarget      Int               @default(0)
+  carryover       Int               @default(0)
+  effectiveTarget Int               @default(0)
+  completedCount  Int               @default(0)
+  isCompleted     Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  assignment      ProjectAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@index([assignmentId])
 }
 
 model Issue {

@@ -12,7 +12,7 @@ import * as DocumentPicker from "expo-document-picker";
 
 dayjs.extend(relativeTime);
 
-import { fetchExpenses, fetchNotifications, markNotificationAsRead, fetchMonthlyPerformanceReport, uploadPhoto, uploadFile, type Task, fetchTodayLocationLogs, fetchDayEndReports } from "../api";
+import { fetchExpenses, fetchNotifications, markNotificationAsRead, markAllNotificationsAsRead, fetchMonthlyPerformanceReport, uploadPhoto, uploadFile, type Task, fetchTodayLocationLogs, fetchDayEndReports } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useTasks } from "../hooks/useTasks";
 import { useForms } from "../hooks/useForms";
@@ -710,12 +710,43 @@ export function HomeScreen() {
         </Card>
       </View>
 
+      <View style={styles.summaryRow}>
+        <Card mode="contained" style={[styles.summaryCard, { backgroundColor: "#E0F2FE" }]} onPress={() => navigation.navigate("Projects")}>
+          <Card.Content style={styles.summaryContent}>
+            <View style={styles.summaryIconRow}>
+              <AppIcon color="#0284C7" name="target" size={20} />
+              <Text style={[styles.mutedSummaryLabel, { color: "#0284C7", fontWeight: "800" }]}>PROJECTS & TARGETS</Text>
+            </View>
+            <Text style={[styles.summaryValue, { color: "#0284C7", fontSize: 14 }]}>View Progress</Text>
+          </Card.Content>
+        </Card>
+      </View>
+
       {/* Hide department section on mobile app per user request */}
 
       {/* Notifications Modal */}
       <Portal>
         <Dialog visible={showNotifications} onDismiss={() => setShowNotifications(false)} style={styles.notificationDialog}>
-          <Dialog.Title style={styles.dialogTitle}>Notifications</Dialog.Title>
+          <View style={styles.dialogHeaderRow}>
+            <Dialog.Title style={styles.dialogTitle}>Notifications</Dialog.Title>
+            {unreadCount > 0 && (
+              <Button
+                compact
+                mode="text"
+                onPress={async () => {
+                  try {
+                    await markAllNotificationsAsRead();
+                    notificationsQuery.refetch();
+                  } catch (err) {
+                    console.error("[Notifications] Failed to mark all as read:", err);
+                  }
+                }}
+                labelStyle={{ fontSize: 12, fontWeight: "700", color: "#A4262C" }}
+              >
+                Mark all read
+              </Button>
+            )}
+          </View>
           <Dialog.Content style={{ maxHeight: 400 }}>
             <ScrollView>
               {notifications.length === 0 ? (
@@ -1060,6 +1091,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 24,
     marginHorizontal: 20
+  },
+  dialogHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingRight: 12
   },
   dialogTitle: {
     fontWeight: "800",

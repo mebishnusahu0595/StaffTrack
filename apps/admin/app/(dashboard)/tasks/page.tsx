@@ -1085,6 +1085,14 @@ export default function TasksPage() {
                                 )}>
                                    {task.priority || "Medium"}
                                 </Badge>
+                                {task.taskType && task.taskType !== "NORMAL" && (
+                                   <Badge variant="outline" className={cn(
+                                      "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 ml-1.5",
+                                      task.taskType === "DEALER" ? "border-blue-200 text-blue-700 bg-blue-50" : "border-emerald-200 text-emerald-700 bg-emerald-50"
+                                   )}>
+                                      {task.taskType === "DEALER" ? "🤝 DEALER" : "🌾 FARMER"}
+                                   </Badge>
+                                 )}
                               </td>
                               <td className="py-2 px-4">
                                 <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.createdAt), 'dd-MM-yyyy')}</span>
@@ -1737,6 +1745,25 @@ function StatusBadge({ status, dueDate }: { status: string, dueDate: string }) {
   );
 }
 
+const DEALER_PRESET_CHECKLIST = [
+  { id: "dl_name", title: "Dealer Name", required: true, validations: ["TEXT"] },
+  { id: "dl_contact", title: "Contact No.", required: true, validations: ["TEXT"] },
+  { id: "dl_location", title: "Location", required: true, validations: ["GEOTAG"] },
+  { id: "dl_product", title: "Product Discussed", required: true, validations: ["TEXT"] },
+  { id: "dl_photo", title: "Dealer/Store Photo", required: true, validations: ["IMAGE"] },
+  { id: "dl_remarks", title: "User Remarks", required: true, validations: ["TEXT"] },
+];
+
+const FARMER_PRESET_CHECKLIST = [
+  { id: "fm_name", title: "Farmer Name", required: true, validations: ["TEXT"] },
+  { id: "fm_contact", title: "Contact No.", required: true, validations: ["TEXT"] },
+  { id: "fm_village", title: "Village", required: true, validations: ["TEXT"] },
+  { id: "fm_farmland", title: "Farm Land", required: true, validations: ["TEXT"] },
+  { id: "fm_crop", title: "Crop Name", required: true, validations: ["TEXT"] },
+  { id: "fm_photo", title: "Farmer/Farm Photo", required: true, validations: ["IMAGE"] },
+  { id: "fm_remarks", title: "User Remarks", required: true, validations: ["TEXT"] },
+];
+
 function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
   const [showDescription, setShowDescription] = useState(false);
   const [showValidations, setShowValidations] = useState(false);
@@ -1799,8 +1826,8 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
     repeatDays: [] as number[],
     repeatDates: [] as number[],
     skipHolidays: false,
-    attachmentUrl: null as string | null,
     attachmentName: null as string | null,
+    taskType: "NORMAL",
     validations: [] as string[],
     checklist: [] as Array<{
       id: string;
@@ -1835,6 +1862,29 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
       setData(d => ({ ...d, dueDate: initialDate, endDate: initialDate, endTime: "23:59" }));
     }
   }, [initialDate]);
+
+  const handleTaskTypeChange = (type: string) => {
+    if (type === "DEALER") {
+      setData(prev => ({
+        ...prev,
+        taskType: "DEALER",
+        checklist: DEALER_PRESET_CHECKLIST
+      }));
+      setShowChecklist(true);
+    } else if (type === "FARMER") {
+      setData(prev => ({
+        ...prev,
+        taskType: "FARMER",
+        checklist: FARMER_PRESET_CHECKLIST
+      }));
+      setShowChecklist(true);
+    } else {
+      setData(prev => ({
+        ...prev,
+        taskType: "NORMAL"
+      }));
+    }
+  };
 
   const toggleDay = (day: number) => {
     setData(prev => ({
@@ -2049,6 +2099,26 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
       
       <div className="p-6 space-y-6 overflow-y-auto flex-1">
          <div className="space-y-4">
+            {/* Task Category / Type selection */}
+            <div className="space-y-2">
+               <Label className="text-[10px] font-black uppercase text-slate-400">Task Category / Type *</Label>
+               <Select value={data.taskType || "NORMAL"} onValueChange={handleTaskTypeChange}>
+                  <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold">
+                     <SelectValue placeholder="Select Category" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl p-1.5">
+                     <SelectItem value="NORMAL" className="rounded-xl font-bold">Standard Task (Normal)</SelectItem>
+                     <SelectItem value="DEALER" className="rounded-xl font-bold text-blue-600">🤝 Dealer Visit Task</SelectItem>
+                     <SelectItem value="FARMER" className="rounded-xl font-bold text-emerald-600">🌾 Farmer Visit Task</SelectItem>
+                  </SelectContent>
+               </Select>
+               {(data.taskType === "DEALER" || data.taskType === "FARMER") && (
+                 <p className="text-[11px] font-bold text-blue-600 bg-blue-50/80 p-2.5 rounded-xl border border-blue-100">
+                   ✨ {data.taskType} preset active! Required fields ({data.taskType === "DEALER" ? "Dealer Name, Contact No., Location, Product Discussed, Photo, User Remarks" : "Farmer Name, Contact No., Village, Farm Land, Crop Name, Photo, User Remarks"}) are auto-configured. You can still add extra custom fields below.
+                 </p>
+               )}
+            </div>
+
             <div className="space-y-2">
                <Label className="text-[10px] font-black uppercase text-slate-400">Assign User*</Label>
                <Select value={data.assignedToId} onValueChange={v => setData({...data, assignedToId: v})}>
@@ -2852,6 +2922,7 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
     status: task.status || "PENDING",
     attachmentUrl: task.attachmentUrl || null as string | null,
     attachmentName: task.attachmentName || null as string | null,
+    taskType: task.taskType || "NORMAL",
     repeatFrequency: task.repeatFrequency || "NONE",
     repeatDays: task.repeatDays ? task.repeatDays.split(',').map((x: string) => parseInt(x)).filter((x: number) => !isNaN(x)) : [] as number[],
     repeatDates: task.repeatDates ? task.repeatDates.split(',').map((x: string) => parseInt(x)).filter((x: number) => !isNaN(x)) : [] as number[],
@@ -2883,6 +2954,29 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
       reminder: string;
     }>
   });
+
+  const handleTaskTypeChange = (type: string) => {
+    if (type === "DEALER") {
+      setData(prev => ({
+        ...prev,
+        taskType: "DEALER",
+        checklist: prev.checklist && prev.checklist.length > 0 ? prev.checklist : DEALER_PRESET_CHECKLIST
+      }));
+      setShowChecklist(true);
+    } else if (type === "FARMER") {
+      setData(prev => ({
+        ...prev,
+        taskType: "FARMER",
+        checklist: prev.checklist && prev.checklist.length > 0 ? prev.checklist : FARMER_PRESET_CHECKLIST
+      }));
+      setShowChecklist(true);
+    } else {
+      setData(prev => ({
+        ...prev,
+        taskType: "NORMAL"
+      }));
+    }
+  };
 
   const toggleDay = (day: number) => {
     setData(prev => ({
@@ -3097,6 +3191,26 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
       
       <div className="p-6 space-y-6 overflow-y-auto flex-1">
          <div className="space-y-4">
+            {/* Task Category / Type selection */}
+            <div className="space-y-2">
+               <Label className="text-[10px] font-black uppercase text-slate-400">Task Category / Type *</Label>
+               <Select value={data.taskType || "NORMAL"} onValueChange={handleTaskTypeChange}>
+                  <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold">
+                     <SelectValue placeholder="Select Category" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl p-1.5">
+                     <SelectItem value="NORMAL" className="rounded-xl font-bold">Standard Task (Normal)</SelectItem>
+                     <SelectItem value="DEALER" className="rounded-xl font-bold text-blue-600">🤝 Dealer Visit Task</SelectItem>
+                     <SelectItem value="FARMER" className="rounded-xl font-bold text-emerald-600">🌾 Farmer Visit Task</SelectItem>
+                  </SelectContent>
+               </Select>
+               {(data.taskType === "DEALER" || data.taskType === "FARMER") && (
+                 <p className="text-[11px] font-bold text-blue-600 bg-blue-50/80 p-2.5 rounded-xl border border-blue-100">
+                   ✨ {data.taskType} preset active! Required fields ({data.taskType === "DEALER" ? "Dealer Name, Contact No., Location, Product Discussed, Photo, User Remarks" : "Farmer Name, Contact No., Village, Farm Land, Crop Name, Photo, User Remarks"}) are auto-configured. You can still add extra custom fields below.
+                 </p>
+               )}
+            </div>
+
             <div className="space-y-2">
                <Label className="text-[10px] font-black uppercase text-slate-400">Assign User*</Label>
                <Select value={data.assignedToId} onValueChange={v => setData({...data, assignedToId: v})}>

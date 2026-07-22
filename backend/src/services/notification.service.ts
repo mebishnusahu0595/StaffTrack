@@ -46,6 +46,13 @@ export async function markAsRead(id: string) {
   });
 }
 
+export async function markAllAsRead(userId: string) {
+  return prisma.notification.updateMany({
+    where: { userId, isRead: false },
+    data: { isRead: true }
+  });
+}
+
 interface ServiceAccount {
   project_id: string;
   private_key: string;

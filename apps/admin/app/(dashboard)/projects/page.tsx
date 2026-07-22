@@ -24,7 +24,7 @@ import {
   SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchProjects, createProject, updateProject, deleteProject, fetchUsers } from "@/lib/api";
+import { fetchProjects, createProject, updateProject, deleteProject, fetchUsers, fetchEmployees } from "@/lib/api";
 import { useAuth } from "@/components/auth-provider";
 import { cn } from "@/lib/utils";
 
@@ -96,13 +96,19 @@ function DotMenu({ onEdit, onDelete, align = "right" }: {
 
 // ── Project Progress Modal ────────────────────────────────────────────────────
 function ViewProgressModal({ project, onClose }: { project: any; onClose: () => void }) {
-  const completedTasks = project.tasks?.filter((t: any) => t.status === "COMPLETED").length ?? 0;
-  const totalTasks = project.tasks?.length ?? 0;
-  const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  const assignments = project.assignments || [];
+  
+  // Total Target across all assignments
+  const totalTargetQty = assignments.reduce((acc: number, a: any) => acc + (a.targetQuantity || 0), 0) || (project.targetQuantity || 0);
+  const totalCompletedCount = assignments.reduce((acc: number, a: any) => acc + (a.completedCount || 0), 0);
+  const overallProgress = totalTargetQty > 0 ? Math.min(100, Math.round((totalCompletedCount / totalTargetQty) * 100)) : 0;
+
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>(assignments[0]?.id || "");
+  const activeAssignment = assignments.find((a: any) => a.id === selectedAssignmentId) || assignments[0];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-0 overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl p-0 overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="p-8 bg-gradient-to-br from-blue-600 to-indigo-700 text-white relative">
           <button onClick={onClose} className="absolute top-5 right-5 text-white/70 hover:text-white">
@@ -115,81 +121,151 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
             <Badge className={cn("text-[9px] font-black rounded-lg h-5 border", STATUS_COLORS[project.status] || STATUS_COLORS.Ongoing)}>
               {project.status}
             </Badge>
+            <Badge className="bg-white/20 text-white text-[9px] font-black rounded-lg h-5">
+              {project.targetType || "YEARLY"} TARGET
+            </Badge>
           </div>
-          <h2 className="text-xl font-black">{project.name}</h2>
+          <h2 className="text-2xl font-black">{project.name}</h2>
           <p className="text-blue-100 text-xs font-medium mt-1 line-clamp-2">{project.description || "No description provided."}</p>
         </div>
 
         {/* Body */}
-        <div className="p-8 space-y-6">
-          {/* Progress bar */}
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-xs font-black text-slate-500 uppercase tracking-wider">Overall Progress</span>
-              <span className="text-xl font-black text-slate-900">{progress}%</span>
+        <div className="p-8 space-y-6 max-h-[75vh] overflow-y-auto">
+          {/* Overall Dynamic Progress bar */}
+          <div className="space-y-3 p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-950 text-white">
+            <div className="flex justify-between items-center">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-300">Project Completion Bar</span>
+                <p className="text-sm font-bold text-white mt-0.5">
+                  {totalCompletedCount} / {totalTargetQty} Units Achieved
+                </p>
+              </div>
+              <span className="text-3xl font-black text-emerald-400">{overallProgress}%</span>
             </div>
-            <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
+            <div className="h-3 rounded-full bg-slate-800 overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-700"
-                style={{ width: `${progress}%` }}
+                className="h-full bg-gradient-to-r from-emerald-400 to-blue-500 rounded-full transition-all duration-700"
+                style={{ width: `${overallProgress}%` }}
               />
             </div>
+            <div className="flex justify-between text-[10px] font-bold text-slate-400">
+              <span>{totalCompletedCount} Completed</span>
+              <span>{Math.max(0, totalTargetQty - totalCompletedCount)} Remaining</span>
+            </div>
           </div>
 
-          {/* Stats grid */}
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              { label: "Total Tasks", value: totalTasks, color: "blue" },
-              { label: "Completed",   value: completedTasks, color: "emerald" },
-              { label: "Pending",     value: totalTasks - completedTasks, color: "amber" },
-            ].map(stat => (
-              <div key={stat.label} className={cn(
-                "p-4 rounded-2xl text-center",
-                stat.color === "blue" ? "bg-blue-50" : stat.color === "emerald" ? "bg-emerald-50" : "bg-amber-50"
-              )}>
-                <p className={cn("text-2xl font-black",
-                  stat.color === "blue" ? "text-blue-700" : stat.color === "emerald" ? "text-emerald-700" : "text-amber-700"
-                )}>{stat.value}</p>
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 mt-1">{stat.label}</p>
+          {/* Assigned Staff Selector */}
+          {assignments.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Assigned Staff Breakdown ({assignments.length})</p>
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {assignments.map((a: any) => {
+                  const isSelected = (a.id === activeAssignment?.id);
+                  const aProgress = a.targetQuantity > 0 ? Math.min(100, Math.round((a.completedCount / a.targetQuantity) * 100)) : 0;
+
+                  return (
+                    <button
+                      key={a.id}
+                      onClick={() => setSelectedAssignmentId(a.id)}
+                      className={cn(
+                        "p-3 rounded-2xl border text-left min-w-[160px] flex-1 transition-all",
+                        isSelected ? "bg-blue-50 border-blue-500 ring-2 ring-blue-500/20" : "bg-slate-50 border-slate-200 hover:bg-slate-100"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <Avatar className="h-6 w-6">
+                          <AvatarFallback className="text-[10px] font-bold bg-blue-600 text-white">
+                            {a.user?.name?.[0] || "S"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-xs font-bold text-slate-900 truncate">{a.user?.name || "Staff Member"}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
+                        <span>{a.completedCount}/{a.targetQuantity}</span>
+                        <span className="text-blue-600 font-black">{aProgress}%</span>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-            ))}
-          </div>
-
-          {/* Task list */}
-          {project.tasks?.length > 0 && (
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Task Breakdown</p>
-              {project.tasks.map((task: any) => (
-                <div key={task.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className={cn("h-2 w-2 rounded-full flex-shrink-0",
-                      task.status === "COMPLETED" ? "bg-emerald-500" :
-                      task.status === "IN_PROGRESS" ? "bg-amber-500" : "bg-slate-300"
-                    )} />
-                    <span className="text-xs font-bold text-slate-700 line-clamp-1">{task.title}</span>
-                  </div>
-                  <Badge className={cn("text-[9px] font-black rounded-lg border",
-                    task.status === "COMPLETED" ? "bg-emerald-50 text-emerald-600 border-emerald-200" :
-                    task.status === "IN_PROGRESS" ? "bg-amber-50 text-amber-600 border-amber-200" :
-                    "bg-slate-50 text-slate-500 border-slate-200"
-                  )}>
-                    {task.status?.replace("_", " ")}
-                  </Badge>
-                </div>
-              ))}
             </div>
           )}
 
-          {/* Created date + extra info */}
+          {/* Active Staff Member Period Breakdown */}
+          {activeAssignment && (
+            <div className="space-y-4 p-5 rounded-2xl border border-slate-200 bg-slate-50/50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-black text-slate-900">{activeAssignment.user?.name}'s Period Breakdown</h4>
+                  <p className="text-[10px] font-bold text-slate-500">
+                    Target: {activeAssignment.targetQuantity} | Completed: {activeAssignment.completedCount}
+                  </p>
+                </div>
+                <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-xs font-bold">
+                  {project.targetType === "YEARLY" ? "12 Months" : project.targetType === "MONTHLY" ? "4 Weeks" : "1 Week"}
+                </Badge>
+              </div>
+
+              {/* Periods Table */}
+              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50 text-[10px] font-black uppercase text-slate-500">
+                      <TableHead>Period</TableHead>
+                      <TableHead className="text-center">Base Target</TableHead>
+                      <TableHead className="text-center">Carryover (+)</TableHead>
+                      <TableHead className="text-center">Effective Target</TableHead>
+                      <TableHead className="text-center">Completed</TableHead>
+                      <TableHead className="text-right">Progress</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {activeAssignment.periods?.map((p: any) => {
+                      const pPercent = p.effectiveTarget > 0 ? Math.min(100, Math.round((p.completedCount / p.effectiveTarget) * 100)) : 0;
+                      return (
+                        <TableRow key={p.id} className="text-xs font-bold text-slate-700">
+                          <TableCell className="font-black text-slate-900">{p.periodName}</TableCell>
+                          <TableCell className="text-center">{p.baseTarget}</TableCell>
+                          <TableCell className="text-center">
+                            {p.carryover > 0 ? (
+                              <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200 font-bold">
+                                +{p.carryover}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">0</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center font-black text-indigo-700">{p.effectiveTarget}</TableCell>
+                          <TableCell className="text-center font-black text-emerald-600">{p.completedCount}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <span className="text-[11px] font-black">{pPercent}%</span>
+                              <div className="w-16 h-2 rounded-full bg-slate-100 overflow-hidden">
+                                <div
+                                  className={cn("h-full rounded-full transition-all", pPercent >= 100 ? "bg-emerald-500" : "bg-blue-500")}
+                                  style={{ width: `${pPercent}%` }}
+                                />
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+
+          {/* Project Details */}
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
             {[
               { label: "Created", value: project.createdAt ? new Date(project.createdAt).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }) : "—" },
               { label: "Priority", value: project.priority || "Medium" },
               { label: "Department", value: project.department || "General" },
+              { label: "Client Name", value: project.clientName || "—" },
               { label: "Budget", value: project.budget ? `₹${Number(project.budget).toLocaleString()}` : "—" },
-              { label: "Target Clients", value: project.targetClients ? Number(project.targetClients).toLocaleString() : "—" },
-              { label: "Employee Budget", value: project.employeeBudget ? `₹${Number(project.employeeBudget).toLocaleString()}` : "—" },
-              { label: "Expense Budget", value: project.expenseBudget ? `₹${Number(project.expenseBudget).toLocaleString()}` : "—" },
+              { label: "Deadline", value: project.deadline ? new Date(project.deadline).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }) : "—" },
             ].map(item => (
               <div key={item.label}>
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</p>
@@ -213,44 +289,76 @@ function ProjectFormModal({
   onSuccess: () => void;
 }) {
   const [form, setForm] = useState({
-    name:        project?.name        ?? "",
-    description: project?.description ?? "",
-    status:      project?.status      ?? "Ongoing",
-    priority:    project?.priority    ?? "Medium",
-    department:  project?.department  ?? "",
-    budget:      project?.budget      ?? "",
-    targetClients: project?.targetClients ?? "",
-    employeeBudget: project?.employeeBudget ?? "",
-    expenseBudget: project?.expenseBudget ?? "",
-    deadline:    project?.deadline    ? new Date(project.deadline).toISOString().split("T")[0] : "",
-    tags:        project?.tags        ?? "",
-    clientName:  project?.clientName  ?? "",
-    objectives:  project?.objectives  ?? "",
+    name:           project?.name           ?? "",
+    description:    project?.description    ?? "",
+    status:         project?.status         ?? "Ongoing",
+    priority:       project?.priority       ?? "Medium",
+    targetType:     project?.targetType     ?? "YEARLY",
+    targetQuantity: project?.targetQuantity ?? 120,
+    startDate:      project?.startDate      ? new Date(project.startDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+    endDate:        project?.endDate        ? new Date(project.endDate).toISOString().split("T")[0] : "",
+    department:     project?.department     ?? "",
+    clientName:     project?.clientName     ?? "",
+    objectives:     project?.objectives     ?? "",
+    budget:         project?.budget         ?? "",
+    deadline:       project?.deadline       ? new Date(project.deadline).toISOString().split("T")[0] : "",
+    tags:           project?.tags           ?? "",
   });
+
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>(
+    project?.assignments ? project.assignments.map((a: any) => a.userId) : []
+  );
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const employeesQuery = useQuery({
+    queryKey: ["employeesForProject"],
+    queryFn: () => fetchEmployees()
+  });
+
+  const employees = employeesQuery.data ?? [];
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
 
+  const toggleUser = (userId: string) => {
+    setSelectedUserIds(curr =>
+      curr.includes(userId) ? curr.filter(id => id !== userId) : [...curr, userId]
+    );
+  };
+
+  const selectAllUsers = () => {
+    if (selectedUserIds.length === employees.length) {
+      setSelectedUserIds([]);
+    } else {
+      setSelectedUserIds(employees.map((e: any) => e.id));
+    }
+  };
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) { setError("Project name is required"); return; }
+    if (selectedUserIds.length === 0 && mode === "create") {
+      setError("Please select at least one employee to assign");
+      return;
+    }
+
     setSaving(true);
     setError("");
     try {
       const payload = {
         ...form,
+        targetQuantity: Number(form.targetQuantity) || 0,
         budget: form.budget ? Number(form.budget) : undefined,
-        targetClients: form.targetClients ? Number(form.targetClients) : undefined,
-        employeeBudget: form.employeeBudget ? Number(form.employeeBudget) : undefined,
-        expenseBudget: form.expenseBudget ? Number(form.expenseBudget) : undefined,
+        assignedUserIds: selectedUserIds
       };
+
       if (mode === "create") await createProject(payload);
       else await updateProject(project.id, payload);
       onSuccess();
-    } catch {
-      setError(mode === "create" ? "Failed to create project" : "Failed to update project");
+    } catch (err: any) {
+      setError(err?.message || (mode === "create" ? "Failed to create project" : "Failed to update project"));
     } finally {
       setSaving(false);
     }
@@ -261,20 +369,20 @@ function ProjectFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="p-8 bg-gradient-to-r from-blue-600 to-indigo-600 text-white relative">
           <button onClick={onClose} className="absolute top-5 right-5 text-white/70 hover:text-white">
             <X className="h-5 w-5" />
           </button>
-          <h2 className="text-2xl font-black">{mode === "create" ? "Create New Project" : "Edit Project"}</h2>
+          <h2 className="text-2xl font-black">{mode === "create" ? "Create New Target Project" : "Edit Project"}</h2>
           <p className="text-blue-100 text-sm font-medium mt-1">
-            {mode === "create" ? "Initiate a new high-level business objective." : "Update the project details below."}
+            {mode === "create" ? "Assign targets (Yearly/Monthly/Weekly) to employees with auto-breakdown & carryovers." : "Update project details."}
           </p>
         </div>
 
         {/* Form */}
-        <form onSubmit={submit} className="p-8 space-y-5 max-h-[70vh] overflow-y-auto">
+        <form onSubmit={submit} className="p-8 space-y-5 max-h-[75vh] overflow-y-auto">
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
               <AlertCircle className="h-4 w-4 flex-shrink-0" /> {error}
@@ -284,102 +392,121 @@ function ProjectFormModal({
           {/* Row 1: Name */}
           <div className="space-y-1.5">
             <Label className={LABEL_CLS}>Project Name *</Label>
-            <Input value={form.name} onChange={set("name")} placeholder="e.g. Q4 Sales Strategy" className={FIELD_CLS} required />
+            <Input value={form.name} onChange={set("name")} placeholder="e.g. Annual Sales Target 2026" className={FIELD_CLS} required />
           </div>
 
-          {/* Row 2: Description */}
-          <div className="space-y-1.5">
-            <Label className={LABEL_CLS}>Description</Label>
-            <textarea
-              value={form.description} onChange={set("description")}
-              placeholder="Describe the project objective and goals..."
-              rows={3}
-              className="w-full rounded-2xl bg-slate-50 border border-slate-200/60 focus:bg-white transition-all font-medium text-sm px-4 py-3 resize-none outline-none focus:ring-2 focus:ring-blue-500/20"
-            />
-          </div>
-
-          {/* Row 3: Objectives */}
-          <div className="space-y-1.5">
-            <Label className={LABEL_CLS}>Key Objectives</Label>
-            <textarea
-              value={form.objectives} onChange={set("objectives")}
-              placeholder="List the key goals or deliverables..."
-              rows={2}
-              className="w-full rounded-2xl bg-slate-50 border border-slate-200/60 focus:bg-white transition-all font-medium text-sm px-4 py-3 resize-none outline-none focus:ring-2 focus:ring-blue-500/20"
-            />
-          </div>
-
-          {/* Row 4: Status + Priority */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Row 2: Target Calculation Type + Total Target Quantity */}
+          <div className="grid grid-cols-2 gap-4 p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100">
             <div className="space-y-1.5">
-              <Label className={LABEL_CLS}>Status</Label>
-              <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
+              <Label className={LABEL_CLS}>Target Calculation Period *</Label>
+              <Select value={form.targetType} onValueChange={v => setForm(f => ({ ...f, targetType: v }))}>
                 <SelectTrigger className={FIELD_CLS}><SelectValue /></SelectTrigger>
                 <SelectContent className="rounded-2xl p-1.5">
-                  <SelectItem value="Ongoing" className="rounded-xl font-bold">Ongoing</SelectItem>
-                  <SelectItem value="Scheduled" className="rounded-xl font-bold">Scheduled</SelectItem>
-                  <SelectItem value="Completed" className="rounded-xl font-bold">Completed</SelectItem>
+                  <SelectItem value="YEARLY" className="rounded-xl font-bold">Yearly (Divides into 12 Months)</SelectItem>
+                  <SelectItem value="MONTHLY" className="rounded-xl font-bold">Monthly (Divides into 4 Weeks)</SelectItem>
+                  <SelectItem value="WEEKLY" className="rounded-xl font-bold">Weekly (Single 1-Week Target)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className={LABEL_CLS}>Priority</Label>
-              <Select value={form.priority} onValueChange={v => setForm(f => ({ ...f, priority: v }))}>
-                <SelectTrigger className={FIELD_CLS}><SelectValue /></SelectTrigger>
-                <SelectContent className="rounded-2xl p-1.5">
-                  <SelectItem value="Low" className="rounded-xl font-bold">Low</SelectItem>
-                  <SelectItem value="Medium" className="rounded-xl font-bold">Medium</SelectItem>
-                  <SelectItem value="High" className="rounded-xl font-bold">High</SelectItem>
-                  <SelectItem value="Critical" className="rounded-xl font-bold">Critical</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label className={LABEL_CLS}>Total Target Quantity *</Label>
+              <Input
+                type="number"
+                value={form.targetQuantity}
+                onChange={set("targetQuantity")}
+                placeholder="e.g. 120"
+                className={FIELD_CLS}
+                required
+              />
+              <p className="text-[10px] font-bold text-indigo-600">
+                {form.targetType === "YEARLY"
+                  ? `~${Math.ceil((Number(form.targetQuantity) || 0) / 12)} per month`
+                  : form.targetType === "MONTHLY"
+                  ? `~${Math.ceil((Number(form.targetQuantity) || 0) / 4)} per week`
+                  : `${form.targetQuantity} per week`}
+              </p>
             </div>
           </div>
 
-          {/* Row 5: Department + Client */}
+          {/* Date Range (From & To) */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className={LABEL_CLS}>Department</Label>
-              <Input value={form.department} onChange={set("department")} placeholder="e.g. Engineering" className={FIELD_CLS} />
+              <Label className={LABEL_CLS}>Start Date (From) *</Label>
+              <Input type="date" value={form.startDate} onChange={set("startDate")} className={FIELD_CLS} required />
             </div>
             <div className="space-y-1.5">
-              <Label className={LABEL_CLS}>Client Name</Label>
-              <Input value={form.clientName} onChange={set("clientName")} placeholder="e.g. Acme Corp" className={FIELD_CLS} />
+              <Label className={LABEL_CLS}>End Date (To)</Label>
+              <Input type="date" value={form.endDate} onChange={set("endDate")} className={FIELD_CLS} />
             </div>
           </div>
 
-          {/* Row 6: Budget + Deadline */}
+          {/* Assign to Employees (Multi-Select) */}
+          <div className="space-y-2 border-t border-slate-100 pt-3">
+            <div className="flex items-center justify-between">
+              <Label className={LABEL_CLS}>Assign to Employees ({selectedUserIds.length} Selected) *</Label>
+              <button
+                type="button"
+                onClick={selectAllUsers}
+                className="text-xs font-bold text-blue-600 hover:underline"
+              >
+                {selectedUserIds.length === employees.length ? "Deselect All" : "Select All Employees"}
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-3 rounded-2xl border border-slate-200 bg-slate-50">
+              {employees.length === 0 ? (
+                <p className="text-xs text-slate-400 font-medium col-span-2">Loading employees...</p>
+              ) : (
+                employees.map((emp: any) => {
+                  const isChecked = selectedUserIds.includes(emp.id);
+                  return (
+                    <label
+                      key={emp.id}
+                      onClick={() => toggleUser(emp.id)}
+                      className={cn(
+                        "flex items-center gap-2 p-2.5 rounded-xl border text-xs font-bold cursor-pointer transition-all",
+                        isChecked ? "bg-blue-50 border-blue-500 text-blue-900" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-100"
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {}}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="truncate">{emp.name}</span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Description & Objectives */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className={LABEL_CLS}>Budget (₹)</Label>
-              <Input type="number" value={form.budget} onChange={set("budget")} placeholder="e.g. 500000" className={FIELD_CLS} />
+              <Label className={LABEL_CLS}>Description</Label>
+              <textarea
+                value={form.description} onChange={set("description")}
+                placeholder="Describe project details..."
+                rows={2}
+                className="w-full rounded-2xl bg-slate-50 border border-slate-200/60 focus:bg-white transition-all font-medium text-xs px-3 py-2 resize-none outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
             </div>
             <div className="space-y-1.5">
-              <Label className={LABEL_CLS}>Deadline</Label>
-              <Input type="date" value={form.deadline} onChange={set("deadline")} className={FIELD_CLS} />
+              <Label className={LABEL_CLS}>Department & Priority</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input value={form.department} onChange={set("department")} placeholder="Dept" className={FIELD_CLS} />
+                <Select value={form.priority} onValueChange={v => setForm(f => ({ ...f, priority: v }))}>
+                  <SelectTrigger className={FIELD_CLS}><SelectValue /></SelectTrigger>
+                  <SelectContent className="rounded-2xl p-1.5">
+                    <SelectItem value="Low">Low</SelectItem>
+                    <SelectItem value="Medium">Medium</SelectItem>
+                    <SelectItem value="High">High</SelectItem>
+                    <SelectItem value="Critical">Critical</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          </div>
-
-          {/* Row 6.5: Target Clients + Employee Budget + Expense Budget */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <Label className={LABEL_CLS}>Target Clients</Label>
-              <Input type="number" value={form.targetClients} onChange={set("targetClients")} placeholder="e.g. 50" className={FIELD_CLS} />
-            </div>
-            <div className="space-y-1.5">
-              <Label className={LABEL_CLS}>Employee Budget (₹)</Label>
-              <Input type="number" value={form.employeeBudget} onChange={set("employeeBudget")} placeholder="e.g. 100000" className={FIELD_CLS} />
-            </div>
-            <div className="space-y-1.5">
-              <Label className={LABEL_CLS}>Expense Budget (₹)</Label>
-              <Input type="number" value={form.expenseBudget} onChange={set("expenseBudget")} placeholder="e.g. 50000" className={FIELD_CLS} />
-            </div>
-          </div>
-
-          {/* Row 7: Tags */}
-          <div className="space-y-1.5">
-            <Label className={LABEL_CLS}>Tags (comma separated)</Label>
-            <Input value={form.tags} onChange={set("tags")} placeholder="e.g. marketing, q4, priority" className={FIELD_CLS} />
           </div>
 
           {/* Submit */}
@@ -392,7 +519,7 @@ function ProjectFormModal({
               className="flex-1 h-12 bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-200 rounded-2xl font-black text-sm uppercase tracking-widest"
               disabled={saving}
             >
-              {saving ? (mode === "create" ? "Creating..." : "Saving...") : (mode === "create" ? "🚀 Launch Project" : "✓ Save Changes")}
+              {saving ? (mode === "create" ? "Creating & Assigning..." : "Saving...") : (mode === "create" ? "🚀 Assign & Launch Project" : "✓ Save Changes")}
             </Button>
           </div>
         </form>
@@ -468,9 +595,13 @@ function ProjectCard({ project, onEdit, onDelete, onViewProgress }: {
   onDelete: () => void;
   onViewProgress: () => void;
 }) {
-  const completed = project.tasks?.filter((t: any) => t.status === "COMPLETED").length ?? 0;
-  const total = project.tasks?.length ?? 0;
-  const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const assignments = project.assignments || [];
+  const totalTargetQty = assignments.reduce((acc: number, a: any) => acc + (a.targetQuantity || 0), 0) || (project.targetQuantity || 0);
+  const totalCompletedCount = assignments.reduce((acc: number, a: any) => acc + (a.completedCount || 0), 0);
+  const completedTasksCount = project.tasks?.filter((t: any) => t.status === "COMPLETED").length ?? 0;
+  const progress = totalTargetQty > 0 
+    ? Math.min(100, Math.round((totalCompletedCount / totalTargetQty) * 100))
+    : (project.tasks?.length ? Math.round((completedTasksCount / project.tasks.length) * 100) : 0);
 
   return (
     <Card className="rounded-3xl border-none shadow-sm ring-1 ring-slate-200/60 bg-white overflow-hidden group hover:ring-blue-400 hover:shadow-xl hover:shadow-blue-900/5 transition-all duration-300">

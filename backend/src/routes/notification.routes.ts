@@ -33,6 +33,15 @@ router.post("/broadcast", roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRol
   }
 });
 
+router.patch("/read-all", async (req: AuthRequest, res) => {
+  try {
+    await notificationService.markAllAsRead(req.user!.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: "Failed to mark all notifications as read" });
+  }
+});
+
 router.patch("/:id/read", async (req: AuthRequest, res) => {
   try {
     await notificationService.markAsRead(req.params.id);
