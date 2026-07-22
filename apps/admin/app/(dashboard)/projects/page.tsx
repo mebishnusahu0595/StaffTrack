@@ -196,7 +196,7 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
             <div className="space-y-4 p-5 rounded-2xl border border-slate-200 bg-slate-50/50">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="text-sm font-black text-slate-900">{activeAssignment.user?.name}'s Period Breakdown</h4>
+                  <h4 className="text-sm font-black text-slate-900">{activeAssignment.user?.name}&apos;s Period Breakdown</h4>
                   <p className="text-[10px] font-bold text-slate-500">
                     Target: {activeAssignment.targetQuantity} | Completed: {activeAssignment.completedCount}
                   </p>
