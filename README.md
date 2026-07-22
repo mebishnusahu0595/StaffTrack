@@ -1,5 +1,7 @@
 # StaffTrack - Advanced Administrative Dashboard
 
+![Deploy](https://github.com/mebishnusahu0595/StaffTrack/actions/workflows/deploy.yml/badge.svg)
+
 StaffTrack is a comprehensive, production-ready employee management system designed for companies with both office-based and field-based teams. It provides a robust suite of tools for real-time tracking, attendance automation, payroll processing, and task management.
 
 ## 🚀 Key Features
