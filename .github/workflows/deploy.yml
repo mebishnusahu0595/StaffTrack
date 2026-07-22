@@ -8,44 +8,35 @@ on:
 jobs:
   deploy:
     name: Deploy to Server (66.116.249.160)
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - name: 📋 Checkout Code
         uses: actions/checkout@v4
 
-      - name: 🔑 Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          port: 22
-          command_timeout: 15m
-          script: |
-            set -e
+      - name: 📦 Install Dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: /var/www/stafftrack
 
-            echo "📁 Navigating to project directory..."
-            cd /var/www/stafftrack
+      - name: ⬇️ Pull Latest Code
+        run: git pull origin main
+        working-directory: /var/www/stafftrack
 
-            echo "⬇️  Pulling latest code from main..."
-            git pull origin main
+      - name: 🔨 Build Backend
+        working-directory: /var/www/stafftrack/backend
+        run: |
+          npx prisma generate
+          npx prisma db push
+          npm run build
 
-            echo "📦 Installing dependencies..."
-            pnpm install --frozen-lockfile
+      - name: 🏗️ Build Admin Frontend
+        working-directory: /var/www/stafftrack/apps/admin
+        run: npm run build
 
-            echo "🔨 Building backend (TypeScript)..."
-            cd /var/www/stafftrack/backend
-            npx prisma generate
-            npx prisma db push
-            npm run build
+      - name: ♻️ Restart PM2 Services
+        run: |
+          pm2 restart stafftrack-backend stafftrack-frontend
+          pm2 save
 
-            echo "🏗️  Building admin frontend (Next.js)..."
-            cd /var/www/stafftrack/apps/admin
-            npm run build
-
-            echo "♻️  Restarting PM2 services..."
-            pm2 restart stafftrack-backend stafftrack-frontend
-            pm2 save
-
-            echo "✅ Deployment completed successfully!"
+      - name: ✅ Deployment Complete
+        run: echo "Deployment to stafftrack.cloud completed successfully!"
