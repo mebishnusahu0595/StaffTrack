@@ -652,7 +652,7 @@ function ProjectCard({ project, onEdit, onDelete, onViewProgress }: {
           </div>
           <div className="p-3 rounded-2xl bg-slate-50/80 border border-slate-100 group-hover:bg-emerald-50/50 group-hover:border-emerald-100 transition-colors text-center">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Done</p>
-            <p className="text-xl font-black text-slate-900">{completed}</p>
+            <p className="text-xl font-black text-slate-900">{totalCompletedCount || completedTasksCount}</p>
           </div>
         </div>
 
