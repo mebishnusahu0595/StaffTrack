@@ -1231,7 +1231,7 @@ function AttendanceEditSheet({
       setSelectedDate(currentDate);
       loadDateLogs(currentDate);
     }
-  }, [open, currentDate]);
+  }, [open]);
 
   const loadDateLogs = async (dateStr: string) => {
     setLoadingLogs(true);
@@ -1253,14 +1253,16 @@ function AttendanceEditSheet({
   };
 
   const changeSheetDate = (days: number) => {
-    const [y, m, d] = selectedDate.split("-").map(Number);
-    const dt = new Date(y, m - 1, d + days);
-    const yr = dt.getFullYear();
-    const mo = String(dt.getMonth() + 1).padStart(2, "0");
-    const dy = String(dt.getDate()).padStart(2, "0");
-    const newDateStr = `${yr}-${mo}-${dy}`;
-    setSelectedDate(newDateStr);
-    loadDateLogs(newDateStr);
+    setSelectedDate((prevDate) => {
+      const [y, m, d] = prevDate.split("-").map(Number);
+      const dt = new Date(y, m - 1, d + days);
+      const yr = dt.getFullYear();
+      const mo = String(dt.getMonth() + 1).padStart(2, "0");
+      const dy = String(dt.getDate()).padStart(2, "0");
+      const newDateStr = `${yr}-${mo}-${dy}`;
+      loadDateLogs(newDateStr);
+      return newDateStr;
+    });
     setEditingEmpId(null);
     setEditForm(null);
   };
