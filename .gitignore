@@ -86,3 +86,9 @@ uploads/
 *.apk
 *.pdf
 *.ipa
+
+# SSL & Certificates (Sensitive keys)
+*.pem
+*.key
+stafftrack_backup/letsencrypt/
+letsencrypt/
