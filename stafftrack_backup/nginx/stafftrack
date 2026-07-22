@@ -1,0 +1,87 @@
+server {
+    server_name stafftrack.cloud www.stafftrack.cloud;
+
+    # Allow large photo uploads (up to 15MB)
+    client_max_body_size 15M;
+
+    # Timeouts to handle large photo uploads on slow networks
+    client_body_timeout 180s;
+    client_header_timeout 180s;
+
+    # Gzip compression for API JSON responses (speeds up task list, etc.)
+    gzip on;
+    gzip_types application/json text/plain text/css application/javascript;
+    gzip_min_length 1024;
+    gzip_comp_level 4;
+    gzip_vary on;
+
+    # WebSocket / Socket.IO — MUST be before /api and /
+    location /socket.io {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+    }
+
+    location /api {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Proxy timeouts
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
+    }
+
+    location /uploads/ {
+        alias /var/www/stafftrack/backend/uploads/;
+        expires 30d;
+        add_header Cache-Control "public, no-transform";
+        # Enable gzip for served uploads too
+        gzip_static on;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/stafftrack.cloud/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/stafftrack.cloud/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}
+
+server {
+    if ($host = www.stafftrack.cloud) {
+        return 301 https://$host$request_uri;
+    }
+    if ($host = stafftrack.cloud) {
+        return 301 https://$host$request_uri;
+    }
+    listen 80;
+    listen 8000;
+    server_name stafftrack.cloud www.stafftrack.cloud;
+    return 404;
+}

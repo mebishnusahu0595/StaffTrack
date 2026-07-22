@@ -2,7 +2,7 @@
  
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download, Battery, CheckCircle2, XCircle, AlertCircle, CalendarX, Search } from "lucide-react";
+import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download, Battery, CheckCircle2, XCircle, AlertCircle, CalendarX, Search, Pencil, Upload, ImageIcon, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AttendanceStatusBadge } from "@/components/admin/status-badge";
-import { fetchAllAttendance, fetchUsers, markAttendanceStatus, superUpdateAttendance, fetchGroups } from "@/lib/api";
+import { fetchAllAttendance, fetchUsers, markAttendanceStatus, superUpdateAttendance, fetchGroups, uploadFile } from "@/lib/api";
 import { formatTime } from "@/lib/format";
 import { calculateDurations, formatDurationLabel } from "@/lib/timeTracking";
 import { Badge } from "@/components/ui/badge";
@@ -576,11 +576,29 @@ function AttendanceDetailDialog({
   const [endOdoVal, setEndOdoVal] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
+  // Full attendance edit state
+  const [isEditingFull, setIsEditingFull] = useState(false);
+  const [editData, setEditData] = useState<{
+    status: string;
+    punchType: string;
+    checkInTime: string;
+    checkOutTime: string;
+    checkInPhotoUrl: string | null;
+    checkOutPhotoUrl: string | null;
+    startOdometerPhotoUrl: string | null;
+    endOdometerPhotoUrl: string | null;
+    startOdometer: string;
+    endOdometer: string;
+  } | null>(null);
+  const [photoUploading, setPhotoUploading] = useState<string | null>(null);
+
   useEffect(() => {
     if (propRecord) {
       setStartOdoVal(propRecord.startOdometer?.toString() ?? "");
       setEndOdoVal(propRecord.endOdometer?.toString() ?? "");
       setIsEditingOdo(false);
+      setIsEditingFull(false);
+      setEditData(null);
     }
   }, [propRecord]);
 
@@ -617,6 +635,63 @@ function AttendanceDetailDialog({
       setIsEditingOdo(false);
     } catch (err: any) {
       alert(err?.response?.data?.message ?? "Failed to update odometer readings.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleOpenFullEdit = () => {
+    setEditData({
+      status: record.status,
+      punchType: record.punchType || "OFFICE",
+      checkInTime: record.checkInTime ? new Date(record.checkInTime).toISOString().slice(0, 16) : "",
+      checkOutTime: record.checkOutTime ? new Date(record.checkOutTime).toISOString().slice(0, 16) : "",
+      checkInPhotoUrl: record.checkInPhotoUrl ?? null,
+      checkOutPhotoUrl: record.checkOutPhotoUrl ?? null,
+      startOdometerPhotoUrl: record.startOdometerPhotoUrl ?? null,
+      endOdometerPhotoUrl: record.endOdometerPhotoUrl ?? null,
+      startOdometer: record.startOdometer?.toString() ?? "",
+      endOdometer: record.endOdometer?.toString() ?? "",
+    });
+    setIsEditingFull(true);
+  };
+
+  const handleUploadPhoto = async (field: string, file?: File) => {
+    if (!file || !editData) return;
+    setPhotoUploading(field);
+    try {
+      const url = await uploadFile(file);
+      setEditData((prev) => prev ? { ...prev, [field]: url } : null);
+    } catch {
+      alert("Image upload failed");
+    } finally {
+      setPhotoUploading(null);
+    }
+  };
+
+  const handleSaveFullEdit = async () => {
+    if (!editData) return;
+    setIsSaving(true);
+    try {
+      await superUpdateAttendance(record.id, {
+        userId: record.userId,
+        date: record.date,
+        status: editData.status as any,
+        punchType: editData.punchType as any,
+        checkInTime: editData.checkInTime || null,
+        checkOutTime: editData.checkOutTime || null,
+        checkInPhotoUrl: editData.checkInPhotoUrl,
+        checkOutPhotoUrl: editData.checkOutPhotoUrl,
+        startOdometerPhotoUrl: editData.startOdometerPhotoUrl,
+        endOdometerPhotoUrl: editData.endOdometerPhotoUrl,
+        startOdometer: editData.startOdometer !== "" ? parseFloat(editData.startOdometer) : null,
+        endOdometer: editData.endOdometer !== "" ? parseFloat(editData.endOdometer) : null,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      setIsEditingFull(false);
+      setEditData(null);
+    } catch (err: any) {
+      alert(err?.response?.data?.message ?? "Failed to update attendance.");
     } finally {
       setIsSaving(false);
     }
@@ -727,6 +802,13 @@ function AttendanceDetailDialog({
                  >
                    Print Details (Landscape)
                  </Button>
+                 <Button
+                    size="sm"
+                    className="h-9 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs gap-1.5"
+                    onClick={handleOpenFullEdit}
+                  >
+                    <Pencil className="w-3 h-3" /> Edit Attendance
+                  </Button>
                  <AttendanceStatusBadge 
                    status={record.status} 
                    hasCheckOut={!!record.checkOutTime} 
@@ -754,6 +836,99 @@ function AttendanceDetailDialog({
               </div>
            </div>
         </div>
+
+        {/* Full Edit Panel */}
+        {isEditingFull && editData && (
+          <div className="px-8 pt-6 pb-4 border-b border-slate-100 bg-amber-50/30">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm font-black uppercase tracking-wider text-amber-700">✏️ Edit Attendance Record</p>
+              <Button variant="ghost" size="sm" className="text-slate-500 h-7 text-xs" onClick={() => { setIsEditingFull(false); setEditData(null); }}>Cancel</Button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-slate-500">Status</Label>
+                <Select value={editData.status} onValueChange={(v) => setEditData((p) => p ? { ...p, status: v } : null)}>
+                  <SelectTrigger className="h-9 text-xs rounded-lg"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PRESENT">Present</SelectItem>
+                    <SelectItem value="ABSENT">Absent</SelectItem>
+                    <SelectItem value="HALF_DAY">Half Day</SelectItem>
+                    <SelectItem value="ON_LEAVE">On Leave</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-slate-500">Punch Type</Label>
+                <Select value={editData.punchType} onValueChange={(v) => setEditData((p) => p ? { ...p, punchType: v } : null)}>
+                  <SelectTrigger className="h-9 text-xs rounded-lg"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="OFFICE">Office</SelectItem>
+                    <SelectItem value="FIELD">Field</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-slate-500">Check In Time</Label>
+                <Input type="datetime-local" value={editData.checkInTime} onChange={(e) => setEditData((p) => p ? { ...p, checkInTime: e.target.value } : null)} className="h-9 text-xs rounded-lg" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-slate-500">Check Out Time</Label>
+                <Input type="datetime-local" value={editData.checkOutTime} onChange={(e) => setEditData((p) => p ? { ...p, checkOutTime: e.target.value } : null)} className="h-9 text-xs rounded-lg" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-slate-500">Start Odometer</Label>
+                <Input type="number" placeholder="e.g. 45000" value={editData.startOdometer} onChange={(e) => setEditData((p) => p ? { ...p, startOdometer: e.target.value } : null)} className="h-9 text-xs rounded-lg" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-slate-500">End Odometer</Label>
+                <Input type="number" placeholder="e.g. 45080" value={editData.endOdometer} onChange={(e) => setEditData((p) => p ? { ...p, endOdometer: e.target.value } : null)} className="h-9 text-xs rounded-lg" />
+              </div>
+            </div>
+            {/* Photo fields */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              {([
+                { field: "checkInPhotoUrl", label: "Check-In Photo" },
+                { field: "checkOutPhotoUrl", label: "Check-Out Photo" },
+                { field: "startOdometerPhotoUrl", label: "Start Odo Photo" },
+                { field: "endOdometerPhotoUrl", label: "End Odo Photo" },
+              ] as const).map(({ field, label }) => (
+                <div key={field} className="space-y-1">
+                  <Label className="text-[10px] font-black uppercase text-slate-500">{label}</Label>
+                  <div className="flex items-center gap-2">
+                    <div className="h-12 w-16 rounded border bg-slate-100 overflow-hidden flex items-center justify-center shrink-0">
+                      {editData[field] ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={editData[field]!} alt={label} className="h-full w-full object-cover" />
+                      ) : (
+                        <ImageIcon className="h-4 w-4 text-slate-300" />
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="inline-flex cursor-pointer items-center gap-1 rounded border bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-50">
+                        {photoUploading === field ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                        {editData[field] ? "Replace" : "Upload"}
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUploadPhoto(field, e.target.files?.[0])} />
+                      </label>
+                      {editData[field] && (
+                        <button type="button" onClick={() => setEditData((p) => p ? { ...p, [field]: null } : null)} className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 hover:text-rose-700">
+                          <Trash2 className="h-3 w-3" /> Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" className="h-8 text-xs font-bold text-slate-500" onClick={() => { setIsEditingFull(false); setEditData(null); }} disabled={isSaving}>Cancel</Button>
+              <Button size="sm" className="h-8 px-4 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white" onClick={handleSaveFullEdit} disabled={isSaving}>
+                {isSaving ? "Saving..." : "Save All Changes"}
+              </Button>
+            </div>
+          </div>
+        )}
 
         {record.punchType === "FIELD" && (
           <div className="px-8 pt-8">

@@ -79,3 +79,10 @@ dayTrack_codex_prompt.txt
 /stafftrack/
 backend/uploads/
 petroleum-*.json
+
+# Large upload files - not for git
+stafftrack_backup/uploads/
+uploads/
+*.apk
+*.pdf
+*.ipa

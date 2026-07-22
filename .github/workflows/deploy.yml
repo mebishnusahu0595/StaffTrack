@@ -14,12 +14,12 @@ jobs:
       - name: 📋 Checkout Code
         uses: actions/checkout@v4
 
-      - name: 📦 Install Dependencies
-        run: pnpm install --frozen-lockfile
-        working-directory: /var/www/stafftrack
-
       - name: ⬇️ Pull Latest Code
         run: git pull origin main
+        working-directory: /var/www/stafftrack
+
+      - name: 📦 Install Dependencies
+        run: pnpm install --frozen-lockfile
         working-directory: /var/www/stafftrack
 
       - name: 🔨 Build Backend
@@ -35,8 +35,8 @@ jobs:
 
       - name: ♻️ Restart PM2 Services
         run: |
-          pm2 restart stafftrack-backend stafftrack-frontend
-          pm2 save
+          sudo pm2 restart stafftrack-backend stafftrack-frontend
+          sudo pm2 save
 
       - name: ✅ Deployment Complete
         run: echo "Deployment to stafftrack.cloud completed successfully!"
