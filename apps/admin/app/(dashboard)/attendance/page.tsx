@@ -1253,13 +1253,27 @@ function AttendanceEditSheet({
   };
 
   const changeSheetDate = (days: number) => {
-    const d = new Date(selectedDate + "T00:00:00");
-    d.setDate(d.getDate() + days);
-    const newDateStr = d.toISOString().split("T")[0];
+    const [y, m, d] = selectedDate.split("-").map(Number);
+    const dt = new Date(y, m - 1, d + days);
+    const yr = dt.getFullYear();
+    const mo = String(dt.getMonth() + 1).padStart(2, "0");
+    const dy = String(dt.getDate()).padStart(2, "0");
+    const newDateStr = `${yr}-${mo}-${dy}`;
     setSelectedDate(newDateStr);
     loadDateLogs(newDateStr);
     setEditingEmpId(null);
     setEditForm(null);
+  };
+
+  const getFormattedDateLabel = (dateStr: string) => {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    if (!y || !m || !d) return dateStr;
+    return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric"
+    });
   };
 
   const handleStartEdit = (emp: User, existingRecord?: any) => {
@@ -1297,41 +1311,33 @@ function AttendanceEditSheet({
     if (!editForm) return;
     setSavingEmpId(editForm.userId);
     try {
-      let recordId = editForm.id;
-      if (!recordId) {
-        await superBulkMarkAttendance({
-          userId: editForm.userId,
-          startDate: selectedDate,
-          endDate: selectedDate,
-          status: editForm.status,
-          punchType: editForm.punchType,
-          checkInTime: editForm.checkInTime || null,
-          checkOutTime: editForm.checkOutTime || null,
-          timezoneOffset: new Date().getTimezoneOffset()
-        });
-        const freshLogs = await superFetchAttendance(undefined, selectedDate);
-        const createdRec = freshLogs.find((l: any) => l.userId === editForm.userId);
-        if (createdRec) {
-          recordId = createdRec.id;
-        }
-      }
+      const targetRecordId = editForm.id && !editForm.id.startsWith("virtual-") ? editForm.id : "new";
 
-      if (recordId) {
-        await superUpdateAttendance(recordId, {
-          userId: editForm.userId,
-          date: selectedDate,
-          status: editForm.status,
-          punchType: editForm.punchType,
-          checkInTime: editForm.checkInTime || null,
-          checkOutTime: editForm.checkOutTime || null,
-          startOdometer: editForm.startOdometer !== "" ? parseFloat(editForm.startOdometer) : null,
-          endOdometer: editForm.endOdometer !== "" ? parseFloat(editForm.endOdometer) : null,
-          checkInPhotoUrl: editForm.checkInPhotoUrl,
-          checkOutPhotoUrl: editForm.checkOutPhotoUrl,
-          startOdometerPhotoUrl: editForm.startOdometerPhotoUrl,
-          endOdometerPhotoUrl: editForm.endOdometerPhotoUrl,
-        });
-      }
+      await superUpdateAttendance(targetRecordId, {
+        userId: editForm.userId,
+        date: selectedDate,
+        status: editForm.status,
+        punchType: editForm.punchType,
+        checkInTime: editForm.checkInTime ? new Date(editForm.checkInTime).toISOString() : null,
+        checkOutTime: editForm.checkOutTime ? new Date(editForm.checkOutTime).toISOString() : null,
+        startOdometer: editForm.startOdometer !== "" ? parseFloat(editForm.startOdometer) : null,
+        endOdometer: editForm.endOdometer !== "" ? parseFloat(editForm.endOdometer) : null,
+        checkInPhotoUrl: editForm.checkInPhotoUrl,
+        checkOutPhotoUrl: editForm.checkOutPhotoUrl,
+        startOdometerPhotoUrl: editForm.startOdometerPhotoUrl,
+        endOdometerPhotoUrl: editForm.endOdometerPhotoUrl,
+      });
+
+      await loadDateLogs(selectedDate);
+      await queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      setEditingEmpId(null);
+      setEditForm(null);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || "Failed to update attendance");
+    } finally {
+      setSavingEmpId(null);
+    }
+  };
 
       await loadDateLogs(selectedDate);
       await queryClient.invalidateQueries({ queryKey: ["attendance"] });
@@ -1403,12 +1409,7 @@ function AttendanceEditSheet({
                 </span>
               ) : (
                 <span className="text-xs font-bold text-slate-300">
-                  {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-US", {
-                    weekday: "short",
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric"
-                  })}
+                  {getFormattedDateLabel(selectedDate)}
                 </span>
               )}
             </div>
