@@ -1341,17 +1341,6 @@ function AttendanceEditSheet({
     }
   };
 
-      await loadDateLogs(selectedDate);
-      await queryClient.invalidateQueries({ queryKey: ["attendance"] });
-      setEditingEmpId(null);
-      setEditForm(null);
-    } catch (err: any) {
-      alert(err?.response?.data?.message || "Failed to update attendance");
-    } finally {
-      setSavingEmpId(null);
-    }
-  };
-
   const filteredEmps = employees.filter(
     (e) =>
       e.name.toLowerCase().includes(search.toLowerCase()) ||
