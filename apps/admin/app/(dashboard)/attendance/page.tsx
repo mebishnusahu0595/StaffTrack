@@ -1,8 +1,8 @@
 "use client";
  
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download, Battery, CheckCircle2, XCircle, AlertCircle, CalendarX, Search, Pencil, Upload, ImageIcon, Loader2, Trash2 } from "lucide-react";
+import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download, Battery, CheckCircle2, XCircle, AlertCircle, CalendarX, Search, Pencil, Upload, ImageIcon, Loader2, Trash2, ClipboardEdit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AttendanceStatusBadge } from "@/components/admin/status-badge";
-import { fetchAllAttendance, fetchUsers, markAttendanceStatus, superUpdateAttendance, fetchGroups, uploadFile } from "@/lib/api";
+import { fetchAllAttendance, fetchUsers, markAttendanceStatus, superUpdateAttendance, superFetchAttendance, superBulkMarkAttendance, fetchGroups, uploadFile } from "@/lib/api";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { formatTime } from "@/lib/format";
 import { calculateDurations, formatDurationLabel } from "@/lib/timeTracking";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +52,7 @@ export default function AttendancePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewingRecord, setViewingRecord] = useState<(AttendanceRecord & { user: User }) | null>(null);
   const [isMarkDialogOpen, setIsMarkDialogOpen] = useState(false);
+  const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
   const [manualUserId, setManualUserId] = useState("");
   const [manualDate, setManualDate] = useState(startDate);
   const [tick, setTick] = useState(0);
@@ -178,6 +180,13 @@ export default function AttendancePage() {
            <p className="mt-1 text-slate-500 text-sm">Review and verify employee punch records with photo and GPS validation.</p>
         </div>
         <div className="flex items-center gap-3">
+        <Button
+            className="h-11 rounded-xl bg-amber-500 px-4 font-bold shadow-lg shadow-amber-100 hover:bg-amber-600 gap-2"
+            onClick={() => setIsEditSheetOpen(true)}
+          >
+            <ClipboardEdit className="h-4 w-4" />
+            Edit Attendance
+          </Button>
         <Dialog open={isMarkDialogOpen} onOpenChange={setIsMarkDialogOpen}>
           <DialogTrigger asChild>
             <Button
@@ -556,6 +565,13 @@ export default function AttendancePage() {
         record={viewingRecord} 
         userRecords={filteredData.filter(r => r.userId === viewingRecord?.userId)}
         onOpenChange={(open) => !open && setViewingRecord(null)} 
+      />
+
+      <AttendanceEditSheet
+        open={isEditSheetOpen}
+        onOpenChange={setIsEditSheetOpen}
+        currentDate={startDate}
+        employees={employees}
       />
     </div>
   );
@@ -1186,4 +1202,404 @@ function formatCoords(lat?: number | null, lng?: number | null, digits = 4) {
   }
 
   return `${lat.toFixed(digits)}, ${lng.toFixed(digits)}`;
+}
+
+function AttendanceEditSheet({
+  open,
+  onOpenChange,
+  currentDate,
+  employees
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  currentDate: string;
+  employees: User[];
+}) {
+  const queryClient = useQueryClient();
+  const [selectedDate, setSelectedDate] = useState(currentDate);
+  const [search, setSearch] = useState("");
+  const [attendanceLogs, setAttendanceLogs] = useState<any[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+
+  const [editingEmpId, setEditingEmpId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<any>(null);
+  const [savingEmpId, setSavingEmpId] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setSelectedDate(currentDate);
+      loadDateLogs(currentDate);
+    }
+  }, [open, currentDate]);
+
+  const loadDateLogs = async (dateStr: string) => {
+    setLoadingLogs(true);
+    try {
+      const logs = await superFetchAttendance(undefined, dateStr);
+      setAttendanceLogs(logs);
+    } catch (err) {
+      console.error("Failed to load attendance for date:", err);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  const handleDateChange = (newDate: string) => {
+    setSelectedDate(newDate);
+    loadDateLogs(newDate);
+  };
+
+  const handleStartEdit = (emp: User, existingRecord?: any) => {
+    setEditingEmpId(emp.id);
+    setEditForm({
+      id: existingRecord?.id || null,
+      userId: emp.id,
+      status: existingRecord?.status || "PRESENT",
+      punchType: existingRecord?.punchType || (emp.workMode === "FIELD" ? "FIELD" : "OFFICE"),
+      checkInTime: existingRecord?.checkInTime ? new Date(existingRecord.checkInTime).toISOString().slice(0, 16) : "",
+      checkOutTime: existingRecord?.checkOutTime ? new Date(existingRecord.checkOutTime).toISOString().slice(0, 16) : "",
+      startOdometer: existingRecord?.startOdometer?.toString() ?? "",
+      endOdometer: existingRecord?.endOdometer?.toString() ?? "",
+      checkInPhotoUrl: existingRecord?.checkInPhotoUrl ?? null,
+      checkOutPhotoUrl: existingRecord?.checkOutPhotoUrl ?? null,
+      startOdometerPhotoUrl: existingRecord?.startOdometerPhotoUrl ?? null,
+      endOdometerPhotoUrl: existingRecord?.endOdometerPhotoUrl ?? null,
+    });
+  };
+
+  const handlePhotoUpload = async (field: string, file?: File) => {
+    if (!file || !editForm) return;
+    setPhotoUploading(field);
+    try {
+      const url = await uploadFile(file);
+      setEditForm((prev: any) => (prev ? { ...prev, [field]: url } : null));
+    } catch {
+      alert("Photo upload failed");
+    } finally {
+      setPhotoUploading(null);
+    }
+  };
+
+  const handleSaveEmpAttendance = async () => {
+    if (!editForm) return;
+    setSavingEmpId(editForm.userId);
+    try {
+      let recordId = editForm.id;
+      if (!recordId) {
+        await superBulkMarkAttendance({
+          userId: editForm.userId,
+          startDate: selectedDate,
+          endDate: selectedDate,
+          status: editForm.status,
+          punchType: editForm.punchType,
+          checkInTime: editForm.checkInTime || null,
+          checkOutTime: editForm.checkOutTime || null,
+          timezoneOffset: new Date().getTimezoneOffset()
+        });
+        const freshLogs = await superFetchAttendance(undefined, selectedDate);
+        const createdRec = freshLogs.find((l: any) => l.userId === editForm.userId);
+        if (createdRec) {
+          recordId = createdRec.id;
+        }
+      }
+
+      if (recordId) {
+        await superUpdateAttendance(recordId, {
+          userId: editForm.userId,
+          date: selectedDate,
+          status: editForm.status,
+          punchType: editForm.punchType,
+          checkInTime: editForm.checkInTime || null,
+          checkOutTime: editForm.checkOutTime || null,
+          startOdometer: editForm.startOdometer !== "" ? parseFloat(editForm.startOdometer) : null,
+          endOdometer: editForm.endOdometer !== "" ? parseFloat(editForm.endOdometer) : null,
+          checkInPhotoUrl: editForm.checkInPhotoUrl,
+          checkOutPhotoUrl: editForm.checkOutPhotoUrl,
+          startOdometerPhotoUrl: editForm.startOdometerPhotoUrl,
+          endOdometerPhotoUrl: editForm.endOdometerPhotoUrl,
+        });
+      }
+
+      await loadDateLogs(selectedDate);
+      await queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      setEditingEmpId(null);
+      setEditForm(null);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || "Failed to update attendance");
+    } finally {
+      setSavingEmpId(null);
+    }
+  };
+
+  const filteredEmps = employees.filter(
+    (e) =>
+      e.name.toLowerCase().includes(search.toLowerCase()) ||
+      e.email.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="sm:max-w-2xl w-full p-0 flex flex-col bg-slate-50 overflow-hidden">
+        <div className="bg-slate-900 text-white p-6 shrink-0 border-b border-slate-800">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-amber-500/20 p-2 rounded-xl border border-amber-500/30">
+                <ClipboardEdit className="h-5 w-5 text-amber-400" />
+              </div>
+              <div>
+                <SheetTitle className="text-lg font-black text-white">Edit Employee Attendance</SheetTitle>
+                <p className="text-xs text-slate-400">Correct status, times, photos & odometer for all staff</p>
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 flex items-center gap-3 bg-slate-800/80 p-2 rounded-xl border border-slate-700">
+            <Calendar className="h-4 w-4 text-amber-400 shrink-0" />
+            <Label htmlFor="sheet-date" className="text-xs font-bold text-slate-300 shrink-0">Date:</Label>
+            <Input
+              id="sheet-date"
+              type="date"
+              value={selectedDate}
+              onChange={(e) => handleDateChange(e.target.value)}
+              className="bg-slate-900 border-slate-700 text-white h-8 text-xs rounded-lg"
+            />
+            {loadingLogs && <Loader2 className="h-4 w-4 text-amber-400 animate-spin ml-auto" />}
+          </div>
+        </div>
+
+        <div className="p-4 bg-white border-b border-slate-200 shrink-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            <Input
+              placeholder="Search all employees..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-9 text-xs rounded-lg border-slate-200"
+            />
+          </div>
+          <div className="mt-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider flex justify-between">
+            <span>{filteredEmps.length} Employees total</span>
+            <span>{attendanceLogs.length} Records logged on {selectedDate}</span>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {filteredEmps.map((emp) => {
+            const record = attendanceLogs.find((l) => l.userId === emp.id);
+            const isEditing = editingEmpId === emp.id;
+
+            return (
+              <div
+                key={emp.id}
+                className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 transition-all"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Avatar className="h-10 w-10 border border-slate-100 shrink-0">
+                      <AvatarFallback className="bg-slate-100 font-bold text-slate-600 text-xs">
+                        {emp.name.slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-900 text-sm truncate">{emp.name}</p>
+                      <p className="text-xs text-slate-400 truncate">{emp.email} • <span className="font-semibold text-slate-600">{emp.workMode}</span></p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge
+                      className={cn(
+                        "text-[10px] font-black px-2.5 py-0.5 rounded-full border-none",
+                        record?.status === "PRESENT"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : record?.status === "ABSENT"
+                          ? "bg-rose-100 text-rose-700"
+                          : record?.status === "HALF_DAY"
+                          ? "bg-amber-100 text-amber-700"
+                          : record?.status === "ON_LEAVE"
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-slate-100 text-slate-500"
+                      )}
+                    >
+                      {record ? record.status : "NOT MARKED"}
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant={isEditing ? "outline" : "default"}
+                      className={cn(
+                        "h-8 text-xs font-bold rounded-lg gap-1",
+                        isEditing
+                          ? "border-slate-300 text-slate-600"
+                          : "bg-amber-500 hover:bg-amber-600 text-white"
+                      )}
+                      onClick={() => {
+                        if (isEditing) {
+                          setEditingEmpId(null);
+                          setEditForm(null);
+                        } else {
+                          handleStartEdit(emp, record);
+                        }
+                      }}
+                    >
+                      <Pencil className="h-3 w-3" />
+                      {isEditing ? "Cancel" : "Edit"}
+                    </Button>
+                  </div>
+                </div>
+
+                {isEditing && editForm && (
+                  <div className="mt-4 pt-4 border-t border-slate-100 bg-amber-50/40 -mx-4 -mb-4 p-4 rounded-b-2xl space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-black uppercase text-slate-500">Status</Label>
+                        <Select
+                          value={editForm.status}
+                          onValueChange={(v) => setEditForm((p: any) => ({ ...p, status: v }))}
+                        >
+                          <SelectTrigger className="h-9 text-xs bg-white rounded-lg"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="PRESENT">Present</SelectItem>
+                            <SelectItem value="ABSENT">Absent</SelectItem>
+                            <SelectItem value="HALF_DAY">Half Day</SelectItem>
+                            <SelectItem value="ON_LEAVE">On Leave</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-black uppercase text-slate-500">Punch Type</Label>
+                        <Select
+                          value={editForm.punchType}
+                          onValueChange={(v) => setEditForm((p: any) => ({ ...p, punchType: v }))}
+                        >
+                          <SelectTrigger className="h-9 text-xs bg-white rounded-lg"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="OFFICE">Office</SelectItem>
+                            <SelectItem value="FIELD">Field</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-black uppercase text-slate-500">Check In Time</Label>
+                        <Input
+                          type="datetime-local"
+                          value={editForm.checkInTime}
+                          onChange={(e) => setEditForm((p: any) => ({ ...p, checkInTime: e.target.value }))}
+                          className="h-9 text-xs bg-white rounded-lg"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-black uppercase text-slate-500">Check Out Time</Label>
+                        <Input
+                          type="datetime-local"
+                          value={editForm.checkOutTime}
+                          onChange={(e) => setEditForm((p: any) => ({ ...p, checkOutTime: e.target.value }))}
+                          className="h-9 text-xs bg-white rounded-lg"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-black uppercase text-slate-500">Start Odometer (KM)</Label>
+                        <Input
+                          type="number"
+                          placeholder="e.g. 45000"
+                          value={editForm.startOdometer}
+                          onChange={(e) => setEditForm((p: any) => ({ ...p, startOdometer: e.target.value }))}
+                          className="h-9 text-xs bg-white rounded-lg"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-black uppercase text-slate-500">End Odometer (KM)</Label>
+                        <Input
+                          type="number"
+                          placeholder="e.g. 45080"
+                          value={editForm.endOdometer}
+                          onChange={(e) => setEditForm((p: any) => ({ ...p, endOdometer: e.target.value }))}
+                          className="h-9 text-xs bg-white rounded-lg"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200/60">
+                      {([
+                        { field: "checkInPhotoUrl", label: "Check-In Selfie" },
+                        { field: "checkOutPhotoUrl", label: "Check-Out Selfie" },
+                        { field: "startOdometerPhotoUrl", label: "Start Odo Photo" },
+                        { field: "endOdometerPhotoUrl", label: "End Odo Photo" },
+                      ] as const).map(({ field, label }) => (
+                        <div key={field} className="space-y-1">
+                          <Label className="text-[10px] font-black uppercase text-slate-500">{label}</Label>
+                          <div className="flex items-center gap-2">
+                            <div className="h-10 w-12 rounded border bg-white overflow-hidden flex items-center justify-center shrink-0">
+                              {editForm[field] ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={editForm[field]} alt={label} className="h-full w-full object-cover" />
+                              ) : (
+                                <ImageIcon className="h-4 w-4 text-slate-300" />
+                              )}
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <label className="inline-flex cursor-pointer items-center gap-1 rounded border bg-white px-2 py-0.5 text-[10px] font-bold text-slate-700 hover:bg-slate-50">
+                                {photoUploading === field ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                                {editForm[field] ? "Change" : "Upload"}
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) => handlePhotoUpload(field, e.target.files?.[0])}
+                                />
+                              </label>
+                              {editForm[field] && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditForm((p: any) => ({ ...p, [field]: null }))}
+                                  className="text-[9px] font-bold text-rose-600 hover:underline text-left"
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 text-xs font-bold text-slate-500"
+                        onClick={() => {
+                          setEditingEmpId(null);
+                          setEditForm(null);
+                        }}
+                        disabled={savingEmpId === emp.id}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-8 px-4 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-lg"
+                        onClick={handleSaveEmpAttendance}
+                        disabled={savingEmpId === emp.id}
+                      >
+                        {savingEmpId === emp.id ? (
+                          <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Saving...</span>
+                        ) : (
+                          "Save Attendance Record"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
 }
