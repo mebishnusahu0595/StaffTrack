@@ -1825,7 +1825,7 @@ function DealerSelector({
       {isLoading ? (
         <p className="text-xs text-slate-400 font-medium">Loading dealers...</p>
       ) : dealers.length === 0 ? (
-        <p className="text-xs text-slate-500 font-medium italic">No dealers registered yet. Click "+ Add New Dealer" to add one.</p>
+        <p className="text-xs text-slate-500 font-medium italic">No dealers registered yet. Click &quot;+ Add New Dealer&quot; to add one.</p>
       ) : (
         <div className="flex flex-wrap gap-2 pt-1 max-h-36 overflow-y-auto pr-1">
           {dealers.map((d: any) => {
