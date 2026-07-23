@@ -15,6 +15,7 @@ const publicUserSelect = {
   phone: true,
   role: true,
   workMode: true,
+  designation: true,
   companyId: true,
   managerId: true,
   createdAt: true

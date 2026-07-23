@@ -115,7 +115,23 @@ export function PersonalAttendancePanel({
     return dayjs(record.date).isSame(dayjs(), "day");
   }, [todayAttendance, activeAttendance]);
 
+  // Check if staff is Sales Officer (exclude Field Assistant / F/A)
+  const isSalesOfficer = useMemo(() => {
+    const d = (user?.designation || "").trim().toLowerCase();
+    if (
+      d.includes("field assistant") ||
+      d.includes("f/a") ||
+      d.includes("f.a") ||
+      d.includes("field-assistant") ||
+      d.includes("assistant")
+    ) {
+      return false;
+    }
+    return true;
+  }, [user?.designation]);
+
   const show50KmExpenseCard = Boolean(
+    isSalesOfficer &&
     isToday &&
     (todayAttendance || activeAttendance) &&
     !(todayAttendance || activeAttendance)?.isCheckInPending &&
