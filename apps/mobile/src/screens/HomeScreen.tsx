@@ -538,6 +538,7 @@ export function HomeScreen() {
       hideTimeSummary={true} 
       hideDayEndButton={true} 
       onNavigateDayEnd={() => navigation.navigate("DayEndReport")} 
+      onNavigateExpense={() => navigation.navigate("Expenses")}
     />
   );
 

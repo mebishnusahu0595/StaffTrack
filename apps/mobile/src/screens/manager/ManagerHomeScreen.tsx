@@ -137,7 +137,10 @@ export function ManagerHomeScreen() {
         <Text style={styles.dateLabel}>{dayjs().format("ddd, MMM D, YYYY")}</Text>
       </View>
       <View style={{ marginBottom: 20 }}>
-        <PersonalAttendancePanel onNavigateDayEnd={() => navigation.navigate("DayEndReport")} />
+        <PersonalAttendancePanel 
+          onNavigateDayEnd={() => navigation.navigate("DayEndReport")} 
+          onNavigateExpense={() => navigation.navigate("ManagerExpenses" as any)}
+        />
       </View>
 
       {/* Team header */}

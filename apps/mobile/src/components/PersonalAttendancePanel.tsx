@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Image, Linking, Platform, StyleSheet, View } from "react-native";
@@ -7,7 +7,16 @@ import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 
 import { API_ORIGIN_URL } from "../config/env";
-import { fetchDayEndReports, fetchTodayLocationLogs, uploadPhoto, type LocationPing, type PunchType } from "../api";
+import { 
+  fetchDayEndReports, 
+  fetchTodayLocationLogs, 
+  fetchExpenses, 
+  createExpense, 
+  uploadExpenseReceipt, 
+  uploadPhoto, 
+  type LocationPing, 
+  type PunchType 
+} from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useAttendance } from "../hooks/useAttendance";
 import { useLocation } from "../hooks/useLocation";
@@ -22,13 +31,16 @@ import { AppIcon } from "./AppIcon";
  */
 export function PersonalAttendancePanel({ 
   onNavigateDayEnd,
+  onNavigateExpense,
   hideTimeSummary = false,
   hideDayEndButton = false
 }: { 
   onNavigateDayEnd?: () => void;
+  onNavigateExpense?: () => void;
   hideTimeSummary?: boolean;
   hideDayEndButton?: boolean;
 }) {
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { checkIn, checkOut, startBreak, endBreak, isCheckingIn, isCheckingOut, isStartingBreak, isEndingBreak, todayAttendance, activeAttendance, todaySessions, activeBreak } = useAttendance();
   const { getCurrentCoordinates, isLoading: isLocationLoading } = useLocation();
@@ -83,6 +95,54 @@ export function PersonalAttendancePanel({
     () => calculateDistanceKm(locationLogsQuery.data ?? []),
     [locationLogsQuery.data]
   );
+
+  // 50km+ Daily Travel Expense calculation & states
+  const odoDistanceKm = useMemo(() => {
+    const record = todayAttendance || activeAttendance;
+    if (record?.startOdometer != null && record?.endOdometer != null) {
+      return Math.max(0, record.endOdometer - record.startOdometer);
+    }
+    return 0;
+  }, [todayAttendance?.startOdometer, todayAttendance?.endOdometer, activeAttendance?.startOdometer, activeAttendance?.endOdometer]);
+
+  const effectiveKm = useMemo(() => {
+    return Math.max(odoDistanceKm, distanceKm);
+  }, [odoDistanceKm, distanceKm]);
+
+  const isToday = useMemo(() => {
+    const record = todayAttendance || activeAttendance;
+    if (!record) return true;
+    return dayjs(record.date).isSame(dayjs(), "day");
+  }, [todayAttendance, activeAttendance]);
+
+  const show50KmExpenseCard = Boolean(
+    isToday &&
+    (todayAttendance || activeAttendance) &&
+    !(todayAttendance || activeAttendance)?.isCheckInPending &&
+    ((todayAttendance || activeAttendance)?.punchType === "FIELD" || isFieldPunch) &&
+    effectiveKm >= 50
+  );
+
+  const expensesQuery = useQuery({
+    enabled: Boolean(user?.id && show50KmExpenseCard),
+    queryKey: ["expenses", user?.id],
+    queryFn: () => fetchExpenses()
+  });
+
+  const todayTravelExpense = useMemo(() => {
+    const expenses = expensesQuery.data ?? [];
+    return expenses.find(
+      (e) =>
+        dayjs(e.date).isSame(dayjs(), "day") &&
+        (e.category === "TRAVEL" || e.description?.toLowerCase().includes("travel"))
+    );
+  }, [expensesQuery.data]);
+
+  const [travelDialogVisible, setTravelDialogVisible] = useState(false);
+  const [travelAmount, setTravelAmount] = useState("");
+  const [travelDesc, setTravelDesc] = useState("");
+  const [travelReceipt, setTravelReceipt] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [isSubmittingTravelExpense, setIsSubmittingTravelExpense] = useState(false);
 
   const latestLocationLog = useMemo(() => {
     const logs = locationLogsQuery.data ?? [];
@@ -454,6 +514,186 @@ export function PersonalAttendancePanel({
           </Card.Content>
         </Card>
       ) : null}
+
+      {/* 50+ KM Daily Travel Expense Claim Option (Inline card at bottom of module, active till 12 AM) */}
+      {show50KmExpenseCard ? (
+        <Card
+          mode="contained"
+          style={{
+            borderRadius: 16,
+            backgroundColor: todayTravelExpense ? "#F0FDF4" : "#EFF6FF",
+            borderWidth: 1.5,
+            borderColor: todayTravelExpense ? "#86EFAC" : "#BFDBFE",
+            marginTop: 4
+          }}
+        >
+          <Card.Content style={{ padding: 14 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 12,
+                  backgroundColor: todayTravelExpense ? "#DCFCE7" : "#DBEAFE",
+                  alignItems: "center",
+                  justifyContent: "center"
+                }}
+              >
+                <AppIcon
+                  name={todayTravelExpense ? "check-decagram" : "car-sports"}
+                  size={24}
+                  color={todayTravelExpense ? "#166534" : "#1D4ED8"}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "800", color: todayTravelExpense ? "#166534" : "#1E40AF" }}>
+                    {todayTravelExpense ? "TRAVEL EXPENSE SUBMITTED" : "50+ KM TRAVEL EXPENSE CLAIM"}
+                  </Text>
+                  <View style={{ backgroundColor: todayTravelExpense ? "#BBF7D0" : "#93C5FD", borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2 }}>
+                    <Text style={{ fontSize: 9, fontWeight: "800", color: todayTravelExpense ? "#14532D" : "#1E3A8A" }}>
+                      {effectiveKm.toFixed(1)} KM
+                    </Text>
+                  </View>
+                </View>
+                <Text style={{ fontSize: 11, color: todayTravelExpense ? "#15803D" : "#3B82F6", marginTop: 2, fontWeight: "500" }}>
+                  {todayTravelExpense
+                    ? `Amount: INR ${Number(todayTravelExpense.amount).toFixed(2)} (${todayTravelExpense.approved ? "Approved" : "Pending Approval"})`
+                    : `You traveled ${effectiveKm.toFixed(1)} km today (over 50 km). Submit your daily travel expense before 12 AM.`}
+                </Text>
+              </View>
+            </View>
+
+            {!todayTravelExpense && (
+              <View style={{ marginTop: 12, flexDirection: "row", gap: 8 }}>
+                <Button
+                  mode="contained"
+                  buttonColor="#2563EB"
+                  textColor="#FFFFFF"
+                  icon="cash-plus"
+                  onPress={() => {
+                    setTravelAmount("");
+                    setTravelDesc(`Travel expense for ${effectiveKm.toFixed(1)} km field travel on ${dayjs().format("DD MMM YYYY")}`);
+                    setTravelReceipt(null);
+                    setTravelDialogVisible(true);
+                  }}
+                  style={{ flex: 1, borderRadius: 10 }}
+                  labelStyle={{ fontSize: 12, fontWeight: "700" }}
+                >
+                  Submit Travel Expense
+                </Button>
+                {onNavigateExpense && (
+                  <Button
+                    mode="outlined"
+                    textColor="#1E40AF"
+                    onPress={onNavigateExpense}
+                    style={{ borderRadius: 10, borderColor: "#93C5FD" }}
+                    labelStyle={{ fontSize: 12, fontWeight: "700" }}
+                  >
+                    View All
+                  </Button>
+                )}
+              </View>
+            )}
+          </Card.Content>
+        </Card>
+      ) : null}
+
+      {/* Travel Expense Dialog */}
+      <Portal>
+        <Dialog visible={travelDialogVisible} onDismiss={() => !isSubmittingTravelExpense && setTravelDialogVisible(false)} style={styles.dialog}>
+          <Dialog.Title style={{ fontWeight: "800", color: "#1E40AF" }}>
+            🚗 Travel Expense ({effectiveKm.toFixed(1)} KM)
+          </Dialog.Title>
+          <Dialog.Content style={{ gap: 12 }}>
+            <Text style={{ fontSize: 12, color: "#475569" }}>
+              Submit your travel/fuel expense for today&apos;s field work ({effectiveKm.toFixed(1)} km).
+            </Text>
+
+            <TextInput
+              keyboardType="decimal-pad"
+              label="Expense Amount (INR) *"
+              mode="outlined"
+              value={travelAmount}
+              onChangeText={setTravelAmount}
+              placeholder="e.g. 450"
+              style={{ backgroundColor: "#FFFFFF" }}
+              autoFocus
+            />
+
+            <TextInput
+              label="Description / Notes"
+              mode="outlined"
+              value={travelDesc}
+              onChangeText={setTravelDesc}
+              placeholder="Notes about travel"
+              style={{ backgroundColor: "#FFFFFF" }}
+              multiline
+              numberOfLines={2}
+            />
+
+            <Button
+              icon={travelReceipt ? "check-circle" : "camera"}
+              mode="outlined"
+              onPress={async () => {
+                const photo = await pickVerificationImage({ quality: 0.5 });
+                if (photo) setTravelReceipt(photo);
+              }}
+              style={{ borderColor: travelReceipt ? "#16A34A" : "#CBD5E1", borderRadius: 8 }}
+              textColor={travelReceipt ? "#16A34A" : "#475569"}
+            >
+              {travelReceipt ? "Receipt Photo Attached (Tap to change)" : "Attach Receipt Photo *"}
+            </Button>
+
+            {travelReceipt && (
+              <Image source={{ uri: travelReceipt.uri }} style={{ width: "100%", height: 120, borderRadius: 8, borderWidth: 1, borderColor: "#CBD5E1" }} />
+            )}
+          </Dialog.Content>
+
+          <Dialog.Actions>
+            <Button disabled={isSubmittingTravelExpense} onPress={() => setTravelDialogVisible(false)}>
+              Cancel
+            </Button>
+            <Button
+              mode="contained"
+              buttonColor="#2563EB"
+              disabled={!travelAmount.trim() || isNaN(Number(travelAmount)) || Number(travelAmount) <= 0 || isSubmittingTravelExpense}
+              loading={isSubmittingTravelExpense}
+              onPress={async () => {
+                if (!travelAmount.trim() || Number(travelAmount) <= 0) {
+                  Alert.alert("Invalid Amount", "Please enter a valid expense amount.");
+                  return;
+                }
+                if (!travelReceipt) {
+                  Alert.alert("Receipt Photo Required", "Please attach a photo of the receipt/bill to submit travel expense.");
+                  return;
+                }
+
+                setIsSubmittingTravelExpense(true);
+                try {
+                  const receiptUrl = await uploadExpenseReceipt(travelReceipt);
+                  await createExpense({
+                    category: "TRAVEL",
+                    amount: Number(travelAmount.trim()),
+                    description: travelDesc.trim() || `Travel expense for ${effectiveKm.toFixed(1)} km field travel`,
+                    receiptUrl,
+                    date: dayjs().format("YYYY-MM-DD")
+                  });
+                  await queryClient.invalidateQueries({ queryKey: ["expenses"] });
+                  setTravelDialogVisible(false);
+                  Alert.alert("Expense Submitted", "Your travel expense has been successfully submitted for approval!");
+                } catch (err) {
+                  Alert.alert("Submission Failed", getErrorMessage(err));
+                } finally {
+                  setIsSubmittingTravelExpense(false);
+                }
+              }}
+            >
+              Submit Expense
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
 
       {/* Odometer input dialog */}
       <Portal>
