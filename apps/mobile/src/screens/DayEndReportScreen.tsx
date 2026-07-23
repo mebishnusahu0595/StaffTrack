@@ -1,6 +1,6 @@
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Alert, ScrollView, StyleSheet, View, TouchableOpacity, Share, Image, ActivityIndicator } from "react-native";
 import { Button, Card, HelperText, List, Text, TextInput, IconButton } from "react-native-paper";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -42,6 +42,22 @@ export function DayEndReportScreen() {
   const [isSharing, setIsSharing] = useState<string | null>(null);
   const queryKey = ["dayEndReports", user?.id];
   const isFieldWorkday = todayAttendance?.punchType === "FIELD" || user?.workMode === "FIELD";
+
+  const isSalesOfficer = useMemo(() => {
+    const d = (user?.designation || "").trim().toLowerCase();
+    if (
+      d.includes("field assistant") ||
+      d.includes("f/a") ||
+      d.includes("f.a") ||
+      d.includes("field-assistant") ||
+      d.includes("assistant")
+    ) {
+      return false;
+    }
+    return true;
+  }, [user?.designation]);
+
+  const requireOdometer = isFieldWorkday && isSalesOfficer;
 
   const [remarksInput, setRemarksInput] = useState("");
 
@@ -219,7 +235,7 @@ export function DayEndReportScreen() {
   const hasFormError =
     !form.visitsMeetings.trim() ||
     !form.ordersTaken.trim() ||
-    (isFieldWorkday && (!form.startOdometer.trim() || !form.endOdometer.trim()));
+    (requireOdometer && (!form.startOdometer.trim() || !form.endOdometer.trim()));
   const [isCapturingStart, setIsCapturingStart] = useState(false);
   const [isCapturingEnd, setIsCapturingEnd] = useState(false);
 
@@ -469,19 +485,19 @@ export function DayEndReportScreen() {
     }
 
     if (hasFormError) {
-      Alert.alert("Missing details", isFieldWorkday ? "Visits, orders, and both odometer readings are required." : "Visits and orders are required.");
+      Alert.alert("Missing details", requireOdometer ? "Visits, orders, and both odometer readings are required." : "Visits and orders are required.");
       return;
     }
 
     const start = toNumber(form.startOdometer);
     const end = toNumber(form.endOdometer);
 
-    if (isFieldWorkday && end <= start) {
+    if (requireOdometer && end <= start) {
       Alert.alert("Invalid readings", "End odometer reading must be greater than start reading.");
       return;
     }
 
-    if (isFieldWorkday && (!form.startOdometerPhotoUrl || !form.kmPhotoUrl)) {
+    if (requireOdometer && (!form.startOdometerPhotoUrl || !form.kmPhotoUrl)) {
       Alert.alert("Photos required", "Please capture photos of both Start and End odometer readings.");
       return;
     }
@@ -729,7 +745,7 @@ export function DayEndReportScreen() {
                   value={form.ordersCancelled}
                 />
               </View>
-              {isFieldWorkday ? (
+              {requireOdometer ? (
               <View style={styles.odometerSection}>
                 <Text style={styles.subTitle}>Odometer Readings</Text>
                 
@@ -782,12 +798,7 @@ export function DayEndReportScreen() {
                   </View>
                 )}
               </View>
-              ) : (
-                <View style={styles.officeInfoCard}>
-                  <Text style={styles.officeInfoTitle}>Office work mode</Text>
-                  <Text style={styles.officeInfoText}>Odometer and travel proof are hidden for office punch days.</Text>
-                </View>
-              )}
+              ) : null}
 
               <TextInput
                 label="Remarks"

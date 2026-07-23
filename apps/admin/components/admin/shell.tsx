@@ -34,7 +34,8 @@ import {
   CheckSquare,
   Battery,
   Clock,
-  UploadCloud
+  UploadCloud,
+  Store
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth-provider";
@@ -67,6 +68,7 @@ const navItems: { href: string; label: string; icon: any; roles?: Role[] }[] = [
   { href: "/team", label: "Team Overview", icon: UserCheck },
   { href: "/projects", label: "Project", icon: Folder },
   { href: "/tasks", label: "Tasks", icon: ClipboardList },
+  { href: "/dealers", label: "Dealers", icon: Store },
   { href: "/issues", label: "Issues", icon: AlertTriangle },
   { href: "/forms", label: "Forms", icon: FileSpreadsheet },
   { href: "/company-files", label: "Uploads", icon: UploadCloud },

@@ -270,7 +270,7 @@ export function PersonalAttendancePanel({
 
       let startOdometerPhotoUrl: string | undefined;
       let startOdometer: number | undefined;
-      if (type === "FIELD") {
+      if (type === "FIELD" && isSalesOfficer) {
         const odoAsset = await pickOdometerImage("Start");
         if (!odoAsset) return;
         const reading = await promptOdometerReading("Start");
@@ -300,7 +300,7 @@ export function PersonalAttendancePanel({
       const isField = activeAttendance?.punchType === "FIELD";
       let endOdometerPhotoUrl: string | undefined;
       let endOdometer: number | undefined;
-      if (isField) {
+      if (isField && isSalesOfficer) {
         const odoAsset = await pickOdometerImage("End");
         if (!odoAsset) return;
         const reading = await promptOdometerReading("End");
@@ -489,7 +489,7 @@ export function PersonalAttendancePanel({
       ) : null}
 
       {/* Today's odometer readings */}
-      {!hideTimeSummary && todayAttendance && !todayAttendance.isCheckInPending && todayAttendance.punchType === "FIELD" && (todayAttendance.startOdometerPhotoUrl || todayAttendance.endOdometerPhotoUrl || (todayAttendance.startOdometer !== undefined && todayAttendance.startOdometer !== null)) ? (
+      {!hideTimeSummary && isSalesOfficer && todayAttendance && !todayAttendance.isCheckInPending && todayAttendance.punchType === "FIELD" && (todayAttendance.startOdometerPhotoUrl || todayAttendance.endOdometerPhotoUrl || (todayAttendance.startOdometer !== undefined && todayAttendance.startOdometer !== null)) ? (
         <Card mode="contained" style={{ borderRadius: 12, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E2E8F0" }}>
           <Card.Content style={{ padding: 12 }}>
             <Text style={{ fontSize: 13, fontWeight: "800", color: "#24312D", marginBottom: 12, letterSpacing: 0.5 }}>TODAY&apos;S ODOMETER READINGS</Text>

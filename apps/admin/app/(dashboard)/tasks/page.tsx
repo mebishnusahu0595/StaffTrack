@@ -38,11 +38,12 @@ import {
   ListTodo,
   Paperclip,
   Download,
-  Loader2
+  Loader2,
+  Store
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
-import { fetchTasks, deleteTask, bulkDeleteTasks, deleteAllTasks, updateTask, createTask as apiCreateTask, fetchUsers, createTemplate, fetchProjects, createProject as apiCreateProject, fetchGroups } from "@/lib/api";
+import { fetchTasks, deleteTask, bulkDeleteTasks, deleteAllTasks, updateTask, createTask as apiCreateTask, fetchUsers, createTemplate, fetchProjects, createProject as apiCreateProject, fetchGroups, fetchDealers, createDealer } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -1764,6 +1765,154 @@ const FARMER_PRESET_CHECKLIST = [
   { id: "fm_remarks", title: "User Remarks", required: true, validations: ["TEXT"] },
 ];
 
+function DealerSelector({ 
+  selectedDealerIds, 
+  onChange 
+}: { 
+  selectedDealerIds: string[]; 
+  onChange: (ids: string[]) => void; 
+}) {
+  const queryClient = useQueryClient();
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newDealer, setNewDealer] = useState({ name: "", phone: "", city: "", gstin: "" });
+  const [creating, setCreating] = useState(false);
+
+  const { data: dealers = [], isLoading } = useQuery({
+    queryKey: ["dealers"],
+    queryFn: fetchDealers
+  });
+
+  const handleAddDealer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDealer.name.trim()) return;
+    setCreating(true);
+    try {
+      const created = await createDealer(newDealer);
+      queryClient.invalidateQueries({ queryKey: ["dealers"] });
+      onChange([...selectedDealerIds, created.id]);
+      setNewDealer({ name: "", phone: "", city: "", gstin: "" });
+      setShowAddModal(false);
+    } catch (err: any) {
+      alert("Failed to add dealer: " + (err?.response?.data?.message || err?.message || "Unknown error"));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const toggleDealer = (dealerId: string) => {
+    if (selectedDealerIds.includes(dealerId)) {
+      onChange(selectedDealerIds.filter(id => id !== dealerId));
+    } else {
+      onChange([...selectedDealerIds, dealerId]);
+    }
+  };
+
+  return (
+    <div className="space-y-2 border border-blue-100 bg-blue-50/40 p-4 rounded-2xl">
+      <div className="flex items-center justify-between">
+        <Label className="text-[10px] font-black uppercase tracking-wider text-blue-800 flex items-center gap-1.5">
+          <Store className="h-4 w-4 text-blue-600" /> Select Dealers (Multi-select)
+        </Label>
+        <button
+          type="button"
+          onClick={() => setShowAddModal(!showAddModal)}
+          className="text-[10px] font-black text-blue-600 hover:text-blue-700 bg-white border border-blue-200 px-2.5 py-1 rounded-xl shadow-2xs flex items-center gap-1 transition-all uppercase tracking-wider"
+        >
+          <Plus className="h-3 w-3" /> Add New Dealer
+        </button>
+      </div>
+
+      {isLoading ? (
+        <p className="text-xs text-slate-400 font-medium">Loading dealers...</p>
+      ) : dealers.length === 0 ? (
+        <p className="text-xs text-slate-500 font-medium italic">No dealers registered yet. Click "+ Add New Dealer" to add one.</p>
+      ) : (
+        <div className="flex flex-wrap gap-2 pt-1 max-h-36 overflow-y-auto pr-1">
+          {dealers.map((d: any) => {
+            const isSelected = selectedDealerIds.includes(d.id);
+            return (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => toggleDealer(d.id)}
+                className={cn(
+                  "px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border",
+                  isSelected
+                    ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                )}
+              >
+                <Store className="h-3.5 w-3.5" />
+                <span>{d.name}</span>
+                {d.city && <span className={cn("text-[10px] font-normal opacity-80", isSelected ? "text-blue-100" : "text-slate-400")}>({d.city})</span>}
+                {isSelected && <Check className="h-3.5 w-3.5 ml-0.5" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {showAddModal && (
+        <div className="p-3.5 bg-white border border-blue-200 rounded-2xl shadow-lg space-y-3 animate-in fade-in slide-in-from-top-1 mt-2">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <span className="text-xs font-black text-slate-800 flex items-center gap-1">
+              <Plus className="h-3.5 w-3.5 text-blue-600" /> Quick Add Dealer
+            </span>
+            <button type="button" onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 text-xs font-bold">✕</button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="text"
+              placeholder="Dealer Name *"
+              value={newDealer.name}
+              onChange={e => setNewDealer({ ...newDealer, name: e.target.value })}
+              className="h-9 rounded-xl bg-slate-50 border border-slate-200 px-3 text-xs font-bold text-slate-800 placeholder:text-slate-400"
+            />
+            <input
+              type="text"
+              placeholder="Phone Number"
+              value={newDealer.phone}
+              onChange={e => setNewDealer({ ...newDealer, phone: e.target.value })}
+              className="h-9 rounded-xl bg-slate-50 border border-slate-200 px-3 text-xs font-bold text-slate-800 placeholder:text-slate-400"
+            />
+            <input
+              type="text"
+              placeholder="City"
+              value={newDealer.city}
+              onChange={e => setNewDealer({ ...newDealer, city: e.target.value })}
+              className="h-9 rounded-xl bg-slate-50 border border-slate-200 px-3 text-xs font-bold text-slate-800 placeholder:text-slate-400"
+            />
+            <input
+              type="text"
+              placeholder="GSTIN (Optional)"
+              value={newDealer.gstin}
+              onChange={e => setNewDealer({ ...newDealer, gstin: e.target.value })}
+              className="h-9 rounded-xl bg-slate-50 border border-slate-200 px-3 text-xs font-bold text-slate-800 placeholder:text-slate-400 font-mono"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setShowAddModal(false)}
+              className="h-8 px-3 rounded-xl text-slate-500 text-xs font-bold hover:bg-slate-100"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleAddDealer}
+              disabled={creating || !newDealer.name.trim()}
+              className="h-8 px-4 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition-all shadow-sm"
+            >
+              {creating ? "Saving..." : "Add & Select"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
   const [showDescription, setShowDescription] = useState(false);
   const [showValidations, setShowValidations] = useState(false);
@@ -1829,6 +1978,7 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
     attachmentUrl: null as string | null,
     attachmentName: null as string | null,
     taskType: "NORMAL",
+    dealerIds: [] as string[],
     validations: [] as string[],
     checklist: [] as Array<{
       id: string;
@@ -2119,6 +2269,12 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
                  </p>
                )}
             </div>
+
+            {/* Dealer Selector (Multi-Select & Add Dealer) */}
+            <DealerSelector
+              selectedDealerIds={data.dealerIds}
+              onChange={(ids) => setData({ ...data, dealerIds: ids })}
+            />
 
             <div className="space-y-2">
                <Label className="text-[10px] font-black uppercase text-slate-400">Assign User*</Label>
@@ -2924,6 +3080,7 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
     attachmentUrl: task.attachmentUrl || null as string | null,
     attachmentName: task.attachmentName || null as string | null,
     taskType: task.taskType || "NORMAL",
+    dealerIds: (task.dealers || []).map((d: any) => d.id) as string[],
     repeatFrequency: task.repeatFrequency || "NONE",
     repeatDays: task.repeatDays ? task.repeatDays.split(',').map((x: string) => parseInt(x)).filter((x: number) => !isNaN(x)) : [] as number[],
     repeatDates: task.repeatDates ? task.repeatDates.split(',').map((x: string) => parseInt(x)).filter((x: number) => !isNaN(x)) : [] as number[],
@@ -3211,6 +3368,12 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
                  </p>
                )}
             </div>
+
+            {/* Dealer Selector (Multi-Select & Add Dealer) */}
+            <DealerSelector
+              selectedDealerIds={data.dealerIds}
+              onChange={(ids) => setData({ ...data, dealerIds: ids })}
+            />
 
             <div className="space-y-2">
                <Label className="text-[10px] font-black uppercase text-slate-400">Assign User*</Label>
@@ -3916,6 +4079,24 @@ function ViewTaskDetailsDialog({ task }: any) {
                   <p className="text-xs font-bold text-slate-700">{format(new Date(task.dueDate), 'dd MMM yyyy')}</p>
                </div>
             </div>
+
+            {task.dealers && task.dealers.length > 0 && (
+               <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <Label className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-1">
+                     <Store className="h-3.5 w-3.5" /> Assigned Dealers ({task.dealers.length})
+                  </Label>
+                  <div className="flex flex-wrap gap-2">
+                     {task.dealers.map((d: any) => (
+                        <div key={d.id} className="bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-blue-900">
+                           <Store className="h-3.5 w-3.5 text-blue-600" />
+                           <span>{d.name}</span>
+                           {d.city && <span className="text-[10px] text-blue-500 font-normal">({d.city})</span>}
+                           {d.phone && <span className="text-[10px] text-slate-500 font-mono">| {d.phone}</span>}
+                        </div>
+                     ))}
+                  </div>
+               </div>
+            )}
 
             {task.status === "COMPLETED" && (
                <div className="space-y-2 pt-4 border-t border-slate-100">

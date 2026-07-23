@@ -39,6 +39,7 @@ interface CreateTaskInput {
   attachmentName?: string | null;
   templateId?: string | null;
   taskType?: string;
+  dealerIds?: string[];
 }
 
 export async function createTask(actor: AuthUser, input: CreateTaskInput) {
@@ -108,7 +109,10 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
       attachmentUrl: input.attachmentUrl,
       attachmentName: input.attachmentName,
       templateId: input.templateId || null,
-      taskType: input.taskType || "NORMAL"
+      taskType: input.taskType || "NORMAL",
+      dealers: input.dealerIds && input.dealerIds.length > 0 ? {
+        connect: input.dealerIds.map(id => ({ id }))
+      } : undefined
     },
     include: taskInclude
   });
@@ -365,7 +369,10 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
       projectId: input.projectId !== undefined ? input.projectId : undefined,
       attachmentUrl: input.attachmentUrl,
       attachmentName: input.attachmentName,
-      taskType: input.taskType !== undefined ? input.taskType : undefined
+      taskType: input.taskType !== undefined ? input.taskType : undefined,
+      dealers: input.dealerIds !== undefined ? {
+        set: input.dealerIds.map(id => ({ id }))
+      } : undefined
     },
     include: taskInclude
   });
@@ -1141,7 +1148,8 @@ const taskInclude = {
       id: true,
       title: true
     }
-  }
+  },
+  dealers: true
 } satisfies Prisma.TaskInclude;
 
 export function getStartOfDayIST(date: Date = new Date()): Date {

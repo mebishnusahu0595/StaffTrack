@@ -2,7 +2,7 @@
  
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download, Battery, CheckCircle2, XCircle, AlertCircle, CalendarX, Search, Pencil, Upload, ImageIcon, Loader2, Trash2, ClipboardEdit } from "lucide-react";
+import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download, Battery, CheckCircle2, XCircle, AlertCircle, CalendarX, Search, Pencil, Upload, ImageIcon, Loader2, Trash2, ClipboardEdit, Printer, Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -123,6 +123,20 @@ export default function AttendancePage() {
     };
   }, [filteredData]);
 
+  const totalFieldKm = useMemo(() => {
+    return filteredData.reduce((acc, record) => {
+      if (
+        record.punchType === "FIELD" &&
+        record.startOdometer != null &&
+        record.endOdometer != null &&
+        record.endOdometer >= record.startOdometer
+      ) {
+        return acc + (record.endOdometer - record.startOdometer);
+      }
+      return acc;
+    }, 0);
+  }, [filteredData]);
+
   const markMutation = useMutation({
     mutationFn: markAttendanceStatus,
     onSuccess: () => {
@@ -144,18 +158,45 @@ export default function AttendancePage() {
 
   const downloadCSV = () => {
     if (filteredData.length === 0) return;
-    const headers = ["Employee Name", "Email", "Work Mode", "Check In Time", "Check In Lat/Lng", "Check Out Time", "Check Out Lat/Lng", "Type", "Status"];
-    const rows = filteredData.map(r => [
-      r.user?.name || "--",
-      r.user?.email || "--",
-      r.user?.workMode || "--",
-      r.checkInTime ? formatTime(r.checkInTime) : "--",
-      formatCoords(r.checkInLat, r.checkInLng, 6),
-      r.checkOutTime ? formatTime(r.checkOutTime) : "--",
-      formatCoords(r.checkOutLat, r.checkOutLng, 6),
-      r.punchType || "MANUAL",
-      r.status || ""
-    ]);
+    const headers = [
+      "Employee Name",
+      "Email",
+      "Work Mode",
+      "Check In Time",
+      "Check In Lat/Lng",
+      "Check Out Time",
+      "Check Out Lat/Lng",
+      "Type",
+      "Duration",
+      "KM Travelled",
+      "Start Odometer",
+      "End Odometer",
+      "Status"
+    ];
+    const rows = filteredData.map(r => {
+      const durationStr = formatDurationLabel(calculateDurations([r]).officeTimeMs + calculateDurations([r]).fieldTimeMs);
+      const kmStr = r.punchType === "FIELD"
+        ? (r.startOdometer != null && r.endOdometer != null && r.endOdometer >= r.startOdometer
+            ? (r.endOdometer - r.startOdometer).toFixed(1) + " KM"
+            : (r.startOdometer != null ? `Start: ${r.startOdometer}` : "--"))
+        : "--";
+
+      return [
+        r.user?.name || "--",
+        r.user?.email || "--",
+        r.user?.workMode || "--",
+        r.checkInTime ? formatTime(r.checkInTime) : "--",
+        formatCoords(r.checkInLat, r.checkInLng, 6),
+        r.checkOutTime ? formatTime(r.checkOutTime) : "--",
+        formatCoords(r.checkOutLat, r.checkOutLng, 6),
+        r.punchType || "MANUAL",
+        durationStr,
+        kmStr,
+        r.startOdometer ?? "--",
+        r.endOdometer ?? "--",
+        r.status || ""
+      ];
+    });
     
     const csvString = [
       headers.join(","),
@@ -170,6 +211,112 @@ export default function AttendancePage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const downloadPDF = () => {
+    if (filteredData.length === 0) return;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const tableRowsHtml = filteredData.map((r, idx) => {
+      const durationStr = formatDurationLabel(calculateDurations([r]).officeTimeMs + calculateDurations([r]).fieldTimeMs);
+      const kmDisplay = r.punchType === "FIELD"
+        ? (r.startOdometer != null && r.endOdometer != null && r.endOdometer >= r.startOdometer
+            ? `<strong>${(r.endOdometer - r.startOdometer).toFixed(1)} KM</strong><br/><span style="font-size: 8px; color: #64748b;">(${r.startOdometer} → ${r.endOdometer})</span>`
+            : (r.startOdometer != null ? `Start: ${r.startOdometer}` : "--"))
+        : "--";
+
+      const typeBadgeClass = r.punchType === "FIELD" ? "background: #fef3c7; color: #d97706;" : "background: #eff6ff; color: #2563eb;";
+
+      return `
+        <tr style="border-bottom: 1px solid #e2e8f0; font-size: 10px;">
+          <td style="padding: 8px; text-align: center; font-weight: bold; color: #64748b;">${idx + 1}</td>
+          <td style="padding: 8px;">
+            <strong style="color: #0f172a;">${r.user?.name || "--"}</strong><br/>
+            <span style="font-size: 8.5px; color: #64748b;">${r.user?.email || ""} / ${r.user?.workMode || ""}</span>
+          </td>
+          <td style="padding: 8px;">${r.checkInTime ? formatTime(r.checkInTime) : "--"}</td>
+          <td style="padding: 8px;">${r.checkOutTime ? formatTime(r.checkOutTime) : "Active"}</td>
+          <td style="padding: 8px; text-align: center;">
+            <span style="${typeBadgeClass} padding: 3px 8px; border-radius: 6px; font-size: 8.5px; font-weight: 800; text-transform: uppercase;">
+              ${r.punchType || "MANUAL"}
+            </span>
+          </td>
+          <td style="padding: 8px; text-align: center; font-weight: 600;">${durationStr}</td>
+          <td style="padding: 8px; text-align: center; color: #b45309;">${kmDisplay}</td>
+          <td style="padding: 8px; text-align: right; font-weight: 800;">${r.status || "--"}</td>
+        </tr>
+      `;
+    }).join("");
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Attendance Report (${startDate} to ${endDate})</title>
+  <style>
+    @page { size: A4 landscape; margin: 10mm; }
+    body { font-family: system-ui, -apple-system, sans-serif; color: #0f172a; margin: 0; padding: 12px; -webkit-print-color-adjust: exact; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #cbd5e1; padding-bottom: 12px; margin-bottom: 14px; }
+    .title { font-size: 22px; font-weight: 900; letter-spacing: -0.5px; color: #0f172a; }
+    .subtitle { font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-top: 3px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 16px; }
+    .summary-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; }
+    .card-label { font-size: 8.5px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+    .card-val { font-size: 16px; font-weight: 900; margin-top: 3px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+    th { background: #f1f5f9; padding: 8px; text-align: left; font-size: 9px; font-weight: 900; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; border-top: 1px solid #e2e8f0; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="title">STAFFTRACK ATTENDANCE LOG</div>
+      <div class="subtitle">Date Range: ${startDate} to ${endDate} | Total Records: ${filteredData.length}</div>
+    </div>
+    <div style="text-align: right; font-size: 9.5px; font-weight: 600; color: #64748b;">
+      Generated on: ${new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+    </div>
+  </div>
+
+  <div class="summary-grid">
+    <div class="summary-card"><div class="card-label">Total Rostered</div><div class="card-val">${summaryCounts.total}</div></div>
+    <div class="summary-card"><div class="card-label" style="color: #059669;">Present</div><div class="card-val" style="color: #059669;">${summaryCounts.present}</div></div>
+    <div class="summary-card"><div class="card-label" style="color: #e11d48;">Absent</div><div class="card-val" style="color: #e11d48;">${summaryCounts.absent}</div></div>
+    <div class="summary-card"><div class="card-label" style="color: #d97706;">Half Day</div><div class="card-val" style="color: #d97706;">${summaryCounts.halfDay}</div></div>
+    <div class="summary-card"><div class="card-label" style="color: #2563eb;">On Leave</div><div class="card-val" style="color: #2563eb;">${summaryCounts.onLeave}</div></div>
+    <div class="summary-card" style="background: #fffbeb; border-color: #fef3c7;"><div class="card-label" style="color: #b45309;">Total Field KM</div><div class="card-val" style="color: #b45309;">${totalFieldKm.toFixed(1)} KM</div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="text-align: center; width: 30px;">#</th>
+        <th>Employee</th>
+        <th>Check In</th>
+        <th>Check Out</th>
+        <th style="text-align: center;">Type</th>
+        <th style="text-align: center;">Duration</th>
+        <th style="text-align: center;">KM Travelled</th>
+        <th style="text-align: right;">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRowsHtml}
+    </tbody>
+  </table>
+
+  <script>
+    window.onload = () => {
+      setTimeout(() => { window.print(); }, 400);
+    };
+  </script>
+</body>
+</html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
   };
  
   return (
@@ -296,7 +443,7 @@ export default function AttendancePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card className="border-none shadow-sm ring-1 ring-slate-200/50 bg-white">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
@@ -341,7 +488,7 @@ export default function AttendancePage() {
             </div>
           </CardContent>
         </Card>
-        <Card className="border-none shadow-sm ring-1 ring-slate-200/50 bg-white col-span-2 md:col-span-1">
+        <Card className="border-none shadow-sm ring-1 ring-slate-200/50 bg-white">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-wider text-blue-500">On Leave</p>
@@ -349,6 +496,19 @@ export default function AttendancePage() {
             </div>
             <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100">
               <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-none shadow-sm ring-1 ring-slate-200/50 bg-amber-50/40">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-amber-600">Total Field KM</p>
+              <h3 className="text-xl font-black text-amber-700 mt-1">
+                {totalFieldKm.toFixed(1)} <span className="text-xs font-bold text-amber-600">KM</span>
+              </h3>
+            </div>
+            <div className="h-10 w-10 rounded-xl bg-amber-100/80 flex items-center justify-center border border-amber-200 text-amber-600">
+              <Gauge className="h-5 w-5" />
             </div>
           </CardContent>
         </Card>
@@ -400,12 +560,22 @@ export default function AttendancePage() {
                <Button 
                  variant="outline" 
                  size="sm" 
-                 className="h-9 rounded-lg border-slate-200 bg-white font-bold text-slate-600 gap-2 shadow-sm text-xs"
+                 className="h-9 rounded-lg border-slate-200 bg-white font-bold text-slate-600 gap-2 shadow-sm text-xs hover:bg-slate-50"
                  onClick={downloadCSV}
                  disabled={filteredData.length === 0}
                >
                  <Download className="h-3.5 w-3.5" />
                  Export CSV
+               </Button>
+               <Button 
+                 variant="outline" 
+                 size="sm" 
+                 className="h-9 rounded-lg border-slate-200 bg-white font-bold text-slate-600 gap-2 shadow-sm text-xs hover:bg-slate-50"
+                 onClick={downloadPDF}
+                 disabled={filteredData.length === 0}
+               >
+                 <Printer className="h-3.5 w-3.5 text-blue-600" />
+                 Export PDF
                </Button>
             </div>
             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
@@ -422,6 +592,7 @@ export default function AttendancePage() {
               <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Check Out</TableHead>
               <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400 text-center">Type</TableHead>
               <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400 text-center">Duration</TableHead>
+              <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-amber-600 text-center">KM Travelled</TableHead>
               <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400 text-center">Verification</TableHead>
               <TableHead className="py-4 px-8 text-[11px] font-black uppercase tracking-wider text-slate-400 text-right">Status</TableHead>
             </TableRow>
@@ -429,7 +600,7 @@ export default function AttendancePage() {
           <TableBody>
             {attendanceQuery.isLoading ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-40 text-center">
+                <TableCell colSpan={9} className="h-40 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <div className="h-6 w-6 border-2 border-blue-600 border-t-transparent animate-spin rounded-full" />
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Fetching records...</span>
@@ -438,7 +609,7 @@ export default function AttendancePage() {
               </TableRow>
             ) : filteredData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-40 text-center">
+                <TableCell colSpan={9} className="h-40 text-center">
                   <div className="flex flex-col items-center gap-2 text-slate-300">
                     <UserIcon className="h-10 w-10 opacity-20" />
                     <span className="text-xs font-bold uppercase tracking-widest">No records found for this date.</span>
@@ -511,6 +682,36 @@ export default function AttendancePage() {
                     <span className="text-xs font-bold text-slate-600">
                       {formatDurationLabel(calculateDurations([record]).officeTimeMs + calculateDurations([record]).fieldTimeMs)}
                     </span>
+                  </TableCell>
+                  <TableCell className="py-5 px-6 text-center">
+                    {record.punchType === "FIELD" ? (
+                      record.startOdometer != null && record.endOdometer != null ? (
+                        record.endOdometer >= record.startOdometer ? (
+                          <div className="flex flex-col items-center">
+                            <span className="text-xs font-black text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60 shadow-xs">
+                              {(record.endOdometer - record.startOdometer).toFixed(1)} KM
+                            </span>
+                            <span className="text-[9px] font-bold text-slate-400 mt-0.5">
+                              {record.startOdometer} → {record.endOdometer}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center">
+                            <span className="text-xs font-bold text-rose-600">Odo Error</span>
+                            <span className="text-[9px] font-bold text-slate-400 mt-0.5">{record.startOdometer} &gt; {record.endOdometer}</span>
+                          </div>
+                        )
+                      ) : record.startOdometer != null ? (
+                        <div className="flex flex-col items-center">
+                          <span className="text-xs font-bold text-amber-600">Start: {record.startOdometer}</span>
+                          <span className="text-[9px] font-bold text-slate-300 italic mt-0.5">In Progress</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs font-bold text-slate-300">--</span>
+                      )
+                    ) : (
+                      <span className="text-xs font-bold text-slate-300">--</span>
+                    )}
                   </TableCell>
                   <TableCell className="py-5 px-6">
                      <div className="flex items-center justify-center gap-2" onClick={(e) => e.stopPropagation()}>

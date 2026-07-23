@@ -121,10 +121,23 @@ export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
           )}
         </View>
 
-        {location && (
-          <View style={styles.metaRow}>
-            <Icon source="map-check-outline" size={16} color="#66736F" />
-            <Text style={styles.metaText}>Location: Verified</Text>
+        {task.dealers && task.dealers.length > 0 && (
+          <View style={styles.dealersContainer}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+              <Icon source="storefront-outline" size={14} color="#0284C7" />
+              <Text style={styles.dealersHeaderTitle}>
+                ASSIGNED DEALER{task.dealers.length > 1 ? "S" : ""} ({task.dealers.length})
+              </Text>
+            </View>
+            <View style={styles.dealersList}>
+              {task.dealers.map((d) => (
+                <View key={d.id} style={styles.dealerChip}>
+                  <Text style={styles.dealerChipText}>
+                    🤝 {d.name}{d.city ? ` (${d.city})` : ""}{d.phone ? ` • ${d.phone}` : ""}
+                  </Text>
+                </View>
+              ))}
+            </View>
           </View>
         )}
 
@@ -446,5 +459,38 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
     color: '#2E7D32',
-  }
+  },
+  dealersContainer: {
+    marginTop: 10,
+    backgroundColor: "#F0F9FF",
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+  },
+  dealersHeaderTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#0369A1",
+    letterSpacing: 0.5,
+  },
+  dealersList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 4,
+  },
+  dealerChip: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#93C5FD",
+  },
+  dealerChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#1E40AF",
+  },
 });

@@ -771,5 +771,41 @@ export async function deleteDocument(id: string) {
   return response.data.data;
 }
 
+// Dealers
+export async function fetchDealers() {
+  const response = await api.get<{ data: any[] }>("/dealers");
+  return response.data.data;
+}
+
+export async function fetchDealer(id: string) {
+  const response = await api.get<{ data: any }>(`/dealers/${id}`);
+  return response.data.data;
+}
+
+export async function createDealer(data: {
+  name: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  gstin?: string;
+}) {
+  const response = await api.post<{ data: any }>("/dealers", data);
+  return response.data.data;
+}
+
+export async function updateDealer(id: string, data: any) {
+  const response = await api.put<{ data: any }>(`/dealers/${id}`, data);
+  return response.data.data;
+}
+
+export async function deleteDealer(id: string) {
+  const response = await api.delete<{ data: any }>(`/dealers/${id}`);
+  return response.data.data;
+}
+
+
 
 
