@@ -1,6 +1,7 @@
 import { autoCheckoutStuckUsers, autoCheckoutOldStuckSessions } from "../services/attendance.service";
 import { checkStaleLocations } from "../services/location.service";
 import { rolloverOverdueTasks, sendDailyTaskNotifications } from "../services/task.service";
+import { cleanupOldImages } from "../services/imageCleanup.service";
 
 export function startScheduler() {
   // 1. Immediately clean up any old stuck sessions from previous days on startup
@@ -17,6 +18,11 @@ export function startScheduler() {
   sendDailyTaskNotifications()
     .then(() => console.log("[Scheduler] Initial daily task notifications sent."))
     .catch((err) => console.error("[Scheduler] Initial daily task notifications failed:", err));
+
+  // 1d. Automatically clean up images older than 2 calendar months on startup
+  cleanupOldImages()
+    .then((res) => console.log(`[Scheduler] Initial image cleanup completed (${res.deletedFilesCount} files removed).`))
+    .catch((err) => console.error("[Scheduler] Initial image cleanup failed:", err));
 
   // 2. Schedule the daily auto-checkout to run at midnight in Indian Standard Time (IST)
   function scheduleNextRun() {
@@ -59,6 +65,12 @@ export function startScheduler() {
         console.log("[Scheduler] Scheduled daily task notifications sent.");
       } catch (error) {
         console.error("[Scheduler] Error in scheduled daily task notifications:", error);
+      }
+      try {
+        await cleanupOldImages();
+        console.log("[Scheduler] Scheduled daily image cleanup completed.");
+      } catch (error) {
+        console.error("[Scheduler] Error in scheduled image cleanup:", error);
       }
       // Recursively schedule the next day's run
       scheduleNextRun();
