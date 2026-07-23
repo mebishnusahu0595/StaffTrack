@@ -61,6 +61,7 @@ model Company {
   leaveTypes    LeaveType[]
   holidayTemplates HolidayTemplate[]
   salarySlips   SalarySlip[]
+  companyFiles  CompanyFile[]
 }
 
 model Group {
@@ -125,6 +126,7 @@ model User {
   salarySlips        SalarySlip[]   @relation("UserSalarySlips")
   createdTemplates   Template[]     @relation("CreatedTemplates")
   projectAssignments ProjectAssignment[]
+  uploadedFiles      CompanyFile[]
 
   @@index([companyId])
   @@index([managerId])
@@ -634,4 +636,26 @@ model SalarySlip {
   @@unique([userId, month, year])
   @@index([companyId])
   @@index([userId])
+}
+
+model CompanyFile {
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  fileUrl      String
+  fileName     String
+  fileSize     Float?
+  fileType     String?   // PDF, IMAGE, DOC, AUDIO, VIDEO, SPREADSHEET, OTHER
+  mimeType     String?
+  category     String?   @default("General") // Policy, General, Training, Notice, Form, Other
+  uploadedById String
+  companyId    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([uploadedById])
 }

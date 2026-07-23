@@ -774,3 +774,27 @@ export async function updateProjectPeriodProgress(
   return unwrap(await api.patch<ApiEnvelope<any>>(`/projects/periods/${periodId}/progress`, payload));
 }
 
+export type CompanyFile = {
+  id: string;
+  title: string;
+  description?: string | null;
+  fileUrl: string;
+  fileName: string;
+  fileSize?: number | null;
+  fileType?: string | null;
+  mimeType?: string | null;
+  category?: string | null;
+  createdAt: string;
+  uploadedBy?: {
+    id: string;
+    name: string;
+    email: string;
+    avatarUrl?: string | null;
+  };
+};
+
+export async function fetchCompanyDocuments(params?: { search?: string; category?: string }): Promise<CompanyFile[]> {
+  return unwrap(await api.get<ApiEnvelope<CompanyFile[]>>("/documents", { params }));
+}
+
+

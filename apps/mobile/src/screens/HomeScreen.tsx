@@ -720,6 +720,16 @@ export function HomeScreen() {
             <Text style={[styles.summaryValue, { color: "#0284C7", fontSize: 14 }]}>View Progress</Text>
           </Card.Content>
         </Card>
+
+        <Card mode="contained" style={[styles.summaryCard, { backgroundColor: "#FEF3C7" }]} onPress={() => navigation.navigate("Files")}>
+          <Card.Content style={styles.summaryContent}>
+            <View style={styles.summaryIconRow}>
+              <AppIcon color="#D97706" name="folder-outline" size={20} />
+              <Text style={[styles.mutedSummaryLabel, { color: "#D97706", fontWeight: "800" }]}>FILES & DOCUMENTS</Text>
+            </View>
+            <Text style={[styles.summaryValue, { color: "#D97706", fontSize: 14 }]}>View All</Text>
+          </Card.Content>
+        </Card>
       </View>
 
       {/* Hide department section on mobile app per user request */}

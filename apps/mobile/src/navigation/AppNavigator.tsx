@@ -27,6 +27,7 @@ import { IssuesScreen } from "../screens/IssuesScreen";
 import { LeaveRequestScreen } from "../screens/LeaveRequestScreen";
 import { SalarySlipScreen } from "../screens/SalarySlipScreen";
 import { ProjectsScreen } from "../screens/ProjectsScreen";
+import { FilesScreen } from "../screens/FilesScreen";
 
 // Manager Screens
 import { ManagerHomeScreen } from "../screens/manager/ManagerHomeScreen";
@@ -44,6 +45,7 @@ export type RootStackParamList = {
 
 export type MainDrawerParamList = {
   Home: undefined;
+  Files: undefined;
   Projects: undefined;
   Tasks: undefined;
   Forms: undefined;
@@ -67,6 +69,7 @@ export type ManagerDrawerParamList = {
   ManagerHome: undefined;
   ManagerTeam: undefined;
   ManagerAttendance: undefined;
+  Files: undefined;
   Projects: undefined;
   Attendance: undefined;
   DayEndReport: undefined;
@@ -243,6 +246,14 @@ function MainDrawer() {
         }} 
       />
       <Drawer.Screen 
+        component={FilesScreen} 
+        name="Files" 
+        options={{ 
+          title: "Files & Documents",
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="folder-outline" size={size} /> 
+        }} 
+      />
+      <Drawer.Screen 
         component={ProjectsScreen} 
         name="Projects" 
         options={{ 
@@ -359,6 +370,14 @@ function ManagerDrawer() {
         options={{ 
           title: "Home",
           drawerIcon: ({ color, size }) => <AppIcon color={color} name="home" size={size} /> 
+        }} 
+      />
+      <ManagerDrawerNavigator.Screen 
+        component={FilesScreen} 
+        name="Files" 
+        options={{ 
+          title: "Files & Documents",
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="folder-outline" size={size} /> 
         }} 
       />
       <ManagerDrawerNavigator.Screen 

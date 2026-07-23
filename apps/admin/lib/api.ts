@@ -747,4 +747,29 @@ export async function superUpdateTravelDistance(payload: { userId: string; date:
   return response.data;
 }
 
+export async function fetchDocuments(params?: { search?: string; category?: string }) {
+  const response = await api.get<{ data: any[] }>("/documents", { params });
+  return response.data.data;
+}
+
+export async function createDocument(payload: {
+  title: string;
+  description?: string;
+  fileUrl: string;
+  fileName: string;
+  fileSize?: number;
+  fileType?: string;
+  mimeType?: string;
+  category?: string;
+}) {
+  const response = await api.post<{ data: any }>("/documents", payload);
+  return response.data.data;
+}
+
+export async function deleteDocument(id: string) {
+  const response = await api.delete<{ data: any }>(`/documents/${id}`);
+  return response.data.data;
+}
+
+
 
