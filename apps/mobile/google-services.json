@@ -1,0 +1,105 @@
+{
+  "project_info": {
+    "project_number": "852961041744",
+    "project_id": "petroleum-3ba43",
+    "storage_bucket": "petroleum-3ba43.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:852961041744:android:366b45d43afbd2b5e32055",
+        "android_client_info": {
+          "package_name": "com.indraprastha.petroleum"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAEwqsXixFYWx9CEHGlUsuQ2vhMGgPq2aU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:852961041744:android:931995330666effde32055",
+        "android_client_info": {
+          "package_name": "com.indraprastha.petroleum.admin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAEwqsXixFYWx9CEHGlUsuQ2vhMGgPq2aU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:852961041744:android:3b4172f110e0182fe32055",
+        "android_client_info": {
+          "package_name": "com.indraprastha.petroleum.customer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAEwqsXixFYWx9CEHGlUsuQ2vhMGgPq2aU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:852961041744:android:dddfa71252202ed3e32055",
+        "android_client_info": {
+          "package_name": "com.indraprastha.petroleum.staff"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAEwqsXixFYWx9CEHGlUsuQ2vhMGgPq2aU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:852961041744:android:8662fefa9ebb4a26e32055",
+        "android_client_info": {
+          "package_name": "com.stafftrack.staff"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAEwqsXixFYWx9CEHGlUsuQ2vhMGgPq2aU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
