@@ -5,9 +5,11 @@ import { sendSuccess } from "../lib/response";
 export async function listDocuments(req: Request, res: Response) {
   const { search, category } = req.query;
 
-  const whereClause: any = {
-    companyId: req.user!.companyId,
-  };
+  const whereClause: any = {};
+
+  if (req.user?.companyId) {
+    whereClause.companyId = req.user.companyId;
+  }
 
   if (category && typeof category === "string" && category !== "ALL") {
     whereClause.category = category;
@@ -48,6 +50,17 @@ export async function createDocument(req: Request, res: Response) {
     return;
   }
 
+  let companyId = req.user?.companyId;
+  if (!companyId) {
+    const firstCompany = await prisma.company.findFirst();
+    companyId = firstCompany?.id;
+  }
+
+  if (!companyId) {
+    res.status(400).json({ success: false, message: "No company found to attach document to" });
+    return;
+  }
+
   // Helper to determine fileType if missing
   let derivedType = fileType;
   if (!derivedType) {
@@ -72,7 +85,7 @@ export async function createDocument(req: Request, res: Response) {
       mimeType: mimeType || null,
       category: category || "General",
       uploadedById: req.user!.id,
-      companyId: req.user!.companyId
+      companyId
     },
     include: {
       uploadedBy: {
@@ -92,8 +105,13 @@ export async function createDocument(req: Request, res: Response) {
 export async function deleteDocument(req: Request, res: Response) {
   const { id } = req.params;
 
+  const whereClause: any = { id };
+  if (req.user?.companyId) {
+    whereClause.companyId = req.user.companyId;
+  }
+
   const existing = await prisma.companyFile.findFirst({
-    where: { id, companyId: req.user!.companyId }
+    where: whereClause
   });
 
   if (!existing) {
