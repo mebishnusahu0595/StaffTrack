@@ -10,11 +10,9 @@ import {
   Phone, 
   Mail, 
   MapPin, 
-  FileText, 
   Building2, 
   Loader2, 
-  X,
-  UserCheck
+  X
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchDealers, createDealer, updateDealer, deleteDealer } from "@/lib/api";
