@@ -69,7 +69,7 @@ const navItems: { href: string; label: string; icon: any; roles?: Role[] }[] = [
   { href: "/tasks", label: "Tasks", icon: ClipboardList },
   { href: "/issues", label: "Issues", icon: AlertTriangle },
   { href: "/forms", label: "Forms", icon: FileSpreadsheet },
-  { href: "/uploads", label: "Uploads", icon: UploadCloud },
+  { href: "/company-files", label: "Uploads", icon: UploadCloud },
   { href: "/broadcast", label: "Broadcast", icon: Send, roles: ["SUPERADMIN", "ADMIN", "MANAGER"] },
   { href: "/expenses", label: "Expenses", icon: Receipt },
   { href: "/leaves", label: "Leaves", icon: Calendar },
@@ -497,7 +497,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild className="gap-3 py-2.5 rounded-xl font-bold text-slate-600 focus:bg-blue-50 focus:text-blue-600 cursor-pointer">
-                  <Link href="/uploads" className="flex items-center gap-3 w-full">
+                  <Link href="/company-files" className="flex items-center gap-3 w-full">
                     <UploadCloud className="h-4 w-4" /> Upload File
                   </Link>
                 </DropdownMenuItem>
