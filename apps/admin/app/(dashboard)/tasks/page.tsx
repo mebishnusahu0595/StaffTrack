@@ -106,10 +106,6 @@ export default function TasksPage() {
   const [page, setPage] = useState(1);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [viewingTask, setViewingTask] = useState<any>(null);
-  const activeViewingTask = useMemo(() => {
-    if (!viewingTask) return null;
-    return (tasks as any[]).find((t: any) => t.id === viewingTask.id) || viewingTask;
-  }, [viewingTask, tasks]);
 
   // Custom Filter & View Options
   const [selectedAssignee, setSelectedAssignee] = useState<string>("ALL");
@@ -141,6 +137,11 @@ export default function TasksPage() {
     queryKey: ["tasks"],
     queryFn: fetchTasks
   });
+
+  const activeViewingTask = useMemo(() => {
+    if (!viewingTask) return null;
+    return (tasks as any[]).find((t: any) => t.id === viewingTask.id) || viewingTask;
+  }, [viewingTask, tasks]);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
