@@ -4053,14 +4053,16 @@ function ViewTaskDetailsDialog({ task }: any) {
         </DialogClose>
         <div className="flex items-center gap-3 mb-2 flex-wrap">
            <StatusBadge status={task.status} dueDate={task.dueDate} />
-           {task.taskType && task.taskType !== "NORMAL" && (
-             <Badge className={cn(
-               "text-[9px] font-black uppercase tracking-wider border",
-               task.taskType === "DEALER" ? "bg-blue-500/20 text-blue-300 border-blue-400/30" : "bg-emerald-500/20 text-emerald-300 border-emerald-400/30"
-             )}>
-               {task.taskType === "DEALER" ? "🤝 Dealer Visit Task" : "🌾 Farmer Visit Task"}
-             </Badge>
-           )}
+           <Badge className={cn(
+             "text-[9px] font-black uppercase tracking-wider border",
+             task.taskType === "DEALER"
+               ? "bg-blue-500/20 text-blue-300 border-blue-400/30"
+               : task.taskType === "FARMER"
+               ? "bg-emerald-500/20 text-emerald-300 border-emerald-400/30"
+               : "bg-slate-500/20 text-slate-300 border-slate-400/30"
+           )}>
+             {task.taskType === "DEALER" ? "🤝 Dealer Visit Task" : task.taskType === "FARMER" ? "🌾 Farmer Visit Task" : "📋 Standard Task"}
+           </Badge>
            <Badge variant="outline" className="border-white/20 text-white/60 text-[9px] font-black uppercase">Task ID: {task.id.slice(-6)}</Badge>
         </div>
         <DialogTitle className="text-2xl font-black">{task.title}</DialogTitle>
@@ -4108,23 +4110,40 @@ function ViewTaskDetailsDialog({ task }: any) {
                </div>
             </div>
 
-            {task.dealers && task.dealers.length > 0 && (
-               <div className="space-y-2 pt-2 border-t border-slate-100">
-                  <Label className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-1">
-                     <Store className="h-3.5 w-3.5" /> Assigned Dealers ({task.dealers.length})
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+               <div className="flex items-center justify-between">
+                  <Label className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-1.5">
+                     <Store className="h-3.5 w-3.5" /> Assigned Dealers ({task.dealers?.length || 0})
                   </Label>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">
+                     Category: {task.taskType || "NORMAL"}
+                  </span>
+               </div>
+
+               {task.dealers && task.dealers.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                      {task.dealers.map((d: any) => (
-                        <div key={d.id} className="bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-blue-900">
-                           <Store className="h-3.5 w-3.5 text-blue-600" />
-                           <span>{d.name}</span>
-                           {d.city && <span className="text-[10px] text-blue-500 font-normal">({d.city})</span>}
-                           {d.phone && <span className="text-[10px] text-slate-500 font-mono">| {d.phone}</span>}
+                        <div key={d.id} className="bg-blue-50 border border-blue-200 px-3 py-2 rounded-xl flex flex-col gap-0.5 text-xs font-bold text-blue-900">
+                           <div className="flex items-center gap-1.5">
+                              <Store className="h-3.5 w-3.5 text-blue-600" />
+                              <span>{d.name}</span>
+                              {d.city && <span className="text-[10px] text-blue-600 font-semibold">({d.city})</span>}
+                           </div>
+                           {(d.phone || d.gstin) && (
+                              <div className="text-[10px] text-slate-500 font-normal pl-5 flex items-center gap-2">
+                                 {d.phone && <span>📞 {d.phone}</span>}
+                                 {d.gstin && <span>📄 GST: {d.gstin}</span>}
+                              </div>
+                           )}
                         </div>
                      ))}
                   </div>
-               </div>
-            )}
+               ) : (
+                  <div className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl text-xs text-slate-500 font-medium">
+                     No dealers linked to this task.
+                  </div>
+               )}
+            </div>
 
             {task.status === "COMPLETED" && (
                <div className="space-y-2 pt-4 border-t border-slate-100">
