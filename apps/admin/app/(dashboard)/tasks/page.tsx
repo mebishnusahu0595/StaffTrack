@@ -2292,8 +2292,12 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
 
             {/* Dealer Selector (Multi-Select & Add Dealer) */}
             <DealerSelector
-              selectedDealerIds={data.dealerIds}
-              onChange={(ids) => setData({ ...data, dealerIds: ids })}
+              selectedDealerIds={data.dealerIds || []}
+              onChange={(ids) => setData(prev => ({
+                ...prev,
+                dealerIds: ids,
+                taskType: ids.length > 0 && (prev.taskType === "NORMAL" || !prev.taskType) ? "DEALER" : prev.taskType
+              }))}
             />
 
             <div className="space-y-2">
@@ -3391,13 +3395,17 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
 
             {/* Dealer Selector (Multi-Select & Add Dealer) */}
             <DealerSelector
-              selectedDealerIds={data.dealerIds}
-              onChange={(ids) => setData({ ...data, dealerIds: ids })}
+              selectedDealerIds={data.dealerIds || []}
+              onChange={(ids) => setData(prev => ({
+                ...prev,
+                dealerIds: ids,
+                taskType: ids.length > 0 && (prev.taskType === "NORMAL" || !prev.taskType) ? "DEALER" : prev.taskType
+              }))}
             />
 
             <div className="space-y-2">
                <Label className="text-[10px] font-black uppercase text-slate-400">Assign User*</Label>
-               <Select value={data.assignedToId} onValueChange={v => setData({...data, assignedToId: v})}>
+               <Select value={data.assignedToId} onValueChange={v => setData(prev => ({ ...prev, assignedToId: v }))}>
                   <SelectTrigger className="h-12 rounded-2xl bg-slate-50 border-none font-bold">
                      <SelectValue placeholder="Select User" />
                   </SelectTrigger>
@@ -3417,7 +3425,7 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
                     placeholder="Enter task name" 
                     className="h-12 pl-10 rounded-2xl bg-slate-50 border-none font-bold" 
                     value={data.title}
-                    onChange={e => setData({...data, title: e.target.value})}
+                    onChange={e => setData(prev => ({ ...prev, title: e.target.value }))}
                   />
                </div>
             </div>
