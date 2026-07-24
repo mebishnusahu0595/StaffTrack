@@ -53,6 +53,16 @@ router.post("/", roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER
   }
 });
 
+// Update project
+router.patch("/:id", roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER), async (req: AuthRequest, res) => {
+  try {
+    const project = await projectService.updateProject(req.params.id, req.body);
+    res.json({ success: true, data: project });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error instanceof Error ? error.message : "Failed to update project" });
+  }
+});
+
 // Update period progress (log progress count)
 router.patch("/periods/:periodId/progress", async (req: AuthRequest, res) => {
   try {

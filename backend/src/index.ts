@@ -133,6 +133,7 @@ app.use("/api/groups", groupRoutes);
 app.use("/api/holidays", holidayRoutes);
 app.use("/api/payroll", payrollRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/leaves", leaveRoutes);
 app.use("/api/salary-slips", salaryRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/dealers", dealerRoutes);
