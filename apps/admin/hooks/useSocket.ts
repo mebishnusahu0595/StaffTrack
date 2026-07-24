@@ -44,9 +44,40 @@ export function useSocket(companyId?: string) {
       void queryClient.invalidateQueries({ queryKey: ["users"] });
     });
 
-    socket.on("task-update", (data) => {
-      console.log("WS Task Update:", data);
-      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    socket.on("task-update", (eventData) => {
+      console.log("WS Task Update:", eventData);
+      
+      const { type, data } = eventData || {};
+
+      if (data && (type === "update" || type === "status-update")) {
+        queryClient.setQueriesData({ queryKey: ["tasks"] }, (old: any) => {
+          if (!Array.isArray(old)) return old;
+          return old.map((t: any) => (t.id === data.id ? { ...t, ...data } : t));
+        });
+      } else if (data && type === "create") {
+        queryClient.setQueriesData({ queryKey: ["tasks"] }, (old: any) => {
+          if (!Array.isArray(old)) return [data];
+          if (old.some((t: any) => t.id === data.id)) {
+            return old.map((t: any) => (t.id === data.id ? { ...t, ...data } : t));
+          }
+          return [data, ...old];
+        });
+      } else if (data && type === "delete" && data.id) {
+        queryClient.setQueriesData({ queryKey: ["tasks"] }, (old: any) => {
+          if (!Array.isArray(old)) return old;
+          return old.filter((t: any) => t.id !== data.id);
+        });
+      } else if (data && type === "bulk-delete" && Array.isArray(data.ids)) {
+        queryClient.setQueriesData({ queryKey: ["tasks"] }, (old: any) => {
+          if (!Array.isArray(old)) return old;
+          return old.filter((t: any) => !data.ids.includes(t.id));
+        });
+      } else if (type === "delete-all") {
+        queryClient.setQueriesData({ queryKey: ["tasks"] }, []);
+      }
+
+      void queryClient.invalidateQueries({ queryKey: ["tasks"], refetchType: "all" });
+      void queryClient.refetchQueries({ queryKey: ["tasks"] });
     });
 
     socket.on("location-update", (data) => {
