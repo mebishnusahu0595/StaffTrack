@@ -1051,16 +1051,36 @@ export default function TasksPage() {
                                              : format(new Date(task.createdAt), "dd MMM, yyyy")}
                                            </span>
                                    </div>
-                                   <div>
-                                      <p className="text-sm font-bold text-slate-700 leading-tight flex items-center gap-2">
-                                         {task.title}
-                                         {task.subtasks && task.subtasks.length > 0 && (
-                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-500 border border-slate-200/50 uppercase tracking-tighter">
-                                               📋 {task.subtasks.filter((s: any) => s.status === 'COMPLETED').length}/{task.subtasks.length} Subtasks
-                                            </span>
-                                         )}
-                                      </p>
-                                   </div>
+                                    <div>
+                                       <div className="flex items-center gap-2 flex-wrap">
+                                          <p className="text-sm font-bold text-slate-700 leading-tight">
+                                             {task.title}
+                                          </p>
+                                          {task.taskType && task.taskType !== "NORMAL" && (
+                                             <span className={cn(
+                                                "inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border",
+                                                task.taskType === "DEALER" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                             )}>
+                                                {task.taskType === "DEALER" ? "🤝 Dealer Visit" : "🌾 Farmer Visit"}
+                                             </span>
+                                          )}
+                                          {task.subtasks && task.subtasks.length > 0 && (
+                                             <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-500 border border-slate-200/50 uppercase tracking-tighter">
+                                                📋 {task.subtasks.filter((s: any) => s.status === 'COMPLETED').length}/{task.subtasks.length} Subtasks
+                                             </span>
+                                          )}
+                                       </div>
+                                       {task.dealers && task.dealers.length > 0 && (
+                                          <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                             {task.dealers.map((d: any) => (
+                                                <span key={d.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-100">
+                                                   <Store className="h-3 w-3 text-blue-600" />
+                                                   {d.name}{d.city ? ` (${d.city})` : ""}
+                                                </span>
+                                             ))}
+                                          </div>
+                                       )}
+                                    </div>
                                 </div>
                               </td>
                               
@@ -4031,8 +4051,16 @@ function ViewTaskDetailsDialog({ task }: any) {
         <DialogClose className="absolute right-6 top-6 rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
            <X className="h-4 w-4" />
         </DialogClose>
-        <div className="flex items-center gap-3 mb-2">
+        <div className="flex items-center gap-3 mb-2 flex-wrap">
            <StatusBadge status={task.status} dueDate={task.dueDate} />
+           {task.taskType && task.taskType !== "NORMAL" && (
+             <Badge className={cn(
+               "text-[9px] font-black uppercase tracking-wider border",
+               task.taskType === "DEALER" ? "bg-blue-500/20 text-blue-300 border-blue-400/30" : "bg-emerald-500/20 text-emerald-300 border-emerald-400/30"
+             )}>
+               {task.taskType === "DEALER" ? "🤝 Dealer Visit Task" : "🌾 Farmer Visit Task"}
+             </Badge>
+           )}
            <Badge variant="outline" className="border-white/20 text-white/60 text-[9px] font-black uppercase">Task ID: {task.id.slice(-6)}</Badge>
         </div>
         <DialogTitle className="text-2xl font-black">{task.title}</DialogTitle>

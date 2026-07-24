@@ -89,6 +89,20 @@ export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
         })()}
 
         <View style={styles.badgeRow}>
+          {task.taskType && task.taskType !== "NORMAL" && (
+            <View style={[
+              styles.typeBadge,
+              task.taskType === 'DEALER' ? { backgroundColor: '#E0F2FE', borderColor: '#BAE6FD' } : { backgroundColor: '#D1FAE5', borderColor: '#A7F3D0' }
+            ]}>
+              <Text style={[
+                styles.typeText,
+                task.taskType === 'DEALER' ? { color: '#0369A1' } : { color: '#047857' }
+              ]}>
+                {task.taskType === 'DEALER' ? '🤝 DEALER VISIT' : '🌾 FARMER VISIT'}
+              </Text>
+            </View>
+          )}
+
           <View style={[styles.repeatBadge, !task.isRepeating && { backgroundColor: '#E0E4E7' }]}>
             <Icon 
               source={task.isRepeating ? "repeat-variant" : "calendar-month-outline"} 
@@ -492,5 +506,16 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     color: "#1E40AF",
+  },
+  typeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  typeText: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.5,
   },
 });
