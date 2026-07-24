@@ -4078,7 +4078,7 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
               onClick={onEdit}
               className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold px-3 py-1.5 h-8 gap-1 shadow-md shadow-blue-900/30"
             >
-              <Edit2 className="h-3.5 w-3.5" /> Edit Task
+              <Pencil className="h-3.5 w-3.5" /> Edit Task
             </Button>
           )}
           <DialogClose className="rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
@@ -4183,7 +4183,7 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                          onClick={onEdit}
                          className="h-7 text-[10px] font-bold text-blue-600 border-blue-200 bg-white hover:bg-blue-50 rounded-lg gap-1 shrink-0 px-2"
                        >
-                         <Edit2 className="h-3 w-3" /> Add Dealers
+                         <Pencil className="h-3 w-3" /> Add Dealers
                        </Button>
                      )}
                   </div>
