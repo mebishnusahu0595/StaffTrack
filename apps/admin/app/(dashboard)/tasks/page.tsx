@@ -106,6 +106,11 @@ export default function TasksPage() {
   const [page, setPage] = useState(1);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [viewingTask, setViewingTask] = useState<any>(null);
+  const activeViewingTask = useMemo(() => {
+    if (!viewingTask) return null;
+    return (tasks as any[]).find((t: any) => t.id === viewingTask.id) || viewingTask;
+  }, [viewingTask, tasks]);
+
   // Custom Filter & View Options
   const [selectedAssignee, setSelectedAssignee] = useState<string>("ALL");
   const [selectedPriority, setSelectedPriority] = useState<string>("ALL");
@@ -169,13 +174,16 @@ export default function TasksPage() {
       const { id, ...payload } = data;
       return updateTask(id, {
         ...payload,
-        dueDate: new Date(payload.dueDate).toISOString()
+        dueDate: payload.dueDate ? new Date(payload.dueDate).toISOString() : new Date().toISOString()
       });
     },
-    onSuccess: () => {
+    onSuccess: (updatedTask: any) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       setIsEditOpen(false);
       setEditingTask(null);
+      if (updatedTask) {
+        setViewingTask(updatedTask);
+      }
     }
   });
 
@@ -1645,7 +1653,13 @@ export default function TasksPage() {
 
       {/* Viewing Task Details Modal */}
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-        <ViewTaskDetailsDialog task={viewingTask} />
+        <ViewTaskDetailsDialog 
+          task={activeViewingTask} 
+          onEdit={() => {
+            setEditingTask(activeViewingTask);
+            setIsEditOpen(true);
+          }}
+        />
       </Dialog>
 
       {/* Editing Task Dialog Modal */}
@@ -4050,16 +4064,28 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
   );
 }
 
-function ViewTaskDetailsDialog({ task }: any) {
+function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => void }) {
   if (!task) return null;
 
   return (
     <DialogContent className="max-w-2xl p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] hide-close">
       <DialogHeader className="p-8 bg-slate-900 text-white relative">
-        <DialogClose className="absolute right-6 top-6 rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
-           <X className="h-4 w-4" />
-        </DialogClose>
-        <div className="flex items-center gap-3 mb-2 flex-wrap">
+        <div className="absolute right-6 top-6 flex items-center gap-2">
+          {onEdit && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={onEdit}
+              className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold px-3 py-1.5 h-8 gap-1 shadow-md shadow-blue-900/30"
+            >
+              <Edit2 className="h-3.5 w-3.5" /> Edit Task
+            </Button>
+          )}
+          <DialogClose className="rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
+             <X className="h-4 w-4" />
+          </DialogClose>
+        </div>
+        <div className="flex items-center gap-3 mb-2 flex-wrap pr-24">
            <StatusBadge status={task.status} dueDate={task.dueDate} />
            <Badge className={cn(
              "text-[9px] font-black uppercase tracking-wider border",
@@ -4147,8 +4173,19 @@ function ViewTaskDetailsDialog({ task }: any) {
                      ))}
                   </div>
                ) : (
-                  <div className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl text-xs text-slate-500 font-medium">
-                     No dealers linked to this task.
+                  <div className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl text-xs text-slate-500 font-medium flex items-center justify-between gap-2">
+                     <span>No dealers linked to this task.</span>
+                     {onEdit && (
+                       <Button
+                         type="button"
+                         size="sm"
+                         variant="outline"
+                         onClick={onEdit}
+                         className="h-7 text-[10px] font-bold text-blue-600 border-blue-200 bg-white hover:bg-blue-50 rounded-lg gap-1 shrink-0 px-2"
+                       >
+                         <Edit2 className="h-3 w-3" /> Add Dealers
+                       </Button>
+                     )}
                   </div>
                )}
             </div>
