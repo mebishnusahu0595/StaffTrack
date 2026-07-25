@@ -97,24 +97,35 @@ function DotMenu({ onEdit, onDelete, align = "right" }: {
 // ── Project Progress Modal ────────────────────────────────────────────────────
 function ViewProgressModal({ project, onClose }: { project: any; onClose: () => void }) {
   const assignments = project.assignments || [];
+  const unitPrice = Number(project.productPrice) || 0;
   
   // Total Target across all assignments
   const totalTargetQty = assignments.reduce((acc: number, a: any) => acc + (a.targetQuantity || 0), 0) || (project.targetQuantity || 0);
   const totalCompletedCount = assignments.reduce((acc: number, a: any) => acc + (a.completedCount || 0), 0);
   const overallProgress = totalTargetQty > 0 ? Math.min(100, Math.round((totalCompletedCount / totalTargetQty) * 100)) : 0;
 
+  const totalTargetRevenue = totalTargetQty * unitPrice;
+  const totalAchievedRevenue = totalCompletedCount * unitPrice;
+
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>(assignments[0]?.id || "");
+  const [selectedPeriodFilter, setSelectedPeriodFilter] = useState<string>("ALL");
   const activeAssignment = assignments.find((a: any) => a.id === selectedAssignmentId) || assignments[0];
+
+  const filteredPeriods = useMemo(() => {
+    if (!activeAssignment?.periods) return [];
+    if (selectedPeriodFilter === "ALL") return activeAssignment.periods;
+    return activeAssignment.periods.filter((p: any) => p.id === selectedPeriodFilter || p.periodName === selectedPeriodFilter);
+  }, [activeAssignment, selectedPeriodFilter]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl p-0 overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl p-0 overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="p-8 bg-gradient-to-br from-blue-600 to-indigo-700 text-white relative">
+        <div className="p-8 bg-gradient-to-br from-blue-600 via-indigo-600 to-slate-900 text-white relative">
           <button onClick={onClose} className="absolute top-5 right-5 text-white/70 hover:text-white">
             <X className="h-5 w-5" />
           </button>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-[10px] font-black uppercase tracking-widest text-blue-200">
               ID #{project.id?.slice(-6).toUpperCase()}
             </span>
@@ -124,6 +135,11 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
             <Badge className="bg-white/20 text-white text-[9px] font-black rounded-lg h-5">
               {project.targetType || "YEARLY"} TARGET
             </Badge>
+            {project.productName && (
+              <Badge className="bg-emerald-500/30 text-emerald-200 border border-emerald-400/30 text-[9px] font-black rounded-lg h-5">
+                📦 {project.productName}
+              </Badge>
+            )}
           </div>
           <h2 className="text-2xl font-black">{project.name}</h2>
           <p className="text-blue-100 text-xs font-medium mt-1 line-clamp-2">{project.description || "No description provided."}</p>
@@ -131,26 +147,44 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
 
         {/* Body */}
         <div className="p-8 space-y-6 max-h-[75vh] overflow-y-auto">
-          {/* Overall Dynamic Progress bar */}
-          <div className="space-y-3 p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-950 text-white">
-            <div className="flex justify-between items-center">
+
+          {/* Dynamic Sales Revenue & Progress Panel */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-2 space-y-3 p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-950 text-white">
+              <div className="flex justify-between items-center">
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-300">Sales & Completion Bar</span>
+                  <p className="text-sm font-bold text-white mt-0.5">
+                    {totalCompletedCount} / {totalTargetQty} Units Sold
+                  </p>
+                </div>
+                <span className="text-3xl font-black text-emerald-400">{overallProgress}%</span>
+              </div>
+              <div className="h-3 rounded-full bg-slate-800 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-400 to-blue-500 rounded-full transition-all duration-700"
+                  style={{ width: `${overallProgress}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                <span>{totalCompletedCount} Units Sold</span>
+                <span>{Math.max(0, totalTargetQty - totalCompletedCount)} Remaining</span>
+              </div>
+            </div>
+
+            {/* Side Revenue Summary Card */}
+            <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 flex flex-col justify-between">
               <div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-300">Project Completion Bar</span>
-                <p className="text-sm font-bold text-white mt-0.5">
-                  {totalCompletedCount} / {totalTargetQty} Units Achieved
+                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Total Product Sales Amount</span>
+                <h3 className="text-2xl font-black text-emerald-900 mt-1">₹{totalAchievedRevenue.toLocaleString()}</h3>
+                <p className="text-[11px] font-bold text-emerald-700 mt-0.5">
+                  Target: ₹{totalTargetRevenue.toLocaleString()}
                 </p>
               </div>
-              <span className="text-3xl font-black text-emerald-400">{overallProgress}%</span>
-            </div>
-            <div className="h-3 rounded-full bg-slate-800 overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-emerald-400 to-blue-500 rounded-full transition-all duration-700"
-                style={{ width: `${overallProgress}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-[10px] font-bold text-slate-400">
-              <span>{totalCompletedCount} Completed</span>
-              <span>{Math.max(0, totalTargetQty - totalCompletedCount)} Remaining</span>
+              <div className="pt-2 border-t border-emerald-200/60 flex items-center justify-between text-[10px] font-extrabold text-emerald-800">
+                <span>Unit Price:</span>
+                <span>₹{unitPrice.toLocaleString()} / unit</span>
+              </div>
             </div>
           </div>
 
@@ -162,13 +196,14 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
                 {assignments.map((a: any) => {
                   const isSelected = (a.id === activeAssignment?.id);
                   const aProgress = a.targetQuantity > 0 ? Math.min(100, Math.round((a.completedCount / a.targetQuantity) * 100)) : 0;
+                  const aRevenue = (a.completedCount || 0) * unitPrice;
 
                   return (
                     <button
                       key={a.id}
                       onClick={() => setSelectedAssignmentId(a.id)}
                       className={cn(
-                        "p-3 rounded-2xl border text-left min-w-[160px] flex-1 transition-all",
+                        "p-3 rounded-2xl border text-left min-w-[170px] flex-1 transition-all",
                         isSelected ? "bg-blue-50 border-blue-500 ring-2 ring-blue-500/20" : "bg-slate-50 border-slate-200 hover:bg-slate-100"
                       )}
                     >
@@ -181,9 +216,12 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
                         <span className="text-xs font-bold text-slate-900 truncate">{a.user?.name || "Staff Member"}</span>
                       </div>
                       <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
-                        <span>{a.completedCount}/{a.targetQuantity}</span>
+                        <span>{a.completedCount}/{a.targetQuantity} units</span>
                         <span className="text-blue-600 font-black">{aProgress}%</span>
                       </div>
+                      {unitPrice > 0 && (
+                        <p className="text-[10px] font-black text-emerald-600 mt-1">₹{aRevenue.toLocaleString()} sold</p>
+                      )}
                     </button>
                   );
                 })}
@@ -191,19 +229,35 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
             </div>
           )}
 
-          {/* Active Staff Member Period Breakdown */}
+          {/* Active Staff Member Period Breakdown with Month / Week Filter */}
           {activeAssignment && (
             <div className="space-y-4 p-5 rounded-2xl border border-slate-200 bg-slate-50/50">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h4 className="text-sm font-black text-slate-900">{activeAssignment.user?.name}&apos;s Period Breakdown</h4>
                   <p className="text-[10px] font-bold text-slate-500">
-                    Target: {activeAssignment.targetQuantity} | Completed: {activeAssignment.completedCount}
+                    Target: {activeAssignment.targetQuantity} units | Completed: {activeAssignment.completedCount} units
+                    {unitPrice > 0 ? ` (Total Sales: ₹${(activeAssignment.completedCount * unitPrice).toLocaleString()})` : ""}
                   </p>
                 </div>
-                <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-xs font-bold">
-                  {project.targetType === "YEARLY" ? "12 Months" : project.targetType === "MONTHLY" ? "4 Weeks" : "1 Week"}
-                </Badge>
+                
+                {/* Month / Week Filter Dropdown */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase text-slate-400">Select Month/Week:</span>
+                  <Select value={selectedPeriodFilter} onValueChange={setSelectedPeriodFilter}>
+                    <SelectTrigger className="h-9 w-44 rounded-xl text-xs font-bold bg-white border-slate-200">
+                      <SelectValue placeholder="All Periods" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl p-1">
+                      <SelectItem value="ALL" className="rounded-xl text-xs font-bold">All Periods</SelectItem>
+                      {activeAssignment.periods?.map((p: any) => (
+                        <SelectItem key={p.id} value={p.id} className="rounded-xl text-xs font-bold">
+                          {p.periodName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               {/* Periods Table */}
@@ -212,16 +266,20 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
                   <TableHeader>
                     <TableRow className="bg-slate-50 text-[10px] font-black uppercase text-slate-500">
                       <TableHead>Period</TableHead>
-                      <TableHead className="text-center">Base Target</TableHead>
+                      <TableHead className="text-center">Target Units</TableHead>
                       <TableHead className="text-center">Carryover (+)</TableHead>
                       <TableHead className="text-center">Effective Target</TableHead>
-                      <TableHead className="text-center">Completed</TableHead>
+                      <TableHead className="text-center">Sold Units</TableHead>
+                      {unitPrice > 0 && <TableHead className="text-center">Sale Revenue (₹)</TableHead>}
                       <TableHead className="text-right">Progress</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {activeAssignment.periods?.map((p: any) => {
+                    {filteredPeriods.map((p: any) => {
                       const pPercent = p.effectiveTarget > 0 ? Math.min(100, Math.round((p.completedCount / p.effectiveTarget) * 100)) : 0;
+                      const pRevenue = p.completedCount * unitPrice;
+                      const targetRevenue = p.effectiveTarget * unitPrice;
+
                       return (
                         <TableRow key={p.id} className="text-xs font-bold text-slate-700">
                           <TableCell className="font-black text-slate-900">{p.periodName}</TableCell>
@@ -237,6 +295,12 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
                           </TableCell>
                           <TableCell className="text-center font-black text-indigo-700">{p.effectiveTarget}</TableCell>
                           <TableCell className="text-center font-black text-emerald-600">{p.completedCount}</TableCell>
+                          {unitPrice > 0 && (
+                            <TableCell className="text-center font-black text-emerald-700">
+                              ₹{pRevenue.toLocaleString()}
+                              <span className="block text-[9px] font-medium text-slate-400">/ ₹{targetRevenue.toLocaleString()}</span>
+                            </TableCell>
+                          )}
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
                               <span className="text-[11px] font-black">{pPercent}%</span>
@@ -258,8 +322,10 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
           )}
 
           {/* Project Details */}
-          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-100">
             {[
+              { label: "Product Name", value: project.productName || "—" },
+              { label: "Unit Price", value: project.productPrice ? `₹${Number(project.productPrice).toLocaleString()}` : "—" },
               { label: "Created", value: project.createdAt ? new Date(project.createdAt).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }) : "—" },
               { label: "Priority", value: project.priority || "Medium" },
               { label: "Department", value: project.department || "General" },
@@ -290,6 +356,8 @@ function ProjectFormModal({
 }) {
   const [form, setForm] = useState({
     name:           project?.name           ?? "",
+    productName:    project?.productName    ?? "",
+    productPrice:   project?.productPrice   ?? "",
     description:    project?.description    ?? "",
     status:         project?.status         ?? "Ongoing",
     priority:       project?.priority       ?? "Medium",
@@ -350,6 +418,7 @@ function ProjectFormModal({
       const payload = {
         ...form,
         targetQuantity: Number(form.targetQuantity) || 0,
+        productPrice: form.productPrice !== "" ? Number(form.productPrice) : 0,
         budget: form.budget ? Number(form.budget) : undefined,
         assignedUserIds: selectedUserIds
       };
@@ -393,6 +462,32 @@ function ProjectFormModal({
           <div className="space-y-1.5">
             <Label className={LABEL_CLS}>Project Name *</Label>
             <Input value={form.name} onChange={set("name")} placeholder="e.g. Annual Sales Target 2026" className={FIELD_CLS} required />
+          </div>
+
+          {/* Row 1.5: Product Name & Product Unit Price */}
+          <div className="grid grid-cols-2 gap-4 p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200">
+            <div className="space-y-1.5">
+              <Label className={LABEL_CLS}>Product Name</Label>
+              <Input
+                value={form.productName}
+                onChange={set("productName")}
+                placeholder="e.g. Paddy Seed 50kg / Rice Bran"
+                className={FIELD_CLS}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className={LABEL_CLS}>Product Price / Amount (₹ per unit)</Label>
+              <Input
+                type="number"
+                value={form.productPrice}
+                onChange={set("productPrice")}
+                placeholder="e.g. 1200"
+                className={FIELD_CLS}
+              />
+              <p className="text-[10px] font-extrabold text-emerald-700">
+                Target Sales Revenue: ₹{((Number(form.targetQuantity) || 0) * (Number(form.productPrice) || 0)).toLocaleString()}
+              </p>
+            </div>
           </div>
 
           {/* Row 2: Target Calculation Type + Total Target Quantity */}
@@ -603,6 +698,10 @@ function ProjectCard({ project, onEdit, onDelete, onViewProgress }: {
     ? Math.min(100, Math.round((totalCompletedCount / totalTargetQty) * 100))
     : (project.tasks?.length ? Math.round((completedTasksCount / project.tasks.length) * 100) : 0);
 
+  const unitPrice = Number(project.productPrice) || 0;
+  const totalAchievedRevenue = totalCompletedCount * unitPrice;
+  const totalTargetRevenue = totalTargetQty * unitPrice;
+
   return (
     <Card className="rounded-3xl border-none shadow-sm ring-1 ring-slate-200/60 bg-white overflow-hidden group hover:ring-blue-400 hover:shadow-xl hover:shadow-blue-900/5 transition-all duration-300">
       <div className="p-6 space-y-5">
@@ -619,6 +718,11 @@ function ProjectCard({ project, onEdit, onDelete, onViewProgress }: {
                   {project.priority}
                 </Badge>
               )}
+              {project.productName && (
+                <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[9px] font-bold rounded-lg h-5">
+                  📦 {project.productName}
+                </Badge>
+              )}
             </div>
             <h3 className="text-base font-black text-slate-900 group-hover:text-blue-600 transition-colors leading-tight line-clamp-1">
               {project.name}
@@ -626,6 +730,22 @@ function ProjectCard({ project, onEdit, onDelete, onViewProgress }: {
           </div>
           <DotMenu onEdit={onEdit} onDelete={onDelete} />
         </div>
+
+        {/* Product Price & Sales Revenue Banner */}
+        {unitPrice > 0 && (
+          <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200/60 flex items-center justify-between">
+            <div>
+              <p className="text-[9px] font-black uppercase text-emerald-600 tracking-wider">Product Sales Value</p>
+              <p className="text-sm font-black text-emerald-900">₹{totalAchievedRevenue.toLocaleString()}</p>
+            </div>
+            <div className="text-right">
+              <span className="text-[9px] font-bold text-emerald-700 bg-white px-2 py-0.5 rounded-md border border-emerald-200">
+                ₹{unitPrice.toLocaleString()}/unit
+              </span>
+              <span className="block text-[9px] font-medium text-emerald-600 mt-0.5">Target: ₹{totalTargetRevenue.toLocaleString()}</span>
+            </div>
+          </div>
+        )}
 
         {/* Description */}
         <p className="text-xs font-medium text-slate-500 line-clamp-2 leading-relaxed">
@@ -644,14 +764,14 @@ function ProjectCard({ project, onEdit, onDelete, onViewProgress }: {
           </span>
         </div>
 
-        {/* Task counts */}
+        {/* Task & Unit counts */}
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3 rounded-2xl bg-slate-50/80 border border-slate-100 group-hover:bg-blue-50/50 group-hover:border-blue-100 transition-colors text-center">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Tasks</p>
             <p className="text-xl font-black text-slate-900">{project._count?.tasks || 0}</p>
           </div>
           <div className="p-3 rounded-2xl bg-slate-50/80 border border-slate-100 group-hover:bg-emerald-50/50 group-hover:border-emerald-100 transition-colors text-center">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Done</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Units Sold</p>
             <p className="text-xl font-black text-slate-900">{totalCompletedCount || completedTasksCount}</p>
           </div>
         </div>
@@ -660,7 +780,7 @@ function ProjectCard({ project, onEdit, onDelete, onViewProgress }: {
         {(project.budget || project.deadline) && (
           <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold">
             {project.budget && (
-              <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" /> ₹{Number(project.budget).toLocaleString()}</span>
+              <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" /> Budget: ₹{Number(project.budget).toLocaleString()}</span>
             )}
             {project.deadline && (
               <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />
@@ -745,7 +865,19 @@ export default function ProjectsPage() {
     const tasks = projects.reduce((a: number, p: any) => a + (p._count?.tasks || 0), 0);
     const ongoing   = projects.filter((p: any) => p.status === "Ongoing").length;
     const completed = projects.filter((p: any) => p.status === "Completed").length;
-    return { total, tasks, ongoing, completed };
+
+    let totalSoldUnits = 0;
+    let totalRevenue = 0;
+
+    for (const p of projects) {
+      const pAssignments = p.assignments || [];
+      const pCompleted = pAssignments.reduce((acc: number, asg: any) => acc + (asg.completedCount || 0), 0);
+      const price = Number(p.productPrice) || 0;
+      totalSoldUnits += pCompleted;
+      totalRevenue += (pCompleted * price);
+    }
+
+    return { total, tasks, ongoing, completed, totalSoldUnits, totalRevenue };
   }, [projects]);
 
   // Refresh after any mutation
@@ -866,8 +998,8 @@ export default function ProjectsPage() {
           {/* Stats */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <StatsCard label="Total Projects"  value={stats.total}     subValue={`${stats.ongoing} ongoing`}       icon={Folder}       color="blue" />
-            <StatsCard label="Total Tasks"     value={stats.tasks}     subValue="Across all projects"               icon={Target}       color="emerald" />
-            <StatsCard label="In Progress"     value={stats.ongoing}   subValue="Active projects"                   icon={Clock}        color="amber" />
+            <StatsCard label="Total Sales Value" value={`₹${stats.totalRevenue.toLocaleString()}`} subValue={`${stats.totalSoldUnits} total units sold`} icon={TrendingUp} color="emerald" />
+            <StatsCard label="In Progress"     value={stats.ongoing}   subValue="Active target projects"            icon={Clock}        color="amber" />
             <StatsCard label="Completed"       value={stats.completed} subValue="Successfully delivered"            icon={CheckCircle}  color="indigo" />
           </div>
 

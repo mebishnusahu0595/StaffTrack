@@ -2061,13 +2061,15 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
       setData(prev => ({
         ...prev,
         taskType: "FARMER",
-        checklist: FARMER_PRESET_CHECKLIST
+        checklist: FARMER_PRESET_CHECKLIST,
+        dealerIds: []
       }));
       setShowChecklist(true);
     } else {
       setData(prev => ({
         ...prev,
-        taskType: "NORMAL"
+        taskType: "NORMAL",
+        dealerIds: []
       }));
     }
   };
@@ -2306,14 +2308,16 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
             </div>
 
             {/* Dealer Selector (Multi-Select & Add Dealer) */}
-            <DealerSelector
-              selectedDealerIds={data.dealerIds || []}
-              onChange={(ids) => setData(prev => ({
-                ...prev,
-                dealerIds: ids,
-                taskType: ids.length > 0 && (prev.taskType === "NORMAL" || !prev.taskType) ? "DEALER" : prev.taskType
-              }))}
-            />
+            {data.taskType === "DEALER" && (
+              <DealerSelector
+                selectedDealerIds={data.dealerIds || []}
+                onChange={(ids) => setData(prev => ({
+                  ...prev,
+                  dealerIds: ids,
+                  taskType: ids.length > 0 && (prev.taskType === "NORMAL" || !prev.taskType) ? "DEALER" : prev.taskType
+                }))}
+              />
+            )}
 
             <div className="space-y-2">
                <Label className="text-[10px] font-black uppercase text-slate-400">Assign User*</Label>
@@ -3164,13 +3168,15 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
       setData(prev => ({
         ...prev,
         taskType: "FARMER",
-        checklist: prev.checklist && prev.checklist.length > 0 ? prev.checklist : FARMER_PRESET_CHECKLIST
+        checklist: prev.checklist && prev.checklist.length > 0 ? prev.checklist : FARMER_PRESET_CHECKLIST,
+        dealerIds: []
       }));
       setShowChecklist(true);
     } else {
       setData(prev => ({
         ...prev,
-        taskType: "NORMAL"
+        taskType: "NORMAL",
+        dealerIds: []
       }));
     }
   };
@@ -3409,14 +3415,16 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
             </div>
 
             {/* Dealer Selector (Multi-Select & Add Dealer) */}
-            <DealerSelector
-              selectedDealerIds={data.dealerIds || []}
-              onChange={(ids) => setData(prev => ({
-                ...prev,
-                dealerIds: ids,
-                taskType: ids.length > 0 && (prev.taskType === "NORMAL" || !prev.taskType) ? "DEALER" : prev.taskType
-              }))}
-            />
+            {data.taskType === "DEALER" && (
+              <DealerSelector
+                selectedDealerIds={data.dealerIds || []}
+                onChange={(ids) => setData(prev => ({
+                  ...prev,
+                  dealerIds: ids,
+                  taskType: ids.length > 0 && (prev.taskType === "NORMAL" || !prev.taskType) ? "DEALER" : prev.taskType
+                }))}
+              />
+            )}
 
             <div className="space-y-2">
                <Label className="text-[10px] font-black uppercase text-slate-400">Assign User*</Label>

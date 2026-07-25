@@ -287,6 +287,8 @@ export function HomeScreen() {
       if (completionPhoto) {
         photoUrl = await uploadPhoto(completionPhoto);
       }
+      let remarksVal = completionRemarks.trim();
+
       let lat: number | undefined;
       let lng: number | undefined;
       try {
@@ -336,10 +338,23 @@ export function HomeScreen() {
         }
       }
 
+      // Map specific fields for DEALER/FARMER tasks if checklist responses are available
+      if (selectedTask?.taskType === "DEALER") {
+        const dealerPhoto = checklistResponses["dl_photo"]?.image;
+        if (dealerPhoto) photoUrl = dealerPhoto;
+        const dealerRemarks = checklistResponses["dl_remarks"]?.text;
+        if (dealerRemarks) remarksVal = dealerRemarks;
+      } else if (selectedTask?.taskType === "FARMER") {
+        const farmerPhoto = checklistResponses["fm_photo"]?.image;
+        if (farmerPhoto) photoUrl = farmerPhoto;
+        const farmerRemarks = checklistResponses["fm_remarks"]?.text;
+        if (farmerRemarks) remarksVal = farmerRemarks;
+      }
+
       await updateStatus({
         taskId: selectedTask.id,
         status: "COMPLETED",
-        completionData: { photoUrl, remarks: completionRemarks.trim(), lat, lng, checklistResponses: compiledResponses },
+        completionData: { photoUrl, remarks: remarksVal, lat, lng, checklistResponses: compiledResponses },
       });
       setCompletionModalVisible(false);
       setCompletionPhoto(null);
@@ -815,6 +830,24 @@ export function HomeScreen() {
 
             <Divider style={styles.divider} />
 
+            {selectedTask?.taskType === "DEALER" && (
+              <View style={{ backgroundColor: "#E0F2FE", padding: 12, borderRadius: 14, marginBottom: 14, borderWidth: 1, borderColor: "#BAE6FD" }}>
+                <Text style={{ fontWeight: "800", color: "#0369A1", fontSize: 13 }}>🤝 DEALER VISIT TASK</Text>
+                <Text style={{ fontSize: 11, color: "#0284C7", marginTop: 2 }}>
+                  All Dealer details (Dealer Name, Contact No., Location, Product Discussed, Photo, User Remarks) are compulsory.
+                </Text>
+              </View>
+            )}
+
+            {selectedTask?.taskType === "FARMER" && (
+              <View style={{ backgroundColor: "#DCFCE7", padding: 12, borderRadius: 14, marginBottom: 14, borderWidth: 1, borderColor: "#BBF7D0" }}>
+                <Text style={{ fontWeight: "800", color: "#15803D", fontSize: 13 }}>🌾 FARMER VISIT TASK</Text>
+                <Text style={{ fontSize: 11, color: "#166534", marginTop: 2 }}>
+                  All Farmer details (Farmer Name, Contact No., Village, Farm Land, Crop Name, Photo, User Remarks) are compulsory.
+                </Text>
+              </View>
+            )}
+
             {/* Checklist Section */}
             {selectedTask?.checklist && (selectedTask.checklist as any[]).length > 0 && (
               <View style={styles.checklistSection}>
@@ -997,46 +1030,50 @@ export function HomeScreen() {
               </View>
             )}
 
-            <View style={styles.photoSection}>
-              {(completionPhoto || selectedTask?.completionPhotoUrl) && (
-                <View style={styles.photoPreview}>
-                  <Image
-                    source={{
-                      uri: completionPhoto
-                        ? completionPhoto.uri
-                        : selectedTask?.completionPhotoUrl?.startsWith("http")
-                        ? selectedTask.completionPhotoUrl
-                        : `${API_ORIGIN_URL}${selectedTask?.completionPhotoUrl}`,
-                    }}
-                    style={styles.thumbnail}
-                  />
-                  <View>
-                    <Text style={styles.photoNote}>
-                      {completionPhoto ? "New Photo Captured" : "Previous Evidence"}
-                    </Text>
-                    <Button compact onPress={pickCompletionPhoto} mode="text" labelStyle={{ fontSize: 10 }}>
-                      Change Photo
+            {selectedTask?.taskType !== "DEALER" && selectedTask?.taskType !== "FARMER" && (
+              <>
+                <View style={styles.photoSection}>
+                  {(completionPhoto || selectedTask?.completionPhotoUrl) && (
+                    <View style={styles.photoPreview}>
+                      <Image
+                        source={{
+                          uri: completionPhoto
+                            ? completionPhoto.uri
+                            : selectedTask?.completionPhotoUrl?.startsWith("http")
+                            ? selectedTask.completionPhotoUrl
+                            : `${API_ORIGIN_URL}${selectedTask?.completionPhotoUrl}`,
+                        }}
+                        style={styles.thumbnail}
+                      />
+                      <View>
+                        <Text style={styles.photoNote}>
+                          {completionPhoto ? "New Photo Captured" : "Previous Evidence"}
+                        </Text>
+                        <Button compact onPress={pickCompletionPhoto} mode="text" labelStyle={{ fontSize: 10 }}>
+                          Change Photo
+                        </Button>
+                      </View>
+                    </View>
+                  )}
+                  {!completionPhoto && !selectedTask?.completionPhotoUrl && (
+                    <Button mode="outlined" onPress={pickCompletionPhoto} icon="camera" style={styles.photoButton}>
+                      Take Completion Photo
                     </Button>
-                  </View>
+                  )}
                 </View>
-              )}
-              {!completionPhoto && !selectedTask?.completionPhotoUrl && (
-                <Button mode="outlined" onPress={pickCompletionPhoto} icon="camera" style={styles.photoButton}>
-                  Take Completion Photo
-                </Button>
-              )}
-            </View>
 
-            <TextInput
-              label="Remarks / Description"
-              mode="outlined"
-              multiline
-              numberOfLines={4}
-              value={completionRemarks}
-              onChangeText={setCompletionRemarks}
-              placeholder="Describe what you did..."
-              style={styles.remarksInput}
-            />
+                <TextInput
+                  label="Remarks / Description"
+                  mode="outlined"
+                  multiline
+                  numberOfLines={4}
+                  value={completionRemarks}
+                  onChangeText={setCompletionRemarks}
+                  placeholder="Describe what you did..."
+                  style={styles.remarksInput}
+                />
+              </>
+            )}
           </ScrollView>
 
           <View style={styles.modalActions}>

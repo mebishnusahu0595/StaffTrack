@@ -447,9 +447,10 @@ export default function OverviewPage() {
               </CardHeader>
               <CardContent>
                 <div className="flex gap-8 border-b border-slate-100 pb-3 mb-6">
-                  <TabItem label="Tasks"  count={filteredTasks.length}  active={allocatedTab === "Tasks"}  onClick={() => setAllocatedTab("Tasks")} />
-                  <TabItem label="Issues" count={filteredIssues.length} active={allocatedTab === "Issues"} onClick={() => setAllocatedTab("Issues")} />
-                  <TabItem label="Forms"  count={filteredForms.length}  active={allocatedTab === "Forms"}  onClick={() => setAllocatedTab("Forms")} />
+                  <TabItem label="Tasks"    count={filteredTasks.length}  active={allocatedTab === "Tasks"}    onClick={() => setAllocatedTab("Tasks")} />
+                  <TabItem label="Projects" count={projects.length}       active={allocatedTab === "Projects"} onClick={() => setAllocatedTab("Projects")} />
+                  <TabItem label="Issues"   count={filteredIssues.length} active={allocatedTab === "Issues"}   onClick={() => setAllocatedTab("Issues")} />
+                  <TabItem label="Forms"    count={filteredForms.length}  active={allocatedTab === "Forms"}    onClick={() => setAllocatedTab("Forms")} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   {allocatedTab === "Tasks" && (
@@ -470,6 +471,49 @@ export default function OverviewPage() {
                           </Badge>
                         </div>
                       ))
+                  )}
+                  {allocatedTab === "Projects" && (
+                    projects.length === 0
+                      ? <div className="col-span-2 text-center py-12 text-slate-400 text-xs font-bold">No active projects</div>
+                      : projects.slice(0, 10).map(project => {
+                        const assignments = project.assignments || [];
+                        const completedUnits = assignments.reduce((acc: number, a: any) => acc + (a.completedCount || 0), 0);
+                        const price = Number(project.productPrice) || 0;
+                        const salesRevenue = completedUnits * price;
+
+                        return (
+                          <div
+                            key={project.id}
+                            onClick={() => router.push("/projects")}
+                            className="flex flex-col justify-between p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:border-blue-300 hover:shadow-md cursor-pointer transition-all space-y-2"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                                ID #{project.id.slice(-6)}
+                              </span>
+                              <Badge className={cn("text-[9px] font-black uppercase px-2 py-0.5 rounded-lg border",
+                                project.status === "Completed" ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-blue-50 text-blue-600 border-blue-200"
+                              )}>
+                                {project.status}
+                              </Badge>
+                            </div>
+                            <div>
+                              <p className="text-xs font-black text-slate-900 line-clamp-1">{project.name}</p>
+                              {project.productName && (
+                                <p className="text-[10px] font-extrabold text-emerald-600 mt-0.5">📦 {project.productName}</p>
+                              )}
+                            </div>
+                            <div className="pt-2 border-t border-slate-50 flex items-center justify-between text-[10px] font-bold">
+                              <span className="text-slate-500">{completedUnits} units sold</span>
+                              {price > 0 ? (
+                                <span className="text-emerald-700 font-black">₹{salesRevenue.toLocaleString()}</span>
+                              ) : (
+                                <span className="text-slate-400">Target: {project.targetQuantity}</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
                   )}
                   {allocatedTab === "Issues" && (
                     filteredIssues.length === 0

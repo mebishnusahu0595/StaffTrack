@@ -96,7 +96,7 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
   const localHour = parseInt(now.toLocaleTimeString("en-US", { timeZone: "Asia/Kolkata", hour12: false, hour: "numeric" }));
   const localMinute = parseInt(now.toLocaleTimeString("en-US", { timeZone: "Asia/Kolkata", hour12: false, minute: "numeric" }));
 
-  if (localHour > 10 || (localHour === 10 && localMinute > 0)) {
+  if (localHour > 9 || (localHour === 9 && localMinute > 45)) {
     isCheckInPending = true;
     checkInApproved = false;
   }
@@ -1231,6 +1231,30 @@ export async function getPendingLateCheckIns(actor: AuthUser) {
     orderBy: { checkInTime: "desc" }
   });
 
+  const userIds = pendingList.map(item => item.userId);
+  const now = new Date();
+  const { start, end } = monthRange(now.getFullYear(), now.getMonth() + 1);
+
+  const monthlyRecords = await prisma.attendance.findMany({
+    where: {
+      userId: { in: userIds },
+      date: { gte: start, lt: end },
+      checkInTime: { not: null }
+    },
+    select: { userId: true, checkInTime: true }
+  });
+
+  const countsMap: Record<string, number> = {};
+  for (const r of monthlyRecords) {
+    if (r.checkInTime) {
+      const localHour = parseInt(r.checkInTime.toLocaleTimeString("en-US", { timeZone: "Asia/Kolkata", hour12: false, hour: "numeric" }));
+      const localMinute = parseInt(r.checkInTime.toLocaleTimeString("en-US", { timeZone: "Asia/Kolkata", hour12: false, minute: "numeric" }));
+      if (localHour > 9 || (localHour === 9 && localMinute > 45)) {
+        countsMap[r.userId] = (countsMap[r.userId] || 0) + 1;
+      }
+    }
+  }
+
   return pendingList.map(item => ({
     id: item.id,
     userId: item.userId,
@@ -1242,7 +1266,8 @@ export async function getPendingLateCheckIns(actor: AuthUser) {
     date: item.date.toISOString(),
     checkInTime: item.checkInTime ? item.checkInTime.toISOString() : null,
     shiftStart: item.user.shiftStart,
-    createdAt: item.checkInTime ? item.checkInTime.toISOString() : new Date().toISOString()
+    createdAt: item.checkInTime ? item.checkInTime.toISOString() : new Date().toISOString(),
+    lateCheckInsCount: countsMap[item.userId] || 0
   }));
 }
 

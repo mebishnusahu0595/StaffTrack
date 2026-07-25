@@ -295,6 +295,8 @@ model Project {
   priority       String              @default("Medium") // High, Medium, Low, Critical
   targetType     String              @default("YEARLY") // YEARLY, MONTHLY, WEEKLY
   targetQuantity Int                 @default(0)
+  productName    String?
+  productPrice   Float?              @default(0)
   startDate      DateTime?
   endDate        DateTime?
   department     String?

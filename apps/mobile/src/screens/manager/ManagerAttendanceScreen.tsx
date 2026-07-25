@@ -136,6 +136,24 @@ export function ManagerAttendanceScreen() {
                     <Text style={styles.pendingMeta}>
                       {item.department} • In: {item.checkInTime ? dayjs(item.checkInTime).format("hh:mm A") : "--"} (Shift {item.shiftStart})
                     </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
+                      <Text style={{
+                        fontSize: 10,
+                        fontWeight: "bold",
+                        color: item.lateCheckInsCount >= 3 ? "#DC2626" : item.lateCheckInsCount === 2 ? "#D97706" : "#059669",
+                        backgroundColor: item.lateCheckInsCount >= 3 ? "#FEE2E2" : item.lateCheckInsCount === 2 ? "#FEF3C7" : "#D1FAE5",
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                        borderRadius: 6
+                      }}>
+                        Late this month: {item.lateCheckInsCount ?? 0} / 3
+                      </Text>
+                      {item.lateCheckInsCount >= 3 && (
+                        <Text style={{ fontSize: 9, fontWeight: "900", color: "#DC2626" }}>
+                          LIMIT EXCEEDED!
+                        </Text>
+                      )}
+                    </View>
                     <Text style={styles.pendingDate}>{dayjs(item.date).format("DD MMM YYYY")}</Text>
                   </View>
                   <View style={styles.pendingActions}>

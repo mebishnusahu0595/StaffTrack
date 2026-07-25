@@ -9,7 +9,7 @@ import * as Location from "expo-location";
 import { API_ORIGIN_URL } from "../config/env";
 import { 
   fetchDayEndReports, 
-  fetchTodayLocationLogs, 
+  fetchTodayLocationLogs,
   fetchExpenses, 
   createExpense, 
   uploadExpenseReceipt, 
@@ -42,12 +42,26 @@ export function PersonalAttendancePanel({
 }) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { checkIn, checkOut, startBreak, endBreak, isCheckingIn, isCheckingOut, isStartingBreak, isEndingBreak, todayAttendance, activeAttendance, todaySessions, activeBreak } = useAttendance();
+  const { checkIn, checkOut, startBreak, endBreak, isCheckingIn, isCheckingOut, isStartingBreak, isEndingBreak, todayAttendance, activeAttendance, todaySessions, activeBreak, attendance } = useAttendance();
   const { getCurrentCoordinates, isLoading: isLocationLoading } = useLocation();
   const [currentTime, setCurrentTime] = useState(dayjs());
   const { officeTime, fieldTime, breakTime, friendlyBreakTime } = useTimeTracker(todaySessions, currentTime);
   const [isTakingPhoto] = useState(false);
   const [liveLocation, setLiveLocation] = useState<Location.LocationObject | null>(null);
+
+  const lateCheckInsCount = useMemo(() => {
+    return (attendance || []).filter(record => {
+      if (!record.checkInTime) return false;
+      try {
+        const d = new Date(record.checkInTime);
+        const localHour = parseInt(d.toLocaleTimeString("en-US", { timeZone: "Asia/Kolkata", hour12: false, hour: "numeric" }));
+        const localMinute = parseInt(d.toLocaleTimeString("en-US", { timeZone: "Asia/Kolkata", hour12: false, minute: "numeric" }));
+        return localHour > 9 || (localHour === 9 && localMinute > 45);
+      } catch (e) {
+        return false;
+      }
+    }).length;
+  }, [attendance]);
 
   const [odoModalVisible, setOdoModalVisible] = useState(false);
   const [odoValue, setOdoValue] = useState("");
@@ -212,17 +226,7 @@ export function PersonalAttendancePanel({
   const isBusy = isCheckingIn || isCheckingOut || isStartingBreak || isEndingBreak || isLocationLoading || isTakingPhoto || Boolean(loadingStep);
 
   async function pickOdometerImage(type: "Start" | "End"): Promise<ImagePicker.ImagePickerAsset | null> {
-    return new Promise((resolve) => {
-      Alert.alert(
-        "Odometer Photo Required",
-        `Please take a clear photo of the vehicle odometer for the ${type === "Start" ? "start" : "end"} of your field day.`,
-        [
-          { text: "Cancel", onPress: () => resolve(null), style: "cancel" },
-          { text: "Take Photo", onPress: async () => resolve(await pickVerificationImage({ quality: 0.5 })) } // quality 0.5 ensures clear numbers
-        ],
-        { cancelable: false }
-      );
-    });
+    return await pickVerificationImage({ quality: 0.5 });
   }
 
   async function handleCheckIn(type: PunchType) {
@@ -362,19 +366,74 @@ export function PersonalAttendancePanel({
           </View>
 
           {!isCheckedIn ? (
-            <View style={styles.punchButtonsRow}>
-              <TouchableRipple disabled={isBusy} onPress={() => void handleCheckIn("OFFICE")} style={[styles.punchButton, { borderWidth: 1, borderColor: "#E0E0E0", backgroundColor: "#FFFFFF" }]}>
-                <View style={styles.punchButtonContent}>
-                  <AppIcon color="#4A6583" name="office-building" size={32} />
-                  <Text style={styles.punchButtonLabel}>OFFICE</Text>
+            <View>
+              {/* Late check-in limit warning banner */}
+              <View style={{
+                backgroundColor: lateCheckInsCount >= 3 ? "#FEE2E2" : lateCheckInsCount === 2 ? "#FFFBEB" : "#F0F9FF",
+                borderColor: lateCheckInsCount >= 3 ? "#FCA5A5" : lateCheckInsCount === 2 ? "#FDE68A" : "#BEE3F8",
+                borderWidth: 1,
+                borderRadius: 12,
+                padding: 12,
+                marginTop: 16,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10
+              }}>
+                <View style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  backgroundColor: lateCheckInsCount >= 3 ? "#FEE2E2" : lateCheckInsCount === 2 ? "#FEF3C7" : "#E0F2FE",
+                  alignItems: "center",
+                  justifyContent: "center"
+                }}>
+                  <AppIcon
+                    name={lateCheckInsCount >= 3 ? "alert-circle" : "clock-alert-outline"}
+                    size={20}
+                    color={lateCheckInsCount >= 3 ? "#DC2626" : lateCheckInsCount === 2 ? "#D97706" : "#0284C7"}
+                  />
                 </View>
-              </TouchableRipple>
-              <TouchableRipple disabled={isBusy} onPress={() => void handleCheckIn("FIELD")} style={[styles.punchButton, { borderWidth: 1, borderColor: "#E0E0E0", backgroundColor: "#FFFFFF" }]}>
-                <View style={styles.punchButtonContent}>
-                  <AppIcon color="#4A6583" name="map-marker-outline" size={32} />
-                  <Text style={styles.punchButtonLabel}>FIELD</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{
+                    fontSize: 12,
+                    fontWeight: "bold",
+                    color: lateCheckInsCount >= 3 ? "#991B1B" : lateCheckInsCount === 2 ? "#92400E" : "#075985"
+                  }}>
+                    {lateCheckInsCount >= 3
+                      ? "Late limit exceeded (3/3 used)"
+                      : lateCheckInsCount === 2
+                      ? "Only 1 late check-in remaining!"
+                      : `Late check-ins: ${3 - lateCheckInsCount} remaining`}
+                  </Text>
+                  <Text style={{
+                    fontSize: 11,
+                    color: lateCheckInsCount >= 3 ? "#B91C1C" : lateCheckInsCount === 2 ? "#B45309" : "#0369A1",
+                    marginTop: 2,
+                    lineHeight: 15
+                  }}>
+                    {lateCheckInsCount >= 3
+                      ? "You have used all 3 late check-ins this month. Future late check-ins will not be approved!"
+                      : lateCheckInsCount === 2
+                      ? "You have checked in late twice. Please check-in before 9:45 AM to be approved!"
+                      : "Maximum of 3 late check-ins can be approved per month. Please check-in before 9:45 AM."}
+                  </Text>
                 </View>
-              </TouchableRipple>
+              </View>
+
+              <View style={[styles.punchButtonsRow, { marginTop: 16 }]}>
+                <TouchableRipple disabled={isBusy} onPress={() => void handleCheckIn("OFFICE")} style={[styles.punchButton, { borderWidth: 1, borderColor: "#E0E0E0", backgroundColor: "#FFFFFF" }]}>
+                  <View style={styles.punchButtonContent}>
+                    <AppIcon color="#4A6583" name="office-building" size={32} />
+                    <Text style={styles.punchButtonLabel}>OFFICE</Text>
+                  </View>
+                </TouchableRipple>
+                <TouchableRipple disabled={isBusy} onPress={() => void handleCheckIn("FIELD")} style={[styles.punchButton, { borderWidth: 1, borderColor: "#E0E0E0", backgroundColor: "#FFFFFF" }]}>
+                  <View style={styles.punchButtonContent}>
+                    <AppIcon color="#4A6583" name="map-marker-outline" size={32} />
+                    <Text style={styles.punchButtonLabel}>FIELD</Text>
+                  </View>
+                </TouchableRipple>
+              </View>
             </View>
           ) : (
             <View>
@@ -775,65 +834,20 @@ function toRadians(value: number) {
 }
 
 async function pickVerificationImage(options?: { quality?: number }): Promise<ImagePicker.ImagePickerAsset | null> {
-  return new Promise((resolve) => {
-    Alert.alert(
-      "Verification Photo",
-      "Take a new photo or choose an existing one from the gallery:",
-      [
-        {
-          text: "Cancel",
-          onPress: () => resolve(null),
-          style: "cancel"
-        },
-        {
-          text: "Take Photo (Camera)",
-          onPress: async () => {
-            const permission = await ImagePicker.requestCameraPermissionsAsync();
-            if (!permission.granted) {
-              Alert.alert("Permission denied", "Camera access is required for verification.");
-              resolve(null);
-              return;
-            }
-            try {
-              const result = await ImagePicker.launchCameraAsync({ 
-                allowsEditing: false, // Disabling editing intent prevents memory crashes on low-end/budget phones
-                quality: options?.quality ?? 0.4 
-              });
-              resolve(result.canceled ? null : result.assets[0]);
-            } catch (cameraErr) {
-              console.error("[Camera] launchCameraAsync failed:", cameraErr);
-              Alert.alert("Camera Error", "Failed to launch camera. Opening gallery instead...");
-              resolve(await pickFromGallery(options));
-            }
-          }
-        },
-        {
-          text: "Choose from Gallery",
-          onPress: async () => {
-            resolve(await pickFromGallery(options));
-          }
-        }
-      ],
-      { cancelable: true }
-    );
-  });
-}
-
-async function pickFromGallery(options?: { quality?: number }): Promise<ImagePicker.ImagePickerAsset | null> {
-  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  const permission = await ImagePicker.requestCameraPermissionsAsync();
   if (!permission.granted) {
-    Alert.alert("Permission denied", "Gallery access is required.");
+    Alert.alert("Camera Permission Required", "Camera access is required for attendance selfie and odometer verification.");
     return null;
   }
   try {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      allowsEditing: false,
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: false, // Disabling editing intent prevents memory crashes on low-end/budget phones
       quality: options?.quality ?? 0.4
     });
     return result.canceled ? null : result.assets[0];
-  } catch (err) {
-    console.error("[Gallery] launchImageLibraryAsync failed:", err);
-    Alert.alert("Error", "Failed to open gallery.");
+  } catch (cameraErr) {
+    console.error("[Camera] launchCameraAsync failed:", cameraErr);
+    Alert.alert("Camera Error", "Failed to launch camera. Please try again.");
     return null;
   }
 }

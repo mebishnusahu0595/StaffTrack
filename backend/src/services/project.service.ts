@@ -8,6 +8,8 @@ export interface CreateProjectInput {
   priority?: string;
   targetType?: "YEARLY" | "MONTHLY" | "WEEKLY" | string;
   targetQuantity?: number;
+  productName?: string;
+  productPrice?: number;
   startDate?: string;
   endDate?: string;
   department?: string;
@@ -24,7 +26,7 @@ export async function createProject(companyIdOrUser: any, input: CreateProjectIn
   const companyId = typeof companyIdOrUser === "string" ? companyIdOrUser : companyIdOrUser.companyId;
   const {
     name, description, status = "Ongoing", priority = "Medium",
-    targetType = "YEARLY", targetQuantity = 0, startDate, endDate,
+    targetType = "YEARLY", targetQuantity = 0, productName, productPrice, startDate, endDate,
     department, clientName, objectives, tags, budget, deadline, assignedUserIds = []
   } = input;
 
@@ -49,6 +51,8 @@ export async function createProject(companyIdOrUser: any, input: CreateProjectIn
       priority,
       targetType,
       targetQuantity: Number(targetQuantity) || 0,
+      productName: productName || undefined,
+      productPrice: productPrice != null ? Number(productPrice) : 0,
       startDate: start,
       endDate: end,
       department,
@@ -238,7 +242,9 @@ export async function updateProject(arg1: any, arg2: any, arg3?: any) {
       budget: data.budget ? Number(data.budget) : undefined,
       deadline: data.deadline ? new Date(data.deadline) : undefined,
       targetQuantity: data.targetQuantity ? Number(data.targetQuantity) : undefined,
-      targetType: data.targetType
+      targetType: data.targetType,
+      productName: data.productName !== undefined ? data.productName : undefined,
+      productPrice: data.productPrice !== undefined ? Number(data.productPrice) : undefined
     }
   });
 }

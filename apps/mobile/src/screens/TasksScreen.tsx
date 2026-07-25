@@ -33,12 +33,6 @@ export function TasksScreen() {
   const [checklistResponses, setChecklistResponses] = useState<Record<string, { text?: string; dropdown?: string; image?: string; video?: string; audio?: string; file?: { url: string; name: string }; geotag?: { lat: number; lng: number } }>>({});
 
   const isChecklistComplete = useMemo(() => {
-    if (selectedTask?.taskType === "DEALER" || selectedTask?.taskType === "FARMER") {
-      const hasPhoto = Boolean(completionPhoto || selectedTask?.completionPhotoUrl);
-      const hasRemarks = Boolean(completionRemarks.trim());
-      if (!hasPhoto || !hasRemarks) return false;
-    }
-
     if (!selectedTask?.checklist) return true;
     const checklist = selectedTask.checklist as any[];
     for (const item of checklist) {
@@ -56,7 +50,7 @@ export function TasksScreen() {
       }
     }
     return true;
-  }, [selectedTask, checklistResponses, completionPhoto, completionRemarks]);
+  }, [selectedTask, checklistResponses]);
 
   async function captureChecklistImage(itemId: string) {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -223,6 +217,8 @@ export function TasksScreen() {
       if (completionPhoto) {
         photoUrl = await uploadPhoto(completionPhoto);
       }
+      let remarksVal = completionRemarks.trim();
+
       let lat: number | undefined;
       let lng: number | undefined;
       try {
@@ -272,10 +268,23 @@ export function TasksScreen() {
         }
       }
 
+      // Map specific fields for DEALER/FARMER tasks if checklist responses are available
+      if (selectedTask?.taskType === "DEALER") {
+        const dealerPhoto = checklistResponses["dl_photo"]?.image;
+        if (dealerPhoto) photoUrl = dealerPhoto;
+        const dealerRemarks = checklistResponses["dl_remarks"]?.text;
+        if (dealerRemarks) remarksVal = dealerRemarks;
+      } else if (selectedTask?.taskType === "FARMER") {
+        const farmerPhoto = checklistResponses["fm_photo"]?.image;
+        if (farmerPhoto) photoUrl = farmerPhoto;
+        const farmerRemarks = checklistResponses["fm_remarks"]?.text;
+        if (farmerRemarks) remarksVal = farmerRemarks;
+      }
+
       await updateStatus({
         taskId: selectedTask.id,
         status: "COMPLETED",
-        completionData: { photoUrl, remarks: completionRemarks.trim(), lat, lng, checklistResponses: compiledResponses },
+        completionData: { photoUrl, remarks: remarksVal, lat, lng, checklistResponses: compiledResponses },
       });
       setCompletionModalVisible(false);
       setCompletionPhoto(null);
@@ -767,46 +776,50 @@ export function TasksScreen() {
               </View>
             )}
 
-            <View style={styles.photoSection}>
-              {(completionPhoto || selectedTask?.completionPhotoUrl) && (
-                <View style={styles.photoPreview}>
-                  <Image
-                    source={{
-                      uri: completionPhoto
-                        ? completionPhoto.uri
-                        : selectedTask?.completionPhotoUrl?.startsWith("http")
-                        ? selectedTask.completionPhotoUrl
-                        : `${API_ORIGIN_URL}${selectedTask?.completionPhotoUrl}`,
-                    }}
-                    style={styles.thumbnail}
-                  />
-                  <View>
-                    <Text style={styles.photoNote}>
-                      {completionPhoto ? "New Photo Captured" : "Previous Evidence"}
-                    </Text>
-                    <Button compact onPress={pickCompletionPhoto} mode="text" labelStyle={{ fontSize: 10 }}>
-                      Change Photo
+            {selectedTask?.taskType !== "DEALER" && selectedTask?.taskType !== "FARMER" && (
+              <>
+                <View style={styles.photoSection}>
+                  {(completionPhoto || selectedTask?.completionPhotoUrl) && (
+                    <View style={styles.photoPreview}>
+                      <Image
+                        source={{
+                          uri: completionPhoto
+                            ? completionPhoto.uri
+                            : selectedTask?.completionPhotoUrl?.startsWith("http")
+                            ? selectedTask.completionPhotoUrl
+                            : `${API_ORIGIN_URL}${selectedTask?.completionPhotoUrl}`,
+                        }}
+                        style={styles.thumbnail}
+                      />
+                      <View>
+                        <Text style={styles.photoNote}>
+                          {completionPhoto ? "New Photo Captured" : "Previous Evidence"}
+                        </Text>
+                        <Button compact onPress={pickCompletionPhoto} mode="text" labelStyle={{ fontSize: 10 }}>
+                          Change Photo
+                        </Button>
+                      </View>
+                    </View>
+                  )}
+                  {!completionPhoto && !selectedTask?.completionPhotoUrl && (
+                    <Button mode="outlined" onPress={pickCompletionPhoto} icon="camera" style={styles.photoButton}>
+                      Take Completion Photo
                     </Button>
-                  </View>
+                  )}
                 </View>
-              )}
-              {!completionPhoto && !selectedTask?.completionPhotoUrl && (
-                <Button mode="outlined" onPress={pickCompletionPhoto} icon="camera" style={styles.photoButton}>
-                  Take Completion Photo
-                </Button>
-              )}
-            </View>
 
-            <TextInput
-              label="Remarks / Description"
-              mode="outlined"
-              multiline
-              numberOfLines={4}
-              value={completionRemarks}
-              onChangeText={setCompletionRemarks}
-              placeholder="Describe what you did..."
-              style={styles.remarksInput}
-            />
+                <TextInput
+                  label="Remarks / Description"
+                  mode="outlined"
+                  multiline
+                  numberOfLines={4}
+                  value={completionRemarks}
+                  onChangeText={setCompletionRemarks}
+                  placeholder="Describe what you did..."
+                  style={styles.remarksInput}
+                />
+              </>
+            )}
           </ScrollView>
 
           <View style={styles.modalActions}>

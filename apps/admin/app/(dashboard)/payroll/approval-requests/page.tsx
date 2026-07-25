@@ -276,6 +276,22 @@ export default function ApprovalRequestsPage() {
                           <span className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
                             {item.email} / {item.designation || "Staff"}
                           </span>
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
+                              item.lateCheckInsCount >= 3
+                                ? "bg-rose-50 text-rose-600 border-rose-200"
+                                : item.lateCheckInsCount === 2
+                                ? "bg-amber-50 text-amber-600 border-amber-200"
+                                : "bg-emerald-50 text-emerald-600 border-emerald-200"
+                            }`}>
+                              Late this month: {item.lateCheckInsCount ?? 0} / 3
+                            </span>
+                            {(item.lateCheckInsCount ?? 0) >= 3 && (
+                              <span className="text-[9px] font-black text-rose-600 uppercase tracking-wider animate-pulse">
+                                Limit Exceeded!
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </TableCell>
