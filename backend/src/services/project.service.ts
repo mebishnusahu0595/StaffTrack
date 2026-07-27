@@ -224,11 +224,91 @@ export async function getUserProjects(userId: string) {
   }));
 }
 
+function generatePeriodsData(qty: number, targetType: string, start: Date) {
+  const periodsData: Array<{
+    periodIndex: number;
+    periodType: string;
+    periodName: string;
+    startDate: Date;
+    endDate: Date;
+    baseTarget: number;
+  }> = [];
+
+  if (targetType === "YEARLY") {
+    const monthlyBase = Math.max(0, Math.floor(qty / 12));
+    const remainder = qty % 12;
+
+    for (let i = 1; i <= 12; i++) {
+      const periodStart = startOfMonth(addMonths(start, i - 1));
+      const periodEnd = endOfMonth(periodStart);
+      const monthBase = i === 12 ? monthlyBase + remainder : monthlyBase;
+
+      periodsData.push({
+        periodIndex: i,
+        periodType: "MONTHLY",
+        periodName: format(periodStart, "MMM yyyy"),
+        startDate: periodStart,
+        endDate: periodEnd,
+        baseTarget: monthBase
+      });
+    }
+  } else if (targetType === "MONTHLY") {
+    const weeklyBase = Math.max(0, Math.floor(qty / 4));
+    const remainder = qty % 4;
+
+    for (let i = 1; i <= 4; i++) {
+      const periodStart = addWeeks(start, i - 1);
+      const periodEnd = addDays(periodStart, 6);
+      const weekBase = i === 4 ? weeklyBase + remainder : weeklyBase;
+
+      periodsData.push({
+        periodIndex: i,
+        periodType: "WEEKLY",
+        periodName: `Week ${i} (${format(periodStart, "d MMM")})`,
+        startDate: periodStart,
+        endDate: periodEnd,
+        baseTarget: weekBase
+      });
+    }
+  } else {
+    // WEEKLY
+    periodsData.push({
+      periodIndex: 1,
+      periodType: "WEEKLY",
+      periodName: `Week 1 (${format(start, "d MMM")})`,
+      startDate: start,
+      endDate: addWeeks(start, 1),
+      baseTarget: qty
+    });
+  }
+
+  return periodsData;
+}
+
 export async function updateProject(arg1: any, arg2: any, arg3?: any) {
   const projectId = typeof arg1 === "string" ? arg1 : arg2;
   const data = typeof arg1 === "string" ? arg2 : arg3;
 
-  return prisma.project.update({
+  const existingProject = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: {
+      assignments: {
+        include: {
+          periods: { orderBy: { periodIndex: "asc" } }
+        }
+      }
+    }
+  });
+
+  if (!existingProject) {
+    throw new Error("Project not found");
+  }
+
+  const updatedTargetQty = data.targetQuantity !== undefined ? Number(data.targetQuantity) : existingProject.targetQuantity;
+  const updatedTargetType = data.targetType || existingProject.targetType;
+  const startDate = data.startDate ? new Date(data.startDate) : (existingProject.startDate ? new Date(existingProject.startDate) : new Date());
+
+  await prisma.project.update({
     where: { id: projectId },
     data: {
       name: data.name,
@@ -241,12 +321,115 @@ export async function updateProject(arg1: any, arg2: any, arg3?: any) {
       tags: data.tags,
       budget: data.budget ? Number(data.budget) : undefined,
       deadline: data.deadline ? new Date(data.deadline) : undefined,
-      targetQuantity: data.targetQuantity ? Number(data.targetQuantity) : undefined,
-      targetType: data.targetType,
+      targetQuantity: updatedTargetQty,
+      targetType: updatedTargetType,
       productName: data.productName !== undefined ? data.productName : undefined,
       productPrice: data.productPrice !== undefined ? Number(data.productPrice) : undefined
     }
   });
+
+  const newPeriods = generatePeriodsData(updatedTargetQty, updatedTargetType, startDate);
+
+  // Sync assigned users if assignedUserIds was provided in payload
+  const assignedUserIds: string[] | undefined = Array.isArray(data.assignedUserIds) ? data.assignedUserIds : undefined;
+  const existingAssignments = existingProject.assignments;
+  const existingAssignedUserIds = existingAssignments.map((a) => a.userId);
+  const targetUserIds = assignedUserIds || existingAssignedUserIds;
+
+  // Unassign users that were removed
+  if (assignedUserIds) {
+    for (const assignment of existingAssignments) {
+      if (!assignedUserIds.includes(assignment.userId)) {
+        await prisma.projectPeriodProgress.deleteMany({ where: { assignmentId: assignment.id } });
+        await prisma.projectAssignment.delete({ where: { id: assignment.id } });
+      }
+    }
+  }
+
+  // Update existing assignments or create new assignments for target user IDs
+  for (const userId of targetUserIds) {
+    let assignment = existingAssignments.find((a) => a.userId === userId);
+
+    if (!assignment) {
+      await prisma.projectAssignment.create({
+        data: {
+          projectId,
+          userId,
+          targetQuantity: updatedTargetQty,
+          completedCount: 0,
+          periods: {
+            create: newPeriods.map((p) => ({
+              periodIndex: p.periodIndex,
+              periodType: p.periodType,
+              periodName: p.periodName,
+              startDate: p.startDate,
+              endDate: p.endDate,
+              baseTarget: p.baseTarget,
+              carryover: 0,
+              effectiveTarget: p.baseTarget,
+              completedCount: 0
+            }))
+          }
+        }
+      });
+    } else {
+      // Update targetQuantity on assignment
+      await prisma.projectAssignment.update({
+        where: { id: assignment.id },
+        data: { targetQuantity: updatedTargetQty }
+      });
+
+      const existingPeriods = assignment.periods;
+      if (existingPeriods.length !== newPeriods.length) {
+        // Target type changed (e.g. YEARLY -> MONTHLY), re-create periods
+        await prisma.projectPeriodProgress.deleteMany({ where: { assignmentId: assignment.id } });
+        await prisma.projectPeriodProgress.createMany({
+          data: newPeriods.map((p) => ({
+            assignmentId: assignment.id,
+            periodIndex: p.periodIndex,
+            periodType: p.periodType,
+            periodName: p.periodName,
+            startDate: p.startDate,
+            endDate: p.endDate,
+            baseTarget: p.baseTarget,
+            carryover: 0,
+            effectiveTarget: p.baseTarget,
+            completedCount: 0
+          }))
+        });
+      } else {
+        // Same period count, update baseTargets and recalculate carryover cascade!
+        let runningCarryover = 0;
+        for (let i = 0; i < newPeriods.length; i++) {
+          const np = newPeriods[i];
+          const ep = existingPeriods[i];
+
+          const currentCompleted = ep ? ep.completedCount : 0;
+          const currentCarryover = runningCarryover;
+          const currentEffective = np.baseTarget + currentCarryover;
+          const shortfall = Math.max(0, currentEffective - currentCompleted);
+          runningCarryover = shortfall;
+
+          if (ep) {
+            await prisma.projectPeriodProgress.update({
+              where: { id: ep.id },
+              data: {
+                periodName: np.periodName,
+                startDate: np.startDate,
+                endDate: np.endDate,
+                baseTarget: np.baseTarget,
+                carryover: currentCarryover,
+                effectiveTarget: currentEffective,
+                isCompleted: currentCompleted >= currentEffective
+              }
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return getProjectById(projectId);
 }
 
 export async function updatePeriodProgress(
