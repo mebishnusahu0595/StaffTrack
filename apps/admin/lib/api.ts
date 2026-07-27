@@ -447,7 +447,7 @@ export async function fetchPayrollReport(params?: { month: number; year: number 
   return response.data.data;
 }
 
-export async function fetchSalaryMatrix(params?: { month: number; year: number }) {
+export async function fetchSalaryMatrix(params?: { month: number; year: number; ratePerKm?: number }) {
   const response = await api.get<{ data: any[] }>("/payroll/matrix", { params });
   return response.data.data;
 }

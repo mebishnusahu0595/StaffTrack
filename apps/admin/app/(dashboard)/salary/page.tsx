@@ -42,17 +42,33 @@ import { EmployeeDetailDrawer } from "@/components/admin/employee-detail-drawer"
 export default function SalaryMatrixPage() {
   const [selectedMonth, setSelectedMonth] = useState(dayjs());
   const [search, setSearch] = useState("");
+  const [ratePerKm, setRatePerKm] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("salary_rate_per_km");
+      if (saved && !isNaN(Number(saved))) return Number(saved);
+    }
+    return 5;
+  });
   const [slipEmployee, setSlipEmployee] = useState<any>(null);
   const [customizingEmployee, setCustomizingEmployee] = useState<any>(null);
   const [drawerEmployeeId, setDrawerEmployeeId] = useState<string | null>(null);
   
   const queryClient = useQueryClient();
 
+  const handleRateChange = (val: number) => {
+    const nextRate = isNaN(val) ? 0 : val;
+    setRatePerKm(nextRate);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("salary_rate_per_km", String(nextRate));
+    }
+  };
+
   const salaryQuery = useQuery({
-    queryKey: ["salary-matrix", selectedMonth.month() + 1, selectedMonth.year()],
+    queryKey: ["salary-matrix", selectedMonth.month() + 1, selectedMonth.year(), ratePerKm],
     queryFn: () => fetchSalaryMatrix({ 
       month: selectedMonth.month() + 1, 
-      year: selectedMonth.year() 
+      year: selectedMonth.year(),
+      ratePerKm
     })
   });
 
@@ -77,7 +93,7 @@ export default function SalaryMatrixPage() {
     const headers = [
       "Employee Name", "Designation", "Department", "Base Salary", 
       "Payable Days", "Absences", "Holidays", "Leaves", "Total KM", 
-      "Travel Payout", "Points", "Net Salary", "Total Payout"
+      "Travel Rate (Per KM)", "Travel Payout", "Points", "Net Salary", "Total Payout"
     ];
     const rows = filteredReports.map(e => [
       e.userName || "",
@@ -89,6 +105,7 @@ export default function SalaryMatrixPage() {
       e.holidayDays || 0,
       e.paidLeaveDays || 0,
       (e.totalKm || 0).toFixed(1),
+      `₹${e.travelRate ?? ratePerKm}`,
       e.travelAllowance || 0,
       e.monthlyPoints || 0,
       e.netSalary || 0,
@@ -153,7 +170,25 @@ export default function SalaryMatrixPage() {
             onChange={e => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200/80 px-3.5 py-1.5 rounded-2xl">
+            <div className="flex flex-col">
+              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 leading-none">Travel Rate</span>
+              <span className="text-[10px] font-black text-blue-600">Per KM</span>
+            </div>
+            <div className="flex items-center gap-1 bg-white border border-slate-200 px-2.5 py-1 rounded-xl shadow-inner">
+              <span className="text-xs font-black text-slate-500">₹</span>
+              <input
+                type="number"
+                min={0}
+                step={0.5}
+                value={ratePerKm}
+                onChange={(e) => handleRateChange(Number(e.target.value))}
+                className="w-12 text-center text-xs font-black text-slate-900 focus:outline-none"
+              />
+              <span className="text-[10px] font-bold text-slate-400">/ KM</span>
+            </div>
+          </div>
           <Button 
             variant="outline" 
             onClick={exportSalaryCSV}
@@ -239,10 +274,15 @@ export default function SalaryMatrixPage() {
                       </div>
                     </td>
                     <td className="py-4 px-6 text-center text-xs font-bold text-slate-600 font-mono">
-                      {(emp.totalKm || 0).toFixed(1)} KM
+                      <span className="bg-slate-100 px-2.5 py-1 rounded-xl text-slate-800 font-black">
+                        {(emp.totalKm || 0).toFixed(1)} KM
+                      </span>
                     </td>
-                    <td className="py-4 px-6 font-mono text-xs font-bold text-slate-600">
-                      ₹{Number(emp.travelAllowance || 0).toLocaleString()}
+                    <td className="py-4 px-6 font-mono text-xs font-bold text-slate-800">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-black text-emerald-700">₹{Number(emp.travelAllowance || 0).toLocaleString()}</span>
+                        <span className="text-[9px] font-extrabold text-slate-400">{(emp.totalKm || 0).toFixed(1)} km × ₹{emp.travelRate ?? ratePerKm}</span>
+                      </div>
                     </td>
                     <td className="py-4 px-6 text-center">
                       <div className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 px-2 py-0.5 rounded-lg border border-amber-200/40 text-[10px] font-black">

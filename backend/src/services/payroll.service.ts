@@ -2,7 +2,7 @@ import { TaskStatus, UserRole } from "@prisma/client";
 import { eachDayOfInterval, endOfMonth, format, isSameDay, isWeekend, startOfMonth } from "date-fns";
 import { prisma } from "../lib/prisma";
 
-export async function calculateMonthlyPayroll(companyId: string, month: number, year: number) {
+export async function calculateMonthlyPayroll(companyId: string, month: number, year: number, ratePerKm?: number) {
   const start = startOfMonth(new Date(year, month - 1));
   const end = endOfMonth(start);
   const daysInMonth = eachDayOfInterval({ start, end });
@@ -171,13 +171,16 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
       };
     });
 
-    const totalKm = user.attendances.reduce((sum: number, att: any) => {
+    const odometerKm = user.attendances.reduce((sum: number, att: any) => {
       if (att.startOdometer !== null && att.endOdometer !== null && att.endOdometer >= att.startOdometer) {
         return sum + (att.endOdometer - att.startOdometer);
       }
       return sum;
     }, 0);
-    const travelRate = user.travelRate ?? 5.0;
+    const derKm = reports.filter((r) => r.userId === user.id).reduce((sum, r) => sum + Number(r.kmTravelled || 0), 0);
+    const totalKm = Math.max(odometerKm, derKm);
+
+    const travelRate = (ratePerKm !== undefined && !isNaN(Number(ratePerKm))) ? Number(ratePerKm) : (user.travelRate ?? 5.0);
     const travelAllowance = Math.round(totalKm * travelRate);
 
     const approvedExpensesTotal = expensesByUser.get(user.id) ?? 0;
@@ -206,6 +209,7 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
       netSalary,
       deductionAmount,
       totalKm,
+      travelRate,
       travelAllowance,
       totalPayout,
       dailyBreakdown,
@@ -242,8 +246,8 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
   });
 }
 
-export async function calculateSalaryMatrix(companyId: string, month: number, year: number) {
-  const reports = await calculateMonthlyPayroll(companyId, month, year);
+export async function calculateSalaryMatrix(companyId: string, month: number, year: number, ratePerKm?: number) {
+  const reports = await calculateMonthlyPayroll(companyId, month, year, ratePerKm);
 
   return reports.map((report: any) => {
     const totalDays = report.totalDays;
@@ -270,6 +274,7 @@ export async function calculateSalaryMatrix(companyId: string, month: number, ye
       monthlyPoints: report.monthlyPoints,
       approvedExpensesTotal: report.approvedExpensesTotal,
       totalKm: report.totalKm,
+      travelRate: report.travelRate,
       travelAllowance: report.travelAllowance,
       deductionAmount: report.deductionAmount,
       netSalary: report.netSalary,

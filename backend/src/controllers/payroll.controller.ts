@@ -6,11 +6,13 @@ export async function getPayrollReport(req: Request, res: Response) {
   try {
     const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
     const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    const ratePerKm = req.query.ratePerKm ? parseFloat(req.query.ratePerKm as string) : undefined;
 
     const report = await payrollService.calculateMonthlyPayroll(
       req.user!.companyId,
       month,
-      year
+      year,
+      ratePerKm
     );
 
     sendSuccess(res, report, "Payroll report generated");
@@ -24,11 +26,13 @@ export async function getSalaryMatrix(req: Request, res: Response) {
   try {
     const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
     const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    const ratePerKm = req.query.ratePerKm ? parseFloat(req.query.ratePerKm as string) : undefined;
     
     const report = await payrollService.calculateSalaryMatrix(
       req.user!.companyId,
       month,
-      year
+      year,
+      ratePerKm
     );
 
     sendSuccess(res, report, "Salary matrix generated");
