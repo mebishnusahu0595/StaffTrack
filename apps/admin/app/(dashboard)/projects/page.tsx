@@ -195,7 +195,8 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
               <div className="flex gap-2 overflow-x-auto pb-2">
                 {assignments.map((a: any) => {
                   const isSelected = (a.id === activeAssignment?.id);
-                  const aProgress = a.targetQuantity > 0 ? Math.round((a.completedCount / a.targetQuantity) * 100) : 0;
+                  const aTarget = totalTargetQty || a.targetQuantity || 0;
+                  const aProgress = aTarget > 0 ? Math.round((a.completedCount / aTarget) * 100) : 0;
                   const aRevenue = (a.completedCount || 0) * unitPrice;
 
                   return (
@@ -216,7 +217,7 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
                         <span className="text-xs font-bold text-slate-900 truncate">{a.user?.name || "Staff Member"}</span>
                       </div>
                       <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
-                        <span>{a.completedCount}/{a.targetQuantity} units</span>
+                        <span>{a.completedCount}/{aTarget} units</span>
                         <span className="text-blue-600 font-black">{aProgress}%</span>
                       </div>
                       {unitPrice > 0 && (
@@ -236,7 +237,7 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
                 <div>
                   <h4 className="text-sm font-black text-slate-900">{activeAssignment.user?.name}&apos;s Period Breakdown</h4>
                   <p className="text-[10px] font-bold text-slate-500">
-                    Target: {activeAssignment.targetQuantity} units | Completed: {activeAssignment.completedCount} units
+                    Target: {totalTargetQty || activeAssignment.targetQuantity} units | Completed: {activeAssignment.completedCount} units
                     {unitPrice > 0 ? ` (Total Sales: ₹${(activeAssignment.completedCount * unitPrice).toLocaleString()})` : ""}
                   </p>
                 </div>

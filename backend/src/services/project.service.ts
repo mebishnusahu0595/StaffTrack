@@ -116,11 +116,22 @@ export async function syncProjectPeriods(projectId: string) {
   const startDate = project.startDate ? new Date(project.startDate) : new Date();
 
   for (const assignment of project.assignments) {
-    if (assignment.periods.length !== expectedCount) {
+    if (assignment.targetQuantity !== project.targetQuantity) {
+      await prisma.projectAssignment.update({
+        where: { id: assignment.id },
+        data: { targetQuantity: project.targetQuantity }
+      });
+    }
+
+    const sumBaseTargets = assignment.periods.reduce((acc, p) => acc + p.baseTarget, 0);
+    const countMismatch = assignment.periods.length !== expectedCount;
+    const targetMismatch = project.targetQuantity > 0 && sumBaseTargets !== project.targetQuantity;
+
+    if (countMismatch || targetMismatch) {
       const totalCompleted = assignment.completedCount || 0;
       await prisma.projectPeriodProgress.deleteMany({ where: { assignmentId: assignment.id } });
 
-      const newPeriods = generatePeriodsData(assignment.targetQuantity || project.targetQuantity, targetType, startDate);
+      const newPeriods = generatePeriodsData(project.targetQuantity, targetType, startDate);
       let runningCarryover = 0;
 
       for (let i = 0; i < newPeriods.length; i++) {
@@ -177,13 +188,18 @@ export async function listProjects(companyIdOrUser: any, search?: string) {
     orderBy: { createdAt: "desc" }
   });
 
-  // Auto-sync any existing project whose period counts mismatch targetType
+  // Auto-sync any existing project whose period counts or target mismatch
   let needsReFetch = false;
   for (const project of projects) {
     const targetType = String(project.targetType || "YEARLY").trim().toUpperCase();
     const expectedCount = targetType === "YEARLY" ? 12 : targetType === "MONTHLY" ? 4 : 1;
     for (const assignment of project.assignments) {
-      if (assignment.periods.length !== expectedCount) {
+      const sumBaseTargets = assignment.periods.reduce((acc, p) => acc + p.baseTarget, 0);
+      const countMismatch = assignment.periods.length !== expectedCount;
+      const targetMismatch = project.targetQuantity > 0 && sumBaseTargets !== project.targetQuantity;
+      const qtyMismatch = assignment.targetQuantity !== project.targetQuantity;
+
+      if (countMismatch || targetMismatch || qtyMismatch) {
         await syncProjectPeriods(project.id);
         needsReFetch = true;
         break;
@@ -229,7 +245,19 @@ export async function getProjectById(projectId: string) {
   if (project) {
     const targetType = String(project.targetType || "YEARLY").trim().toUpperCase();
     const expectedCount = targetType === "YEARLY" ? 12 : targetType === "MONTHLY" ? 4 : 1;
-    const hasMismatch = project.assignments.some(a => a.periods.length !== expectedCount);
+    let hasMismatch = false;
+
+    for (const assignment of project.assignments) {
+      const sumBaseTargets = assignment.periods.reduce((acc, p) => acc + p.baseTarget, 0);
+      const countMismatch = assignment.periods.length !== expectedCount;
+      const targetMismatch = project.targetQuantity > 0 && sumBaseTargets !== project.targetQuantity;
+      const qtyMismatch = assignment.targetQuantity !== project.targetQuantity;
+
+      if (countMismatch || targetMismatch || qtyMismatch) {
+        hasMismatch = true;
+        break;
+      }
+    }
 
     if (hasMismatch) {
       await syncProjectPeriods(project.id);
