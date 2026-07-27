@@ -102,7 +102,7 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
   // Total Target across all assignments
   const totalTargetQty = assignments.reduce((acc: number, a: any) => acc + (a.targetQuantity || 0), 0) || (project.targetQuantity || 0);
   const totalCompletedCount = assignments.reduce((acc: number, a: any) => acc + (a.completedCount || 0), 0);
-  const overallProgress = totalTargetQty > 0 ? Math.min(100, Math.round((totalCompletedCount / totalTargetQty) * 100)) : 0;
+  const overallProgress = totalTargetQty > 0 ? Math.round((totalCompletedCount / totalTargetQty) * 100) : 0;
 
   const totalTargetRevenue = totalTargetQty * unitPrice;
   const totalAchievedRevenue = totalCompletedCount * unitPrice;
@@ -163,7 +163,7 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
               <div className="h-3 rounded-full bg-slate-800 overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-emerald-400 to-blue-500 rounded-full transition-all duration-700"
-                  style={{ width: `${overallProgress}%` }}
+                  style={{ width: `${Math.min(100, Math.max(0, overallProgress))}%` }}
                 />
               </div>
               <div className="flex justify-between text-[10px] font-bold text-slate-400">
@@ -195,7 +195,7 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
               <div className="flex gap-2 overflow-x-auto pb-2">
                 {assignments.map((a: any) => {
                   const isSelected = (a.id === activeAssignment?.id);
-                  const aProgress = a.targetQuantity > 0 ? Math.min(100, Math.round((a.completedCount / a.targetQuantity) * 100)) : 0;
+                  const aProgress = a.targetQuantity > 0 ? Math.round((a.completedCount / a.targetQuantity) * 100) : 0;
                   const aRevenue = (a.completedCount || 0) * unitPrice;
 
                   return (
@@ -276,7 +276,7 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
                   </TableHeader>
                   <TableBody>
                     {filteredPeriods.map((p: any) => {
-                      const pPercent = p.effectiveTarget > 0 ? Math.min(100, Math.round((p.completedCount / p.effectiveTarget) * 100)) : 0;
+                      const pPercent = p.effectiveTarget > 0 ? Math.round((p.completedCount / p.effectiveTarget) * 100) : 0;
                       const pRevenue = p.completedCount * unitPrice;
                       const targetRevenue = p.effectiveTarget * unitPrice;
 
@@ -307,7 +307,7 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
                               <div className="w-16 h-2 rounded-full bg-slate-100 overflow-hidden">
                                 <div
                                   className={cn("h-full rounded-full transition-all", pPercent >= 100 ? "bg-emerald-500" : "bg-blue-500")}
-                                  style={{ width: `${pPercent}%` }}
+                                  style={{ width: `${Math.min(100, Math.max(0, pPercent))}%` }}
                                 />
                               </div>
                             </div>
@@ -880,6 +880,11 @@ export default function ProjectsPage() {
     return { total, tasks, ongoing, completed, totalSoldUnits, totalRevenue };
   }, [projects]);
 
+  const activeProgressProject = useMemo(() => {
+    if (!progressProject) return null;
+    return projects.find((p: any) => p.id === progressProject.id) || progressProject;
+  }, [projects, progressProject]);
+
   // Refresh after any mutation
   function refresh() {
     queryClient.invalidateQueries({ queryKey: ["projects"] });
@@ -928,9 +933,9 @@ export default function ProjectsPage() {
           loading={deletingId}
         />
       )}
-      {progressProject && (
+      {activeProgressProject && (
         <ViewProgressModal
-          project={progressProject}
+          project={activeProgressProject}
           onClose={() => setProgressProject(null)}
         />
       )}

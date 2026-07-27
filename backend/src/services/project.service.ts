@@ -380,25 +380,40 @@ export async function updateProject(arg1: any, arg2: any, arg3?: any) {
       });
 
       const existingPeriods = assignment.periods;
-      if (existingPeriods.length !== newPeriods.length) {
-        // Target type changed (e.g. YEARLY -> MONTHLY), re-create periods
+      const targetTypeChanged = existingProject.targetType !== updatedTargetType;
+
+      if (existingPeriods.length !== newPeriods.length || targetTypeChanged) {
+        // Target type changed (e.g. MONTHLY -> YEARLY), re-create periods preserving completed sales
+        const totalCompleted = assignment.completedCount || 0;
         await prisma.projectPeriodProgress.deleteMany({ where: { assignmentId: assignment.id } });
-        await prisma.projectPeriodProgress.createMany({
-          data: newPeriods.map((p) => ({
-            assignmentId: assignment.id,
-            periodIndex: p.periodIndex,
-            periodType: p.periodType,
-            periodName: p.periodName,
-            startDate: p.startDate,
-            endDate: p.endDate,
-            baseTarget: p.baseTarget,
-            carryover: 0,
-            effectiveTarget: p.baseTarget,
-            completedCount: 0
-          }))
-        });
+        
+        let runningCarryover = 0;
+        for (let i = 0; i < newPeriods.length; i++) {
+          const p = newPeriods[i];
+          const periodCompleted = i === 0 ? totalCompleted : 0;
+          const currentCarryover = runningCarryover;
+          const currentEffective = p.baseTarget + currentCarryover;
+          const shortfall = Math.max(0, currentEffective - periodCompleted);
+          runningCarryover = shortfall;
+
+          await prisma.projectPeriodProgress.create({
+            data: {
+              assignmentId: assignment.id,
+              periodIndex: p.periodIndex,
+              periodType: p.periodType,
+              periodName: p.periodName,
+              startDate: p.startDate,
+              endDate: p.endDate,
+              baseTarget: p.baseTarget,
+              carryover: currentCarryover,
+              effectiveTarget: currentEffective,
+              completedCount: periodCompleted,
+              isCompleted: periodCompleted >= currentEffective
+            }
+          });
+        }
       } else {
-        // Same period count, update baseTargets and recalculate carryover cascade!
+        // Same period count and target type, update baseTargets and recalculate carryover cascade!
         let runningCarryover = 0;
         for (let i = 0; i < newPeriods.length; i++) {
           const np = newPeriods[i];
