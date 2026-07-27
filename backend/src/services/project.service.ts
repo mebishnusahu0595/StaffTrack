@@ -65,72 +65,7 @@ export async function createProject(companyIdOrUser: any, input: CreateProjectIn
   });
 
   // Calculate periods per assignment
-  const periodsData: Array<{
-    periodIndex: number;
-    periodType: string;
-    periodName: string;
-    startDate: Date;
-    endDate: Date;
-    baseTarget: number;
-    carryover: number;
-    effectiveTarget: number;
-  }> = [];
-
-  const qty = Number(targetQuantity) || 0;
-
-  if (targetType === "YEARLY") {
-    const monthlyBase = Math.max(1, Math.floor(qty / 12));
-    const remainder = qty % 12;
-
-    for (let i = 1; i <= 12; i++) {
-      const periodStart = startOfMonth(addMonths(start, i - 1));
-      const periodEnd = endOfMonth(periodStart);
-      const monthBase = i === 12 ? monthlyBase + remainder : monthlyBase;
-
-      periodsData.push({
-        periodIndex: i,
-        periodType: "MONTHLY",
-        periodName: format(periodStart, "MMM yyyy"),
-        startDate: periodStart,
-        endDate: periodEnd,
-        baseTarget: monthBase,
-        carryover: 0,
-        effectiveTarget: monthBase
-      });
-    }
-  } else if (targetType === "MONTHLY") {
-    const weeklyBase = Math.max(1, Math.floor(qty / 4));
-    const remainder = qty % 4;
-
-    for (let i = 1; i <= 4; i++) {
-      const periodStart = addWeeks(start, i - 1);
-      const periodEnd = addDays(periodStart, 6);
-      const weekBase = i === 4 ? weeklyBase + remainder : weeklyBase;
-
-      periodsData.push({
-        periodIndex: i,
-        periodType: "WEEKLY",
-        periodName: `Week ${i} (${format(periodStart, "d MMM")})`,
-        startDate: periodStart,
-        endDate: periodEnd,
-        baseTarget: weekBase,
-        carryover: 0,
-        effectiveTarget: weekBase
-      });
-    }
-  } else {
-    // WEEKLY
-    periodsData.push({
-      periodIndex: 1,
-      periodType: "WEEKLY",
-      periodName: `Week 1 (${format(start, "d MMM")})`,
-      startDate: start,
-      endDate: end,
-      baseTarget: qty,
-      carryover: 0,
-      effectiveTarget: qty
-    });
-  }
+  const periodsData = generatePeriodsData(Number(targetQuantity) || 0, targetType, start);
 
   // Create assignments for assigned users
   if (Array.isArray(assignedUserIds) && assignedUserIds.length > 0) {
@@ -139,7 +74,7 @@ export async function createProject(companyIdOrUser: any, input: CreateProjectIn
         data: {
           projectId: project.id,
           userId,
-          targetQuantity: qty,
+          targetQuantity: Number(targetQuantity) || 0,
           completedCount: 0,
           periods: {
             create: periodsData.map(p => ({
@@ -150,7 +85,7 @@ export async function createProject(companyIdOrUser: any, input: CreateProjectIn
               endDate: p.endDate,
               baseTarget: p.baseTarget,
               carryover: 0,
-              effectiveTarget: p.effectiveTarget,
+              effectiveTarget: p.baseTarget,
               completedCount: 0
             }))
           }
@@ -160,6 +95,60 @@ export async function createProject(companyIdOrUser: any, input: CreateProjectIn
   }
 
   return getProjectById(project.id);
+}
+
+export async function syncProjectPeriods(projectId: string) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: {
+      assignments: {
+        include: {
+          periods: { orderBy: { periodIndex: "asc" } }
+        }
+      }
+    }
+  });
+
+  if (!project) return;
+
+  const targetType = String(project.targetType || "YEARLY").trim().toUpperCase();
+  const expectedCount = targetType === "YEARLY" ? 12 : targetType === "MONTHLY" ? 4 : 1;
+  const startDate = project.startDate ? new Date(project.startDate) : new Date();
+
+  for (const assignment of project.assignments) {
+    if (assignment.periods.length !== expectedCount) {
+      const totalCompleted = assignment.completedCount || 0;
+      await prisma.projectPeriodProgress.deleteMany({ where: { assignmentId: assignment.id } });
+
+      const newPeriods = generatePeriodsData(assignment.targetQuantity || project.targetQuantity, targetType, startDate);
+      let runningCarryover = 0;
+
+      for (let i = 0; i < newPeriods.length; i++) {
+        const p = newPeriods[i];
+        const periodCompleted = i === 0 ? totalCompleted : 0;
+        const currentCarryover = runningCarryover;
+        const currentEffective = p.baseTarget + currentCarryover;
+        const shortfall = Math.max(0, currentEffective - periodCompleted);
+        runningCarryover = shortfall;
+
+        await prisma.projectPeriodProgress.create({
+          data: {
+            assignmentId: assignment.id,
+            periodIndex: p.periodIndex,
+            periodType: p.periodType,
+            periodName: p.periodName,
+            startDate: p.startDate,
+            endDate: p.endDate,
+            baseTarget: p.baseTarget,
+            carryover: currentCarryover,
+            effectiveTarget: currentEffective,
+            completedCount: periodCompleted,
+            isCompleted: periodCompleted >= currentEffective
+          }
+        });
+      }
+    }
+  }
 }
 
 export async function listProjects(companyIdOrUser: any, search?: string) {
@@ -173,7 +162,7 @@ export async function listProjects(companyIdOrUser: any, search?: string) {
     ];
   }
 
-  return prisma.project.findMany({
+  const projects = await prisma.project.findMany({
     where,
     include: {
       tasks: { select: { id: true, title: true, status: true, assignedTo: { select: { id: true, name: true } } } },
@@ -187,10 +176,43 @@ export async function listProjects(companyIdOrUser: any, search?: string) {
     },
     orderBy: { createdAt: "desc" }
   });
+
+  // Auto-sync any existing project whose period counts mismatch targetType
+  let needsReFetch = false;
+  for (const project of projects) {
+    const targetType = String(project.targetType || "YEARLY").trim().toUpperCase();
+    const expectedCount = targetType === "YEARLY" ? 12 : targetType === "MONTHLY" ? 4 : 1;
+    for (const assignment of project.assignments) {
+      if (assignment.periods.length !== expectedCount) {
+        await syncProjectPeriods(project.id);
+        needsReFetch = true;
+        break;
+      }
+    }
+  }
+
+  if (needsReFetch) {
+    return prisma.project.findMany({
+      where,
+      include: {
+        tasks: { select: { id: true, title: true, status: true, assignedTo: { select: { id: true, name: true } } } },
+        assignments: {
+          include: {
+            user: { select: { id: true, name: true, email: true, avatarUrl: true, designation: true } },
+            periods: { orderBy: { periodIndex: "asc" } }
+          }
+        },
+        _count: { select: { tasks: true } }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+  }
+
+  return projects;
 }
 
 export async function getProjectById(projectId: string) {
-  return prisma.project.findUnique({
+  let project = await prisma.project.findUnique({
     where: { id: projectId },
     include: {
       tasks: { select: { id: true, title: true, status: true, assignedTo: { select: { id: true, name: true } } } },
@@ -203,6 +225,31 @@ export async function getProjectById(projectId: string) {
       _count: { select: { tasks: true } }
     }
   });
+
+  if (project) {
+    const targetType = String(project.targetType || "YEARLY").trim().toUpperCase();
+    const expectedCount = targetType === "YEARLY" ? 12 : targetType === "MONTHLY" ? 4 : 1;
+    const hasMismatch = project.assignments.some(a => a.periods.length !== expectedCount);
+
+    if (hasMismatch) {
+      await syncProjectPeriods(project.id);
+      project = await prisma.project.findUnique({
+        where: { id: projectId },
+        include: {
+          tasks: { select: { id: true, title: true, status: true, assignedTo: { select: { id: true, name: true } } } },
+          assignments: {
+            include: {
+              user: { select: { id: true, name: true, email: true, avatarUrl: true, designation: true } },
+              periods: { orderBy: { periodIndex: "asc" } }
+            }
+          },
+          _count: { select: { tasks: true } }
+        }
+      });
+    }
+  }
+
+  return project;
 }
 
 export async function getUserProjects(userId: string) {
@@ -234,7 +281,9 @@ function generatePeriodsData(qty: number, targetType: string, start: Date) {
     baseTarget: number;
   }> = [];
 
-  if (targetType === "YEARLY") {
+  const type = String(targetType || "YEARLY").trim().toUpperCase();
+
+  if (type === "YEARLY") {
     const monthlyBase = Math.max(0, Math.floor(qty / 12));
     const remainder = qty % 12;
 
@@ -252,7 +301,7 @@ function generatePeriodsData(qty: number, targetType: string, start: Date) {
         baseTarget: monthBase
       });
     }
-  } else if (targetType === "MONTHLY") {
+  } else if (type === "MONTHLY") {
     const weeklyBase = Math.max(0, Math.floor(qty / 4));
     const remainder = qty % 4;
 
