@@ -100,7 +100,7 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
   const unitPrice = Number(project.productPrice) || 0;
   
   // Total Target across all assignments
-  const totalTargetQty = assignments.reduce((acc: number, a: any) => acc + (a.targetQuantity || 0), 0) || (project.targetQuantity || 0);
+  const totalTargetQty = Number(project.targetQuantity) || assignments.reduce((acc: number, a: any) => acc + (a.targetQuantity || 0), 0) || 0;
   const totalCompletedCount = assignments.reduce((acc: number, a: any) => acc + (a.completedCount || 0), 0);
   const overallProgress = totalTargetQty > 0 ? Math.round((totalCompletedCount / totalTargetQty) * 100) : 0;
 
@@ -691,11 +691,11 @@ function ProjectCard({ project, onEdit, onDelete, onViewProgress }: {
   onViewProgress: () => void;
 }) {
   const assignments = project.assignments || [];
-  const totalTargetQty = assignments.reduce((acc: number, a: any) => acc + (a.targetQuantity || 0), 0) || (project.targetQuantity || 0);
+  const totalTargetQty = Number(project.targetQuantity) || assignments.reduce((acc: number, a: any) => acc + (a.targetQuantity || 0), 0) || 0;
   const totalCompletedCount = assignments.reduce((acc: number, a: any) => acc + (a.completedCount || 0), 0);
   const completedTasksCount = project.tasks?.filter((t: any) => t.status === "COMPLETED").length ?? 0;
   const progress = totalTargetQty > 0 
-    ? Math.min(100, Math.round((totalCompletedCount / totalTargetQty) * 100))
+    ? Math.round((totalCompletedCount / totalTargetQty) * 100)
     : (project.tasks?.length ? Math.round((completedTasksCount / project.tasks.length) * 100) : 0);
 
   const unitPrice = Number(project.productPrice) || 0;
