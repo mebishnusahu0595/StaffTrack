@@ -21,6 +21,7 @@ import { useTimeTracker } from "../hooks/useTimeTracker";
 import type { MainDrawerParamList } from "../navigation/AppNavigator";
 import { appIconSource, AppIcon } from "../components/AppIcon";
 import { PersonalAttendancePanel } from "../components/PersonalAttendancePanel";
+import { DailyAllowanceCard } from "../components/DailyAllowanceCard";
 import { TaskCard } from "../components/TaskCard";
 import { API_ORIGIN_URL } from "../config/env";
 
@@ -592,10 +593,12 @@ export function HomeScreen() {
       {showTasksOnTop ? (
         <>
           {tasksSection}
+          <DailyAllowanceCard />
           {attendancePanel}
         </>
       ) : (
         <>
+          <DailyAllowanceCard />
           {attendancePanel}
           {tasksSection}
         </>

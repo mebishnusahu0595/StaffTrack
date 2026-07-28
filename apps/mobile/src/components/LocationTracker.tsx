@@ -242,7 +242,7 @@ export function LocationTracker() {
             if (enabled && permission.status === "granted") {
               console.log("[LocationTracker] [Mobile Foreground] Fetching position...");
               const position = await Location.getCurrentPositionAsync({
-                accuracy: Location.Accuracy.Balanced,
+                accuracy: Location.Accuracy.High,
               });
 
               const level = await Battery.getBatteryLevelAsync().catch(() => -1);
@@ -314,7 +314,7 @@ export async function startBackgroundLocationTracking(user?: any): Promise<boole
     const alreadyStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
 
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-      accuracy: Location.Accuracy.Balanced, // Balanced accuracy is much more battery optimized
+      accuracy: Location.Accuracy.High, // High accuracy GPS tracking
       activityType: Location.ActivityType.AutomotiveNavigation,
       deferredUpdatesInterval: trackingInterval,
       distanceInterval: 0, // No distance gate — send pings on time basis so stationary users aren't falsely marked offline

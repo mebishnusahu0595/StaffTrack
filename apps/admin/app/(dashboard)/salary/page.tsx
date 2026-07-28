@@ -93,7 +93,7 @@ export default function SalaryMatrixPage() {
     const headers = [
       "Employee Name", "Designation", "Department", "Base Salary", 
       "Payable Days", "Absences", "Holidays", "Leaves", "Total KM", 
-      "Travel Rate (Per KM)", "Travel Payout", "Points", "Net Salary", "Total Payout"
+      "Travel Rate (Per KM)", "Travel Payout", "Daily Allowance (50km+)", "Points", "Net Salary", "Total Payout"
     ];
     const rows = filteredReports.map(e => [
       e.userName || "",
@@ -107,6 +107,7 @@ export default function SalaryMatrixPage() {
       (e.totalKm || 0).toFixed(1),
       `₹${e.travelRate ?? ratePerKm}`,
       e.travelAllowance || 0,
+      e.dailyAllowanceTotal || 0,
       e.monthlyPoints || 0,
       e.netSalary || 0,
       e.totalPayout || 0
@@ -229,6 +230,7 @@ export default function SalaryMatrixPage() {
                   <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400 text-center">Abs / Holiday / Lvs</th>
                   <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400 text-center font-mono">Travel KM</th>
                   <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400">Travel Payout</th>
+                  <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400 text-center">Daily Allowance</th>
                   <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400 text-center">Points</th>
                   <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400 text-right">Net Salary</th>
                   <th className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400 text-right">Total Payout</th>
@@ -283,6 +285,15 @@ export default function SalaryMatrixPage() {
                         <span className="text-xs font-black text-emerald-700">₹{Number(emp.travelAllowance || 0).toLocaleString()}</span>
                         <span className="text-[9px] font-extrabold text-slate-400">{(emp.totalKm || 0).toFixed(1)} km × ₹{emp.travelRate ?? ratePerKm}</span>
                       </div>
+                    </td>
+                    <td className="py-4 px-6 text-center font-mono text-xs font-bold text-slate-800">
+                      {emp.dailyAllowanceTotal > 0 ? (
+                        <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-xl border border-emerald-200/50 font-black">
+                          ₹{Number(emp.dailyAllowanceTotal).toLocaleString()}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-normal">-</span>
+                      )}
                     </td>
                     <td className="py-4 px-6 text-center">
                       <div className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 px-2 py-0.5 rounded-lg border border-amber-200/40 text-[10px] font-black">

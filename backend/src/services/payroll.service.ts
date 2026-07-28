@@ -7,7 +7,7 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
   const end = endOfMonth(start);
   const daysInMonth = eachDayOfInterval({ start, end });
 
-  const [users, holidays, approvedExpenses, reports, completedTasks, company, savedSlips] = await Promise.all([
+  const [users, holidays, approvedExpenses, reports, completedTasks, company, savedSlips, dailyAllowances] = await Promise.all([
     prisma.user.findMany({
       where: { companyId, role: { in: [UserRole.EMPLOYEE, UserRole.MANAGER] } },
       include: {
@@ -84,10 +84,24 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
     }),
     prisma.salarySlip.findMany({
       where: { companyId, month, year }
+    }),
+    prisma.dailyAllowance.findMany({
+      where: {
+        companyId,
+        date: {
+          gte: start,
+          lte: end
+        }
+      },
+      select: {
+        userId: true,
+        amount: true
+      }
     })
   ]);
 
   const expensesByUser = sumAmountsByUser(approvedExpenses);
+  const dailyAllowancesByUser = sumAmountsByUser(dailyAllowances);
   const reportsByUserDate = groupReportsByUserDate(reports);
   const taskPointsByUserDate = groupTaskPointsByUserDate(completedTasks);
   const savedSlipsMap = new Map(savedSlips.map((s) => [s.userId, s]));
@@ -184,9 +198,10 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
     const travelAllowance = Math.round(totalKm * travelRate);
 
     const approvedExpensesTotal = expensesByUser.get(user.id) ?? 0;
+    const dailyAllowanceTotal = dailyAllowancesByUser.get(user.id) ?? 0;
     const netSalary = Math.round(totalPayableDays * dailySalary);
     const deductionAmount = Math.max(0, effectiveBaseSalary - netSalary);
-    const totalPayout = netSalary + approvedExpensesTotal + travelAllowance;
+    const totalPayout = netSalary + approvedExpensesTotal + travelAllowance + dailyAllowanceTotal;
 
     const result: any = {
       userId: user.id,
@@ -205,6 +220,7 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
       holidayDays,
       totalPayableDays,
       approvedExpensesTotal,
+      dailyAllowanceTotal,
       monthlyPoints,
       netSalary,
       deductionAmount,
@@ -273,6 +289,7 @@ export async function calculateSalaryMatrix(companyId: string, month: number, ye
       dailyWage,
       monthlyPoints: report.monthlyPoints,
       approvedExpensesTotal: report.approvedExpensesTotal,
+      dailyAllowanceTotal: report.dailyAllowanceTotal,
       totalKm: report.totalKm,
       travelRate: report.travelRate,
       travelAllowance: report.travelAllowance,

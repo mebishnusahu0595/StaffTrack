@@ -27,6 +27,7 @@ import teamRoutes from "./routes/team.routes";
 import salaryRoutes from "./routes/salary.routes";
 import documentRoutes from "./routes/document.routes";
 import dealerRoutes from "./routes/dealer.routes";
+import dailyAllowanceRoutes from "./routes/dailyAllowance.routes";
 import path from "path";
 import { initSocket } from "./lib/socket";
 import { corsOrigin } from "./lib/cors";
@@ -137,6 +138,7 @@ app.use("/api/leaves", leaveRoutes);
 app.use("/api/salary-slips", salaryRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/dealers", dealerRoutes);
+app.use("/api/daily-allowance", dailyAllowanceRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({

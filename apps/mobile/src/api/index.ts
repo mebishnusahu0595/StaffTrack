@@ -798,4 +798,29 @@ export async function fetchCompanyDocuments(params?: { search?: string; category
   return unwrap(await api.get<ApiEnvelope<CompanyFile[]>>("/documents", { params }));
 }
 
+// Daily Allowance
+export type DailyAllowanceStatus = {
+  gpsKm: number;
+  thresholdExceeded: boolean;
+  allowance?: {
+    id: string;
+    amount: number;
+    remark?: string | null;
+    gpsKm: number;
+    submittedAt?: string;
+  } | null;
+};
+
+export async function fetchDailyAllowanceStatus(): Promise<DailyAllowanceStatus> {
+  return unwrap(await api.get<ApiEnvelope<DailyAllowanceStatus>>("/daily-allowance/today-status"));
+}
+
+export async function submitDailyAllowance(payload: { amount: number; remark?: string }): Promise<any> {
+  return unwrap(await api.post<ApiEnvelope<any>>("/daily-allowance/submit", payload));
+}
+
+export async function fetchDailyAllowanceSubmissions(params?: { date?: string; startDate?: string; endDate?: string }): Promise<any[]> {
+  return unwrap(await api.get<ApiEnvelope<any[]>>("/daily-allowance/submissions", { params }));
+}
+
 

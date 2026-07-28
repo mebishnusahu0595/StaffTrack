@@ -801,6 +801,11 @@ export async function updateDealer(id: string, data: any) {
   return response.data.data;
 }
 
+export async function fetchDailyAllowanceSubmissions(params?: { date?: string; startDate?: string; endDate?: string }) {
+  const response = await api.get<{ data: any[] }>("/daily-allowance/submissions", { params });
+  return response.data.data;
+}
+
 export async function deleteDealer(id: string) {
   const response = await api.delete<{ data: any }>(`/dealers/${id}`);
   return response.data.data;

@@ -52,6 +52,7 @@ export function SalarySlipModal({ isOpen, onClose, data, month }: SalarySlipModa
   const earningItems = data.earnings || [
     { label: "Basic Salary", actual: data.baseSalary, calculated: data.netSalary },
     ...(data.travelAllowance > 0 ? [{ label: "Travel Allowance", actual: data.travelAllowance, calculated: data.travelAllowance }] : []),
+    ...(data.dailyAllowanceTotal > 0 ? [{ label: "Daily Allowance (50km+)", actual: data.dailyAllowanceTotal, calculated: data.dailyAllowanceTotal }] : []),
     ...(data.approvedExpensesTotal > 0 ? [{ label: "Reimbursed Expenses", actual: data.approvedExpensesTotal, calculated: data.approvedExpensesTotal }] : [])
   ];
   const totalEarnings = earningItems.reduce((sum: number, item: any) => sum + Number(item.calculated ?? item.actual ?? 0), 0);
