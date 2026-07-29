@@ -768,12 +768,32 @@ export async function fetchMyProjects(): Promise<UserProjectAssignment[]> {
   return unwrap(await api.get<ApiEnvelope<UserProjectAssignment[]>>("/projects/my-projects"));
 }
 
+export type ProjectProgressLog = {
+  id: string;
+  periodId: string;
+  changedBy: string;
+  previousCount: number;
+  newCount: number;
+  delta: number;
+  note?: string | null;
+  createdAt: string;
+  user: {
+    name: string;
+    avatarUrl?: string | null;
+  };
+};
+
+export async function fetchPeriodLogs(periodId: string): Promise<ProjectProgressLog[]> {
+  return unwrap(await api.get<ApiEnvelope<ProjectProgressLog[]>>(`/projects/periods/${periodId}/logs`));
+}
+
 export async function updateProjectPeriodProgress(
   periodId: string,
-  payload: { completedIncrement?: number; completedCount?: number }
+  payload: { completedIncrement?: number; completedCount?: number; note?: string }
 ): Promise<any> {
   return unwrap(await api.patch<ApiEnvelope<any>>(`/projects/periods/${periodId}/progress`, payload));
 }
+
 
 export type CompanyFile = {
   id: string;

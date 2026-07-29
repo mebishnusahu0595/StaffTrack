@@ -1,6 +1,6 @@
 {
   "name": "@stafftrack/mobile",
-  "version": "1.0.7.3",
+  "version": "1.0.8",
   "private": true,
   "main": "index.js",
   "scripts": {

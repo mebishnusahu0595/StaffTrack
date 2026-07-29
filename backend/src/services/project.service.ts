@@ -526,7 +526,7 @@ export async function updateProject(arg1: any, arg2: any, arg3?: any) {
 
 export async function updatePeriodProgress(
   periodId: string,
-  input: { completedIncrement?: number; completedCount?: number }
+  input: { completedIncrement?: number; completedCount?: number; changedBy?: string; note?: string; isAdmin?: boolean }
 ) {
   const period = await prisma.projectPeriodProgress.findUnique({
     where: { id: periodId },
@@ -535,11 +535,43 @@ export async function updatePeriodProgress(
 
   if (!period) throw new Error("Period not found");
 
+  // Lock and permission checks
+  const isAdmin = input.isAdmin ?? false;
+  if (input.changedBy) {
+    if (!isAdmin) {
+      // 1. Owner check
+      if (period.assignment.userId !== input.changedBy) {
+        throw new Error("Forbidden: You are not assigned to this project");
+      }
+      // 2. Lock check: If period has ended, staff cannot edit
+      const today = new Date();
+      if (today > new Date(period.endDate)) {
+        throw new Error("This period has ended and is locked. You can no longer log or edit progress for it.");
+      }
+    }
+  }
+
   let newCompleted = period.completedCount;
   if (input.completedIncrement !== undefined) {
     newCompleted = Math.max(0, period.completedCount + input.completedIncrement);
   } else if (input.completedCount !== undefined) {
     newCompleted = Math.max(0, input.completedCount);
+  }
+
+  const delta = newCompleted - period.completedCount;
+
+  // Create audit log if changedBy is provided and completed count has changed
+  if (input.changedBy && delta !== 0) {
+    await prisma.projectProgressLog.create({
+      data: {
+        periodId,
+        changedBy: input.changedBy,
+        previousCount: period.completedCount,
+        newCount: newCompleted,
+        delta,
+        note: input.note || null
+      }
+    });
   }
 
   // Update current period
@@ -593,6 +625,23 @@ export async function updatePeriodProgress(
   return prisma.projectAssignment.findUnique({
     where: { id: period.assignmentId },
     include: { project: true, periods: { orderBy: { periodIndex: "asc" } } }
+  });
+}
+
+export async function getPeriodLogs(periodId: string) {
+  return prisma.projectProgressLog.findMany({
+    where: { periodId },
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          avatarUrl: true
+        }
+      }
+    },
+    orderBy: { createdAt: "desc" }
   });
 }
 

@@ -163,10 +163,21 @@ async function sendFcmPushNotification(token: string, title: string, message: st
           },
           data: stringData,
           android: {
-            priority: "HIGH",
+            priority: "high",
             notification: {
-              channelId: "default",
+              channel_id: "default",
               sound: "default"
+            }
+          },
+          apns: {
+            payload: {
+              aps: {
+                alert: {
+                  title,
+                  body: message
+                },
+                sound: "default"
+              }
             }
           }
         }

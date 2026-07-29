@@ -2,7 +2,8 @@ export default ({ config }) => ({
   ...config,
   name: "StaffTrack",
   slug: "stafftrack",
-  version: "1.0.7.3",
+  owner: "bishnusahu",
+  version: "1.0.8",
   orientation: "portrait",
   icon: "./assets/icon.png",
   userInterfaceStyle: "light",
@@ -59,7 +60,7 @@ export default ({ config }) => ({
   android: {
     package: "com.stafftrack.staff",
     googleServicesFile: "./google-services.json",
-    versionCode: 10,
+    versionCode: 11,
     largeHeap: true,
     notification: {
       icon: "./assets/logo.png",

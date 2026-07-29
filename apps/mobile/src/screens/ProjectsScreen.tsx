@@ -3,16 +3,22 @@ import { ScrollView, StyleSheet, View, RefreshControl, Alert } from "react-nativ
 import { Text, Card, Button, ProgressBar, Badge, IconButton, Portal, Modal, TextInput } from "react-native-paper";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
-import { fetchMyProjects, updateProjectPeriodProgress, UserProjectAssignment, ProjectPeriodProgress } from "../api";
+import { fetchMyProjects, updateProjectPeriodProgress, fetchPeriodLogs, UserProjectAssignment, ProjectPeriodProgress, ProjectProgressLog } from "../api";
 import { AppIcon } from "../components/AppIcon";
 
 export function ProjectsScreen() {
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
   const [logModalVisible, setLogModalVisible] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<ProjectPeriodProgress | null>(null);
   const [incrementCount, setIncrementCount] = useState("1");
+  const [editCount, setEditCount] = useState("0");
+  const [editNote, setEditNote] = useState("");
+  const [logs, setLogs] = useState<ProjectProgressLog[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
 
   const projectsQuery = useQuery({
     queryKey: ["myProjects"],
@@ -54,6 +60,48 @@ export function ProjectsScreen() {
       setIsSubmitting(false);
     }
   };
+
+  const handleOpenEditModal = async (period: ProjectPeriodProgress) => {
+    setSelectedPeriod(period);
+    setEditCount(String(period.completedCount));
+    setEditNote("");
+    setEditModalVisible(true);
+    setLoadingLogs(true);
+    setLogs([]);
+    try {
+      const history = await fetchPeriodLogs(period.id);
+      setLogs(history);
+    } catch (err: any) {
+      console.warn("Failed to fetch period logs:", err?.message);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  const handleEditProgress = async () => {
+    if (!selectedPeriod) return;
+    const count = parseInt(editCount, 10);
+    if (isNaN(count) || count < 0) {
+      Alert.alert("Invalid input", "Please enter a valid non-negative number.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await updateProjectPeriodProgress(selectedPeriod.id, {
+        completedCount: count,
+        note: editNote.trim() || undefined
+      });
+      await queryClient.invalidateQueries({ queryKey: ["myProjects"] });
+      setEditModalVisible(false);
+      Alert.alert("Success", `Updated completed count to ${count}!`);
+    } catch (err: any) {
+      Alert.alert("Error", err?.message || "Failed to update count.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
 
   return (
     <ScrollView
@@ -134,84 +182,142 @@ export function ProjectsScreen() {
                 </View>
 
                 {/* Active Period Card */}
-                {activePeriod && (
-                  <Card style={styles.activePeriodCard} mode="contained">
-                    <Card.Content style={{ padding: 12, gap: 8 }}>
-                      <View style={styles.activePeriodHeader}>
-                        <View>
-                          <Text style={styles.activePeriodLabel}>CURRENT PERIOD</Text>
-                          <Text style={styles.activePeriodName}>{activePeriod.periodName}</Text>
-                        </View>
-                        <Button
-                          mode="contained"
-                          buttonColor="#0284C7"
-                          compact
-                          onPress={() => handleOpenLogModal(activePeriod)}
-                          labelStyle={{ fontSize: 11, fontWeight: "700" }}
-                        >
-                          + Log Progress
-                        </Button>
-                      </View>
+                {activePeriod && (() => {
+                  const pEnd = dayjs(activePeriod.endDate);
+                  const isLocked = now.isAfter(pEnd);
+                  const daysLeft = pEnd.diff(now, "day");
+                  const hoursLeft = pEnd.diff(now, "hour") % 24;
+                  let countdownText = "";
+                  if (isLocked) {
+                    countdownText = "Locked";
+                  } else if (daysLeft > 0) {
+                    countdownText = `${daysLeft}d ${hoursLeft}h left`;
+                  } else if (hoursLeft >= 0) {
+                    countdownText = `${hoursLeft}h left`;
+                  } else {
+                    countdownText = "Locked";
+                  }
 
-                      {/* Period Target Breakdown with Carryover */}
-                      <View style={styles.targetGrid}>
-                        <View style={styles.targetBox}>
-                          <Text style={styles.targetBoxLabel}>BASE TARGET</Text>
-                          <Text style={styles.targetBoxVal}>{activePeriod.baseTarget}</Text>
+                  return (
+                    <Card style={styles.activePeriodCard} mode="contained">
+                      <Card.Content style={{ padding: 12, gap: 8 }}>
+                        <View style={styles.activePeriodHeader}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.activePeriodLabel}>CURRENT PERIOD</Text>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                              <Text style={styles.activePeriodName}>{activePeriod.periodName}</Text>
+                              <Badge style={isLocked ? styles.lockedBadge : styles.countdownBadge}>
+                                {countdownText}
+                              </Badge>
+                            </View>
+                          </View>
+                          {!isLocked && (
+                            <View style={{ flexDirection: "row", gap: 4 }}>
+                              <Button
+                                mode="contained"
+                                buttonColor="#0284C7"
+                                compact
+                                onPress={() => handleOpenLogModal(activePeriod)}
+                                labelStyle={{ fontSize: 10, fontWeight: "700" }}
+                                style={{ minWidth: 0, paddingHorizontal: 8 }}
+                              >
+                                + Log
+                              </Button>
+                              <Button
+                                mode="outlined"
+                                textColor="#0284C7"
+                                compact
+                                onPress={() => handleOpenEditModal(activePeriod)}
+                                labelStyle={{ fontSize: 10, fontWeight: "700" }}
+                                style={{ borderColor: "#0284C7", minWidth: 0, paddingHorizontal: 8 }}
+                              >
+                                Edit
+                              </Button>
+                            </View>
+                          )}
                         </View>
-                        <View style={styles.targetBox}>
-                          <Text style={styles.targetBoxLabel}>CARRYOVER</Text>
-                          <Text style={[styles.targetBoxVal, activePeriod.carryover > 0 && { color: "#D97706" }]}>
-                            {activePeriod.carryover > 0 ? `+${activePeriod.carryover}` : "0"}
-                          </Text>
+
+                        {/* Period Target Breakdown with Carryover */}
+                        <View style={styles.targetGrid}>
+                          <View style={styles.targetBox}>
+                            <Text style={styles.targetBoxLabel}>BASE TARGET</Text>
+                            <Text style={styles.targetBoxVal}>{activePeriod.baseTarget}</Text>
+                          </View>
+                          <View style={styles.targetBox}>
+                            <Text style={styles.targetBoxLabel}>CARRYOVER</Text>
+                            <Text style={[styles.targetBoxVal, activePeriod.carryover > 0 && { color: "#D97706" }]}>
+                              {activePeriod.carryover > 0 ? `+${activePeriod.carryover}` : "0"}
+                            </Text>
+                          </View>
+                          <View style={styles.targetBox}>
+                            <Text style={styles.targetBoxLabel}>TOTAL TARGET</Text>
+                            <Text style={[styles.targetBoxVal, { color: "#0284C7" }]}>
+                              {activePeriod.effectiveTarget}
+                            </Text>
+                          </View>
+                          <View style={styles.targetBox}>
+                            <Text style={styles.targetBoxLabel}>COMPLETED</Text>
+                            <Text style={[styles.targetBoxVal, { color: "#16A34A" }]}>
+                              {activePeriod.completedCount}
+                            </Text>
+                          </View>
                         </View>
-                        <View style={styles.targetBox}>
-                          <Text style={styles.targetBoxLabel}>TOTAL TARGET</Text>
-                          <Text style={[styles.targetBoxVal, { color: "#0284C7" }]}>
-                            {activePeriod.effectiveTarget}
-                          </Text>
-                        </View>
-                        <View style={styles.targetBox}>
-                          <Text style={styles.targetBoxLabel}>COMPLETED</Text>
-                          <Text style={[styles.targetBoxVal, { color: "#16A34A" }]}>
-                            {activePeriod.completedCount}
-                          </Text>
-                        </View>
-                      </View>
-                    </Card.Content>
-                  </Card>
-                )}
+                      </Card.Content>
+                    </Card>
+                  );
+                })()}
 
                 {/* Full Breakdown per period */}
                 <View style={{ marginTop: 4 }}>
                   <Text style={styles.breakdownHeader}>Period Breakdown ({periods.length})</Text>
                   {periods.map((p) => {
-                    const pProgress = p.effectiveTarget > 0 ? Math.min(1, p.completedCount / p.effectiveTarget) : 0;
                     const isCurrent = activePeriod?.id === p.id;
+                    const pEnd = dayjs(p.endDate);
+                    const pLocked = now.isAfter(pEnd);
 
                     return (
                       <View key={p.id} style={[styles.periodRow, isCurrent && styles.periodRowActive]}>
                         <View style={{ flex: 1 }}>
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                             <Text style={styles.periodNameText}>{p.periodName}</Text>
                             {isCurrent && <Badge style={styles.nowBadge}>CURRENT</Badge>}
+                            {pLocked && <Badge style={styles.lockedBadgeMini}>LOCKED</Badge>}
                           </View>
                           <Text style={styles.periodTargetSub}>
                             Base: {p.baseTarget} {p.carryover > 0 ? `| Carryover: +${p.carryover}` : ""} | Total: {p.effectiveTarget}
                           </Text>
                         </View>
 
-                        <View style={{ alignItems: "flex-end", gap: 2 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                           <Text style={styles.periodCountText}>
                             {p.completedCount} / {p.effectiveTarget}
                           </Text>
-                          <IconButton
-                            icon="plus-circle"
-                            size={20}
-                            iconColor="#0284C7"
-                            onPress={() => handleOpenLogModal(p)}
-                            style={{ margin: 0 }}
-                          />
+                          {!pLocked ? (
+                            <View style={{ flexDirection: "row" }}>
+                              <IconButton
+                                icon="plus-circle"
+                                size={18}
+                                iconColor="#0284C7"
+                                onPress={() => handleOpenLogModal(p)}
+                                style={{ margin: 0 }}
+                              />
+                              <IconButton
+                                icon="pencil"
+                                size={18}
+                                iconColor="#475569"
+                                onPress={() => handleOpenEditModal(p)}
+                                style={{ margin: 0 }}
+                              />
+                            </View>
+                          ) : (
+                            <IconButton
+                              icon="lock"
+                              size={18}
+                              iconColor="#94A3B8"
+                              style={{ margin: 0 }}
+                              disabled
+                            />
+                          )}
                         </View>
                       </View>
                     );
@@ -264,6 +370,88 @@ export function ProjectsScreen() {
                 </Button>
               </View>
             </View>
+          )}
+        </Modal>
+      </Portal>
+
+      {/* Edit Progress Modal */}
+      <Portal>
+        <Modal
+          visible={editModalVisible}
+          onDismiss={() => !isSubmitting && setEditModalVisible(false)}
+          contentContainerStyle={styles.modalContainer}
+        >
+          {selectedPeriod && (
+            <ScrollView contentContainerStyle={{ gap: 14 }} style={{ maxHeight: 400 }} showsVerticalScrollIndicator={true}>
+              <Text style={styles.modalTitle}>Edit Target Logs</Text>
+              <Text style={styles.modalSub}>
+                Period: <Text style={{ fontWeight: "700", color: "#0284C7" }}>{selectedPeriod.periodName}</Text>
+              </Text>
+              <Text style={{ fontSize: 12, color: "#64748B" }}>
+                Current Done: {selectedPeriod.completedCount} / {selectedPeriod.effectiveTarget}
+              </Text>
+
+              <TextInput
+                label="Set Exact Completed Units"
+                mode="outlined"
+                keyboardType="numeric"
+                value={editCount}
+                onChangeText={setEditCount}
+                style={{ backgroundColor: "#FFFFFF" }}
+              />
+
+              <TextInput
+                label="Reason / Note (Optional)"
+                mode="outlined"
+                value={editNote}
+                onChangeText={setEditNote}
+                style={{ backgroundColor: "#FFFFFF" }}
+                placeholder="e.g. Corrected log typo"
+              />
+
+              <View style={styles.modalActions}>
+                <Button onPress={() => setEditModalVisible(false)} disabled={isSubmitting}>
+                  Cancel
+                </Button>
+                <Button
+                  mode="contained"
+                  buttonColor="#0284C7"
+                  onPress={handleEditProgress}
+                  loading={isSubmitting}
+                  disabled={isSubmitting}
+                >
+                  Save Count
+                </Button>
+              </View>
+
+              <View style={styles.logHistoryContainer}>
+                <Text style={styles.logHistoryTitle}>Edit History / Logs</Text>
+                {loadingLogs ? (
+                  <Text style={styles.logHistorySub}>Loading history logs...</Text>
+                ) : logs.length === 0 ? (
+                  <Text style={styles.logHistorySub}>No previous changes logged for this period.</Text>
+                ) : (
+                  logs.map((log) => {
+                    const sign = log.delta > 0 ? "+" : "";
+                    const formattedDate = dayjs(log.createdAt).format("DD MMM, hh:mm A");
+                    return (
+                      <View key={log.id} style={styles.logItem}>
+                        <View style={styles.logItemHeader}>
+                          <Text style={styles.logItemUser}>{log.user?.name || "User"}</Text>
+                          <Text style={styles.logItemDate}>{formattedDate}</Text>
+                        </View>
+                        <Text style={styles.logItemDetails}>
+                          Change: {log.previousCount} → {log.newCount} ({sign}{log.delta})
+                        </Text>
+                        {log.note ? (
+                          <Text style={styles.logItemNote}>Note: "{log.note}"</Text>
+                        ) : null}
+                      </View>
+                    );
+                  })
+                )}
+              </View>
+            </ScrollView>
           )}
         </Modal>
       </Portal>
@@ -508,5 +696,73 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     gap: 8,
     marginTop: 8
+  },
+  lockedBadge: {
+    backgroundColor: "#FEE2E2",
+    color: "#EF4444",
+    fontSize: 9,
+    fontWeight: "800"
+  },
+  countdownBadge: {
+    backgroundColor: "#FEF3C7",
+    color: "#D97706",
+    fontSize: 9,
+    fontWeight: "800"
+  },
+  lockedBadgeMini: {
+    backgroundColor: "#FEE2E2",
+    color: "#EF4444",
+    fontSize: 8,
+    fontWeight: "800"
+  },
+  logHistoryContainer: {
+    marginTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+    paddingTop: 12
+  },
+  logHistoryTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#475569",
+    marginBottom: 8
+  },
+  logHistorySub: {
+    fontSize: 11,
+    color: "#94A3B8",
+    fontStyle: "italic"
+  },
+  logItem: {
+    backgroundColor: "#F8FAFC",
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    marginBottom: 6
+  },
+  logItemHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 2
+  },
+  logItemUser: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#334155"
+  },
+  logItemDate: {
+    fontSize: 9,
+    color: "#94A3B8"
+  },
+  logItemDetails: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#0F172A"
+  },
+  logItemNote: {
+    fontSize: 10,
+    color: "#64748B",
+    marginTop: 2,
+    fontStyle: "italic"
   }
 });

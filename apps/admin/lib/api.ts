@@ -292,7 +292,7 @@ export async function deleteProject(id: string) {
   await api.delete(`/projects/${id}`);
 }
 
-export async function updatePeriodProgress(periodId: string, input: { completedIncrement?: number; completedCount?: number }) {
+export async function updatePeriodProgress(periodId: string, input: { completedIncrement?: number; completedCount?: number; note?: string }) {
   const response = await api.patch<{ data: any }>(`/projects/periods/${periodId}/progress`, input);
   return response.data.data;
 }
@@ -810,6 +810,12 @@ export async function deleteDealer(id: string) {
   const response = await api.delete<{ data: any }>(`/dealers/${id}`);
   return response.data.data;
 }
+
+export async function fetchPeriodLogs(periodId: string) {
+  const response = await api.get<{ data: any[] }>(`/projects/periods/${periodId}/logs`);
+  return response.data.data;
+}
+
 
 
 

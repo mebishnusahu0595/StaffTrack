@@ -130,6 +130,7 @@ model User {
   projectAssignments ProjectAssignment[]
   uploadedFiles      CompanyFile[]
   dailyAllowances    DailyAllowance[]
+  projectProgressLogs ProjectProgressLog[]
 
   @@index([companyId])
   @@index([managerId])
@@ -354,6 +355,7 @@ model ProjectPeriodProgress {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   assignment      ProjectAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  logs            ProjectProgressLog[]
 
   @@index([assignmentId])
 }
@@ -704,4 +706,22 @@ model DailyAllowance {
   @@index([companyId, date])
   @@index([userId, date])
 }
+
+model ProjectProgressLog {
+  id            String   @id @default(cuid())
+  periodId      String
+  changedBy     String
+  previousCount Int
+  newCount      Int
+  delta         Int
+  note          String?
+  createdAt     DateTime @default(now())
+
+  period   ProjectPeriodProgress @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  user     User                  @relation(fields: [changedBy], references: [id], onDelete: Cascade)
+
+  @@index([periodId])
+  @@index([changedBy])
+}
+
 

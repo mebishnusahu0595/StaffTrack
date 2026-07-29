@@ -24,7 +24,7 @@ import {
   SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchProjects, createProject, updateProject, deleteProject, fetchUsers, fetchEmployees } from "@/lib/api";
+import { fetchProjects, createProject, updateProject, deleteProject, fetchUsers, fetchEmployees, updatePeriodProgress, fetchPeriodLogs } from "@/lib/api";
 import { useAuth } from "@/components/auth-provider";
 import { cn } from "@/lib/utils";
 
@@ -116,6 +116,19 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
     if (selectedPeriodFilter === "ALL") return activeAssignment.periods;
     return activeAssignment.periods.filter((p: any) => p.id === selectedPeriodFilter || p.periodName === selectedPeriodFilter);
   }, [activeAssignment, selectedPeriodFilter]);
+
+  // Edit period states
+  const queryClient = useQueryClient();
+  const [editingPeriod, setEditingPeriod] = useState<any | null>(null);
+  const [newCount, setNewCount] = useState<string>("");
+  const [editReason, setEditReason] = useState<string>("");
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState<boolean>(false);
+  const [editError, setEditError] = useState<string>("");
+
+  // History/Logs states
+  const [viewingLogsPeriod, setViewingLogsPeriod] = useState<any | null>(null);
+  const [periodLogs, setPeriodLogs] = useState<any[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState<boolean>(false);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
@@ -266,13 +279,14 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50 text-[10px] font-black uppercase text-slate-500">
-                      <TableHead>Period</TableHead>
-                      <TableHead className="text-center">Target Units</TableHead>
-                      <TableHead className="text-center">Carryover (+)</TableHead>
-                      <TableHead className="text-center">Effective Target</TableHead>
-                      <TableHead className="text-center">Sold Units</TableHead>
-                      {unitPrice > 0 && <TableHead className="text-center">Sale Revenue (₹)</TableHead>}
-                      <TableHead className="text-right">Progress</TableHead>
+                      <TableHead className="px-2">Period</TableHead>
+                      <TableHead className="text-center px-1">Target</TableHead>
+                      <TableHead className="text-center px-1">Carryover</TableHead>
+                      <TableHead className="text-center px-1">Effective</TableHead>
+                      <TableHead className="text-center px-1">Sold</TableHead>
+                      {unitPrice > 0 && <TableHead className="text-center px-2">Revenue (₹)</TableHead>}
+                      <TableHead className="text-center px-2">Progress</TableHead>
+                      <TableHead className="text-right px-2">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -281,36 +295,90 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
                       const pRevenue = p.completedCount * unitPrice;
                       const targetRevenue = p.effectiveTarget * unitPrice;
 
+                      const isLocked = new Date() > new Date(p.endDate);
+                      const daysLeft = Math.ceil((new Date(p.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+
                       return (
                         <TableRow key={p.id} className="text-xs font-bold text-slate-700">
-                          <TableCell className="font-black text-slate-900">{p.periodName}</TableCell>
-                          <TableCell className="text-center">{p.baseTarget}</TableCell>
-                          <TableCell className="text-center">
+                          <TableCell className="px-2 py-3">
+                            <div className="flex flex-col">
+                              <span className="font-black text-slate-900">{p.periodName}</span>
+                              {isLocked ? (
+                                <span className="text-[9px] font-black text-rose-600 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded w-fit mt-0.5">
+                                  🔒 Locked
+                                </span>
+                              ) : daysLeft > 0 && daysLeft <= 3 ? (
+                                <span className="text-[9px] font-black text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded w-fit mt-0.5">
+                                  ⏳ {daysLeft}d left
+                                </span>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center px-1 py-3">{p.baseTarget}</TableCell>
+                          <TableCell className="text-center px-1 py-3">
                             {p.carryover > 0 ? (
-                              <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200 font-bold">
+                              <span className="text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-lg border border-amber-200 font-bold">
                                 +{p.carryover}
                               </span>
                             ) : (
                               <span className="text-slate-400">0</span>
                             )}
                           </TableCell>
-                          <TableCell className="text-center font-black text-indigo-700">{p.effectiveTarget}</TableCell>
-                          <TableCell className="text-center font-black text-emerald-600">{p.completedCount}</TableCell>
+                          <TableCell className="text-center px-1 py-3 font-black text-indigo-700">{p.effectiveTarget}</TableCell>
+                          <TableCell className="text-center px-1 py-3 font-black text-emerald-600">{p.completedCount}</TableCell>
                           {unitPrice > 0 && (
-                            <TableCell className="text-center font-black text-emerald-700">
+                            <TableCell className="text-center px-2 py-3 font-black text-emerald-700">
                               ₹{pRevenue.toLocaleString()}
                               <span className="block text-[9px] font-medium text-slate-400">/ ₹{targetRevenue.toLocaleString()}</span>
                             </TableCell>
                           )}
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
+                          <TableCell className="text-center px-2 py-3">
+                            <div className="flex items-center justify-center gap-1.5">
                               <span className="text-[11px] font-black">{pPercent}%</span>
-                              <div className="w-16 h-2 rounded-full bg-slate-100 overflow-hidden">
+                              <div className="w-12 h-2 rounded-full bg-slate-100 overflow-hidden">
                                 <div
                                   className={cn("h-full rounded-full transition-all", pPercent >= 100 ? "bg-emerald-500" : "bg-blue-500")}
                                   style={{ width: `${Math.min(100, Math.max(0, pPercent))}%` }}
                                 />
                               </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right px-2 py-3">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 rounded-lg text-blue-600 hover:bg-blue-50"
+                                onClick={() => {
+                                  setEditingPeriod(p);
+                                  setNewCount(String(p.completedCount));
+                                  setEditReason("");
+                                  setEditError("");
+                                }}
+                                title="Edit completed units"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 rounded-lg text-slate-500 hover:bg-slate-100"
+                                onClick={async () => {
+                                  setViewingLogsPeriod(p);
+                                  setIsLoadingLogs(true);
+                                  try {
+                                    const logs = await fetchPeriodLogs(p.id);
+                                    setPeriodLogs(logs || []);
+                                  } catch (err) {
+                                    console.error("Failed to load logs", err);
+                                  } finally {
+                                    setIsLoadingLogs(false);
+                                  }
+                                }}
+                                title="View audit logs"
+                              >
+                                <Clock className="h-3.5 w-3.5" />
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -342,6 +410,151 @@ function ViewProgressModal({ project, onClose }: { project: any; onClose: () => 
           </div>
         </div>
       </div>
+
+      {/* Edit Period Progress Modal */}
+      {editingPeriod && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 overflow-hidden animate-in zoom-in-95 duration-200 text-left">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-black text-slate-900">Edit Period Progress</h3>
+              <button onClick={() => setEditingPeriod(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Period Name</span>
+                <p className="text-sm font-bold text-slate-700">{editingPeriod.periodName}</p>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Current Progress</span>
+                <p className="text-sm font-extrabold text-slate-700">{editingPeriod.completedCount} / {editingPeriod.effectiveTarget} units</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">New Completed Count</label>
+                <Input
+                  type="number"
+                  value={newCount}
+                  onChange={(e) => setNewCount(e.target.value)}
+                  placeholder="e.g. 15"
+                  className="h-11 rounded-2xl bg-slate-50 border-slate-200 focus:bg-white transition-all font-medium text-sm"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Reason / Change Note (Optional)</label>
+                <textarea
+                  value={editReason}
+                  onChange={(e) => setEditReason(e.target.value)}
+                  placeholder="e.g. Adjusted manual entry error"
+                  rows={3}
+                  className="w-full rounded-2xl bg-slate-50 border border-slate-200/60 focus:bg-white transition-all font-medium text-xs px-3 py-2 resize-none outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+
+              {editError && (
+                <p className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 p-3 rounded-xl">{editError}</p>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditingPeriod(null)}
+                  className="flex-1 h-11 rounded-2xl font-bold border-slate-200"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={async () => {
+                    if (newCount === "") {
+                      setEditError("Please enter a valid count.");
+                      return;
+                    }
+                    const countVal = parseInt(newCount, 10);
+                    if (isNaN(countVal) || countVal < 0) {
+                      setEditError("Count must be a non-negative integer.");
+                      return;
+                    }
+                    setIsSubmittingEdit(true);
+                    setEditError("");
+                    try {
+                      await updatePeriodProgress(editingPeriod.id, {
+                        completedCount: countVal,
+                        note: editReason
+                      });
+                      await queryClient.invalidateQueries({ queryKey: ["projects"] });
+                      setEditingPeriod(null);
+                    } catch (err: any) {
+                      setEditError(err.response?.data?.message || err.message || "Failed to update period progress.");
+                    } finally {
+                      setIsSubmittingEdit(false);
+                    }
+                  }}
+                  disabled={isSubmittingEdit}
+                  className="flex-1 h-11 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-widest rounded-2xl"
+                >
+                  {isSubmittingEdit ? "Updating..." : "Update Progress"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Audit History Log Modal */}
+      {viewingLogsPeriod && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 overflow-hidden animate-in zoom-in-95 duration-200 text-left">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Audit History Log</h3>
+                <p className="text-xs text-slate-500 font-bold mt-0.5">{viewingLogsPeriod.periodName}</p>
+              </div>
+              <button onClick={() => setViewingLogsPeriod(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="max-h-80 overflow-y-auto space-y-3 pr-1">
+              {isLoadingLogs ? (
+                <p className="text-center text-xs text-slate-400 font-bold py-6">Loading audit logs...</p>
+              ) : periodLogs.length === 0 ? (
+                <p className="text-center text-xs text-slate-400 font-medium py-6">No edit logs found for this period.</p>
+              ) : (
+                periodLogs.map((log: any) => (
+                  <div key={log.id} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl space-y-1">
+                    <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400">
+                      <span className="text-slate-700 font-extrabold">{log.changedByUser?.name || "System / Admin"}</span>
+                      <span>{new Date(log.createdAt).toLocaleString()}</span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-800">
+                      Value changed to <span className="text-blue-600 font-black">{log.completedCount}</span> units (from {log.previousCount} units)
+                    </p>
+                    {log.note && (
+                      <p className="text-xs text-slate-500 italic mt-1 font-medium bg-white p-2 rounded-xl border border-slate-200/50">
+                        &ldquo;{log.note}&rdquo;
+                      </p>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <Button
+                onClick={() => setViewingLogsPeriod(null)}
+                className="h-10 rounded-2xl font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border-none"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

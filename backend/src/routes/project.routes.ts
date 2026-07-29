@@ -66,16 +66,31 @@ router.patch("/:id", roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MAN
 // Update period progress (log progress count)
 router.patch("/periods/:periodId/progress", async (req: AuthRequest, res) => {
   try {
-    const { completedIncrement, completedCount } = req.body;
+    const { completedIncrement, completedCount, note } = req.body;
+    const isAdmin = req.user!.role === "SUPERADMIN" || req.user!.role === "ADMIN" || req.user!.role === "MANAGER";
     const updated = await projectService.updatePeriodProgress(req.params.periodId, {
       completedIncrement: completedIncrement !== undefined ? Number(completedIncrement) : undefined,
-      completedCount: completedCount !== undefined ? Number(completedCount) : undefined
+      completedCount: completedCount !== undefined ? Number(completedCount) : undefined,
+      note,
+      changedBy: req.user!.id,
+      isAdmin
     });
     res.json({ success: true, data: updated });
   } catch (error) {
     res.status(500).json({ success: false, error: error instanceof Error ? error.message : "Failed to update period progress" });
   }
 });
+
+// Get period logs
+router.get("/periods/:periodId/logs", async (req: AuthRequest, res) => {
+  try {
+    const logs = await projectService.getPeriodLogs(req.params.periodId);
+    res.json({ success: true, data: logs });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error instanceof Error ? error.message : "Failed to fetch period logs" });
+  }
+});
+
 
 // Delete project
 router.delete("/:id", roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER), async (req: AuthRequest, res) => {
