@@ -821,6 +821,15 @@ function setISTTime(date: Date, timeSource: Date): Date {
   return fromIST(dateIST);
 }
 
+function normalizeFrequency(freq?: string | null): "DAILY" | "WEEKLY" | "MONTHLY" | null {
+  if (!freq) return null;
+  const upper = freq.trim().toUpperCase();
+  if (["DAILY", "EVERYDAY", "EVERY DAY", "EVERY_DAY", "DAY"].includes(upper)) return "DAILY";
+  if (["WEEKLY", "EVERY WEEK", "EVERY_WEEK", "WEEK"].includes(upper)) return "WEEKLY";
+  if (["MONTHLY", "EVERY MONTH", "EVERY_MONTH", "MONTH"].includes(upper)) return "MONTHLY";
+  return null;
+}
+
 /**
  * The first occurrence on/after `windowStart` matching the recurrence rule.
  * Unlike calculateNextOccurrence (which always advances), this can return the
@@ -840,7 +849,7 @@ function computeFirstOccurrence(
 
   const dIST = toIST(windowStart);
   dIST.setUTCHours(0, 0, 0, 0);
-  const freq = frequency ? frequency.toUpperCase() : null;
+  const freq = normalizeFrequency(frequency);
 
   if (freq === "WEEKLY" && repeatDays) {
     const allowedDays = repeatDays.split(",").map(Number).filter((n) => !Number.isNaN(n));
@@ -952,6 +961,11 @@ async function preGenerateTasksForSeries(baseTask: any, companyId: string, subta
     assignedTo: { companyId }
   };
 
+  // Extract dealer IDs if available
+  const dealerIds: string[] = baseTask.dealers && Array.isArray(baseTask.dealers)
+    ? baseTask.dealers.map((d: any) => d.id)
+    : [];
+
   let guard = 0;
   while (guard < 400) {
     guard++;
@@ -968,51 +982,73 @@ async function preGenerateTasksForSeries(baseTask: any, companyId: string, subta
       ? new Date(nextDueDate.getTime() - startDateOffset)
       : null;
 
-    // Create each occurrence individually so we can attach its own subtasks.
-    const occurrence = await prisma.task.create({
-      data: {
-        title: baseTask.title,
-        description: baseTask.description,
-        assignedToId: baseTask.assignedToId,
-        assignedById: baseTask.assignedById,
-        dueDate: new Date(nextDueDate),
-        startDate: calculatedStartDate,
-        endDate: baseTask.endDate ? new Date(baseTask.endDate) : null,
-        lat: baseTask.lat,
-        lng: baseTask.lng,
-        isRepeating: true,
-        repeatFrequency: baseTask.repeatFrequency,
-        repeatDays: baseTask.repeatDays,
-        repeatDates: baseTask.repeatDates,
-        skipHolidays: baseTask.skipHolidays,
-        priority: baseTask.priority,
-        points: baseTask.points === 0 ? 10 : baseTask.points,
+    // Check if an occurrence for this root series task on this day already exists
+    const startOfDayOcc = fromIST(new Date(toIST(nextDueDate).setUTCHours(0, 0, 0, 0)));
+    const endOfDayOcc = fromIST(new Date(toIST(nextDueDate).setUTCHours(23, 59, 59, 999)));
+
+    const existingOccurrence = await prisma.task.findFirst({
+      where: {
         parentTaskId: baseTask.id,
-        validations: baseTask.validations ?? undefined,
-        checklist: baseTask.checklist ?? undefined,
-        geofenceLat: baseTask.geofenceLat,
-        geofenceLng: baseTask.geofenceLng,
-        geofenceRadius: baseTask.geofenceRadius,
-        reminder: baseTask.reminder,
-        attachmentUrl: baseTask.attachmentUrl,
-        attachmentName: baseTask.attachmentName,
-        templateId: baseTask.templateId || null
+        isSubtask: false,
+        dueDate: {
+          gte: startOfDayOcc,
+          lte: endOfDayOcc
+        }
       }
     });
 
-    if (subtasks && subtasks.length > 0) {
-      await createSubtasksForOccurrence(
-        occurrence.id,
-        calculatedStartDate ?? new Date(nextDueDate),
-        new Date(nextDueDate),
-        baseTask.endDate ? new Date(baseTask.endDate) : null,
-        subtasks,
-        { id: baseTask.assignedById } as AuthUser,
-        baseTask.assignedToId,
-        baseTask.title,
-        false, // occurrences always align subtasks to the occurrence date
-        false // don't spam notifications for future occurrences
-      );
+    if (!existingOccurrence) {
+      // Create each occurrence individually so we can attach its own subtasks and dealers.
+      const occurrence = await prisma.task.create({
+        data: {
+          title: baseTask.title,
+          description: baseTask.description,
+          assignedToId: baseTask.assignedToId,
+          assignedById: baseTask.assignedById,
+          dueDate: new Date(nextDueDate),
+          startDate: calculatedStartDate,
+          endDate: baseTask.endDate ? new Date(baseTask.endDate) : null,
+          lat: baseTask.lat,
+          lng: baseTask.lng,
+          isRepeating: true,
+          repeatFrequency: baseTask.repeatFrequency,
+          repeatDays: baseTask.repeatDays,
+          repeatDates: baseTask.repeatDates,
+          skipHolidays: baseTask.skipHolidays,
+          priority: baseTask.priority,
+          points: baseTask.points === 0 ? 10 : baseTask.points,
+          parentTaskId: baseTask.id,
+          taskType: baseTask.taskType || "NORMAL",
+          projectId: baseTask.projectId || null,
+          validations: baseTask.validations ?? undefined,
+          checklist: baseTask.checklist ?? undefined,
+          geofenceLat: baseTask.geofenceLat,
+          geofenceLng: baseTask.geofenceLng,
+          geofenceRadius: baseTask.geofenceRadius,
+          reminder: baseTask.reminder,
+          attachmentUrl: baseTask.attachmentUrl,
+          attachmentName: baseTask.attachmentName,
+          templateId: baseTask.templateId || null,
+          dealers: dealerIds.length > 0 ? {
+            connect: dealerIds.map(id => ({ id }))
+          } : undefined
+        }
+      });
+
+      if (subtasks && subtasks.length > 0) {
+        await createSubtasksForOccurrence(
+          occurrence.id,
+          calculatedStartDate ?? new Date(nextDueDate),
+          new Date(nextDueDate),
+          baseTask.endDate ? new Date(baseTask.endDate) : null,
+          subtasks,
+          { id: baseTask.assignedById } as AuthUser,
+          baseTask.assignedToId,
+          baseTask.title,
+          false, // occurrences always align subtasks to the occurrence date
+          false // don't spam notifications for future occurrences
+        );
+      }
     }
 
     currentTaskState.dueDate = new Date(nextDueDate);
@@ -1029,7 +1065,7 @@ async function calculateNextOccurrence(task: any) {
   const dIST = toIST(task.dueDate);
   dIST.setUTCHours(0, 0, 0, 0);
 
-  const frequency = task.repeatFrequency ? task.repeatFrequency.toUpperCase() : null;
+  const frequency = normalizeFrequency(task.repeatFrequency);
   const days = task.repeatDays;
   const dates = task.repeatDates;
   const skipHolidays = task.skipHolidays;
@@ -1051,10 +1087,10 @@ async function calculateNextOccurrence(task: any) {
       count++;
     } while (!allowedDates.includes(dIST.getUTCDate()) && count < 32);
   } else {
-    // Fallback
-    if (frequency === 'DAILY') dIST.setUTCDate(dIST.getUTCDate() + 1);
-    else if (frequency === 'WEEKLY') dIST.setUTCDate(dIST.getUTCDate() + 7);
+    // Fallback if repeatDays or repeatDates were not specified for WEEKLY/MONTHLY
+    if (frequency === 'WEEKLY') dIST.setUTCDate(dIST.getUTCDate() + 7);
     else if (frequency === 'MONTHLY') dIST.setUTCMonth(dIST.getUTCMonth() + 1);
+    else dIST.setUTCDate(dIST.getUTCDate() + 1);
   }
 
   if (skipHolidays) {
@@ -1190,31 +1226,34 @@ export async function rolloverOverdueTasks() {
     });
   }
 
-  // 2. Repeating tasks (isRepeating = true): mark them as CANCELLED instead of rolling over to avoid clogging.
-  const overdueRepeatingTasks = await prisma.task.findMany({
+  // Backfill missing series occurrences for all active repeating series
+  backfillMissingSeriesOccurrences().catch(err =>
+    console.error("[Task Service] Backfill series occurrences error:", err)
+  );
+}
+
+export async function backfillMissingSeriesOccurrences() {
+  // Find all root repeating tasks (parentTaskId is null, isRepeating is true)
+  const rootRepeatingTasks = await prisma.task.findMany({
     where: {
-      status: {
-        in: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS]
-      },
       isRepeating: true,
-      dueDate: {
-        lt: todayStart
-      }
-    }
+      parentTaskId: null,
+      isSubtask: false
+    },
+    include: taskInclude
   });
 
-  if (overdueRepeatingTasks.length > 0) {
-    console.log(`[Task Rollover] Found ${overdueRepeatingTasks.length} overdue repeating tasks. Marking as CANCELLED.`);
-    await prisma.task.updateMany({
-      where: {
-        id: {
-          in: overdueRepeatingTasks.map(t => t.id)
-        }
-      },
-      data: {
-        status: TaskStatus.CANCELLED
-      }
+  for (const rootTask of rootRepeatingTasks) {
+    const subtaskTemplates = await prisma.task.findMany({
+      where: { parentTaskId: rootTask.id, isSubtask: true },
+      orderBy: { createdAt: "asc" }
     });
+
+    await preGenerateTasksForSeries(
+      rootTask,
+      rootTask.assignedTo?.companyId || "",
+      subtaskTemplates
+    );
   }
 }
 
