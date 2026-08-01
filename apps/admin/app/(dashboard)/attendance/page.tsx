@@ -978,13 +978,13 @@ function AttendanceDetailDialog({
       <div class="border border-slate-150 rounded-2xl p-6 bg-slate-50/50">
         <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider mb-4 border-b pb-2">Check In Details</h3>
         <p class="text-xs font-bold text-slate-500 mb-4">Location: ${rec.checkInLat && rec.checkInLng ? `${rec.checkInLat.toFixed(5)}, ${rec.checkInLng.toFixed(5)}` : "—"}</p>
-        \${rec.checkInPhotoUrl ? \`<img src="\${rec.checkInPhotoUrl}" class="max-h-64 object-contain rounded-xl border border-slate-200" />\` : \`<p class="text-xs text-slate-400">No Photo Uploaded</p>\`}
+        ${rec.checkInPhotoUrl ? `<img src="${rec.checkInPhotoUrl}" class="max-h-64 object-contain rounded-xl border border-slate-200" />` : `<p class="text-xs text-slate-400">No Photo Uploaded</p>`}
       </div>
 
       <div class="border border-slate-150 rounded-2xl p-6 bg-slate-50/50">
         <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider mb-4 border-b pb-2">Check Out Details</h3>
         <p class="text-xs font-bold text-slate-500 mb-4">Location: ${rec.checkOutLat && rec.checkOutLng ? `${rec.checkOutLat.toFixed(5)}, ${rec.checkOutLng.toFixed(5)}` : "—"}</p>
-        \${rec.checkOutPhotoUrl ? \`<img src="\${rec.checkOutPhotoUrl}" class="max-h-64 object-contain rounded-xl border border-slate-200" />\` : \`<p class="text-xs text-slate-400">No Photo Uploaded / Session Active</p>\`}
+        ${rec.checkOutPhotoUrl ? `<img src="${rec.checkOutPhotoUrl}" class="max-h-64 object-contain rounded-xl border border-slate-200" />` : `<p class="text-xs text-slate-400">No Photo Uploaded / Session Active</p>`}
       </div>
     </div>
   </div>
