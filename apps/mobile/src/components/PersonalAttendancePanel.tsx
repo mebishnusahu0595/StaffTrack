@@ -285,7 +285,9 @@ export function PersonalAttendancePanel({
         if (!asset) return; // User cancelled camera
 
         setLoadingStep("Verifying Face AI...");
-        faceAiResult = await analyzeFaceApi(asset.uri);
+        // Pass base64 data URL — backend needs image data, not local file:// path
+        const imageData = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+        faceAiResult = await analyzeFaceApi(imageData);
 
         // Check if AI detected fake human face or screen printout
         if (!faceAiResult.isHumanFace || faceAiResult.isScreenOrPrintout) {
@@ -323,7 +325,8 @@ export function PersonalAttendancePanel({
           if (!odoAsset) return;
 
           setLoadingStep("Analyzing Odometer AI & OCR...");
-          odometerAiResult = await analyzeOdometerApi(odoAsset.uri);
+          const odoImageData = odoAsset.base64 ? `data:image/jpeg;base64,${odoAsset.base64}` : odoAsset.uri;
+          odometerAiResult = await analyzeOdometerApi(odoImageData);
 
           if (!odometerAiResult.isOdometer || odometerAiResult.isBlurry || odometerAiResult.isScreenOrPrintout) {
             odoRetakeCount++;
@@ -388,7 +391,8 @@ export function PersonalAttendancePanel({
         if (!asset) return;
 
         setLoadingStep("Verifying Face AI...");
-        faceAiResult = await analyzeFaceApi(asset.uri);
+        const imageData = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+        faceAiResult = await analyzeFaceApi(imageData);
 
         if (!faceAiResult.isHumanFace || faceAiResult.isScreenOrPrintout) {
           faceRetakeCount++;
@@ -425,7 +429,8 @@ export function PersonalAttendancePanel({
           if (!odoAsset) return;
 
           setLoadingStep("Analyzing Odometer AI & OCR...");
-          odometerAiResult = await analyzeOdometerApi(odoAsset.uri);
+          const odoImageData = odoAsset.base64 ? `data:image/jpeg;base64,${odoAsset.base64}` : odoAsset.uri;
+          odometerAiResult = await analyzeOdometerApi(odoImageData);
 
           if (!odometerAiResult.isOdometer || odometerAiResult.isBlurry || odometerAiResult.isScreenOrPrintout) {
             odoRetakeCount++;
@@ -1032,7 +1037,8 @@ async function pickVerificationImage(options?: { quality?: number }): Promise<Im
   try {
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: false, // Disabling editing intent prevents memory crashes on low-end/budget phones
-      quality: options?.quality ?? 0.4
+      quality: options?.quality ?? 0.4,
+      base64: true  // Include base64 so backend can analyze the image (local file:// URIs are not accessible from server)
     });
     return result.canceled ? null : result.assets[0];
   } catch (cameraErr) {

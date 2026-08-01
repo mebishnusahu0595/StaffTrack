@@ -239,9 +239,10 @@ export async function checkOut(payload: CheckOutPayload): Promise<Attendance> {
   return unwrap(await api.post<ApiEnvelope<Attendance>>("/attendance/checkout", withCoordinateAliases(payload)));
 }
 
-export async function analyzeFaceApi(image: string): Promise<any> {
+export async function analyzeFaceApi(imageData: string): Promise<any> {
   try {
-    const res = await api.post<ApiEnvelope<any>>("/attendance/analyze-face", { image }, { timeout: 6000 });
+    // imageData should be a base64 data URL: data:image/jpeg;base64,...
+    const res = await api.post<ApiEnvelope<any>>("/attendance/analyze-face", { image: imageData }, { timeout: 8000 });
     return unwrap(res);
   } catch (err: any) {
     console.warn("[Mobile API] analyzeFaceApi offline/fallback:", err?.message || err);
@@ -255,9 +256,9 @@ export async function analyzeFaceApi(image: string): Promise<any> {
   }
 }
 
-export async function analyzeOdometerApi(image: string): Promise<any> {
+export async function analyzeOdometerApi(imageData: string): Promise<any> {
   try {
-    const res = await api.post<ApiEnvelope<any>>("/attendance/analyze-odometer", { image }, { timeout: 6000 });
+    const res = await api.post<ApiEnvelope<any>>("/attendance/analyze-odometer", { image: imageData }, { timeout: 8000 });
     return unwrap(res);
   } catch (err: any) {
     console.warn("[Mobile API] analyzeOdometerApi offline/fallback:", err?.message || err);
