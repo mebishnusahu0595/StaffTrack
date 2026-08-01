@@ -159,10 +159,9 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
 }
 
 export async function listTasks(actor: AuthUser, dateStr?: string) {
-  // Automatically rollover overdue pending / in_progress tasks — fire-and-forget
-  // so it doesn't block the response. Errors are logged but not surfaced.
-  rolloverOverdueTasks().catch(err =>
-    console.error("[Task Rollover] background rollover failed:", err)
+  // Ensure overdue rollover & series backfilling complete before listing tasks
+  await rolloverOverdueTasks().catch(err =>
+    console.error("[Task Rollover] rollover failed:", err)
   );
 
   const tasks = await prisma.task.findMany({
@@ -938,12 +937,15 @@ async function createSubtasksForOccurrence(
 
 async function preGenerateTasksForSeries(baseTask: any, companyId: string, subtasks: any[] = []) {
   const horizonDays = 366;
-  let maxDate = new Date();
+  const baseStart = baseTask.startDate ? new Date(baseTask.startDate) : new Date(baseTask.dueDate);
+
+  let maxDate = new Date(baseStart.getTime());
   maxDate.setDate(maxDate.getDate() + horizonDays);
 
   if (baseTask.endDate) {
     const baseEndDate = new Date(baseTask.endDate);
-    if (baseEndDate < maxDate) {
+    const isExplicitLongEndDate = baseEndDate.getTime() > baseStart.getTime() + 24 * 60 * 60 * 1000;
+    if (isExplicitLongEndDate && baseEndDate < maxDate) {
       maxDate = baseEndDate;
     }
   }
