@@ -782,6 +782,7 @@ ${htmlContent}
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50/50 border-b border-slate-100">
               <tr>
+                <th className="py-4 px-8 text-[11px] font-black uppercase tracking-wider text-slate-400">ID</th>
                 <th className="py-4 px-8 text-[11px] font-black uppercase tracking-wider text-slate-400">Name</th>
                 <th className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Phone</th>
                 <th className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Designation</th>
@@ -807,6 +808,9 @@ ${htmlContent}
                       "group border-b border-slate-50 hover:bg-slate-50/50 transition-colors cursor-pointer",
                       isExpanded && "bg-slate-50/80 hover:bg-slate-50/80"
                     )} onClick={() => setExpandedId(isExpanded ? null : user.id)}>
+                      <td className="py-5 px-8 font-black text-xs text-slate-500">
+                        {user.employeeCode || "—"}
+                      </td>
                       <td className="py-5 px-8">
                         <div className="flex items-center gap-4">
                           <Avatar className="h-10 w-10 border border-slate-100 shadow-sm ring-2 ring-white">
@@ -1035,7 +1039,7 @@ ${htmlContent}
                     </tr>
                     {isExpanded && (
                       <tr>
-                        <td colSpan={9} className="p-0 border-none bg-slate-50/80">
+                        <td colSpan={10} className="p-0 border-none bg-slate-50/80">
                            <div className="px-8 py-8 animate-in slide-in-from-top-4 duration-300">
                               <div className="grid grid-cols-12 gap-8">
                                  {/* Left: Profile & Quick Stats */}

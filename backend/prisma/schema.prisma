@@ -7,6 +7,650 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Company {
+  id               String            @id @default(cuid())
+  name             String
+  createdAt        DateTime          @default(now())
+  companyFiles     CompanyFile[]
+  dailyAllowances  DailyAllowance[]
+  dealers          Dealer[]
+  forms            Form[]
+  groups           Group[]
+  holidays         Holiday[]
+  holidayTemplates HolidayTemplate[]
+  issues           Issue[]
+  leaveRequests    LeaveRequest[]
+  leaveTypes       LeaveType[]
+  projects         Project[]
+  salarySlips      SalarySlip[]
+  syncDevices      SyncDevice[]
+  users            User[]
+}
+
+model Group {
+  id         String   @id @default(cuid())
+  name       String
+  baseSalary Float    @default(0)
+  companyId  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  members    User[]
+
+  @@index([companyId])
+}
+
+model User {
+  id                  String               @id @default(cuid())
+  name                String
+  email               String               @unique
+  passwordHash        String
+  phone               String
+  role                UserRole
+  workMode            WorkMode             @default(BOTH)
+  designation         String?
+  joiningDate         DateTime             @default(now())
+  avatarUrl           String?
+  shiftStart          String               @default("09:00")
+  shiftEnd            String               @default("18:00")
+  baseSalary          Float                @default(0)
+  companyId           String
+  managerId           String?
+  groupId             String?
+  employeeCode        String?              @unique
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  holidayTemplateId   String?
+  batteryLevel        Int?
+  expoPushToken       String?
+  isLocationOn        Boolean              @default(true)
+  locationOffAt       DateTime?
+  travelRate          Float                @default(5.0)
+  attendances         Attendance[]
+  attendanceRequests  AttendanceRequest[]
+  uploadedFiles       CompanyFile[]
+  dailyAllowances     DailyAllowance[]
+  dayEndReports       DayEndReport[]
+  approvedExpenses    Expense[]            @relation("ExpenseApprover")
+  expenses            Expense[]            @relation("ExpenseOwner")
+  createdForms        Form[]               @relation("CreatedForms")
+  formResponses       FormResponse[]
+  assignedIssues      Issue[]              @relation("AssignedIssues")
+  reportedIssues      Issue[]              @relation("ReportedIssues")
+  issueUpdates        IssueUpdate[]
+  approvedLeaves      LeaveRequest[]       @relation("ApprovedLeaves")
+  leaveRequests       LeaveRequest[]       @relation("UserLeaves")
+  locationLogs        LocationLog[]
+  notifications       Notification[]
+  projectAssignments  ProjectAssignment[]
+  projectProgressLogs ProjectProgressLog[]
+  salarySlips         SalarySlip[]         @relation("UserSalarySlips")
+  createdTasks        Task[]               @relation("CreatedTasks")
+  assignedTasks       Task[]               @relation("AssignedTasks")
+  createdTemplates    Template[]           @relation("CreatedTemplates")
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  group               Group?               @relation(fields: [groupId], references: [id])
+  holidayTemplate     HolidayTemplate?     @relation(fields: [holidayTemplateId], references: [id])
+  manager             User?                @relation("ManagerTeam", fields: [managerId], references: [id])
+  teamMembers         User[]               @relation("ManagerTeam")
+
+  @@index([companyId])
+  @@index([managerId])
+  @@index([groupId])
+}
+
+model Holiday {
+  id          String   @id @default(cuid())
+  date        DateTime
+  name        String
+  description String?
+  type        String   @default("HOLIDAY")
+  companyId   String
+  groupId     String?
+  userId      String?
+  createdAt   DateTime @default(now())
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([groupId])
+  @@index([userId])
+}
+
+model Task {
+  id                 String     @id @default(cuid())
+  title              String
+  description        String?
+  status             TaskStatus @default(PENDING)
+  assignedToId       String
+  assignedById       String
+  dueDate            DateTime
+  lat                Float?
+  lng                Float?
+  isRepeating        Boolean    @default(false)
+  repeatFrequency    String?
+  repeatDays         String?
+  repeatDates        String?
+  skipHolidays       Boolean    @default(false)
+  completionPhotoUrl String?
+  completionRemarks  String?
+  projectId          String?
+  priority           String     @default("Medium")
+  points             Int        @default(0)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  attachmentName     String?
+  attachmentUrl      String?
+  checklist          Json?
+  checklistResponses Json?
+  completionLat      Float?
+  completionLng      Float?
+  endDate            DateTime?
+  geofenceLat        Float?
+  geofenceLng        Float?
+  geofenceRadius     Float?
+  isSubtask          Boolean    @default(false)
+  parentTaskId       String?
+  reminder           Int?
+  startDate          DateTime?
+  templateId         String?
+  validations        Json?
+  completedAt        DateTime?
+  taskType           String     @default("NORMAL")
+  assignedBy         User       @relation("CreatedTasks", fields: [assignedById], references: [id], onDelete: Cascade)
+  assignedTo         User       @relation("AssignedTasks", fields: [assignedToId], references: [id], onDelete: Cascade)
+  parentTask         Task?      @relation("SubTasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  subtasks           Task[]     @relation("SubTasks")
+  project            Project?   @relation(fields: [projectId], references: [id])
+  template           Template?  @relation(fields: [templateId], references: [id])
+  dealers            Dealer[]   @relation("TaskDealers")
+
+  @@index([assignedToId])
+  @@index([assignedById])
+  @@index([status])
+  @@index([templateId])
+}
+
+model LocationLog {
+  id           String   @id @default(cuid())
+  userId       String
+  lat          Float
+  lng          Float
+  accuracy     Float
+  batteryLevel Float?
+  timestamp    DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, timestamp])
+}
+
+model Attendance {
+  id                    String           @id @default(cuid())
+  userId                String
+  date                  DateTime
+  punchType             PunchType?
+  checkInTime           DateTime?
+  checkInLat            Float?
+  checkInLng            Float?
+  checkInPhotoUrl       String?
+  checkOutTime          DateTime?
+  checkOutLat           Float?
+  checkOutLng           Float?
+  checkOutPhotoUrl      String?
+  status                AttendanceStatus @default(PRESENT)
+  checkInApproved       Boolean          @default(true)
+  checkInApprovedAt     DateTime?
+  checkInApprovedBy     String?
+  endOdometer           Float?
+  endOdometerPhotoUrl   String?
+  isCheckInPending      Boolean          @default(false)
+  startOdometer         Float?
+  startOdometerPhotoUrl String?
+  user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  breaks                Break[]
+
+  @@index([userId, date])
+}
+
+model DayEndReport {
+  id                    String   @id @default(cuid())
+  userId                String
+  date                  DateTime
+  visitsSummary         String
+  ordersTaken           Int
+  ordersCancelled       Int
+  kmTravelled           Float
+  kmPhotoUrl            String?
+  startOdometer         Float?
+  endOdometer           Float?
+  startOdometerPhotoUrl String?
+  remarks               String
+  submittedAt           DateTime @default(now())
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+model Expense {
+  id           String          @id @default(cuid())
+  userId       String
+  category     ExpenseCategory
+  amount       Float
+  description  String
+  receiptUrl   String
+  date         DateTime
+  approved     Boolean         @default(false)
+  approvedById String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  approvedBy   User?           @relation("ExpenseApprover", fields: [approvedById], references: [id])
+  user         User            @relation("ExpenseOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@index([approvedById])
+}
+
+model Project {
+  id             String              @id @default(cuid())
+  name           String
+  description    String?
+  status         String              @default("Ongoing")
+  companyId      String
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  employeeBudget Float?
+  expenseBudget  Float?
+  targetClients  Int?
+  budget         Float?
+  clientName     String?
+  deadline       DateTime?
+  department     String?
+  endDate        DateTime?
+  objectives     String?
+  priority       String              @default("Medium")
+  startDate      DateTime?
+  tags           String?
+  targetQuantity Int                 @default(0)
+  targetType     String              @default("YEARLY")
+  productName    String?
+  productPrice   Float?              @default(0)
+  issues         Issue[]
+  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  assignments    ProjectAssignment[]
+  tasks          Task[]
+
+  @@index([companyId])
+}
+
+model ProjectAssignment {
+  id             String                  @id @default(cuid())
+  projectId      String
+  userId         String
+  targetQuantity Int                     @default(0)
+  completedCount Int                     @default(0)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  project        Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user           User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  periods        ProjectPeriodProgress[]
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+}
+
+model ProjectPeriodProgress {
+  id              String               @id @default(cuid())
+  assignmentId    String
+  periodType      String
+  periodIndex     Int
+  periodName      String
+  startDate       DateTime
+  endDate         DateTime
+  baseTarget      Int                  @default(0)
+  carryover       Int                  @default(0)
+  effectiveTarget Int                  @default(0)
+  completedCount  Int                  @default(0)
+  isCompleted     Boolean              @default(false)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  assignment      ProjectAssignment    @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  logs            ProjectProgressLog[]
+
+  @@index([assignmentId])
+}
+
+model Issue {
+  id           String        @id @default(cuid())
+  title        String
+  description  String
+  priority     String        @default("Medium")
+  status       String        @default("Open")
+  startDate    DateTime      @default(now())
+  reportedById String
+  assigneeId   String?
+  companyId    String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  category     String        @default("General")
+  department   String?
+  projectId    String?
+  assignee     User?         @relation("AssignedIssues", fields: [assigneeId], references: [id])
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project      Project?      @relation(fields: [projectId], references: [id])
+  reportedBy   User          @relation("ReportedIssues", fields: [reportedById], references: [id], onDelete: Cascade)
+  updates      IssueUpdate[]
+
+  @@index([companyId])
+  @@index([reportedById])
+}
+
+model IssueUpdate {
+  id        String   @id @default(cuid())
+  issueId   String
+  userId    String
+  type      String
+  content   String?
+  createdAt DateTime @default(now())
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([issueId])
+}
+
+model Form {
+  id          String         @id @default(cuid())
+  name        String
+  category    String?
+  status      String         @default("Published")
+  createdById String?
+  companyId   String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  company     Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy   User?          @relation("CreatedForms", fields: [createdById], references: [id])
+  fields      FormField[]
+  responses   FormResponse[]
+
+  @@index([companyId])
+}
+
+model FormField {
+  id       String  @id @default(cuid())
+  formId   String
+  label    String
+  type     String
+  required Boolean @default(false)
+  options  String?
+  form     Form    @relation(fields: [formId], references: [id], onDelete: Cascade)
+}
+
+model FormResponse {
+  id          String   @id @default(cuid())
+  formId      String
+  userId      String
+  data        String
+  submittedAt DateTime @default(now())
+  form        Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([formId])
+  @@index([userId])
+}
+
+model Template {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  priority    String   @default("Medium")
+  startTime   String?
+  dueTime     String?
+  recurrence  String?
+  description String?
+  data        String   @default("{}")
+  rating      Float    @default(0)
+  usageCount  Int      @default(0)
+  createdById String?
+  companyId   String?
+  createdAt   DateTime @default(now())
+  tasks       Task[]
+  createdBy   User?    @relation("CreatedTemplates", fields: [createdById], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Break {
+  id           String     @id @default(cuid())
+  attendanceId String
+  startTime    DateTime   @default(now())
+  endTime      DateTime?
+  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+
+  @@index([attendanceId])
+}
+
+model LeaveRequest {
+  id           String      @id @default(cuid())
+  userId       String
+  startDate    DateTime
+  endDate      DateTime
+  reason       String
+  status       LeaveStatus @default(PENDING)
+  approvedById String?
+  companyId    String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  approvedBy   User?       @relation("ApprovedLeaves", fields: [approvedById], references: [id])
+  company      Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user         User        @relation("UserLeaves", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([companyId])
+  @@index([status])
+}
+
+model AttendanceRequest {
+  id           String        @id @default(cuid())
+  userId       String
+  date         DateTime
+  type         String        @default("New Punch Added")
+  punchType    PunchType     @default(OFFICE)
+  checkInTime  DateTime?
+  checkOutTime DateTime?
+  reason       String
+  status       RequestStatus @default(PENDING)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+}
+
+model SyncDevice {
+  id         String   @id @default(cuid())
+  name       String
+  macAddress String   @unique
+  lastSync   DateTime
+  status     String   @default("Offline")
+  companyId  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+model LeaveType {
+  id                  String   @id @default(cuid())
+  name                String
+  alias               String
+  description         String?
+  autoAllocationCount Float
+  autoAllocationFreq  String
+  carryForward        Float
+  carryForwardFreq    String
+  encashment          Boolean  @default(false)
+  leaveCycle          String   @default("CALENDAR")
+  companyId           String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  company             Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+model HolidayTemplate {
+  id        String                @id @default(cuid())
+  name      String
+  companyId String
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+  company   Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  holidays  HolidayTemplateItem[]
+  users     User[]
+
+  @@index([companyId])
+}
+
+model HolidayTemplateItem {
+  id          String          @id @default(cuid())
+  templateId  String
+  date        DateTime
+  name        String
+  description String?
+  createdAt   DateTime        @default(now())
+  template    HolidayTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+}
+
+model SalarySlip {
+  id             String           @id @default(cuid())
+  userId         String
+  companyId      String
+  month          Int
+  year           Int
+  status         SalarySlipStatus @default(DRAFT)
+  orgName        String?
+  orgSubtitle    String?
+  orgCode        String?
+  logoUrl        String?
+  orgEmail       String?
+  orgWebsite     String?
+  orgPhone       String?
+  companyCode    String?
+  bankName       String?
+  bankAccountNo  String?
+  ifscCode       String?
+  departmentName String?
+  divisionName   String?
+  designation    String?
+  traineeType    String?
+  aadhaarNumber  String?
+  monthDays      Float?
+  payableDays    Float?
+  earnings       Json?
+  deductions     Json?
+  netPay         Float            @default(0)
+  netPayWords    String?
+  remarks        String?
+  createdById    String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  company        Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user           User             @relation("UserSalarySlips", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month, year])
+  @@index([companyId])
+  @@index([userId])
+}
+
+model CompanyFile {
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  fileUrl      String
+  fileName     String
+  fileSize     Float?
+  fileType     String?
+  mimeType     String?
+  category     String?  @default("General")
+  uploadedById String
+  companyId    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([uploadedById])
+}
+
+model Dealer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  city      String?
+  state     String?
+  pincode   String?
+  gstin     String?
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  tasks     Task[]   @relation("TaskDealers")
+
+  @@index([companyId])
+}
+
+model DailyAllowance {
+  id        String   @id @default(cuid())
+  userId    String
+  companyId String
+  date      DateTime
+  amount    Float
+  remark    String?
+  gpsKm     Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([companyId, date])
+  @@index([userId, date])
+}
+
+model ProjectProgressLog {
+  id            String                @id @default(cuid())
+  periodId      String
+  changedBy     String
+  previousCount Int
+  newCount      Int
+  delta         Int
+  note          String?
+  createdAt     DateTime              @default(now())
+  user          User                  @relation(fields: [changedBy], references: [id], onDelete: Cascade)
+  period        ProjectPeriodProgress @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  @@index([periodId])
+  @@index([changedBy])
+}
+
 enum UserRole {
   SUPERADMIN
   ADMIN
@@ -46,465 +690,10 @@ enum WorkMode {
   BOTH
 }
 
-model Company {
-  id        String   @id @default(cuid())
-  name      String
-  createdAt DateTime @default(now())
-  users     User[]
-  projects  Project[]
-  issues    Issue[]
-  forms     Form[]
-  groups    Group[]
-  holidays  Holiday[]
-  leaveRequests LeaveRequest[]
-  syncDevices SyncDevice[]
-  leaveTypes    LeaveType[]
-  holidayTemplates HolidayTemplate[]
-  salarySlips   SalarySlip[]
-  companyFiles  CompanyFile[]
-  dealers       Dealer[]
-  dailyAllowances DailyAllowance[]
-}
-
-model Group {
-  id         String   @id @default(cuid())
-  name       String
-  baseSalary Float    @default(0)
-  companyId  String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  members    User[]
-
-  @@index([companyId])
-}
-
-model User {
-  id              String         @id @default(cuid())
-  name            String
-  email           String         @unique
-  passwordHash    String
-  phone           String
-  role            UserRole
-  workMode        WorkMode       @default(BOTH)
-  designation     String?
-  joiningDate     DateTime       @default(now())
-  avatarUrl       String?
-  shiftStart      String         @default("09:00")
-  shiftEnd        String         @default("18:00")
-  baseSalary      Float          @default(0)
-  travelRate      Float          @default(5.0)
-  companyId       String
-  managerId       String?
-  groupId         String?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  company         Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  manager         User?          @relation("ManagerTeam", fields: [managerId], references: [id], onDelete: SetNull)
-  group           Group?         @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  teamMembers     User[]         @relation("ManagerTeam")
-  assignedTasks   Task[]         @relation("AssignedTasks")
-  createdTasks    Task[]         @relation("CreatedTasks")
-  reportedIssues  Issue[]        @relation("ReportedIssues")
-  assignedIssues  Issue[]        @relation("AssignedIssues")
-  locationLogs    LocationLog[]
-  attendances     Attendance[]
-  dayEndReports   DayEndReport[]
-  formResponses   FormResponse[]
-  expenses        Expense[]      @relation("ExpenseOwner")
-  approvedExpenses Expense[]     @relation("ExpenseApprover")
-  createdForms    Form[]        @relation("CreatedForms")
-  issueUpdates    IssueUpdate[]
-  notifications   Notification[]
-  leaveRequests   LeaveRequest[] @relation("UserLeaves")
-  approvedLeaves  LeaveRequest[] @relation("ApprovedLeaves")
-  attendanceRequests AttendanceRequest[]
-  holidayTemplateId  String?
-  holidayTemplate    HolidayTemplate? @relation(fields: [holidayTemplateId], references: [id], onDelete: SetNull)
-  expoPushToken      String?
-  batteryLevel       Int?
-  isLocationOn       Boolean        @default(true)
-  locationOffAt      DateTime?
-  salarySlips        SalarySlip[]   @relation("UserSalarySlips")
-  createdTemplates   Template[]     @relation("CreatedTemplates")
-  projectAssignments ProjectAssignment[]
-  uploadedFiles      CompanyFile[]
-  dailyAllowances    DailyAllowance[]
-  projectProgressLogs ProjectProgressLog[]
-
-  @@index([companyId])
-  @@index([managerId])
-  @@index([groupId])
-}
-
-model Holiday {
-  id          String   @id @default(cuid())
-  date        DateTime
-  name        String
-  description String?
-  type        String   @default("HOLIDAY") // HOLIDAY, PAID_LEAVE
-  companyId   String
-  groupId     String?
-  userId      String?
-  createdAt   DateTime @default(now())
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@index([companyId])
-  @@index([groupId])
-  @@index([userId])
-}
-
-model Task {
-  id                 String     @id @default(cuid())
-  title              String
-  description        String?
-  status             TaskStatus @default(PENDING)
-  taskType           String     @default("NORMAL") // NORMAL, DEALER, FARMER
-  assignedToId       String
-  assignedById       String
-  dueDate            DateTime
-  startDate          DateTime?
-  endDate            DateTime?
-  lat                Float?
-  lng                Float?
-  isRepeating        Boolean    @default(false)
-  repeatFrequency    String?    // DAILY, WEEKLY, MONTHLY
-  repeatDays         String?    // Comma-separated days (0-6)
-  repeatDates        String?    // Comma-separated dates (1-31)
-  skipHolidays       Boolean    @default(false)
-  completionPhotoUrl String?
-  completionRemarks  String?
-  completionLat      Float?
-  completionLng      Float?
-  projectId          String?
-  priority           String     @default("Medium") // High, Medium, Low
-  points             Int        @default(0)
-  parentTaskId       String?
-  isSubtask          Boolean    @default(false)
-  validations        Json?      // e.g. ["VIDEO", "AUDIO", "IMAGE", "FILE", "TEXT", "DROPDOWN", "GEOTAG"]
-  checklist          Json?      // e.g. [{ id: "...", label: "...", required: boolean, validations: [...] }]
-  checklistResponses Json?      // e.g. [{ id: "...", value: "...", photoUrl: "..." }]
-  geofenceLat        Float?
-  geofenceLng        Float?
-  geofenceRadius     Float?
-  reminder           Int?       // minutes before due
-  attachmentUrl      String?
-  attachmentName     String?
-  templateId         String?
-  completedAt        DateTime?
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
-  assignedTo         User       @relation("AssignedTasks", fields: [assignedToId], references: [id], onDelete: Cascade)
-  assignedBy         User       @relation("CreatedTasks", fields: [assignedById], references: [id], onDelete: Cascade)
-  project            Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  parentTask         Task?      @relation("SubTasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
-  subtasks           Task[]     @relation("SubTasks")
-  template           Template?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  dealers            Dealer[]   @relation("TaskDealers")
-
-  @@index([assignedToId])
-  @@index([assignedById])
-  @@index([status])
-  @@index([templateId])
-}
-
-
-model LocationLog {
-  id           String   @id @default(cuid())
-  userId       String
-  lat          Float
-  lng          Float
-  accuracy     Float
-  batteryLevel Float?
-  timestamp    DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, timestamp])
-}
-
-model Attendance {
-  id                    String           @id @default(cuid())
-  userId                String
-  date                  DateTime
-  punchType             PunchType?
-  checkInTime           DateTime?
-  checkInLat            Float?
-  checkInLng            Float?
-  checkInPhotoUrl       String?
-  startOdometerPhotoUrl String?
-  startOdometer         Float?
-  checkOutTime          DateTime?
-  checkOutLat           Float?
-  checkOutLng           Float?
-  checkOutPhotoUrl      String?
-  endOdometerPhotoUrl   String?
-  endOdometer           Float?
-  status                AttendanceStatus @default(PRESENT)
-  user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  breaks                Break[]
-  
-  isCheckInPending      Boolean          @default(false)
-  checkInApproved       Boolean          @default(true)
-  checkInApprovedBy     String?
-  checkInApprovedAt     DateTime?
-  checkInAiAnalysis     Json?
-  checkOutAiAnalysis    Json?
-
-  @@index([userId, date])
-}
-
-model DayEndReport {
-  id                    String   @id @default(cuid())
-  userId                String
-  date                  DateTime
-  visitsSummary         String
-  ordersTaken           Int
-  ordersCancelled       Int
-  kmTravelled           Float
-  kmPhotoUrl            String?
-  startOdometer         Float?
-  endOdometer           Float?
-  startOdometerPhotoUrl String?
-  remarks               String
-  submittedAt           DateTime @default(now())
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, date])
-  @@index([userId, date])
-}
-
-model Expense {
-  id           String          @id @default(cuid())
-  userId       String
-  category     ExpenseCategory
-  amount       Float
-  description  String
-  receiptUrl   String
-  date         DateTime
-  approved     Boolean         @default(false)
-  approvedById String?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  user         User            @relation("ExpenseOwner", fields: [userId], references: [id], onDelete: Cascade)
-  approvedBy   User?           @relation("ExpenseApprover", fields: [approvedById], references: [id], onDelete: SetNull)
-
-  @@index([userId, date])
-  @@index([approvedById])
-}
-
-model Project {
-  id             String              @id @default(cuid())
-  name           String
-  description    String?
-  status         String              @default("Ongoing") // Ongoing, Scheduled, Completed
-  priority       String              @default("Medium") // High, Medium, Low, Critical
-  targetType     String              @default("YEARLY") // YEARLY, MONTHLY, WEEKLY
-  targetQuantity Int                 @default(0)
-  productName    String?
-  productPrice   Float?              @default(0)
-  startDate      DateTime?
-  endDate        DateTime?
-  department     String?
-  clientName     String?
-  objectives     String?
-  tags           String?
-  budget         Float?
-  deadline       DateTime?
-  companyId      String
-  targetClients  Int?
-  employeeBudget Float?
-  expenseBudget  Float?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  tasks          Task[]
-  issues         Issue[]
-  assignments    ProjectAssignment[]
-
-  @@index([companyId])
-}
-
-model ProjectAssignment {
-  id             String                  @id @default(cuid())
-  projectId      String
-  userId         String
-  targetQuantity Int                     @default(0)
-  completedCount Int                     @default(0)
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @updatedAt
-  project        Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user           User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  periods        ProjectPeriodProgress[]
-
-  @@unique([projectId, userId])
-  @@index([projectId])
-  @@index([userId])
-}
-
-model ProjectPeriodProgress {
-  id              String            @id @default(cuid())
-  assignmentId    String
-  periodType      String            // MONTHLY, WEEKLY
-  periodIndex     Int               // 1..12 or 1..4 or 1
-  periodName      String            // e.g. "Jan 2026", "Week 1"
-  startDate       DateTime
-  endDate         DateTime
-  baseTarget      Int               @default(0)
-  carryover       Int               @default(0)
-  effectiveTarget Int               @default(0)
-  completedCount  Int               @default(0)
-  isCompleted     Boolean           @default(false)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  assignment      ProjectAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  logs            ProjectProgressLog[]
-
-  @@index([assignmentId])
-}
-
-model Issue {
-  id           String   @id @default(cuid())
-  title        String
-  description  String
-  priority     String   @default("Medium") // Critical, High, Medium, Low
-  status       String   @default("Open") // Open, In Progress, Resolved, Closed
-  category     String   @default("General") // Technical, Operational, HR, Billing, Client, Other
-  department   String?
-  projectId    String?
-  startDate    DateTime @default(now())
-  reportedById String
-  assigneeId   String?
-  companyId    String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  reportedBy   User     @relation("ReportedIssues", fields: [reportedById], references: [id], onDelete: Cascade)
-  assignee     User?    @relation("AssignedIssues", fields: [assigneeId], references: [id], onDelete: SetNull)
-  project      Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  updates      IssueUpdate[]
-
-  @@index([companyId])
-  @@index([reportedById])
-}
-
-model IssueUpdate {
-  id          String   @id @default(cuid())
-  issueId     String
-  userId      String
-  type        String   // PHOTO, VIDEO, TEXT, AUDIO, ATTACHMENT
-  content     String?  // Text content or file URL
-  createdAt   DateTime @default(now())
-  issue       Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([issueId])
-}
-
-model Form {
-  id          String         @id @default(cuid())
-  name        String
-  category    String?
-  status      String         @default("Published") // Published, Draft, Trashed
-  createdById String?
-  companyId   String
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  company     Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  createdBy   User?          @relation("CreatedForms", fields: [createdById], references: [id], onDelete: SetNull)
-  fields      FormField[]
-  responses   FormResponse[]
-
-  @@index([companyId])
-}
-
-model FormField {
-  id        String  @id @default(cuid())
-  formId    String
-  label     String
-  type      String  // text, number, select, photo, etc.
-  required  Boolean @default(false)
-  options   String? // JSON string for select options
-  form      Form    @relation(fields: [formId], references: [id], onDelete: Cascade)
-}
-
-model FormResponse {
-  id          String   @id @default(cuid())
-  formId      String
-  userId      String
-  data        String   // JSON string of responses
-  submittedAt DateTime @default(now())
-  form        Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([formId])
-  @@index([userId])
-}
-
-model Template {
-  id          String   @id @default(cuid())
-  name        String
-  type        String   // Task, Project
-  priority    String   @default("Medium")
-  startTime   String?
-  dueTime     String?
-  recurrence  String?  // None, Daily, Weekly
-  description String?
-  data        String   @default("{}") // JSON configuration
-  rating      Float    @default(0)
-  usageCount  Int      @default(0)
-  createdById String?
-  companyId   String?
-  createdAt   DateTime @default(now())
-  tasks       Task[]
-  createdBy   User?    @relation("CreatedTemplates", fields: [createdById], references: [id], onDelete: SetNull)
-}
-model Notification {
-  id        String   @id @default(cuid())
-  userId    String
-  title     String
-  message   String
-  type      String   // TASK_ASSIGNED, TASK_COMPLETED, SYSTEM
-  isRead    Boolean  @default(false)
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-model Break {
-  id           String     @id @default(cuid())
-  attendanceId String
-  startTime    DateTime   @default(now())
-  endTime      DateTime?
-  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
-
-  @@index([attendanceId])
-}
 enum LeaveStatus {
   PENDING
   APPROVED
   REJECTED
-}
-
-model LeaveRequest {
-  id           String      @id @default(cuid())
-  userId       String
-  startDate    DateTime
-  endDate      DateTime
-  reason       String      @db.Text
-  status       LeaveStatus @default(PENDING)
-  approvedById String?
-  companyId    String
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  
-  user         User        @relation("UserLeaves", fields: [userId], references: [id], onDelete: Cascade)
-  approvedBy   User?       @relation("ApprovedLeaves", fields: [approvedById], references: [id], onDelete: SetNull)
-  company      Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([companyId])
-  @@index([status])
 }
 
 enum RequestStatus {
@@ -513,217 +702,7 @@ enum RequestStatus {
   REJECTED
 }
 
-model AttendanceRequest {
-  id           String        @id @default(cuid())
-  userId       String
-  date         DateTime
-  type         String        @default("New Punch Added")
-  punchType    PunchType     @default(OFFICE)
-  checkInTime  DateTime?
-  checkOutTime DateTime?
-  reason       String
-  status       RequestStatus @default(PENDING)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([status])
-}
-
-model SyncDevice {
-  id         String   @id @default(cuid())
-  name       String
-  macAddress String   @unique
-  lastSync   DateTime
-  status     String   @default("Offline") // Online, Offline
-  companyId  String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@index([companyId])
-}
-
-model LeaveType {
-  id                     String   @id @default(cuid())
-  name                   String
-  alias                  String
-  description            String?
-  autoAllocationCount    Float
-  autoAllocationFreq     String   // MONTHLY, YEARLY
-  carryForward           Float
-  carryForwardFreq       String   // END_OF_MONTH, END_OF_YEAR
-  encashment             Boolean  @default(false)
-  leaveCycle             String   @default("CALENDAR") // CALENDAR, FINANCIAL
-  companyId              String
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-  company                Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@index([companyId])
-}
-
-model HolidayTemplate {
-  id          String   @id @default(cuid())
-  name        String
-  companyId   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  holidays    HolidayTemplateItem[]
-  users       User[]
-
-  @@index([companyId])
-}
-
-model HolidayTemplateItem {
-  id          String   @id @default(cuid())
-  templateId  String
-  date        DateTime
-  name        String
-  description String?
-  createdAt   DateTime @default(now())
-  template    HolidayTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-
-  @@index([templateId])
-}
-
 enum SalarySlipStatus {
   DRAFT
   PUBLISHED
 }
-
-// A customisable, admin-built salary slip for one employee for one month.
-// Bank / trainee details and earning / deduction line items are stored so the
-// slip can be re-opened, edited (CRUD), printed to PDF, and shown to the
-// employee once published.
-model SalarySlip {
-  id            String           @id @default(cuid())
-  userId        String
-  companyId     String
-  month         Int
-  year          Int
-  status        SalarySlipStatus @default(DRAFT)
-
-  // Organisation / header block (configurable per slip)
-  orgName       String?
-  orgSubtitle   String?
-  orgCode       String?
-  logoUrl       String?
-  orgEmail      String?
-  orgWebsite    String?
-  orgPhone      String?
-
-  // Bank / trainee detail block
-  companyCode    String?
-  bankName       String?
-  bankAccountNo  String?
-  ifscCode       String?
-  departmentName String?
-  divisionName   String?
-  designation    String?
-  traineeType    String?
-  aadhaarNumber  String?
-  monthDays      Float?
-  payableDays    Float?
-
-  // Line items: JSON arrays of { label, actual, calculated } / { label, amount }
-  earnings      Json?
-  deductions    Json?
-
-  netPay        Float            @default(0)
-  netPayWords   String?
-  remarks       String?
-
-  createdById   String?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-
-  user          User             @relation("UserSalarySlips", fields: [userId], references: [id], onDelete: Cascade)
-  company       Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, month, year])
-  @@index([companyId])
-  @@index([userId])
-}
-
-model CompanyFile {
-  id           String   @id @default(cuid())
-  title        String
-  description  String?
-  fileUrl      String
-  fileName     String
-  fileSize     Float?
-  fileType     String?   // PDF, IMAGE, DOC, AUDIO, VIDEO, SPREADSHEET, OTHER
-  mimeType     String?
-  category     String?   @default("General") // Policy, General, Training, Notice, Form, Other
-  uploadedById String
-  companyId    String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  uploadedBy   User     @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
-
-  @@index([companyId])
-  @@index([uploadedById])
-}
-
-model Dealer {
-  id          String   @id @default(cuid())
-  name        String
-  phone       String?
-  email       String?
-  address     String?
-  city        String?
-  state       String?
-  pincode     String?
-  gstin       String?
-  companyId   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  tasks       Task[]   @relation("TaskDealers")
-
-  @@index([companyId])
-}
-
-model DailyAllowance {
-  id          String   @id @default(cuid())
-  userId      String
-  companyId   String
-  date        DateTime
-  amount      Float
-  remark      String?
-  gpsKm       Float    @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, date])
-  @@index([companyId, date])
-  @@index([userId, date])
-}
-
-model ProjectProgressLog {
-  id            String   @id @default(cuid())
-  periodId      String
-  changedBy     String
-  previousCount Int
-  newCount      Int
-  delta         Int
-  note          String?
-  createdAt     DateTime @default(now())
-
-  period   ProjectPeriodProgress @relation(fields: [periodId], references: [id], onDelete: Cascade)
-  user     User                  @relation(fields: [changedBy], references: [id], onDelete: Cascade)
-
-  @@index([periodId])
-  @@index([changedBy])
-}
-
-

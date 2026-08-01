@@ -31,7 +31,7 @@ async function buildStaffContext(companyId: string): Promise<string> {
     where: { companyId, role: { in: ["EMPLOYEE", "MANAGER"] } },
     select: {
       id: true, name: true, email: true, role: true, designation: true,
-      workMode: true, shiftStart: true, shiftEnd: true
+      workMode: true, shiftStart: true, shiftEnd: true, employeeCode: true
     }
   });
 
@@ -101,6 +101,8 @@ async function buildStaffContext(companyId: string): Promise<string> {
     const latestSalary = salarySlips.find(s => s.userId === u.id);
 
     return {
+      id: u.id,
+      employeeCode: u.employeeCode || "N/A",
       name: u.name,
       role: u.role,
       designation: u.designation || "Staff",
@@ -135,7 +137,7 @@ OVERVIEW:
 
 STAFF DETAILS:
 ${userSummaries.map(u => `
-• ${u.name} (${u.designation} / ${u.role})
+• Name: ${u.name} | ID (Employee Code): ${u.employeeCode} | Database ID: ${u.id} (${u.designation} / ${u.role})
   Attendance: ${u.attendance.thisMonthPresents} present, ${u.attendance.thisMonthAbsences} absent (${u.attendance.attendancePct} this month)
   Today: ${u.attendance.todayStatus}
   Tasks: ${u.tasks.total} total | ${u.tasks.overdue} OVERDUE | ${u.tasks.pending} pending
@@ -174,6 +176,17 @@ FORMATTING RULES (strictly follow):
 - Use emoji sparingly (max 1-2 per response) for key points only
 - Be concise and direct — no filler phrases
 - When listing staff, show: Name — reason (e.g. 5 absences this month)
+
+NOTIFICATION ACTIONS:
+If the user asks you to send a notification, message, or reminder to a specific staff member:
+1. Match the staff member by Name (partial match is allowed), ID (Employee Code e.g. 103), or email.
+2. If multiple staff match the search name (e.g., duplicate names like two Vikram's or similar last names), you MUST NOT trigger a notification. Instead, list the matches with their Name and ID (Employee Code) and ask the user to clarify who they want to notify.
+3. If no staff matches the search name (spelling mistake or user doesn't exist), check the staff list and suggest the closest sounding name(s) (e.g., "I couldn't find anyone named Dikshant. Did you mean Deepika?"). Do not trigger any notifications.
+4. If a single unique staff matches:
+   At the VERY END of your response, on a new line, add:
+   [SEND_NOTIFICATION userId="{database_id}" title="{notification title}" message="{the message}"]
+   NOTE: You MUST use the Database ID (UUID/CUID e.g. cl...) for the userId parameter, NOT the name, and NOT the 3-digit Employee Code!
+5. Confirm in your response text that you have sent the notification to the unique match.
 
 ${context}`;
 
@@ -253,14 +266,15 @@ FORMATTING RULES (strictly follow):
 - When listing staff: Name — reason (e.g. 5 absences this month)
 
 NOTIFICATION ACTIONS:
-If the user asks you to send a notification, message, or reminder to a specific staff member, you MUST:
-1. Find the staff member in the context by name (partial match is fine)
-2. Compose a professional notification message
-3. At the VERY END of your response, on a new line, add:
-   [SEND_NOTIFICATION userId="{their_id}" title="{notification title}" message="{the message}"]
-4. You can add multiple [SEND_NOTIFICATION ...] lines for multiple people
-5. Do NOT make up userIds — only use IDs from the staff context above
-6. Tell the user you are sending the notification in your response text
+If the user asks you to send a notification, message, or reminder to a specific staff member:
+1. Match the staff member by Name (partial match is allowed), ID (Employee Code e.g. 103), or email.
+2. If multiple staff match the search name (e.g., duplicate names like two Vikram's or similar last names), you MUST NOT trigger a notification. Instead, list the matches with their Name and ID (Employee Code) and ask the user to clarify who they want to notify.
+3. If no staff matches the search name (spelling mistake or user doesn't exist), check the staff list and suggest the closest sounding name(s) (e.g., "I couldn't find anyone named Dikshant. Did you mean Deepika?"). Do not trigger any notifications.
+4. If a single unique staff matches:
+   At the VERY END of your response, on a new line, add:
+   [SEND_NOTIFICATION userId="{database_id}" title="{notification title}" message="{the message}"]
+   NOTE: You MUST use the Database ID (UUID/CUID e.g. cl...) for the userId parameter, NOT the name, and NOT the 3-digit Employee Code!
+5. Confirm in your response text that you have sent the notification to the unique match.
 
 ${context}`;
 

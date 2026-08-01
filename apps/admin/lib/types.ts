@@ -36,6 +36,7 @@ export interface User {
   isLocationOn?: boolean;
   locationOffAt?: string | null;
   createdAt: string;
+  employeeCode?: string;
   company?: { name: string } | null;
 }
 

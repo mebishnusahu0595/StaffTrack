@@ -39,6 +39,7 @@ const publicUserSelect = {
   batteryLevel: true,
   isLocationOn: true,
   locationOffAt: true,
+  employeeCode: true,
   createdAt: true
 } satisfies Prisma.UserSelect;
 
@@ -122,6 +123,19 @@ export async function listUsers(
 export async function createUser(input: CreateUserInput) {
   const passwordHash = await bcrypt.hash(input.password, PASSWORD_ROUNDS);
 
+  // Generate unique 3-digit sequential code
+  const lastUser = await prisma.user.findFirst({
+    where: { NOT: { employeeCode: null } },
+    orderBy: { employeeCode: "desc" }
+  });
+  let nextCode = "101";
+  if (lastUser && lastUser.employeeCode) {
+    const lastNum = parseInt(lastUser.employeeCode, 10);
+    if (!isNaN(lastNum)) {
+      nextCode = String(lastNum + 1);
+    }
+  }
+
   const createdUser = await prisma.user.create({
     data: {
       name: input.name,
@@ -138,7 +152,8 @@ export async function createUser(input: CreateUserInput) {
       shiftEnd: input.shiftEnd,
       designation: input.designation,
       joiningDate: input.joiningDate,
-      baseSalary: input.baseSalary
+      baseSalary: input.baseSalary,
+      employeeCode: nextCode
     },
     select: publicUserSelect
   });
