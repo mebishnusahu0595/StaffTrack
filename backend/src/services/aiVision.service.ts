@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 const getGeminiApiKey = () => process.env.GEMINI_API_KEY || "";
 const getGeminiEndpoint = () => `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${getGeminiApiKey()}`;
@@ -10,6 +11,7 @@ export interface FaceAiResult {
   confidence: number;
   warningMessage: string | null;
   networkFallback?: boolean;
+  cached?: boolean;
 }
 
 export interface OdometerAiResult {
@@ -20,6 +22,26 @@ export interface OdometerAiResult {
   confidence: number;
   warningMessage: string | null;
   networkFallback?: boolean;
+  cached?: boolean;
+}
+
+// In-Memory Cache (TTL: 2 Hours) to prevent repeated API hits and zero out redundant billing costs
+const faceCache = new Map<string, { result: FaceAiResult; expiresAt: number }>();
+const odometerCache = new Map<string, { result: OdometerAiResult; expiresAt: number }>();
+const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+function getImageHash(base64Data: string): string {
+  return crypto.createHash("md5").update(base64Data).digest("hex");
+}
+
+function cleanExpiredCache() {
+  const now = Date.now();
+  for (const [key, item] of faceCache.entries()) {
+    if (item.expiresAt < now) faceCache.delete(key);
+  }
+  for (const [key, item] of odometerCache.entries()) {
+    if (item.expiresAt < now) odometerCache.delete(key);
+  }
 }
 
 /** Helper to convert image (URL, file path, or base64) into base64 + mimeType for Gemini inlineData */
@@ -72,7 +94,7 @@ function parseGeminiJson<T>(rawText: string): T | null {
 
 /**
  * Analyzes selfie photo for live human face verification (rejects photo of screen or printout).
- * Timed out at 4000ms for low internet / rural network safety.
+ * Timed out at 3500ms for speed. Caches identical images to eliminate zero-value API hits.
  */
 export async function analyzeFacePhoto(imageInput: string): Promise<FaceAiResult> {
   const fallbackResult: FaceAiResult = {
@@ -85,15 +107,24 @@ export async function analyzeFacePhoto(imageInput: string): Promise<FaceAiResult
 
   try {
     const { base64Data, mimeType } = await prepareImagePayload(imageInput);
-    if (!base64Data) return fallbackResult;
+    if (!base64Data || base64Data.length < 50) return fallbackResult;
+
+    // Check In-Memory Cache first (0ms latency, zero API cost)
+    cleanExpiredCache();
+    const hash = getImageHash(base64Data);
+    const cached = faceCache.get(hash);
+    if (cached && cached.expiresAt > Date.now()) {
+      console.log(`[AI Vision] Returned CACHED face verification result for hash ${hash.slice(0, 8)} (Saved API hit)`);
+      return { ...cached.result, cached: true };
+    }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-    const prompt = `Analyze this attendance selfie photo. Determine:
-1. Is this a real living human face in front of the camera?
-2. Is this a photo of another phone/laptop screen or printed photo paper showing a face?
-Return ONLY valid JSON with structure:
+    const prompt = `Analyze this selfie photo for attendance check-in. Determine:
+1. Is this a real living human face present in front of the camera?
+2. Is this a photo taken off another phone screen, computer monitor, or printout?
+Return ONLY valid JSON:
 {
   "isHumanFace": boolean,
   "isScreenOrPrintout": boolean,
@@ -115,8 +146,8 @@ Return ONLY valid JSON with structure:
           }
         ],
         generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 200
+          temperature: 0.0,
+          maxOutputTokens: 100
         }
       })
     });
@@ -124,7 +155,7 @@ Return ONLY valid JSON with structure:
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.warn(`[AI Vision] Gemini Face API returned status ${response.status}`);
+      console.warn(`[AI Vision] Gemini Face API status ${response.status}`);
       return fallbackResult;
     }
 
@@ -135,15 +166,20 @@ Return ONLY valid JSON with structure:
     const parsed = parseGeminiJson<FaceAiResult>(candidateText);
     if (!parsed) return fallbackResult;
 
-    return {
+    const finalResult: FaceAiResult = {
       isHumanFace: Boolean(parsed.isHumanFace),
       isScreenOrPrintout: Boolean(parsed.isScreenOrPrintout),
       confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.9,
       warningMessage: parsed.warningMessage || (parsed.isScreenOrPrintout ? "Photo of phone screen or printout detected" : !parsed.isHumanFace ? "No human face detected" : null),
       networkFallback: false
     };
+
+    // Save to Cache
+    faceCache.set(hash, { result: finalResult, expiresAt: Date.now() + CACHE_TTL_MS });
+
+    return finalResult;
   } catch (error: any) {
-    console.warn("[AI Vision] analyzeFacePhoto network error or timeout:", error?.message || error);
+    console.warn("[AI Vision] analyzeFacePhoto timeout or error:", error?.message || error);
     return fallbackResult;
   }
 }
@@ -153,7 +189,7 @@ Return ONLY valid JSON with structure:
  * 1. Checks if it is a real odometer (not a photo of a phone screen or non-vehicle object).
  * 2. Checks if it is blurry / unreadable.
  * 3. Extracts numerical odometer digits in KM (OCR).
- * Timed out at 4000ms for low internet / rural network safety.
+ * Timed out at 3500ms for speed. Caches identical images to eliminate zero-value API hits.
  */
 export async function analyzeOdometerPhoto(imageInput: string): Promise<OdometerAiResult> {
   const fallbackResult: OdometerAiResult = {
@@ -168,17 +204,26 @@ export async function analyzeOdometerPhoto(imageInput: string): Promise<Odometer
 
   try {
     const { base64Data, mimeType } = await prepareImagePayload(imageInput);
-    if (!base64Data) return fallbackResult;
+    if (!base64Data || base64Data.length < 50) return fallbackResult;
+
+    // Check In-Memory Cache first (0ms latency, zero API cost)
+    cleanExpiredCache();
+    const hash = getImageHash(base64Data);
+    const cached = odometerCache.get(hash);
+    if (cached && cached.expiresAt > Date.now()) {
+      console.log(`[AI Vision] Returned CACHED odometer result for hash ${hash.slice(0, 8)} (Saved API hit)`);
+      return { ...cached.result, cached: true };
+    }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-    const prompt = `Analyze this vehicle dashboard or odometer photo for field attendance. Determine:
-1. Is this a real vehicle dashboard or odometer display?
-2. Is the photo blurry or unreadable?
-3. Is this a photo taken off another phone screen or computer monitor?
-4. Extract the exact numerical odometer reading in KM (numbers only, e.g. 12540).
-Return ONLY valid JSON with structure:
+    const prompt = `Analyze this vehicle odometer photo. Determine:
+1. Is this a real vehicle odometer display?
+2. Is the photo blurry/unreadable?
+3. Is it a photo of another screen?
+4. Extract numerical reading in KM (numbers only, e.g. 12540).
+Return ONLY valid JSON:
 {
   "isOdometer": boolean,
   "isBlurry": boolean,
@@ -202,8 +247,8 @@ Return ONLY valid JSON with structure:
           }
         ],
         generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 250
+          temperature: 0.0,
+          maxOutputTokens: 100
         }
       })
     });
@@ -211,7 +256,7 @@ Return ONLY valid JSON with structure:
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.warn(`[AI Vision] Gemini Odometer API returned status ${response.status}`);
+      console.warn(`[AI Vision] Gemini Odometer API status ${response.status}`);
       return fallbackResult;
     }
 
@@ -222,7 +267,7 @@ Return ONLY valid JSON with structure:
     const parsed = parseGeminiJson<OdometerAiResult>(candidateText);
     if (!parsed) return fallbackResult;
 
-    return {
+    const finalResult: OdometerAiResult = {
       isOdometer: Boolean(parsed.isOdometer),
       isBlurry: Boolean(parsed.isBlurry),
       isScreenOrPrintout: Boolean(parsed.isScreenOrPrintout),
@@ -231,8 +276,13 @@ Return ONLY valid JSON with structure:
       warningMessage: parsed.warningMessage || (parsed.isBlurry ? "Photo is blurry or unreadable" : !parsed.isOdometer ? "Not a valid vehicle odometer" : parsed.isScreenOrPrintout ? "Photo of phone screen detected" : null),
       networkFallback: false
     };
+
+    // Save to Cache
+    odometerCache.set(hash, { result: finalResult, expiresAt: Date.now() + CACHE_TTL_MS });
+
+    return finalResult;
   } catch (error: any) {
-    console.warn("[AI Vision] analyzeOdometerPhoto network error or timeout:", error?.message || error);
+    console.warn("[AI Vision] analyzeOdometerPhoto timeout or error:", error?.message || error);
     return fallbackResult;
   }
 }
