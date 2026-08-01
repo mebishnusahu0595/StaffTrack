@@ -11,7 +11,9 @@ import {
   type Attendance,
   type Break,
   type Holiday,
-  type LatLng
+  type LatLng,
+  type CheckInPayload,
+  type CheckOutPayload
 } from "../api";
 import { useAuth } from "../auth/AuthContext";
 
@@ -36,14 +38,14 @@ export function useAttendance(month = dayjs().month() + 1, year = dayjs().year()
   });
 
   const checkInMutation = useMutation({
-    mutationFn: (payload: { lat: number; lng: number; punchType: "OFFICE" | "FIELD"; photoUrl?: string; startOdometerPhotoUrl?: string; startOdometer?: number }) => checkInRequest(payload),
+    mutationFn: (payload: CheckInPayload) => checkInRequest(payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: attendanceQueryKey });
     }
   });
 
   const checkOutMutation = useMutation({
-    mutationFn: (payload: { lat: number; lng: number; photoUrl?: string; endOdometerPhotoUrl?: string; endOdometer?: number }) => checkOutRequest(payload),
+    mutationFn: (payload: CheckOutPayload) => checkOutRequest(payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: attendanceQueryKey });
     }

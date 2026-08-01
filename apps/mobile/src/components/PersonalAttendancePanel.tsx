@@ -477,7 +477,12 @@ export function PersonalAttendancePanel({
       await checkOut({ ...coords, photoUrl, endOdometerPhotoUrl, endOdometer, checkOutAiAnalysis });
       Alert.alert("Success", "Check-out successful with AI verification!");
     } catch (error) {
-      Alert.alert("Check-out failed", getErrorMessage(error));
+      const errMsg = getErrorMessage(error);
+      Alert.alert("Check-out failed", errMsg);
+      if (errMsg.includes("No active check-in record found") || errMsg.includes("No active attendance")) {
+        // Force refresh from server to unlock the screen and sync stale state
+        queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      }
     } finally {
       setLoadingStep(null);
     }
