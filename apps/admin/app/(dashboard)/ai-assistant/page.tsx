@@ -192,9 +192,20 @@ export default function AiAssistantPage() {
     try {
       const stream = streamAiChat(text);
       let first = true;
+      let actionResult: any = null;
 
       for await (const chunk of stream) {
         if (abortRef.current) break;
+        
+        if (chunk.startsWith("__ACTION_RESULT__")) {
+          try {
+            actionResult = JSON.parse(chunk.slice(17));
+          } catch (e) {
+            console.error("Action parse err:", e);
+          }
+          continue;
+        }
+
         if (first) {
           first = false;
           setMessages(prev => prev.map(m =>
@@ -207,10 +218,22 @@ export default function AiAssistantPage() {
         }
       }
 
-      // Mark streaming done
-      setMessages(prev => prev.map(m =>
-        m.id === aiId ? { ...m, isStreaming: false } : m
-      ));
+      // Mark streaming done and append action results status description if any
+      setMessages(prev => prev.map(m => {
+        if (m.id === aiId) {
+          let updatedContent = m.content;
+          if (actionResult && actionResult.sent > 0) {
+            updatedContent += `\n\n⚡ Action Successful: Sent push notification alert to ${actionResult.actions.length} staff member(s).`;
+          }
+          return { ...m, isStreaming: false, content: updatedContent };
+        }
+        return m;
+      }));
+
+      // Force notification panel refetch if notification sent
+      if (actionResult && actionResult.sent > 0) {
+        refetchNotifs();
+      }
     } catch {
       setMessages(prev => prev.map(m =>
         m.id === aiId

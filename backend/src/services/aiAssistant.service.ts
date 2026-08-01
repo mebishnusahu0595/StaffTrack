@@ -252,6 +252,16 @@ FORMATTING RULES (strictly follow):
 - Be concise and direct
 - When listing staff: Name — reason (e.g. 5 absences this month)
 
+NOTIFICATION ACTIONS:
+If the user asks you to send a notification, message, or reminder to a specific staff member, you MUST:
+1. Find the staff member in the context by name (partial match is fine)
+2. Compose a professional notification message
+3. At the VERY END of your response, on a new line, add:
+   [SEND_NOTIFICATION userId="{their_id}" title="{notification title}" message="{the message}"]
+4. You can add multiple [SEND_NOTIFICATION ...] lines for multiple people
+5. Do NOT make up userIds — only use IDs from the staff context above
+6. Tell the user you are sending the notification in your response text
+
 ${context}`;
 
     const contents: Array<{ role: "user" | "model"; parts: { text: string }[] }> = [
@@ -307,10 +317,29 @@ ${context}`;
       }
     }
 
-    // Save full response to session history
-    if (fullText) {
+    // Parse [SEND_NOTIFICATION ...] actions from full text
+    const actionRegex = /\[SEND_NOTIFICATION userId="([^"]+)" title="([^"]+)" message="([^"]+)"\]/g;
+    const actions: Array<{ userId: string; title: string; message: string }> = [];
+    let match;
+    while ((match = actionRegex.exec(fullText)) !== null) {
+      actions.push({ userId: match[1], title: match[2], message: match[3] });
+    }
+
+    // Execute notification actions
+    if (actions.length > 0) {
+      const results = await Promise.allSettled(
+        actions.map(a => sendBroadcastNotification(adminId, { userIds: [a.userId], title: a.title, message: a.message }))
+      );
+      const sent = results.filter(r => r.status === "fulfilled").length;
+      // Yield special action-result event (JSON prefixed so frontend can detect it)
+      yield `__ACTION_RESULT__${JSON.stringify({ sent, actions })}`;
+    }
+
+    // Save cleaned response (strip action markers) to session history
+    const cleanedText = fullText.replace(actionRegex, "").trim();
+    if (cleanedText) {
       history.push({ role: "user", parts: [{ text: userMessage }] });
-      history.push({ role: "model", parts: [{ text: fullText }] });
+      history.push({ role: "model", parts: [{ text: cleanedText }] });
       if (history.length > 20) history.splice(0, history.length - 20);
     }
   } catch (err: any) {
