@@ -816,6 +816,41 @@ export async function fetchPeriodLogs(periodId: string) {
   return response.data.data;
 }
 
+// ─── AI Assistant ────────────────────────────────────────────────────────────
+
+export async function aiChat(message: string): Promise<{ reply: string }> {
+  const response = await api.post<{ data: { reply: string } }>("/ai/chat", { message }, { timeout: 30000 });
+  return response.data.data;
+}
+
+export async function aiClearSession(): Promise<void> {
+  await api.post("/ai/clear-session");
+}
+
+export interface SmartNotification {
+  id: string;
+  userId: string;
+  userName: string;
+  type: string;
+  title: string;
+  message: string;
+  severity: "high" | "medium" | "low";
+  data: Record<string, any>;
+}
+
+export async function fetchSmartNotifications(): Promise<SmartNotification[]> {
+  const response = await api.get<{ data: SmartNotification[] }>("/ai/smart-notifications");
+  return response.data.data;
+}
+
+export async function sendSmartNotifications(
+  notifications: Array<{ userId: string; title: string; message: string }>
+): Promise<{ sent: number }> {
+  const response = await api.post<{ data: { sent: number } }>("/ai/notify", { notifications });
+  return response.data.data;
+}
+
+
 
 
 

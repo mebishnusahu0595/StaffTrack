@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import {
   Bell,
+  Bot,
   ClipboardList,
   FileText,
   HelpCircle,
@@ -65,6 +66,7 @@ type Role = "SUPERADMIN" | "ADMIN" | "MANAGER" | "EMPLOYEE";
 // `roles` omitted means "visible to everyone who can reach the dashboard".
 const navItems: { href: string; label: string; icon: any; roles?: Role[] }[] = [
   { href: "/", label: "Home", icon: LayoutDashboard },
+  { href: "/ai-assistant", label: "AI Assistant", icon: Bot, roles: ["ADMIN", "SUPERADMIN"] },
   { href: "/team", label: "Team Overview", icon: UserCheck },
   { href: "/projects", label: "Project", icon: Folder },
   { href: "/tasks", label: "Tasks", icon: ClipboardList },
