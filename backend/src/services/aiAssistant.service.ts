@@ -3,7 +3,7 @@ import { sendBroadcastNotification } from "./notification.service";
 
 const getGeminiApiKey = () => process.env.GEMINI_API_KEY || "";
 const getGeminiEndpoint = () =>
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${getGeminiApiKey()}`;
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${getGeminiApiKey()}`;
 
 /** In-memory session history per admin (keyed by userId) */
 const chatSessions = new Map<string, Array<{ role: "user" | "model"; parts: { text: string }[] }>>();
@@ -199,7 +199,8 @@ ${context}`;
     clearTimeout(timeout);
 
     if (!response.ok) {
-      console.warn("[AI Assistant] Gemini API error:", response.status);
+      const errBody = await response.text();
+      console.warn("[AI Assistant] Gemini API error:", response.status, errBody);
       return fallback;
     }
 
