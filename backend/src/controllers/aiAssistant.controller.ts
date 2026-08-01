@@ -21,6 +21,42 @@ export async function chat(req: AuthRequest, res: Response) {
   }
 }
 
+/** Streaming endpoint — SSE, chunks arrive like GPT typewriter effect */
+export async function chatStream(req: AuthRequest, res: Response) {
+  const { message } = req.body;
+  if (!message || typeof message !== "string" || message.trim().length === 0) {
+    res.status(400).json({ success: false, error: "Message is required" });
+    return;
+  }
+  const adminId = req.user!.id;
+  const companyId = req.user!.companyId;
+  if (!companyId) {
+    res.status(400).json({ success: false, error: "Company context missing" });
+    return;
+  }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // disable nginx buffering
+  res.flushHeaders();
+
+  try {
+    const stream = aiAssistantService.chatWithAssistantStream(adminId, companyId, message.trim());
+    for await (const chunk of stream) {
+      res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+      if (typeof (res as any).flush === "function") (res as any).flush();
+    }
+  } catch (err) {
+    console.error("[AI Stream Controller] error:", err);
+    res.write(`data: ${JSON.stringify({ text: " [AI error, please retry]" })}\n\n`);
+  } finally {
+    res.write("data: [DONE]\n\n");
+    res.end();
+  }
+}
+
+
 export async function clearSession(req: AuthRequest, res: Response) {
   try {
     aiAssistantService.clearChatSession(req.user!.id);

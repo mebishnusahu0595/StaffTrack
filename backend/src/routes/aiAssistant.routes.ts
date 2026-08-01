@@ -10,6 +10,8 @@ const router = Router();
 const adminGuard = roleGuard(UserRole.ADMIN, UserRole.SUPERADMIN);
 
 router.post("/chat", adminGuard, asyncHandler(aiAssistantController.chat));
+router.post("/chat-stream", adminGuard, aiAssistantController.chatStream); // SSE — no asyncHandler (streams)
+
 router.post("/clear-session", adminGuard, asyncHandler(aiAssistantController.clearSession));
 router.get("/smart-notifications", adminGuard, asyncHandler(aiAssistantController.getSmartNotifications));
 router.post("/notify", adminGuard, asyncHandler(aiAssistantController.sendNotifications));

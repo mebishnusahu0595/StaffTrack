@@ -4,6 +4,8 @@ import { sendBroadcastNotification } from "./notification.service";
 const getGeminiApiKey = () => process.env.GEMINI_API_KEY || "";
 const getGeminiEndpoint = () =>
   `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${getGeminiApiKey()}`;
+const getGeminiStreamEndpoint = () =>
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:streamGenerateContent?alt=sse&key=${getGeminiApiKey()}`;
 
 /** In-memory session history per admin (keyed by userId) */
 const chatSessions = new Map<string, Array<{ role: "user" | "model"; parts: { text: string }[] }>>();
@@ -156,7 +158,7 @@ export async function chatWithAssistant(adminId: string, companyId: string, user
     }
     const history = chatSessions.get(adminId)!;
 
-    const systemPrompt = `You are an intelligent HR & Staff Management AI Assistant for StaffTrack — a workforce management platform. 
+    const systemPrompt = `You are an intelligent HR and Staff Management AI Assistant for StaffTrack — a workforce management platform.
 
 You have access to real-time company data provided below. Your role is to:
 1. Answer questions about staff attendance, tasks, salary, deductions, leaves accurately using the data
@@ -165,34 +167,40 @@ You have access to real-time company data provided below. Your role is to:
 4. Identify patterns and flag concerns proactively
 5. NEVER make up data — only use what is provided in the context
 
-Be concise, professional, and use emojis sparingly for key points. When recommending actions, be specific about which staff member and why.
+FORMATTING RULES (strictly follow):
+- Do NOT use markdown symbols like ** for bold or # for headings
+- Use plain text only
+- Use bullet points with the • character for lists
+- Use emoji sparingly (max 1-2 per response) for key points only
+- Be concise and direct — no filler phrases
+- When listing staff, show: Name — reason (e.g. 5 absences this month)
 
 ${context}`;
 
-    const contents: Array<{ role: "user" | "model"; parts: { text: string }[] }> = [
-      { role: "user", parts: [{ text: systemPrompt + "\n\nUser Question: " + userMessage }] }
-    ];
+    const buildContents = (msg: string) => {
+      const baseContents: Array<{ role: "user" | "model"; parts: { text: string }[] }> = [
+        { role: "user", parts: [{ text: systemPrompt + "\n\nQuestion: " + msg }] }
+      ];
+      const recentHistory = history.slice(-8);
+      if (recentHistory.length > 0) {
+        baseContents.push(...recentHistory);
+        baseContents.push({ role: "user", parts: [{ text: msg }] });
+      }
+      return baseContents;
+    };
 
-    // Add last 8 conversation turns for context
-    const recentHistory = history.slice(-8);
-    if (recentHistory.length > 0) {
-      contents.push(...recentHistory);
-      contents.push({ role: "user", parts: [{ text: userMessage }] });
-    }
+    const genConfig = { temperature: 0.2, maxOutputTokens: 4096 };
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
+    const timeout = setTimeout(() => controller.abort(), 25000);
 
     const response = await fetch(getGeminiEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: controller.signal as any,
       body: JSON.stringify({
-        contents,
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 800
-        }
+        contents: buildContents(userMessage),
+        generationConfig: genConfig
       })
     });
 
@@ -211,7 +219,6 @@ ${context}`;
     // Save to session history
     history.push({ role: "user", parts: [{ text: userMessage }] });
     history.push({ role: "model", parts: [{ text: aiText }] });
-    // Trim to 20 messages
     if (history.length > 20) history.splice(0, history.length - 20);
 
     return aiText;
@@ -221,10 +228,102 @@ ${context}`;
   }
 }
 
+/** Streaming chat — yields text chunks as they arrive from Gemini */
+export async function* chatWithAssistantStream(
+  adminId: string,
+  companyId: string,
+  userMessage: string
+): AsyncGenerator<string> {
+  try {
+    const context = await buildStaffContext(companyId);
+
+    if (!chatSessions.has(adminId)) chatSessions.set(adminId, []);
+    const history = chatSessions.get(adminId)!;
+
+    const systemPrompt = `You are an intelligent HR and Staff Management AI Assistant for StaffTrack — a workforce management platform.
+
+You have access to real-time company data below. Answer accurately using only provided data.
+
+FORMATTING RULES (strictly follow):
+- Do NOT use markdown symbols like ** or # 
+- Plain text only
+- Use • for bullet lists
+- Use emoji sparingly (max 2 per response)
+- Be concise and direct
+- When listing staff: Name — reason (e.g. 5 absences this month)
+
+${context}`;
+
+    const contents: Array<{ role: "user" | "model"; parts: { text: string }[] }> = [
+      { role: "user", parts: [{ text: systemPrompt + "\n\nQuestion: " + userMessage }] }
+    ];
+    const recentHistory = history.slice(-8);
+    if (recentHistory.length > 0) {
+      contents.push(...recentHistory);
+      contents.push({ role: "user", parts: [{ text: userMessage }] });
+    }
+
+    const response = await fetch(getGeminiStreamEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents,
+        generationConfig: { temperature: 0.2, maxOutputTokens: 4096 }
+      })
+    });
+
+    if (!response.ok || !response.body) {
+      const errBody = await response.text();
+      console.warn("[AI Stream] Gemini error:", response.status, errBody);
+      yield "Sorry, AI assistant is currently unavailable. Please try again.";
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let fullText = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const json = line.slice(6).trim();
+        if (!json || json === "[DONE]") continue;
+        try {
+          const parsed = JSON.parse(json);
+          const chunk = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (chunk) {
+            fullText += chunk;
+            yield chunk;
+          }
+        } catch { /* skip malformed chunks */ }
+      }
+    }
+
+    // Save full response to session history
+    if (fullText) {
+      history.push({ role: "user", parts: [{ text: userMessage }] });
+      history.push({ role: "model", parts: [{ text: fullText }] });
+      if (history.length > 20) history.splice(0, history.length - 20);
+    }
+  } catch (err: any) {
+    console.warn("[AI Stream] Error:", err?.message);
+    yield "Sorry, AI assistant is currently unavailable. Please check your connection.";
+  }
+}
+
 /** Clear chat session for an admin */
 export function clearChatSession(adminId: string) {
   chatSessions.delete(adminId);
 }
+
 
 /** Smart Notification Algorithm — analyzes staff data and generates suggested notifications */
 export async function generateSmartNotifications(companyId: string): Promise<SmartNotification[]> {
