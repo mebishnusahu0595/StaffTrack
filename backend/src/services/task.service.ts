@@ -1236,17 +1236,39 @@ export async function rolloverOverdueTasks() {
 }
 
 export async function backfillMissingSeriesOccurrences() {
-  // Find all root repeating tasks (parentTaskId is null, isRepeating is true)
-  const rootRepeatingTasks = await prisma.task.findMany({
+  // Find all repeating tasks in DB that are not subtasks
+  const repeatingTasks = await prisma.task.findMany({
     where: {
       isRepeating: true,
-      parentTaskId: null,
       isSubtask: false
     },
     include: taskInclude
   });
 
-  for (const rootTask of rootRepeatingTasks) {
+  // Collect true root tasks for series backfilling
+  const rootTasksMap = new Map<string, any>();
+  for (const task of repeatingTasks) {
+    if (!task.parentTaskId) {
+      rootTasksMap.set(task.id, task);
+    }
+  }
+
+  for (const task of repeatingTasks) {
+    if (task.parentTaskId && !rootTasksMap.has(task.parentTaskId)) {
+      const parent = await prisma.task.findUnique({
+        where: { id: task.parentTaskId },
+        include: taskInclude
+      });
+      if (parent && parent.isRepeating) {
+        rootTasksMap.set(parent.id, parent);
+      } else {
+        // If parent task is missing or not repeating, treat this task as series root
+        rootTasksMap.set(task.id, task);
+      }
+    }
+  }
+
+  for (const rootTask of rootTasksMap.values()) {
     const subtaskTemplates = await prisma.task.findMany({
       where: { parentTaskId: rootTask.id, isSubtask: true },
       orderBy: { createdAt: "asc" }
