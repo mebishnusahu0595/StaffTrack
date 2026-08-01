@@ -3,7 +3,7 @@ import { sendBroadcastNotification } from "./notification.service";
 
 const getGeminiApiKey = () => process.env.GEMINI_API_KEY || "";
 const getGeminiEndpoint = () =>
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-latest:generateContent?key=${getGeminiApiKey()}`;
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${getGeminiApiKey()}`;
 
 /** In-memory session history per admin (keyed by userId) */
 const chatSessions = new Map<string, Array<{ role: "user" | "model"; parts: { text: string }[] }>>();
