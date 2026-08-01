@@ -207,6 +207,8 @@ model Attendance {
   startOdometerPhotoUrl String?
   user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   breaks                Break[]
+  checkInAiAnalysis     Json?
+  checkOutAiAnalysis    Json?
 
   @@index([userId, date])
 }
