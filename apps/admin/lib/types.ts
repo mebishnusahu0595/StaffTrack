@@ -77,6 +77,12 @@ export interface Task {
   geofenceRadius?: number | null;
   reminder?: number | null;
   parentTaskId?: string | null;
+  parentTask?: {
+    id: string;
+    title: string;
+    createdAt?: string;
+    endDate?: string | null;
+  } | null;
   subtasks?: Task[];
   attachmentUrl?: string | null;
   attachmentName?: string | null;

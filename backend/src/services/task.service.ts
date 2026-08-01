@@ -1010,6 +1010,7 @@ async function preGenerateTasksForSeries(baseTask: any, companyId: string, subta
           dueDate: new Date(nextDueDate),
           startDate: calculatedStartDate,
           endDate: baseTask.endDate ? new Date(baseTask.endDate) : null,
+          createdAt: baseTask.createdAt ? new Date(baseTask.createdAt) : undefined,
           lat: baseTask.lat,
           lng: baseTask.lng,
           isRepeating: true,

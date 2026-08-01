@@ -417,15 +417,30 @@ export default function TasksPage() {
         return false;
       });
 
-      // Deduplicate repeating tasks by series ID so each series is shown once per date view
-      const seenSeries = new Set<string>();
-      filtered = filtered.filter(t => {
+      // Deduplicate repeating tasks per series for the selected date view.
+      // Prefer the occurrence whose dueDate matches filterDate so the exact day's occurrence is displayed.
+      const seriesMap = new Map<string, any>();
+      const nonSeriesTasks: any[] = [];
+
+      filtered.forEach(t => {
         const seriesKey = t.parentTaskId || (t.isRepeating ? t.id : null);
-        if (!seriesKey) return true;
-        if (seenSeries.has(seriesKey)) return false;
-        seenSeries.add(seriesKey);
-        return true;
+        if (!seriesKey) {
+          nonSeriesTasks.push(t);
+        } else {
+          const existing = seriesMap.get(seriesKey);
+          const taskDueStr = getLocalDateStr(t.dueDate);
+          if (!existing) {
+            seriesMap.set(seriesKey, t);
+          } else {
+            // If current task matches filterDate exactly, prefer it over existing
+            if (taskDueStr === filterDate) {
+              seriesMap.set(seriesKey, t);
+            }
+          }
+        }
       });
+
+      filtered = [...nonSeriesTasks, ...Array.from(seriesMap.values())];
     }
 
     // Sub Navigation Filters
@@ -1149,10 +1164,10 @@ export default function TasksPage() {
                                  )}
                               </td>
                               <td className="py-2 px-4">
-                                <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.createdAt), 'dd-MM-yyyy')}</span>
+                                <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.parentTask?.createdAt || task.startDate || task.createdAt), 'dd-MM-yyyy')}</span>
                               </td>
                               <td className="py-2 px-4">
-                                <span className="text-[10px] font-bold text-slate-600">{format(new Date(task.endDate || task.dueDate), 'dd-MM-yyyy')}</span>
+                                <span className="text-[10px] font-bold text-slate-600">{format(new Date(task.endDate || task.parentTask?.endDate || task.dueDate), 'dd-MM-yyyy')}</span>
                               </td>
                               <td className="py-2 px-6 text-right">
                                 <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1285,10 +1300,10 @@ export default function TasksPage() {
                         </Badge>
                       </td>
                       <td className="py-2 px-4">
-                        <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.createdAt), 'dd-MM-yyyy')}</span>
+                        <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.parentTask?.createdAt || task.startDate || task.createdAt), 'dd-MM-yyyy')}</span>
                       </td>
                       <td className="py-2 px-4">
-                        <span className="text-[10px] font-bold text-slate-600">{format(new Date(task.endDate || task.dueDate), 'dd-MM-yyyy')}</span>
+                        <span className="text-[10px] font-bold text-slate-600">{format(new Date(task.endDate || task.parentTask?.endDate || task.dueDate), 'dd-MM-yyyy')}</span>
                       </td>
                       <td className="py-2 px-6 text-right">
                         <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
