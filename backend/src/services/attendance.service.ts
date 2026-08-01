@@ -15,6 +15,7 @@ interface CheckInInput {
   photoUrl?: string;
   startOdometerPhotoUrl?: string;
   startOdometer?: number;
+  checkInAiAnalysis?: any;
 }
 
 interface CheckOutInput {
@@ -23,6 +24,7 @@ interface CheckOutInput {
   photoUrl?: string;
   endOdometerPhotoUrl?: string;
   endOdometer?: number;
+  checkOutAiAnalysis?: any;
 }
 
 interface ManualAttendanceInput {
@@ -132,7 +134,8 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
           isCheckInPending,
           checkInApproved,
           checkInApprovedBy: null,
-          checkInApprovedAt: null
+          checkInApprovedAt: null,
+          checkInAiAnalysis: input.checkInAiAnalysis ?? undefined
         }
       });
     } else {
@@ -149,7 +152,8 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
           startOdometer: input.punchType === PunchType.FIELD ? input.startOdometer : undefined,
           status: AttendanceStatus.PRESENT,
           isCheckInPending,
-          checkInApproved
+          checkInApproved,
+          checkInAiAnalysis: input.checkInAiAnalysis ?? undefined
         }
       });
     }
@@ -346,7 +350,8 @@ export async function checkOut(actor: AuthUser, input: CheckOutInput) {
       checkOutLng: input.lng,
       checkOutPhotoUrl: input.photoUrl,
       endOdometerPhotoUrl: input.endOdometerPhotoUrl,
-      endOdometer: input.endOdometer
+      endOdometer: input.endOdometer,
+      checkOutAiAnalysis: input.checkOutAiAnalysis ?? undefined
     }
   });
 
@@ -682,6 +687,8 @@ export async function getAttendanceByDate(
         checkInApproved: true,
         checkInApprovedBy: null,
         checkInApprovedAt: null,
+        checkInAiAnalysis: null,
+        checkOutAiAnalysis: null,
         user: {
           id: user.id,
           name: user.name,
@@ -747,6 +754,8 @@ function buildAbsentRecord(userId: string, date: Date) {
     checkInApproved: true,
     checkInApprovedBy: null,
     checkInApprovedAt: null,
+    checkInAiAnalysis: null,
+    checkOutAiAnalysis: null,
     breaks: []
   };
 }
@@ -1550,5 +1559,15 @@ export async function autoCheckoutOldStuckSessions() {
       console.error(`[Scheduler] Failed to close old session ${record.id}:`, error);
     }
   }
+}
+
+export async function analyzeFacePhotoService(image: string) {
+  const { analyzeFacePhoto } = await import("./aiVision.service");
+  return analyzeFacePhoto(image);
+}
+
+export async function analyzeOdometerPhotoService(image: string) {
+  const { analyzeOdometerPhoto } = await import("./aiVision.service");
+  return analyzeOdometerPhoto(image);
 }
 

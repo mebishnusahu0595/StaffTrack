@@ -27,6 +27,16 @@ router.post(
   asyncHandler(attendanceController.checkOut)
 );
 router.post(
+  "/analyze-face",
+  roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER, UserRole.EMPLOYEE),
+  asyncHandler(attendanceController.analyzeFace)
+);
+router.post(
+  "/analyze-odometer",
+  roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER, UserRole.EMPLOYEE),
+  asyncHandler(attendanceController.analyzeOdometer)
+);
+router.post(
   "/mark",
   roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER),
   validate({ body: manualAttendanceBodySchema }),

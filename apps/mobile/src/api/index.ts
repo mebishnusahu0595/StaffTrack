@@ -191,6 +191,7 @@ export type CheckInPayload = LatLng & {
   startOdometer?: number;
   latitude?: number;
   longitude?: number;
+  checkInAiAnalysis?: any;
 };
 
 export type CheckOutPayload = LatLng & {
@@ -199,6 +200,7 @@ export type CheckOutPayload = LatLng & {
   endOdometer?: number;
   latitude?: number;
   longitude?: number;
+  checkOutAiAnalysis?: any;
 };
 
 function unwrap<T>(response: { data: ApiEnvelope<T> }): T {
@@ -235,6 +237,40 @@ export async function checkIn(payload: CheckInPayload): Promise<Attendance> {
 
 export async function checkOut(payload: CheckOutPayload): Promise<Attendance> {
   return unwrap(await api.post<ApiEnvelope<Attendance>>("/attendance/checkout", withCoordinateAliases(payload)));
+}
+
+export async function analyzeFaceApi(image: string): Promise<any> {
+  try {
+    const res = await api.post<ApiEnvelope<any>>("/attendance/analyze-face", { image }, { timeout: 6000 });
+    return unwrap(res);
+  } catch (err: any) {
+    console.warn("[Mobile API] analyzeFaceApi offline/fallback:", err?.message || err);
+    return {
+      isHumanFace: true,
+      isScreenOrPrintout: false,
+      confidence: 0.5,
+      warningMessage: "Weak network/offline check (logged for audit)",
+      networkFallback: true
+    };
+  }
+}
+
+export async function analyzeOdometerApi(image: string): Promise<any> {
+  try {
+    const res = await api.post<ApiEnvelope<any>>("/attendance/analyze-odometer", { image }, { timeout: 6000 });
+    return unwrap(res);
+  } catch (err: any) {
+    console.warn("[Mobile API] analyzeOdometerApi offline/fallback:", err?.message || err);
+    return {
+      isOdometer: true,
+      isBlurry: false,
+      isScreenOrPrintout: false,
+      detectedReading: null,
+      confidence: 0.5,
+      warningMessage: "Weak network/offline check (logged for audit)",
+      networkFallback: true
+    };
+  }
 }
 
 export async function startBreak(): Promise<Break> {

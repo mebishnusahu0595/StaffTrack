@@ -2,7 +2,7 @@
  
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download, Battery, CheckCircle2, XCircle, AlertCircle, CalendarX, Search, Pencil, Upload, ImageIcon, Loader2, Trash2, ClipboardEdit, Printer, Gauge } from "lucide-react";
+import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download, Battery, CheckCircle2, XCircle, AlertCircle, CalendarX, Search, Pencil, Upload, ImageIcon, Loader2, Trash2, ClipboardEdit, Printer, Gauge, Sparkles, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -1274,6 +1274,145 @@ function AttendanceDetailDialog({
             )}
           </div>
         )}
+
+        {/* AI & OCR Verification Audit Report Card */}
+        <div className="mx-8 mt-6 p-4 rounded-2xl border border-purple-100 bg-purple-50/30 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-purple-600 animate-pulse" />
+              <h4 className="text-xs font-black uppercase tracking-wider text-purple-900">
+                AI & OCR Verification Audit Report
+              </h4>
+            </div>
+            <span className="text-[10px] font-bold text-purple-700 bg-purple-100/90 px-2 py-0.5 rounded-md border border-purple-200">
+              Gemini Flash Vision AI
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+            {/* Check-in AI Audit */}
+            <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xs space-y-2">
+              <div className="flex items-center justify-between border-b pb-1.5">
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">
+                  Check-in AI Verification
+                </span>
+                {(record as any).checkInAiAnalysis?.faceAi?.isHumanFace ? (
+                  <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">
+                    ✓ Human Verified
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">
+                    {(record as any).checkInAiAnalysis ? "⚠️ Warnings / Fallback" : "Standard Photo"}
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-500 font-medium">Face Type:</span>
+                  <span className="font-bold text-slate-800">
+                    {(record as any).checkInAiAnalysis?.faceAi?.isScreenOrPrintout ? "⚠️ Photo of Screen" : (record as any).checkInAiAnalysis?.faceAi?.isHumanFace ? "Live Living Human" : "Standard Check-in Photo"}
+                  </span>
+                </div>
+
+                {record.punchType === "FIELD" && (
+                  <>
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-slate-500 font-medium">Odometer Meter:</span>
+                      <span className="font-bold text-slate-800">
+                        {(record as any).checkInAiAnalysis?.odometerAi?.isOdometer !== false ? "Valid Vehicle Meter" : "Invalid Meter"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-slate-500 font-medium">OCR Detected vs Entered:</span>
+                      <span className="font-bold text-slate-800">
+                        {(record as any).checkInAiAnalysis?.odometerAi?.detectedReading != null ? `${(record as any).checkInAiAnalysis.odometerAi.detectedReading} KM` : "N/A"} vs {record.startOdometer != null ? `${record.startOdometer} KM` : "N/A"}
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-500 font-medium">Retake Count:</span>
+                  <span className="font-bold text-slate-800">
+                    Face: {(record as any).checkInAiAnalysis?.faceRetakeCount ?? 0} | Odo: {(record as any).checkInAiAnalysis?.odoRetakeCount ?? 0}
+                  </span>
+                </div>
+
+                {(record as any).checkInAiAnalysis?.faceAi?.warningMessage && (
+                  <p className="text-[10px] text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-100 font-medium mt-1">
+                    Note: {(record as any).checkInAiAnalysis.faceAi.warningMessage}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Check-out AI Audit */}
+            <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xs space-y-2">
+              <div className="flex items-center justify-between border-b pb-1.5">
+                <span className="text-[10px] font-black uppercase tracking-wider text-rose-700">
+                  Check-out AI Verification
+                </span>
+                {record.checkOutTime ? (
+                  (record as any).checkOutAiAnalysis?.faceAi?.isHumanFace ? (
+                    <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">
+                      ✓ Human Verified
+                    </span>
+                  ) : (
+                    <span className="text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">
+                      {(record as any).checkOutAiAnalysis ? "⚠️ Warnings / Fallback" : "Standard Photo"}
+                    </span>
+                  )
+                ) : (
+                  <span className="text-[9px] font-medium text-slate-400">In Progress</span>
+                )}
+              </div>
+
+              {record.checkOutTime ? (
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-500 font-medium">Face Type:</span>
+                    <span className="font-bold text-slate-800">
+                      {(record as any).checkOutAiAnalysis?.faceAi?.isScreenOrPrintout ? "⚠️ Photo of Screen" : (record as any).checkOutAiAnalysis?.faceAi?.isHumanFace ? "Live Living Human" : "Standard Check-out Photo"}
+                    </span>
+                  </div>
+
+                  {record.punchType === "FIELD" && (
+                    <>
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-slate-500 font-medium">Odometer Meter:</span>
+                        <span className="font-bold text-slate-800">
+                          {(record as any).checkOutAiAnalysis?.odometerAi?.isOdometer !== false ? "Valid Vehicle Meter" : "Invalid Meter"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-slate-500 font-medium">OCR Detected vs Entered:</span>
+                        <span className="font-bold text-slate-800">
+                          {(record as any).checkOutAiAnalysis?.odometerAi?.detectedReading != null ? `${(record as any).checkOutAiAnalysis.odometerAi.detectedReading} KM` : "N/A"} vs {record.endOdometer != null ? `${record.endOdometer} KM` : "N/A"}
+                        </span>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-500 font-medium">Retake Count:</span>
+                    <span className="font-bold text-slate-800">
+                      Face: {(record as any).checkOutAiAnalysis?.faceRetakeCount ?? 0} | Odo: {(record as any).checkOutAiAnalysis?.odoRetakeCount ?? 0}
+                    </span>
+                  </div>
+
+                  {(record as any).checkOutAiAnalysis?.faceAi?.warningMessage && (
+                    <p className="text-[10px] text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-100 font-medium mt-1">
+                      Note: {(record as any).checkOutAiAnalysis.faceAi.warningMessage}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 italic">Check-out not completed yet</p>
+              )}
+            </div>
+          </div>
+        </div>
 
         <div className="p-8 grid grid-cols-2 gap-8">
            {/* Punch In */}

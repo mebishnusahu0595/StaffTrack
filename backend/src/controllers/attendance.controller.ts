@@ -167,3 +167,23 @@ export async function forceCheckout(req: Request, res: Response): Promise<void> 
   sendSuccess(res, result, "Force checked out successfully");
 }
 
+export async function analyzeFace(req: Request, res: Response): Promise<void> {
+  const image = req.body.image || req.body.photoUrl || req.body.base64;
+  if (!image) {
+    res.status(400).json({ success: false, error: "Image payload is required" });
+    return;
+  }
+  const result = await attendanceService.analyzeFacePhotoService(image);
+  sendSuccess(res, result, "Face analysis completed");
+}
+
+export async function analyzeOdometer(req: Request, res: Response): Promise<void> {
+  const image = req.body.image || req.body.photoUrl || req.body.base64;
+  if (!image) {
+    res.status(400).json({ success: false, error: "Image payload is required" });
+    return;
+  }
+  const result = await attendanceService.analyzeOdometerPhotoService(image);
+  sendSuccess(res, result, "Odometer analysis completed");
+}
+

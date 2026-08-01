@@ -247,6 +247,8 @@ model Attendance {
   checkInApproved       Boolean          @default(true)
   checkInApprovedBy     String?
   checkInApprovedAt     DateTime?
+  checkInAiAnalysis     Json?
+  checkOutAiAnalysis    Json?
 
   @@index([userId, date])
 }

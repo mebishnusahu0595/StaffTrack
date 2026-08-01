@@ -14,6 +14,8 @@ import {
   createExpense, 
   uploadExpenseReceipt, 
   uploadPhoto, 
+  analyzeFaceApi,
+  analyzeOdometerApi,
   type LocationPing, 
   type PunchType 
 } from "../api";
@@ -66,12 +68,16 @@ export function PersonalAttendancePanel({
   const [odoModalVisible, setOdoModalVisible] = useState(false);
   const [odoValue, setOdoValue] = useState("");
   const [odoTitle, setOdoTitle] = useState("");
+  const [odoDetectedReading, setOdoDetectedReading] = useState<number | null>(null);
+  const [odoAiWarning, setOdoAiWarning] = useState<string | null>(null);
   const [odoResolve, setOdoResolve] = useState<{ resolve: (val: number | null) => void } | null>(null);
 
-  function promptOdometerReading(type: "Start" | "End"): Promise<number | null> {
+  function promptOdometerReading(type: "Start" | "End", detectedReading: number | null = null, aiWarning: string | null = null): Promise<number | null> {
     return new Promise((resolve) => {
       setOdoTitle(`${type} Day Odometer`);
-      setOdoValue("");
+      setOdoValue(detectedReading !== null ? String(detectedReading) : "");
+      setOdoDetectedReading(detectedReading);
+      setOdoAiWarning(aiWarning);
       setOdoResolve({ resolve });
       setOdoModalVisible(true);
     });
@@ -269,26 +275,100 @@ export function PersonalAttendancePanel({
         }
       }
 
-      const asset = await pickVerificationImage({ quality: 0.4 }); // quality 0.4 for attendance face photo
-      if (!asset) return;
+      // Step A: Face Selfie Capture + AI Face Verification
+      let asset: ImagePicker.ImagePickerAsset | null = null;
+      let faceAiResult: any = null;
+      let faceRetakeCount = 0;
 
+      while (true) {
+        asset = await pickVerificationImage({ quality: 0.4 });
+        if (!asset) return; // User cancelled camera
+
+        setLoadingStep("Verifying Face AI...");
+        faceAiResult = await analyzeFaceApi(asset.uri);
+
+        // Check if AI detected fake human face or screen printout
+        if (!faceAiResult.isHumanFace || faceAiResult.isScreenOrPrintout) {
+          faceRetakeCount++;
+          const warning = faceAiResult.warningMessage || "Photo of phone screen or object detected. Live human face required.";
+          
+          const userChoice = await new Promise<boolean>((resolve) => {
+            Alert.alert(
+              "⚠️ AI Face Verification Failed",
+              `${warning}\n\nPlease take a clear, live selfie of your face.`,
+              [
+                { text: "Cancel Check-in", style: "cancel", onPress: () => resolve(false) },
+                { text: "📷 Retake Selfie", onPress: () => resolve(true) }
+              ]
+            );
+          });
+
+          if (!userChoice) return; // User cancelled check-in
+        } else {
+          break; // Valid human face verified!
+        }
+      }
+
+      // Step B: Field Mode Odometer Capture + AI/OCR Verification
       let startOdometerPhotoUrl: string | undefined;
       let startOdometer: number | undefined;
+      let odometerAiResult: any = null;
+      let odoRetakeCount = 0;
+
       if (type === "FIELD" && isSalesOfficer) {
-        const odoAsset = await pickOdometerImage("Start");
-        if (!odoAsset) return;
-        const reading = await promptOdometerReading("Start");
+        let odoAsset: ImagePicker.ImagePickerAsset | null = null;
+
+        while (true) {
+          odoAsset = await pickOdometerImage("Start");
+          if (!odoAsset) return;
+
+          setLoadingStep("Analyzing Odometer AI & OCR...");
+          odometerAiResult = await analyzeOdometerApi(odoAsset.uri);
+
+          if (!odometerAiResult.isOdometer || odometerAiResult.isBlurry || odometerAiResult.isScreenOrPrintout) {
+            odoRetakeCount++;
+            const msg = odometerAiResult.warningMessage || (odometerAiResult.isBlurry ? "Photo is blurry or unreadable" : "Not a valid vehicle odometer display");
+            
+            const retakeChoice = await new Promise<boolean>((resolve) => {
+              Alert.alert(
+                "⚠️ Odometer Photo Warning",
+                `${msg}\n\nPlease ensure your vehicle odometer is clearly visible and not blurry.`,
+                [
+                  { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+                  { text: "📷 Retake Odometer", onPress: () => resolve(true) }
+                ]
+              );
+            });
+
+            if (!retakeChoice) return;
+          } else {
+            break; // Valid odometer photo!
+          }
+        }
+
+        const reading = await promptOdometerReading("Start", odometerAiResult?.detectedReading ?? null, odometerAiResult?.warningMessage ?? null);
         if (reading === null) return;
         startOdometer = reading;
+
         setLoadingStep("Uploading Odometer...");
-        startOdometerPhotoUrl = await uploadPhoto(odoAsset);
+        startOdometerPhotoUrl = await uploadPhoto(odoAsset!);
       }
 
       setLoadingStep("Processing...");
-      const [photoUrl, coords] = await Promise.all([uploadPhoto(asset), getCurrentCoordinates()]);
+      const [photoUrl, coords] = await Promise.all([uploadPhoto(asset!), getCurrentCoordinates()]);
+      
+      const checkInAiAnalysis = {
+        faceAi: faceAiResult,
+        faceRetakeCount,
+        odometerAi: odometerAiResult,
+        odoRetakeCount,
+        enteredOdometer: startOdometer ?? null,
+        timestamp: new Date().toISOString()
+      };
+
       setLoadingStep("Saving...");
-      await checkIn({ ...coords, punchType: type, photoUrl, startOdometerPhotoUrl, startOdometer });
-      Alert.alert("Success", "Check-in successful");
+      await checkIn({ ...coords, punchType: type, photoUrl, startOdometerPhotoUrl, startOdometer, checkInAiAnalysis });
+      Alert.alert("Success", "Check-in successful with AI verification!");
     } catch (error) {
       Alert.alert("Check-in failed", getErrorMessage(error));
     } finally {
@@ -298,27 +378,99 @@ export function PersonalAttendancePanel({
 
   async function handleCheckOut() {
     try {
-      const asset = await pickVerificationImage({ quality: 0.4 }); // quality 0.4 for attendance face photo
-      if (!asset) return;
+      // Step A: Face Selfie Capture + AI Face Verification
+      let asset: ImagePicker.ImagePickerAsset | null = null;
+      let faceAiResult: any = null;
+      let faceRetakeCount = 0;
+
+      while (true) {
+        asset = await pickVerificationImage({ quality: 0.4 });
+        if (!asset) return;
+
+        setLoadingStep("Verifying Face AI...");
+        faceAiResult = await analyzeFaceApi(asset.uri);
+
+        if (!faceAiResult.isHumanFace || faceAiResult.isScreenOrPrintout) {
+          faceRetakeCount++;
+          const warning = faceAiResult.warningMessage || "Photo of phone screen or object detected. Live human face required.";
+          
+          const userChoice = await new Promise<boolean>((resolve) => {
+            Alert.alert(
+              "⚠️ AI Face Verification Failed",
+              `${warning}\n\nPlease take a clear, live selfie of your face.`,
+              [
+                { text: "Cancel Check-out", style: "cancel", onPress: () => resolve(false) },
+                { text: "📷 Retake Selfie", onPress: () => resolve(true) }
+              ]
+            );
+          });
+
+          if (!userChoice) return;
+        } else {
+          break;
+        }
+      }
 
       const isField = activeAttendance?.punchType === "FIELD";
       let endOdometerPhotoUrl: string | undefined;
       let endOdometer: number | undefined;
+      let odometerAiResult: any = null;
+      let odoRetakeCount = 0;
+
       if (isField && isSalesOfficer) {
-        const odoAsset = await pickOdometerImage("End");
-        if (!odoAsset) return;
-        const reading = await promptOdometerReading("End");
+        let odoAsset: ImagePicker.ImagePickerAsset | null = null;
+
+        while (true) {
+          odoAsset = await pickOdometerImage("End");
+          if (!odoAsset) return;
+
+          setLoadingStep("Analyzing Odometer AI & OCR...");
+          odometerAiResult = await analyzeOdometerApi(odoAsset.uri);
+
+          if (!odometerAiResult.isOdometer || odometerAiResult.isBlurry || odometerAiResult.isScreenOrPrintout) {
+            odoRetakeCount++;
+            const msg = odometerAiResult.warningMessage || (odometerAiResult.isBlurry ? "Photo is blurry or unreadable" : "Not a valid vehicle odometer display");
+            
+            const retakeChoice = await new Promise<boolean>((resolve) => {
+              Alert.alert(
+                "⚠️ Odometer Photo Warning",
+                `${msg}\n\nPlease ensure your vehicle odometer is clearly visible and not blurry.`,
+                [
+                  { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+                  { text: "📷 Retake Odometer", onPress: () => resolve(true) }
+                ]
+              );
+            });
+
+            if (!retakeChoice) return;
+          } else {
+            break;
+          }
+        }
+
+        const reading = await promptOdometerReading("End", odometerAiResult?.detectedReading ?? null, odometerAiResult?.warningMessage ?? null);
         if (reading === null) return;
         endOdometer = reading;
+
         setLoadingStep("Uploading Odometer...");
-        endOdometerPhotoUrl = await uploadPhoto(odoAsset);
+        endOdometerPhotoUrl = await uploadPhoto(odoAsset!);
       }
 
       setLoadingStep("Processing...");
-      const [photoUrl, coords] = await Promise.all([uploadPhoto(asset), getCurrentCoordinates()]);
+      const [photoUrl, coords] = await Promise.all([uploadPhoto(asset!), getCurrentCoordinates()]);
+
+      const checkOutAiAnalysis = {
+        faceAi: faceAiResult,
+        faceRetakeCount,
+        odometerAi: odometerAiResult,
+        odoRetakeCount,
+        enteredOdometer: endOdometer ?? null,
+        timestamp: new Date().toISOString()
+      };
+
       setLoadingStep("Saving...");
-      await checkOut({ ...coords, photoUrl, endOdometerPhotoUrl, endOdometer });
-      Alert.alert("Success", "Check-out successful");
+      await checkOut({ ...coords, photoUrl, endOdometerPhotoUrl, endOdometer, checkOutAiAnalysis });
+      Alert.alert("Success", "Check-out successful with AI verification!");
     } catch (error) {
       Alert.alert("Check-out failed", getErrorMessage(error));
     } finally {
@@ -774,9 +926,47 @@ export function PersonalAttendancePanel({
       <Portal>
         <Dialog visible={odoModalVisible} dismissable={false} style={styles.dialog}>
           <Dialog.Title style={{ fontWeight: "800", color: "#24312D" }}>{odoTitle}</Dialog.Title>
-          <Dialog.Content>
-            <Text style={{ fontSize: 13, color: "#66736F", marginBottom: 12 }}>Please enter the vehicle odometer reading in KM.</Text>
-            <TextInput keyboardType="numeric" label="Odometer (KM)" mode="outlined" value={odoValue} onChangeText={setOdoValue} placeholder="e.g. 12540" style={{ backgroundColor: "#FFFFFF" }} autoFocus />
+          <Dialog.Content style={{ gap: 10 }}>
+            <Text style={{ fontSize: 13, color: "#66736F" }}>Please enter the vehicle odometer reading in KM.</Text>
+            
+            {odoDetectedReading !== null ? (
+              <View style={{ backgroundColor: "#F0FDF4", borderColor: "#86EFAC", borderWidth: 1, borderRadius: 8, padding: 10, flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <AppIcon name="magnify-scan" size={20} color="#166534" />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#166534" }}>AI/OCR DETECTED READING</Text>
+                  <Text style={{ fontSize: 14, fontWeight: "800", color: "#14532D", marginTop: 1 }}>{odoDetectedReading} KM</Text>
+                </View>
+              </View>
+            ) : null}
+
+            {odoAiWarning ? (
+              <View style={{ backgroundColor: "#FFFBEB", borderColor: "#FCD34D", borderWidth: 1, borderRadius: 8, padding: 8 }}>
+                <Text style={{ fontSize: 11, color: "#B45309", fontWeight: "600" }}>⚠️ AI Note: {odoAiWarning}</Text>
+              </View>
+            ) : null}
+
+            <TextInput 
+              keyboardType="numeric" 
+              label="Odometer (KM) *" 
+              mode="outlined" 
+              value={odoValue} 
+              onChangeText={setOdoValue} 
+              placeholder="e.g. 12540" 
+              style={{ backgroundColor: "#FFFFFF" }} 
+              autoFocus 
+            />
+
+            {odoDetectedReading !== null && odoValue.trim() !== "" && !isNaN(Number(odoValue)) ? (
+              Number(odoValue.trim()) === odoDetectedReading ? (
+                <Text style={{ fontSize: 11, color: "#16A34A", fontWeight: "700" }}>✓ Input matches AI photo reading</Text>
+              ) : (
+                <View style={{ backgroundColor: "#FEF2F2", borderColor: "#FCA5A5", borderWidth: 1, borderRadius: 8, padding: 8 }}>
+                  <Text style={{ fontSize: 11, color: "#991B1B", fontWeight: "600" }}>
+                    ⚠️ Warning: Typed reading ({odoValue}) differs from photo reading (~{odoDetectedReading}). Please double check your entry.
+                  </Text>
+                </View>
+              )
+            ) : null}
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => { setOdoModalVisible(false); odoResolve?.resolve(null); }}>Cancel</Button>
