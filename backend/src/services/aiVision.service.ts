@@ -119,7 +119,7 @@ export async function analyzeFacePhoto(imageInput: string): Promise<FaceAiResult
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     const prompt = `Analyze this selfie photo for attendance check-in. Determine:
 1. Is this a real living human face present in front of the camera?
@@ -147,7 +147,8 @@ Return ONLY valid JSON:
         ],
         generationConfig: {
           temperature: 0.0,
-          maxOutputTokens: 100
+          maxOutputTokens: 1000,
+          responseMimeType: "application/json"
         }
       })
     });
@@ -155,12 +156,14 @@ Return ONLY valid JSON:
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.warn(`[AI Vision] Gemini Face API status ${response.status}`);
+      const errBody = await response.text();
+      console.warn(`[AI Vision] Gemini Face API status ${response.status}:`, errBody);
       return fallbackResult;
     }
 
     const data = await response.json() as any;
     const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    console.log("[AI Vision] Raw candidateText:", candidateText);
     if (!candidateText) return fallbackResult;
 
     const parsed = parseGeminiJson<FaceAiResult>(candidateText);
@@ -216,7 +219,7 @@ export async function analyzeOdometerPhoto(imageInput: string): Promise<Odometer
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     const prompt = `Analyze this vehicle odometer photo. Determine:
 1. Is this a real vehicle odometer display?
@@ -248,7 +251,8 @@ Return ONLY valid JSON:
         ],
         generationConfig: {
           temperature: 0.0,
-          maxOutputTokens: 100
+          maxOutputTokens: 1000,
+          responseMimeType: "application/json"
         }
       })
     });
@@ -256,12 +260,14 @@ Return ONLY valid JSON:
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.warn(`[AI Vision] Gemini Odometer API status ${response.status}`);
+      const errBody = await response.text();
+      console.warn(`[AI Vision] Gemini Odometer API status ${response.status}:`, errBody);
       return fallbackResult;
     }
 
     const data = await response.json() as any;
     const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    console.log("[AI Vision] Raw odometer candidateText:", candidateText);
     if (!candidateText) return fallbackResult;
 
     const parsed = parseGeminiJson<OdometerAiResult>(candidateText);
