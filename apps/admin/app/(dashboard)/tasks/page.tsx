@@ -400,7 +400,31 @@ export default function TasksPage() {
       };
       filtered = filtered.filter(t => {
         const taskDueStr = getLocalDateStr(t.dueDate);
-        return filterDate === taskDueStr;
+        const taskStartStr = getLocalDateStr(t.startDate || t.createdAt);
+        const taskEndStr = getLocalDateStr(t.endDate);
+
+        // 1. Direct due date match
+        if (filterDate === taskDueStr) return true;
+
+        // 2. Repeating / Everyday task active on filterDate
+        const isRepeatingTask = Boolean(t.isRepeating || t.repeatFrequency);
+        if (isRepeatingTask) {
+          const startMatches = !taskStartStr || filterDate >= taskStartStr;
+          const endMatches = !taskEndStr || filterDate <= taskEndStr;
+          return startMatches && endMatches;
+        }
+
+        return false;
+      });
+
+      // Deduplicate repeating tasks by series ID so each series is shown once per date view
+      const seenSeries = new Set<string>();
+      filtered = filtered.filter(t => {
+        const seriesKey = t.parentTaskId || (t.isRepeating ? t.id : null);
+        if (!seriesKey) return true;
+        if (seenSeries.has(seriesKey)) return false;
+        seenSeries.add(seriesKey);
+        return true;
       });
     }
 
@@ -1128,7 +1152,7 @@ export default function TasksPage() {
                                 <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.createdAt), 'dd-MM-yyyy')}</span>
                               </td>
                               <td className="py-2 px-4">
-                                <span className="text-[10px] font-bold text-slate-600">{format(new Date(task.dueDate), 'dd-MM-yyyy')}</span>
+                                <span className="text-[10px] font-bold text-slate-600">{format(new Date(task.endDate || task.dueDate), 'dd-MM-yyyy')}</span>
                               </td>
                               <td className="py-2 px-6 text-right">
                                 <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1264,7 +1288,7 @@ export default function TasksPage() {
                         <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.createdAt), 'dd-MM-yyyy')}</span>
                       </td>
                       <td className="py-2 px-4">
-                        <span className="text-[10px] font-bold text-slate-600">{format(new Date(task.dueDate), 'dd-MM-yyyy')}</span>
+                        <span className="text-[10px] font-bold text-slate-600">{format(new Date(task.endDate || task.dueDate), 'dd-MM-yyyy')}</span>
                       </td>
                       <td className="py-2 px-6 text-right">
                         <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -4149,7 +4173,7 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                </div>
                <div className="space-y-1">
                   <Label className="text-[10px] font-black uppercase text-slate-400">Due Date</Label>
-                  <p className="text-xs font-bold text-slate-700">{format(new Date(task.dueDate), 'dd MMM yyyy')}</p>
+                  <p className="text-xs font-bold text-slate-700">{format(new Date(task.endDate || task.dueDate), 'dd MMM yyyy')}</p>
                </div>
             </div>
 
