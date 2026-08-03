@@ -159,9 +159,9 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
 }
 
 export async function listTasks(actor: AuthUser, dateStr?: string) {
-  // Ensure overdue rollover & series backfilling complete before listing tasks
-  await rolloverOverdueTasks().catch(err =>
-    console.error("[Task Rollover] rollover failed:", err)
+  // Backfill missing series occurrences for repeating tasks before listing
+  backfillMissingSeriesOccurrences().catch(err =>
+    console.error("[Task Service] Backfill series occurrences error:", err)
   );
 
   const tasks = await prisma.task.findMany({
@@ -191,18 +191,12 @@ export async function listTasks(actor: AuthUser, dateStr?: string) {
           t.startDate >= today && 
           t.startDate < tomorrow
         );
-        const carryForwardTasks = tasks.filter(
-          (task) =>
-            task.status !== TaskStatus.COMPLETED &&
-            task.status !== TaskStatus.CANCELLED &&
-            task.dueDate < today
-        );
 
         // Batch fetch all today's notifications for this user in one query
         const todayNotifs = await prisma.notification.findMany({
           where: {
             userId: actor.id,
-            type: { in: ["TASK_DUE_TODAY", "TASK_STARTED_TODAY", "TASK_PENDING_CARRY_FORWARD"] },
+            type: { in: ["TASK_DUE_TODAY", "TASK_STARTED_TODAY"] },
             createdAt: { gte: today }
           },
           select: { type: true, message: true }
@@ -219,12 +213,6 @@ export async function listTasks(actor: AuthUser, dateStr?: string) {
           const msg = `Your task "${task.title}" has started today. Please complete it.`;
           if (!notifSet.has(`TASK_STARTED_TODAY||${msg}`)) {
             await notificationService.createNotification(actor.id, "New Task Started", msg, "TASK_STARTED_TODAY");
-          }
-        }
-        for (const task of carryForwardTasks) {
-          const msg = `Your task "${task.title}" is still pending from yesterday and has been carried forward.`;
-          if (!notifSet.has(`TASK_PENDING_CARRY_FORWARD||${msg}`)) {
-            await notificationService.createNotification(actor.id, "Pending Task From Yesterday", msg, "TASK_PENDING_CARRY_FORWARD");
           }
         }
       } catch (err) {
@@ -1196,43 +1184,6 @@ export function getStartOfDayIST(date: Date = new Date()): Date {
   const indiaTime = new Date(date.getTime() + offset);
   indiaTime.setUTCHours(0, 0, 0, 0);
   return new Date(indiaTime.getTime() - offset);
-}
-
-export async function rolloverOverdueTasks() {
-  const todayStart = getStartOfDayIST();
-
-  // 1. One-off tasks (isRepeating = false): roll them over to todayStart.
-  const overdueOneOffTasks = await prisma.task.findMany({
-    where: {
-      status: {
-        in: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS]
-      },
-      isRepeating: false,
-      dueDate: {
-        lt: todayStart
-      }
-    }
-  });
-
-  if (overdueOneOffTasks.length > 0) {
-    console.log(`[Task Rollover] Found ${overdueOneOffTasks.length} overdue one-off tasks. Rolling over to ${todayStart.toISOString()} and resetting points to 0.`);
-    await prisma.task.updateMany({
-      where: {
-        id: {
-          in: overdueOneOffTasks.map(t => t.id)
-        }
-      },
-      data: {
-        dueDate: todayStart,
-        points: 0
-      }
-    });
-  }
-
-  // Backfill missing series occurrences for all active repeating series
-  backfillMissingSeriesOccurrences().catch(err =>
-    console.error("[Task Service] Backfill series occurrences error:", err)
-  );
 }
 
 export async function backfillMissingSeriesOccurrences() {

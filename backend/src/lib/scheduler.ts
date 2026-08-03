@@ -1,6 +1,6 @@
 import { autoCheckoutStuckUsers, autoCheckoutOldStuckSessions } from "../services/attendance.service";
 import { checkStaleLocations } from "../services/location.service";
-import { rolloverOverdueTasks, sendDailyTaskNotifications } from "../services/task.service";
+import { sendDailyTaskNotifications } from "../services/task.service";
 import { cleanupOldImages } from "../services/imageCleanup.service";
 
 export function startScheduler() {
@@ -8,11 +8,6 @@ export function startScheduler() {
   autoCheckoutOldStuckSessions()
     .then(() => console.log("[Scheduler] Initial old sessions cleanup completed."))
     .catch((err) => console.error("[Scheduler] Initial old sessions cleanup failed:", err));
-
-  // 1b. Automatically rollover overdue tasks on startup
-  rolloverOverdueTasks()
-    .then(() => console.log("[Scheduler] Initial task rollover completed."))
-    .catch((err) => console.error("[Scheduler] Initial task rollover failed:", err));
 
   // 1c. Automatically send daily task notifications on startup
   sendDailyTaskNotifications()
@@ -53,12 +48,6 @@ export function startScheduler() {
         await autoCheckoutStuckUsers();
       } catch (error) {
         console.error("[Scheduler] Error in scheduled auto-checkout job:", error);
-      }
-      try {
-        await rolloverOverdueTasks();
-        console.log("[Scheduler] Scheduled daily task rollover completed.");
-      } catch (error) {
-        console.error("[Scheduler] Error in scheduled daily task rollover:", error);
       }
       try {
         await sendDailyTaskNotifications();

@@ -165,16 +165,9 @@ export function TasksScreen() {
     let result = tasks;
 
     const selectedDateString = selectedDate.format("YYYY-MM-DD");
-    const isSelectedToday = selectedDateString === dayjs().format("YYYY-MM-DD");
 
     result = result.filter((t) => {
       const taskDateString = dayjs(t.dueDate).format("YYYY-MM-DD");
-      if (isSelectedToday) {
-        return (
-          taskDateString === selectedDateString ||
-          (taskDateString < selectedDateString && t.status !== "COMPLETED" && t.status !== "CANCELLED")
-        );
-      }
       return taskDateString === selectedDateString;
     });
 
@@ -486,12 +479,7 @@ export function TasksScreen() {
                 tasks.filter((t) => {
                   const taskDateString = dayjs(t.dueDate).format("YYYY-MM-DD");
                   const selectedDateString = selectedDate.format("YYYY-MM-DD");
-                  const isSelectedToday = selectedDateString === dayjs().format("YYYY-MM-DD");
-                  const matchesDate = isSelectedToday
-                    ? taskDateString === selectedDateString ||
-                      (taskDateString < selectedDateString && t.status !== "COMPLETED" && t.status !== "CANCELLED")
-                    : taskDateString === selectedDateString;
-                  return (t.status === "PENDING" || t.status === "IN_PROGRESS") && matchesDate;
+                  return (t.status === "PENDING" || t.status === "IN_PROGRESS") && taskDateString === selectedDateString;
                 }).length
               }
             </Text>
