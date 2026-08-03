@@ -96,6 +96,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [sidebarSearch, setSidebarSearch] = useState("");
 
   type LocationOffAlert = {
     userId: string;
@@ -383,8 +384,19 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           )}
 
           <nav ref={navRef} className="flex-1 space-y-1 px-4 overflow-y-auto custom-scrollbar scroll-smooth">
+            <div className="relative mb-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search menu..."
+                value={sidebarSearch}
+                onChange={(e) => setSidebarSearch(e.target.value)}
+                className="w-full h-9 pl-9 pr-3 rounded-lg bg-slate-800/60 border border-slate-700/50 text-xs font-medium text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+              />
+            </div>
             {navItems
               .filter((item) => !item.roles || (user?.role && item.roles.includes(user.role as Role)))
+              .filter((item) => !sidebarSearch || item.label.toLowerCase().includes(sidebarSearch.toLowerCase()))
               .map((item) => {
               const isActive = pathname === item.href;
               const badge = badgeCounts[item.href] ?? 0;

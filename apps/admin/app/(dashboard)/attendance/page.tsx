@@ -100,6 +100,8 @@ export default function AttendancePage() {
         record.user?.email?.toLowerCase().includes(q)
       );
     }
+    // Sort alphabetically by employee name
+    data.sort((a, b) => (a.user?.name || "").localeCompare(b.user?.name || "", "en", { sensitivity: "base" }));
     return data;
   }, [attendanceData, employeeFilter, selectedDepartment, searchQuery]);
 

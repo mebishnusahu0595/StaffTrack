@@ -179,6 +179,9 @@ export default function EmployeesPage() {
       items = items.filter((user) => user.groupId === departmentFilter);
     }
 
+    // Sort alphabetically by name
+    items.sort((a, b) => (a.name || "").localeCompare(b.name || "", "en", { sensitivity: "base" }));
+
     return items;
   }, [latestTodayAttendanceByUser, usersQuery.data?.items, workModeFilter, statusFilter, departmentFilter]);
 

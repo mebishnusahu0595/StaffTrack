@@ -45,7 +45,7 @@ export default function MusterReportPage() {
   const filteredData = data.filter((item: any) => 
     (item.userName.toLowerCase().includes(search.toLowerCase())) &&
     (department === "All" || item.group === department)
-  );
+  ).sort((a: any, b: any) => (a.userName || "").localeCompare(b.userName || "", "en", { sensitivity: "base" }));
 
   function changeMonth(delta: number) {
     setSelectedMonth(prev => prev.add(delta, 'month'));
