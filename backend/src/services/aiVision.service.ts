@@ -3,7 +3,7 @@ import path from "path";
 import crypto from "crypto";
 
 const getGeminiApiKey = () => process.env.GEMINI_API_KEY || "";
-const getGeminiEndpoint = () => `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${getGeminiApiKey()}`;
+const getGeminiEndpoint = () => `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${getGeminiApiKey()}`;
 
 // Timeout for Gemini API calls (25s to handle large image payloads reliably)
 const GEMINI_TIMEOUT_MS = 25_000;
