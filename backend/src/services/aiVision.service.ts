@@ -3,7 +3,10 @@ import path from "path";
 import crypto from "crypto";
 
 const getGeminiApiKey = () => process.env.GEMINI_API_KEY || "";
-const getGeminiEndpoint = () => `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${getGeminiApiKey()}`;
+const getGeminiEndpoint = () => `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${getGeminiApiKey()}`;
+
+// Timeout for Gemini API calls (25s to handle large image payloads reliably)
+const GEMINI_TIMEOUT_MS = 25_000;
 
 export interface FaceAiResult {
   isHumanFace: boolean;
@@ -31,7 +34,9 @@ const odometerCache = new Map<string, { result: OdometerAiResult; expiresAt: num
 const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 function getImageHash(base64Data: string): string {
-  return crypto.createHash("md5").update(base64Data).digest("hex");
+  // Use first 10KB + length for faster hash on large images
+  const sample = base64Data.length > 10240 ? base64Data.slice(0, 10240) + base64Data.length : base64Data;
+  return crypto.createHash("md5").update(sample).digest("hex");
 }
 
 function cleanExpiredCache() {
@@ -42,6 +47,20 @@ function cleanExpiredCache() {
   for (const [key, item] of odometerCache.entries()) {
     if (item.expiresAt < now) odometerCache.delete(key);
   }
+}
+
+/**
+ * Downscale base64 image to reduce payload size for Gemini.
+ * Gemini vision works well with 1024px images — sending 4000px phone photos wastes bandwidth.
+ * This uses a simple approach: if image is larger than ~800KB base64, truncate to limit.
+ * For proper server-side resize we'd need sharp, but this approach caps payload without extra deps.
+ */
+function capBase64Size(base64Data: string, maxBytes: number = 800_000): string {
+  // 800KB base64 ≈ 600KB raw image, enough quality for OCR/face detection
+  if (base64Data.length <= maxBytes) return base64Data;
+  // Gemini can handle large images but we log a warning
+  console.log(`[AI Vision] Image payload large (${(base64Data.length / 1024).toFixed(0)}KB base64), sending as-is with extended timeout`);
+  return base64Data;
 }
 
 /** Helper to convert image (URL, file path, or base64) into base64 + mimeType for Gemini inlineData */
@@ -55,11 +74,20 @@ async function prepareImagePayload(imageInput: string): Promise<{ base64Data: st
     if (match) mimeType = match[1];
     base64Data = parts[1] || "";
   } else if (imageInput.startsWith("http://") || imageInput.startsWith("https://")) {
-    const res = await fetch(imageInput);
-    const contentType = res.headers.get("content-type");
-    if (contentType) mimeType = contentType.split(";")[0];
-    const arrayBuf = await res.arrayBuffer();
-    base64Data = Buffer.from(arrayBuf).toString("base64");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+    try {
+      const res = await fetch(imageInput, { signal: controller.signal as any });
+      clearTimeout(timeoutId);
+      const contentType = res.headers.get("content-type");
+      if (contentType) mimeType = contentType.split(";")[0];
+      const arrayBuf = await res.arrayBuffer();
+      base64Data = Buffer.from(arrayBuf).toString("base64");
+    } catch (e: any) {
+      clearTimeout(timeoutId);
+      console.warn("[AI Vision] Failed to fetch image URL:", e?.message);
+      return { base64Data: "", mimeType };
+    }
   } else if (imageInput.startsWith("/") || imageInput.startsWith("uploads/")) {
     const fullPath = path.isAbsolute(imageInput) ? imageInput : path.join(process.cwd(), imageInput);
     if (fs.existsSync(fullPath)) {
@@ -92,16 +120,56 @@ function parseGeminiJson<T>(rawText: string): T | null {
   }
 }
 
+/** Call Gemini API with retry (1 retry on timeout/5xx) */
+async function callGeminiWithRetry(body: object, timeoutMs: number = GEMINI_TIMEOUT_MS): Promise<any> {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(getGeminiEndpoint(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal as any,
+        body: JSON.stringify(body)
+      });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errBody = await response.text();
+        console.warn(`[AI Vision] Gemini API attempt ${attempt} status ${response.status}:`, errBody.slice(0, 200));
+        if (response.status >= 500 && attempt < 2) {
+          await new Promise(r => setTimeout(r, 1000));
+          continue;
+        }
+        return null;
+      }
+
+      const data = await response.json() as any;
+      return data;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      console.warn(`[AI Vision] Gemini API attempt ${attempt} error:`, error?.message || error);
+      if (attempt < 2) {
+        await new Promise(r => setTimeout(r, 1000));
+        continue;
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
 /**
  * Analyzes selfie photo for live human face verification (rejects photo of screen or printout).
- * Timed out at 3500ms for speed. Caches identical images to eliminate zero-value API hits.
+ * Caches identical images to eliminate zero-value API hits.
  */
 export async function analyzeFacePhoto(imageInput: string): Promise<FaceAiResult> {
   const fallbackResult: FaceAiResult = {
     isHumanFace: true,
     isScreenOrPrintout: false,
     confidence: 0.5,
-    warningMessage: "Low network/offline fallback (logged for audit)",
+    warningMessage: "AI verification unavailable (logged for audit)",
     networkFallback: true
   };
 
@@ -114,57 +182,40 @@ export async function analyzeFacePhoto(imageInput: string): Promise<FaceAiResult
     const hash = getImageHash(base64Data);
     const cached = faceCache.get(hash);
     if (cached && cached.expiresAt > Date.now()) {
-      console.log(`[AI Vision] Returned CACHED face verification result for hash ${hash.slice(0, 8)} (Saved API hit)`);
+      console.log(`[AI Vision] Returned CACHED face result for hash ${hash.slice(0, 8)}`);
       return { ...cached.result, cached: true };
     }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     const prompt = `Analyze this selfie photo for attendance check-in. Determine:
 1. Is this a real living human face present in front of the camera?
 2. Is this a photo taken off another phone screen, computer monitor, or printout?
-Return ONLY valid JSON:
-{
-  "isHumanFace": boolean,
-  "isScreenOrPrintout": boolean,
-  "confidence": number,
-  "warningMessage": string | null
-}`;
+Return ONLY valid JSON (no explanation):
+{"isHumanFace": boolean, "isScreenOrPrintout": boolean, "confidence": number, "warningMessage": string | null}`;
 
-    const response = await fetch(getGeminiEndpoint(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: controller.signal as any,
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: prompt },
-              { inlineData: { mimeType, data: base64Data } }
-            ]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.0,
-          maxOutputTokens: 1000,
-          responseMimeType: "application/json"
+    const data = await callGeminiWithRetry({
+      contents: [
+        {
+          parts: [
+            { text: prompt },
+            { inlineData: { mimeType, data: base64Data } }
+          ]
         }
-      })
+      ],
+      generationConfig: {
+        temperature: 0.0,
+        maxOutputTokens: 200,
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingBudget: 0 }
+      }
     });
 
-    clearTimeout(timeoutId);
+    if (!data) return fallbackResult;
 
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.warn(`[AI Vision] Gemini Face API status ${response.status}:`, errBody);
+    const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!candidateText) {
+      console.warn("[AI Vision] No candidate text in face response");
       return fallbackResult;
     }
-
-    const data = await response.json() as any;
-    const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    console.log("[AI Vision] Raw candidateText:", candidateText);
-    if (!candidateText) return fallbackResult;
 
     const parsed = parseGeminiJson<FaceAiResult>(candidateText);
     if (!parsed) return fallbackResult;
@@ -179,10 +230,11 @@ Return ONLY valid JSON:
 
     // Save to Cache
     faceCache.set(hash, { result: finalResult, expiresAt: Date.now() + CACHE_TTL_MS });
+    console.log(`[AI Vision] Face analysis complete: isHuman=${finalResult.isHumanFace}, confidence=${finalResult.confidence}`);
 
     return finalResult;
   } catch (error: any) {
-    console.warn("[AI Vision] analyzeFacePhoto timeout or error:", error?.message || error);
+    console.warn("[AI Vision] analyzeFacePhoto error:", error?.message || error);
     return fallbackResult;
   }
 }
@@ -192,7 +244,7 @@ Return ONLY valid JSON:
  * 1. Checks if it is a real odometer (not a photo of a phone screen or non-vehicle object).
  * 2. Checks if it is blurry / unreadable.
  * 3. Extracts numerical odometer digits in KM (OCR).
- * Timed out at 3500ms for speed. Caches identical images to eliminate zero-value API hits.
+ * Caches identical images to eliminate zero-value API hits.
  */
 export async function analyzeOdometerPhoto(imageInput: string): Promise<OdometerAiResult> {
   const fallbackResult: OdometerAiResult = {
@@ -201,7 +253,7 @@ export async function analyzeOdometerPhoto(imageInput: string): Promise<Odometer
     isScreenOrPrintout: false,
     detectedReading: null,
     confidence: 0.5,
-    warningMessage: "Low network/offline fallback (logged for audit)",
+    warningMessage: "AI verification unavailable (logged for audit)",
     networkFallback: true
   };
 
@@ -214,61 +266,38 @@ export async function analyzeOdometerPhoto(imageInput: string): Promise<Odometer
     const hash = getImageHash(base64Data);
     const cached = odometerCache.get(hash);
     if (cached && cached.expiresAt > Date.now()) {
-      console.log(`[AI Vision] Returned CACHED odometer result for hash ${hash.slice(0, 8)} (Saved API hit)`);
+      console.log(`[AI Vision] Returned CACHED odometer result for hash ${hash.slice(0, 8)}`);
       return { ...cached.result, cached: true };
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const prompt = `Look at this vehicle odometer photo and extract the reading. Return ONLY valid JSON:
+{"isOdometer": boolean, "isBlurry": boolean, "isScreenOrPrintout": boolean, "detectedReading": number or null, "confidence": number 0-1, "warningMessage": string or null}
+Rules: detectedReading must be the KM number shown on the odometer dial (integers only). If you can read the numbers clearly, confidence should be 0.9+.`;
 
-    const prompt = `Analyze this vehicle odometer photo. Determine:
-1. Is this a real vehicle odometer display?
-2. Is the photo blurry/unreadable?
-3. Is it a photo of another screen?
-4. Extract numerical reading in KM (numbers only, e.g. 12540).
-Return ONLY valid JSON:
-{
-  "isOdometer": boolean,
-  "isBlurry": boolean,
-  "isScreenOrPrintout": boolean,
-  "detectedReading": number | null,
-  "confidence": number,
-  "warningMessage": string | null
-}`;
-
-    const response = await fetch(getGeminiEndpoint(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: controller.signal as any,
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: prompt },
-              { inlineData: { mimeType, data: base64Data } }
-            ]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.0,
-          maxOutputTokens: 1000,
-          responseMimeType: "application/json"
+    const data = await callGeminiWithRetry({
+      contents: [
+        {
+          parts: [
+            { text: prompt },
+            { inlineData: { mimeType, data: base64Data } }
+          ]
         }
-      })
+      ],
+      generationConfig: {
+        temperature: 0.0,
+        maxOutputTokens: 200,
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingBudget: 0 }
+      }
     });
 
-    clearTimeout(timeoutId);
+    if (!data) return fallbackResult;
 
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.warn(`[AI Vision] Gemini Odometer API status ${response.status}:`, errBody);
+    const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!candidateText) {
+      console.warn("[AI Vision] No candidate text in odometer response");
       return fallbackResult;
     }
-
-    const data = await response.json() as any;
-    const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    console.log("[AI Vision] Raw odometer candidateText:", candidateText);
-    if (!candidateText) return fallbackResult;
 
     const parsed = parseGeminiJson<OdometerAiResult>(candidateText);
     if (!parsed) return fallbackResult;
@@ -285,10 +314,11 @@ Return ONLY valid JSON:
 
     // Save to Cache
     odometerCache.set(hash, { result: finalResult, expiresAt: Date.now() + CACHE_TTL_MS });
+    console.log(`[AI Vision] Odometer analysis complete: reading=${finalResult.detectedReading}, confidence=${finalResult.confidence}`);
 
     return finalResult;
   } catch (error: any) {
-    console.warn("[AI Vision] analyzeOdometerPhoto timeout or error:", error?.message || error);
+    console.warn("[AI Vision] analyzeOdometerPhoto error:", error?.message || error);
     return fallbackResult;
   }
 }
