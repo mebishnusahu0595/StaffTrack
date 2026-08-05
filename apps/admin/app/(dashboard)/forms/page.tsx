@@ -637,8 +637,19 @@ function ViewResponsesDialog({ form, trigger }: { form: any; trigger?: React.Rea
   };
 
   const filteredResponses = responses.filter((resp: any) => {
-    const userMatch = resp.user?.name?.toLowerCase().includes(respSearch.toLowerCase());
-    const dataMatch = resp.data?.toLowerCase().includes(respSearch.toLowerCase());
+    const q = respSearch.toLowerCase().trim();
+    if (!q) return true;
+    const userMatch = resp.user?.name?.toLowerCase().includes(q);
+    // search across all parsed data values
+    let dataMatch = false;
+    try {
+      const d = typeof resp.data === "string" ? JSON.parse(resp.data) : (resp.data || {});
+      dataMatch = Object.values(d).some((v: any) => {
+        if (!v) return false;
+        if (typeof v === "object" && v.url) return false; // skip photo objects
+        return String(v).toLowerCase().includes(q);
+      });
+    } catch (e) {}
     return userMatch || dataMatch;
   });
 
@@ -653,124 +664,110 @@ function ViewResponsesDialog({ form, trigger }: { form: any; trigger?: React.Rea
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-7xl w-[95vw] h-[92vh] max-h-[92vh] p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] flex flex-col hide-close">
-        <DialogHeader className="p-8 bg-slate-900 text-white relative flex-shrink-0">
-          <DialogClose className="absolute right-6 top-6 rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
+      <DialogContent className="max-w-6xl w-[95vw] h-[90vh] max-h-[90vh] p-0 overflow-hidden border-none shadow-2xl bg-white rounded-2xl flex flex-col hide-close">
+        {/* Header */}
+        <DialogHeader className="px-5 py-3 bg-slate-900 text-white relative flex-shrink-0">
+          <DialogClose className="absolute right-4 top-3 rounded-lg bg-white/10 p-1 text-white/50 hover:bg-white/20 transition-all">
              <X className="h-4 w-4" />
           </DialogClose>
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2">
             <Badge variant="outline" className="border-white/20 text-white/60 text-[9px] font-black uppercase tracking-widest">{form.category}</Badge>
           </div>
-          <DialogTitle className="text-2xl font-black">{form.name} - Responses ({filteredResponses.length})</DialogTitle>
-          <p className="text-slate-400 text-xs font-bold mt-1">Viewing all submissions from the field team.</p>
+          <DialogTitle className="text-base font-black">{form.name} — {filteredResponses.length} response{filteredResponses.length !== 1 ? "s" : ""}</DialogTitle>
         </DialogHeader>
 
-        <div className="p-8 pb-4 flex items-center justify-between gap-4 border-b border-slate-100 flex-shrink-0">
+        {/* Toolbar */}
+        <div className="px-4 py-2.5 flex items-center justify-between gap-3 border-b border-slate-100 flex-shrink-0 bg-slate-50">
            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
               <Input 
-                 placeholder="Search responses..." 
+                 placeholder="Search by name, dealer, address, district…" 
                  value={respSearch}
                  onChange={e => setRespSearch(e.target.value)}
-                 className="h-10 pl-9 rounded-xl bg-slate-50 border-none font-bold text-xs" 
+                 className="h-8 pl-7 rounded-lg bg-white border-slate-200 font-bold text-[11px]" 
               />
            </div>
-           <div className="flex items-center gap-2">
+           <div className="flex items-center gap-1.5">
               <Button 
                  onClick={downloadCSV}
                  disabled={responses.length === 0}
-                 className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-2 px-4 shadow-sm"
+                 className="h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] gap-1.5 px-3 shadow-sm"
               >
-                 <Download className="h-4 w-4" /> Export CSV
+                 <Download className="h-3.5 w-3.5" /> CSV
               </Button>
               <Button 
                  onClick={handlePrint}
                  disabled={responses.length === 0}
-                 className="h-10 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs gap-2 px-4 shadow-sm"
+                 className="h-8 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] gap-1.5 px-3 shadow-sm"
               >
-                 <Printer className="h-4 w-4" /> Export PDF
+                 <Printer className="h-3.5 w-3.5" /> PDF
               </Button>
            </div>
         </div>
         
-        <div className="flex-1 overflow-y-auto p-8 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
            {isLoading ? (
-              <div className="py-20 flex justify-center"><div className="h-8 w-8 animate-spin border-4 border-blue-600 border-t-transparent rounded-full" /></div>
+              <div className="py-16 flex justify-center"><div className="h-6 w-6 animate-spin border-4 border-blue-600 border-t-transparent rounded-full" /></div>
            ) : filteredResponses.length === 0 ? (
-              <div className="py-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">No responses received yet</div>
+              <div className="py-16 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">No responses found</div>
            ) : (
-              <div className="space-y-6">
+              <div className="space-y-3">
                  {filteredResponses.map((resp: any) => {
                     let data = {};
                     try {
                       data = typeof resp.data === "string" ? JSON.parse(resp.data) : (resp.data || {});
-                    } catch (e) {
-                      console.error("Failed to parse response data:", e);
-                    }
+                    } catch (e) {}
                     return (
-                     <div key={resp.id} className="bg-slate-50/80 rounded-[28px] border border-slate-200/80 overflow-hidden text-left shadow-sm hover:shadow-md transition-all">
-                        <div className="px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between">
-                           <div className="flex items-center gap-3">
-                              <Avatar className="h-9 w-9 border border-slate-100">
+                     <div key={resp.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden text-left shadow-sm">
+                        {/* Submission Header */}
+                        <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                           <div className="flex items-center gap-2">
+                              <Avatar className="h-7 w-7 border border-slate-200">
                                  <AvatarImage src={resp.user?.avatarUrl} />
-                                 <AvatarFallback className="bg-blue-600 text-white text-[11px] font-black">{resp.user?.name?.slice(0, 1) || "U"}</AvatarFallback>
+                                 <AvatarFallback className="bg-blue-600 text-white text-[10px] font-black">{resp.user?.name?.slice(0, 1) || "U"}</AvatarFallback>
                               </Avatar>
                               <div>
-                                 <p className="text-sm font-black text-slate-900 uppercase tracking-tight">{resp.user?.name || "Unknown Staff"}</p>
-                                 <p className="text-[10px] font-bold text-slate-400 uppercase">{dayjs(resp.submittedAt).format("DD MMM YYYY, hh:mm A")}</p>
+                                 <p className="text-xs font-black text-slate-900 uppercase tracking-tight leading-tight">{resp.user?.name || "Unknown Staff"}</p>
+                                 <p className="text-[9px] font-bold text-slate-400">{dayjs(resp.submittedAt).format("DD MMM YYYY, hh:mm A")}</p>
                               </div>
                            </div>
-                           <Badge variant="outline" className="text-[10px] font-black border-slate-200 bg-slate-50 text-slate-600">ID: #{resp.id.slice(-6)}</Badge>
+                           <Badge variant="outline" className="text-[9px] font-black border-slate-200 bg-white text-slate-500">#{resp.id.slice(-6)}</Badge>
                         </div>
-                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {/* Fields Grid — compact */}
+                        <div className="p-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                            {Object.entries(data).map(([key, value]: [string, any]) => {
                                const isPhotoObj = typeof value === 'object' && value && 'url' in value;
                                const imageUrl = isPhotoObj ? value.url : (typeof value === 'string' ? value : '');
                                const hasImage = imageUrl && (imageUrl.startsWith('http') || imageUrl.includes('data:') || imageUrl.startsWith('/uploads/'));
                                
                                return (
-                                <div key={key} className="space-y-1.5 bg-white p-4 rounded-2xl border border-slate-100 shadow-2xs">
-                                   <Label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">{key}</Label>
+                                <div key={key} className="space-y-1 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                   <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">{key}</p>
                                    {hasImage ? (
-                                      <div className="space-y-2 pt-1">
-                                        <div className="flex items-center gap-3">
-                                          {/* Small Thumbnail Preview */}
-                                          <div className="h-14 w-14 rounded-xl border border-slate-200 overflow-hidden shadow-2xs flex-shrink-0 bg-slate-100 flex items-center justify-center">
-                                            <img src={imageUrl} className="h-full w-full object-cover" alt={key} />
-                                          </div>
-                                          {/* Eye / View Button */}
-                                          <a 
-                                            href={imageUrl} 
-                                            target="_blank" 
-                                            rel="noopener noreferrer" 
-                                            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 hover:bg-blue-50 hover:border-blue-300 text-slate-700 hover:text-blue-600 font-bold text-xs shadow-2xs transition-all"
-                                          >
-                                            <Eye className="h-4 w-4 text-blue-600" />
-                                            <span>View Media</span>
-                                          </a>
+                                      <div className="flex items-center gap-2">
+                                        <div className="h-10 w-10 rounded-lg border border-slate-200 overflow-hidden flex-shrink-0 bg-slate-100">
+                                          <img src={imageUrl} className="h-full w-full object-cover" alt={key} />
                                         </div>
-
-                                        {isPhotoObj && value.latitude && (
-                                          <div className="flex items-center justify-between gap-2 p-2 bg-slate-50 border border-slate-100 rounded-xl mt-1 text-[10px] font-bold text-slate-500">
-                                            <div className="flex items-center gap-1.5">
-                                              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
-                                              <span>GPS: {value.latitude.toFixed(4)}, {value.longitude.toFixed(4)}</span>
-                                            </div>
-                                            <a 
-                                              href={`https://www.google.com/maps/search/?api=1&query=${value.latitude},${value.longitude}`}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="text-[9px] font-black text-blue-600 hover:underline uppercase flex items-center gap-1"
-                                            >
-                                              <MapPin className="h-3 w-3" /> Map
-                                            </a>
-                                          </div>
-                                        )}
+                                        <a 
+                                          href={imageUrl} 
+                                          target="_blank" 
+                                          rel="noopener noreferrer" 
+                                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-slate-200 hover:bg-blue-50 hover:border-blue-300 text-slate-600 hover:text-blue-600 font-bold text-[10px] transition-all"
+                                        >
+                                          <Eye className="h-3 w-3" />
+                                          View
+                                        </a>
                                       </div>
                                    ) : (
-                                      <p className="text-sm font-extrabold text-slate-800 break-words pt-1">
+                                      <p className="text-xs font-extrabold text-slate-800 break-words">
                                         {Array.isArray(value) ? value.join(", ") : String(value ?? "—")}
                                       </p>
+                                   )}
+                                   {isPhotoObj && value.latitude && (
+                                     <div className="flex items-center justify-between gap-1 p-1 bg-white border border-slate-100 rounded-lg mt-1 text-[9px] font-bold text-slate-500">
+                                       <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />GPS: {value.latitude.toFixed(4)}, {value.longitude.toFixed(4)}</span>
+                                       <a href={`https://www.google.com/maps/search/?api=1&query=${value.latitude},${value.longitude}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-0.5"><MapPin className="h-2.5 w-2.5" />Map</a>
+                                     </div>
                                    )}
                                 </div>
                                );
@@ -782,6 +779,7 @@ function ViewResponsesDialog({ form, trigger }: { form: any; trigger?: React.Rea
               </div>
            )}
         </div>
+
 
         {/* Hidden Printable Area */}
         <div style={{ position: 'absolute', top: -9999, left: -9999, width: '1050px' }}>
