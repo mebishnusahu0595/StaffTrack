@@ -38,7 +38,11 @@ IMPORTANT: Reply with ONLY a JSON array of strings, no extra text or markdown. L
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 1.2, maxOutputTokens: 512 }
+        generationConfig: { 
+          temperature: 1.2, 
+          maxOutputTokens: 512,
+          responseMimeType: "application/json"
+        }
       })
     });
 
