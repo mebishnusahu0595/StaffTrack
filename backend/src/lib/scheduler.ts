@@ -4,6 +4,7 @@ import { sendDailyTaskNotifications } from "../services/task.service";
 import { cleanupOldImages } from "../services/imageCleanup.service";
 import { runAiLateCheckinMonitor } from "../services/aiLateCheckinMonitor.service";
 import { runShiftCheckinReminder } from "../services/shiftCheckinReminder.service";
+import { runAiNudgeMonitor } from "../services/aiNudgeMonitor.service";
 
 export function startScheduler() {
   // 1. Immediately clean up any old stuck sessions from previous days on startup
@@ -25,6 +26,11 @@ export function startScheduler() {
   runAiLateCheckinMonitor()
     .then(() => console.log("[Scheduler] Initial AI late check-in monitor run completed."))
     .catch((err) => console.error("[Scheduler] Initial AI late check-in monitor run failed:", err));
+
+  // 1f. AI Nudge Monitor — run immediately on startup to process active check-ins
+  runAiNudgeMonitor()
+    .then(() => console.log("[Scheduler] Initial AI nudge monitor run completed."))
+    .catch((err) => console.error("[Scheduler] Initial AI nudge monitor run failed:", err));
 
   // 2. Schedule the daily auto-checkout to run at midnight in Indian Standard Time (IST)
   function scheduleNextRun() {
@@ -101,5 +107,14 @@ export function startScheduler() {
       console.error("[Scheduler] Error in shift check-in reminder:", error);
     }
   }, 60 * 1000);
+
+  // 6. AI Nudge Monitor — runs every 60 minutes (throttles internally to prevent spam)
+  setInterval(async () => {
+    try {
+      await runAiNudgeMonitor();
+    } catch (error) {
+      console.error("[Scheduler] Error in AI nudge monitor:", error);
+    }
+  }, 60 * 60 * 1000);
 }
 
