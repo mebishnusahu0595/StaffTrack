@@ -65,10 +65,11 @@ export default function MusterReportPage() {
 
   const exportToCSV = () => {
     const dayHeaders = days.map((day: string) => dayjs(day).format("DD"));
-    const enrichedHeaders = ["Employee", "Group/Dept", "Monthly Points", "Total Leaves", "Total Holidays", "Total Absents", ...dayHeaders];
+    const enrichedHeaders = ["Employee", "Group/Dept", "Monthly Points", "Present Days", "Total Leaves", "Total Holidays", "Total Absents", ...dayHeaders];
 
     const rowsData = filteredData.map((item: any) => {
       const attendanceValues = Object.values(item.attendance || {});
+      const totalPresent = attendanceValues.filter((v: any) => v === "P" || v === "HD").length;
       const totalLeaves = attendanceValues.filter((v: any) => v === "L").length;
       const totalHolidays = attendanceValues.filter((v: any) => v === "H").length;
       const totalAbsents = attendanceValues.filter((v: any) => v === "A").length;
@@ -82,6 +83,7 @@ export default function MusterReportPage() {
         item.userName || "",
         item.group || "",
         item.monthlyPoints ?? 0,
+        totalPresent,
         totalLeaves,
         totalHolidays,
         totalAbsents,
@@ -180,6 +182,7 @@ export default function MusterReportPage() {
                     <tr className="bg-slate-50/50">
                        <th className="sticky left-0 z-20 bg-slate-50/50 px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest border-r border-slate-100">Employee / Dept</th>
                        <th className="px-4 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[80px] border-r border-slate-100/50">Points</th>
+                       <th className="px-4 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[80px] border-r border-slate-100/50">Present</th>
                        <th className="px-4 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[80px] border-r border-slate-100/50">Leaves</th>
                        <th className="px-4 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[80px] border-r border-slate-100/50">Holidays</th>
                        <th className="px-4 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[80px] border-r border-slate-100/50">Absents</th>
@@ -201,6 +204,11 @@ export default function MusterReportPage() {
                            <td className="px-4 py-4 border-r border-slate-50/50 text-center">
                              <div className="inline-flex min-w-[52px] items-center justify-center rounded-lg bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">
                                {item.monthlyPoints ?? 0}
+                             </div>
+                           </td>
+                           <td className="px-4 py-4 border-r border-slate-50/50 text-center">
+                             <div className="inline-flex min-w-[40px] items-center justify-center rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-700">
+                               {Object.values(item.attendance || {}).filter(v => v === "P" || v === "HD").length}
                              </div>
                            </td>
                            <td className="px-4 py-4 border-r border-slate-50/50 text-center">
