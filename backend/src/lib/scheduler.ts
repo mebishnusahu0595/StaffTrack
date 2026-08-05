@@ -2,6 +2,7 @@ import { autoCheckoutStuckUsers, autoCheckoutOldStuckSessions } from "../service
 import { checkStaleLocations } from "../services/location.service";
 import { sendDailyTaskNotifications } from "../services/task.service";
 import { cleanupOldImages } from "../services/imageCleanup.service";
+import { runAiLateCheckinMonitor } from "../services/aiLateCheckinMonitor.service";
 
 export function startScheduler() {
   // 1. Immediately clean up any old stuck sessions from previous days on startup
@@ -18,6 +19,11 @@ export function startScheduler() {
   cleanupOldImages()
     .then((res) => console.log(`[Scheduler] Initial image cleanup completed (${res.deletedFilesCount} files removed).`))
     .catch((err) => console.error("[Scheduler] Initial image cleanup failed:", err));
+
+  // 1e. AI Late Check-In Monitor — run immediately on startup to handle any past pending requests
+  runAiLateCheckinMonitor()
+    .then(() => console.log("[Scheduler] Initial AI late check-in monitor run completed."))
+    .catch((err) => console.error("[Scheduler] Initial AI late check-in monitor run failed:", err));
 
   // 2. Schedule the daily auto-checkout to run at midnight in Indian Standard Time (IST)
   function scheduleNextRun() {
@@ -76,4 +82,13 @@ export function startScheduler() {
       console.error("[Scheduler] Error in periodic stale location check:", error);
     }
   }, 2 * 60 * 1000);
+
+  // 4. AI Late Check-In Monitor — runs every 60 seconds
+  setInterval(async () => {
+    try {
+      await runAiLateCheckinMonitor();
+    } catch (error) {
+      console.error("[Scheduler] Error in AI late check-in monitor:", error);
+    }
+  }, 60 * 1000);
 }
