@@ -3,6 +3,7 @@ import { checkStaleLocations } from "../services/location.service";
 import { sendDailyTaskNotifications } from "../services/task.service";
 import { cleanupOldImages } from "../services/imageCleanup.service";
 import { runAiLateCheckinMonitor } from "../services/aiLateCheckinMonitor.service";
+import { runShiftCheckinReminder } from "../services/shiftCheckinReminder.service";
 
 export function startScheduler() {
   // 1. Immediately clean up any old stuck sessions from previous days on startup
@@ -91,4 +92,14 @@ export function startScheduler() {
       console.error("[Scheduler] Error in AI late check-in monitor:", error);
     }
   }, 60 * 1000);
+
+  // 5. Shift Check-In Reminder — runs every 60 seconds, notifies 10 min before shift start
+  setInterval(async () => {
+    try {
+      await runShiftCheckinReminder();
+    } catch (error) {
+      console.error("[Scheduler] Error in shift check-in reminder:", error);
+    }
+  }, 60 * 1000);
 }
+
