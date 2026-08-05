@@ -219,7 +219,11 @@ export default function FormsPage() {
                       {displayedForms.map(form => (
                          <tr key={form.id} className="group hover:bg-slate-50/50 transition-colors">
                             <td className="px-8 py-6">
-                               <p className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight">{form.name}</p>
+                               <ViewResponsesDialog form={form} trigger={
+                                  <button className="text-left font-black text-slate-900 hover:text-blue-600 transition-colors uppercase tracking-tight hover:underline cursor-pointer">
+                                     {form.name}
+                                  </button>
+                               } />
                             </td>
                             <td className="py-6">
                                <Badge className={cn(
@@ -230,7 +234,11 @@ export default function FormsPage() {
                                </Badge>
                             </td>
                              <td className="py-6 text-center">
-                                <span className="text-xs font-black text-slate-900 bg-slate-100 px-3 py-1 rounded-full">{form._count?.responses || 0}</span>
+                                <ViewResponsesDialog form={form} trigger={
+                                   <button className="text-xs font-black text-slate-900 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 px-3 py-1 rounded-full cursor-pointer transition-colors">
+                                      {form._count?.responses || 0}
+                                   </button>
+                                } />
                              </td>
                             <td className="py-6">
                                <div className="flex items-center gap-3">
@@ -257,7 +265,6 @@ export default function FormsPage() {
                                   >
                                      <LinkIcon className="h-4 w-4" />
                                   </Button>
-                                  <ViewResponsesDialog form={form} />
                                   <DropdownMenu>
                                      <DropdownMenuTrigger asChild>
                                         <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-slate-100 text-slate-400 transition-all">
@@ -319,7 +326,11 @@ export default function FormsPage() {
                       <CardContent className="p-6 pt-3 space-y-4">
                           <div className="flex items-center justify-between text-xs border-b border-slate-50 pb-3">
                              <span className="text-slate-400 font-bold">Responses</span>
-                             <span className="text-sm font-black text-slate-800 bg-slate-100 px-3 py-1 rounded-full">{form._count?.responses || 0}</span>
+                             <ViewResponsesDialog form={form} trigger={
+                                 <button className="text-sm font-black text-slate-800 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 px-3 py-1 rounded-full cursor-pointer transition-colors">
+                                    {form._count?.responses || 0}
+                                 </button>
+                              } />
                           </div>
                          <div className="flex items-center justify-between text-xs border-b border-slate-50 pb-3">
                             <span className="text-slate-400 font-bold">Assigned To</span>
@@ -339,7 +350,6 @@ export default function FormsPage() {
                             >
                                <LinkIcon className="h-4 w-4" />
                             </Button>
-                            <ViewResponsesDialog form={form} />
                             <DropdownMenu>
                                <DropdownMenuTrigger asChild>
                                   <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-slate-100 text-slate-400 transition-all">
@@ -577,7 +587,7 @@ function CreateFormDialog({ onSubmit, isSubmitting, initialData }: any) {
   );
 }
 
-function ViewResponsesDialog({ form }: any) {
+function ViewResponsesDialog({ form, trigger }: { form: any; trigger?: React.ReactNode }) {
   const [respSearch, setRespSearch] = useState("");
   const printRef = useRef<HTMLDivElement>(null);
   const handlePrint = useReactToPrint({
@@ -635,11 +645,15 @@ function ViewResponsesDialog({ form }: any) {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-all">
-          <Eye className="h-4 w-4" />
-        </Button>
+        {trigger ? (
+          trigger
+        ) : (
+          <Button variant="ghost" size="sm" className="h-9 px-3 rounded-xl hover:bg-blue-50 text-blue-600 font-bold text-xs gap-1.5 transition-all">
+            <Eye className="h-4 w-4" /> View Responses
+          </Button>
+        )}
       </DialogTrigger>
-      <DialogContent className="max-w-4xl p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] max-h-[90vh] flex flex-col hide-close">
+      <DialogContent className="max-w-7xl w-[95vw] h-[92vh] max-h-[92vh] p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[32px] flex flex-col hide-close">
         <DialogHeader className="p-8 bg-slate-900 text-white relative flex-shrink-0">
           <DialogClose className="absolute right-6 top-6 rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
              <X className="h-4 w-4" />
@@ -647,7 +661,7 @@ function ViewResponsesDialog({ form }: any) {
           <div className="flex items-center gap-2 mb-2">
             <Badge variant="outline" className="border-white/20 text-white/60 text-[9px] font-black uppercase tracking-widest">{form.category}</Badge>
           </div>
-          <DialogTitle className="text-2xl font-black">{form.name} - Responses</DialogTitle>
+          <DialogTitle className="text-2xl font-black">{form.name} - Responses ({filteredResponses.length})</DialogTitle>
           <p className="text-slate-400 text-xs font-bold mt-1">Viewing all submissions from the field team.</p>
         </DialogHeader>
 
@@ -679,7 +693,7 @@ function ViewResponsesDialog({ form }: any) {
            </div>
         </div>
         
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-8 space-y-6">
            {isLoading ? (
               <div className="py-20 flex justify-center"><div className="h-8 w-8 animate-spin border-4 border-blue-600 border-t-transparent rounded-full" /></div>
            ) : filteredResponses.length === 0 ? (
@@ -694,72 +708,76 @@ function ViewResponsesDialog({ form }: any) {
                       console.error("Failed to parse response data:", e);
                     }
                     return (
-                     <div key={resp.id} className="bg-slate-50 rounded-[32px] border border-slate-100 overflow-hidden text-left">
+                     <div key={resp.id} className="bg-slate-50/80 rounded-[28px] border border-slate-200/80 overflow-hidden text-left shadow-sm hover:shadow-md transition-all">
                         <div className="px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between">
                            <div className="flex items-center gap-3">
-                              <Avatar className="h-8 w-8">
-                                 <AvatarImage src={resp.user.avatarUrl} />
-                                 <AvatarFallback className="bg-blue-600 text-white text-[10px] font-black">{resp.user.name.slice(0, 1)}</AvatarFallback>
+                              <Avatar className="h-9 w-9 border border-slate-100">
+                                 <AvatarImage src={resp.user?.avatarUrl} />
+                                 <AvatarFallback className="bg-blue-600 text-white text-[11px] font-black">{resp.user?.name?.slice(0, 1) || "U"}</AvatarFallback>
                               </Avatar>
                               <div>
-                                 <p className="text-xs font-black text-slate-900 uppercase tracking-tight">{resp.user.name}</p>
+                                 <p className="text-sm font-black text-slate-900 uppercase tracking-tight">{resp.user?.name || "Unknown Staff"}</p>
                                  <p className="text-[10px] font-bold text-slate-400 uppercase">{dayjs(resp.submittedAt).format("DD MMM YYYY, hh:mm A")}</p>
                               </div>
                            </div>
-                           <Badge variant="outline" className="text-[10px] font-bold border-slate-200"># {resp.id.slice(-6)}</Badge>
+                           <Badge variant="outline" className="text-[10px] font-black border-slate-200 bg-slate-50 text-slate-600">ID: #{resp.id.slice(-6)}</Badge>
                         </div>
-                        <div className="p-6 grid grid-cols-2 gap-6">
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                            {Object.entries(data).map(([key, value]: [string, any]) => {
-                              const isPhotoObj = typeof value === 'object' && value && 'url' in value;
-                              const imageUrl = isPhotoObj ? value.url : (typeof value === 'string' ? value : '');
-                              const hasImage = imageUrl && (imageUrl.startsWith('http') || imageUrl.includes('data:image') || imageUrl.startsWith('/uploads/'));
-                              
-                              return (
-                               <div key={key} className="space-y-1">
-                                  <Label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">{key}</Label>
-                                  {hasImage ? (
-                                     <div className="space-y-2">
-                                       <div className="h-48 w-full rounded-2xl overflow-hidden border border-slate-200 shadow-sm relative group">
-                                          <img src={imageUrl} className="h-full w-full object-cover" alt={key} />
+                               const isPhotoObj = typeof value === 'object' && value && 'url' in value;
+                               const imageUrl = isPhotoObj ? value.url : (typeof value === 'string' ? value : '');
+                               const hasImage = imageUrl && (imageUrl.startsWith('http') || imageUrl.includes('data:') || imageUrl.startsWith('/uploads/'));
+                               
+                               return (
+                                <div key={key} className="space-y-1.5 bg-white p-4 rounded-2xl border border-slate-100 shadow-2xs">
+                                   <Label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">{key}</Label>
+                                   {hasImage ? (
+                                      <div className="space-y-2 pt-1">
+                                        <div className="flex items-center gap-3">
+                                          {/* Small Thumbnail Preview */}
+                                          <div className="h-14 w-14 rounded-xl border border-slate-200 overflow-hidden shadow-2xs flex-shrink-0 bg-slate-100 flex items-center justify-center">
+                                            <img src={imageUrl} className="h-full w-full object-cover" alt={key} />
+                                          </div>
+                                          {/* Eye / View Button */}
                                           <a 
                                             href={imageUrl} 
                                             target="_blank" 
                                             rel="noopener noreferrer" 
-                                            className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold uppercase tracking-wider"
+                                            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 hover:bg-blue-50 hover:border-blue-300 text-slate-700 hover:text-blue-600 font-bold text-xs shadow-2xs transition-all"
                                           >
-                                            View Full Image
+                                            <Eye className="h-4 w-4 text-blue-600" />
+                                            <span>View Media</span>
                                           </a>
-                                       </div>
-                                       {isPhotoObj && value.latitude && (
-                                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-white border border-slate-100 rounded-xl mt-1 shadow-sm">
-                                           <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
-                                             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
-                                             <span>GPS: {value.latitude.toFixed(6)}, {value.longitude.toFixed(6)}</span>
-                                             <span className="text-slate-300">|</span>
-                                             <span>{dayjs(value.timestamp).format("hh:mm:ss A")}</span>
-                                           </div>
-                                           <a 
-                                             href={`https://www.google.com/maps/search/?api=1&query=${value.latitude},${value.longitude}`}
-                                             target="_blank"
-                                             rel="noopener noreferrer"
-                                             className="text-[9px] font-black text-blue-600 hover:text-blue-700 hover:underline uppercase tracking-widest flex items-center gap-1"
-                                           >
-                                             <MapPin className="h-3.5 w-3.5 text-blue-600" /> View Map
-                                           </a>
-                                         </div>
-                                       )}
-                                     </div>
-                                  ) : (
-                                     <p className="text-sm font-bold text-slate-700">
-                                       {Array.isArray(value) ? value.join(", ") : String(value)}
-                                     </p>
-                                  )}
-                               </div>
-                              );
+                                        </div>
+
+                                        {isPhotoObj && value.latitude && (
+                                          <div className="flex items-center justify-between gap-2 p-2 bg-slate-50 border border-slate-100 rounded-xl mt-1 text-[10px] font-bold text-slate-500">
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+                                              <span>GPS: {value.latitude.toFixed(4)}, {value.longitude.toFixed(4)}</span>
+                                            </div>
+                                            <a 
+                                              href={`https://www.google.com/maps/search/?api=1&query=${value.latitude},${value.longitude}`}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-[9px] font-black text-blue-600 hover:underline uppercase flex items-center gap-1"
+                                            >
+                                              <MapPin className="h-3 w-3" /> Map
+                                            </a>
+                                          </div>
+                                        )}
+                                      </div>
+                                   ) : (
+                                      <p className="text-sm font-extrabold text-slate-800 break-words pt-1">
+                                        {Array.isArray(value) ? value.join(", ") : String(value ?? "—")}
+                                      </p>
+                                   )}
+                                </div>
+                               );
                            })}
                         </div>
                      </div>
-                   )
+                    )
                  })}
               </div>
            )}

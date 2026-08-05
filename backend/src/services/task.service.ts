@@ -749,19 +749,14 @@ async function taskAccessWhere(actor: AuthUser, dateStr?: string): Promise<Prism
       }
     };
   } else {
-    // Fallback: 60-day bounded window (+/- 30 days) to prevent clogging while allowing date navigation
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    thirtyDaysAgo.setUTCHours(0, 0, 0, 0);
-
-    const thirtyDaysHence = new Date();
-    thirtyDaysHence.setDate(thirtyDaysHence.getDate() + 30);
-    thirtyDaysHence.setUTCHours(23, 59, 59, 999);
+    // Default to Today in IST when no dateStr is specified (e.g. mobile app home screen)
+    const todayStart = getStartOfDayIST(new Date());
+    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
 
     dateFilter = {
       dueDate: {
-        gte: thirtyDaysAgo,
-        lte: thirtyDaysHence
+        gte: todayStart,
+        lte: todayEnd
       }
     };
   }
