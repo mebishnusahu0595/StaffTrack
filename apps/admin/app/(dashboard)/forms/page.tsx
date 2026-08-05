@@ -664,7 +664,7 @@ function ViewResponsesDialog({ form, trigger }: { form: any; trigger?: React.Rea
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-6xl w-[95vw] h-[90vh] max-h-[90vh] p-0 overflow-hidden border-none shadow-2xl bg-white rounded-2xl flex flex-col hide-close">
+      <DialogContent className="!fixed !inset-4 !max-w-none !w-auto !h-auto !max-h-none !translate-x-0 !translate-y-0 !left-4 !right-4 !top-4 !bottom-4 p-0 overflow-hidden border-none shadow-2xl bg-white rounded-2xl flex flex-col hide-close">
         {/* Header */}
         <DialogHeader className="px-5 py-3 bg-slate-900 text-white relative flex-shrink-0">
           <DialogClose className="absolute right-4 top-3 rounded-lg bg-white/10 p-1 text-white/50 hover:bg-white/20 transition-all">
@@ -712,7 +712,7 @@ function ViewResponsesDialog({ form, trigger }: { form: any; trigger?: React.Rea
               <div className="py-16 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">No responses found</div>
            ) : (
               <div className="space-y-3">
-                 {filteredResponses.map((resp: any) => {
+                 {filteredResponses.map((resp: any, idx: number) => {
                     let data = {};
                     try {
                       data = typeof resp.data === "string" ? JSON.parse(resp.data) : (resp.data || {});
@@ -722,6 +722,7 @@ function ViewResponsesDialog({ form, trigger }: { form: any; trigger?: React.Rea
                         {/* Submission Header */}
                         <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
                            <div className="flex items-center gap-2">
+                              <span className="h-6 w-6 rounded-full bg-slate-800 text-white text-[10px] font-black flex items-center justify-center flex-shrink-0">{idx + 1}</span>
                               <Avatar className="h-7 w-7 border border-slate-200">
                                  <AvatarImage src={resp.user?.avatarUrl} />
                                  <AvatarFallback className="bg-blue-600 text-white text-[10px] font-black">{resp.user?.name?.slice(0, 1) || "U"}</AvatarFallback>
