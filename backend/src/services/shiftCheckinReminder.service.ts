@@ -40,7 +40,7 @@ IMPORTANT: Reply with ONLY a JSON array of strings, no extra text or markdown. L
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: { 
           temperature: 1.0, 
-          maxOutputTokens: 512,
+          maxOutputTokens: 2048,
           responseMimeType: "application/json",
           responseSchema: {
             type: "ARRAY",
