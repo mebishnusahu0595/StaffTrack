@@ -13,7 +13,7 @@ import { createNotification } from "./notification.service";
 
 const GEMINI_API_KEY = () => process.env.GEMINI_API_KEY || "";
 const GEMINI_URL = () =>
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY()}`;
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY()}`;
 
 // ---------- Gemini AI message pool generation ----------
 
