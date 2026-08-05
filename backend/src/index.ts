@@ -49,6 +49,12 @@ startScheduler();
 // Native Gzip Compression Middleware
 app.use((req, res, next) => {
   const acceptEncoding = req.headers["accept-encoding"] || "";
+  
+  // Bypass compression for Server-Sent Events (SSE) / stream requests
+  if (req.url.includes("stream") || req.headers.accept === "text/event-stream") {
+    return next();
+  }
+
   if (!acceptEncoding.includes("gzip")) {
     return next();
   }
