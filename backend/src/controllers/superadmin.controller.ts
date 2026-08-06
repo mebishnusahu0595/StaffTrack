@@ -365,11 +365,8 @@ export async function updateExpense(req: Request, res: Response): Promise<void> 
   if (date !== undefined) data.date = date ? new Date(date) : undefined;
   if (approved !== undefined) {
     data.approved = Boolean(approved);
-    if (approved) {
-      data.approvedById = (req as any).user?.id || null;
-    } else {
-      data.approvedById = null;
-    }
+    // Both approve and reject should record who made the decision
+    data.approvedById = (req as any).user?.id || null;
   }
 
   const updatedExpense = await prisma.expense.update({

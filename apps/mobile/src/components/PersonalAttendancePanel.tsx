@@ -793,9 +793,9 @@ export function PersonalAttendancePanel({
                     </Text>
                   </View>
                 </View>
-                <Text style={{ fontSize: 11, color: todayTravelExpense ? "#15803D" : "#3B82F6", marginTop: 2, fontWeight: "500" }}>
+                <Text style={{ fontSize: 11, color: todayTravelExpense ? (todayTravelExpense.approved ? "#15803D" : todayTravelExpense.approvedById ? "#DC2626" : "#15803D") : "#3B82F6", marginTop: 2, fontWeight: "500" }}>
                   {todayTravelExpense
-                    ? `Amount: INR ${Number(todayTravelExpense.amount).toFixed(2)} (${todayTravelExpense.approved ? "Approved" : "Pending Approval"})`
+                    ? `Amount: INR ${Number(todayTravelExpense.amount).toFixed(2)} (${todayTravelExpense.approved ? "Approved" : todayTravelExpense.approvedById ? "Rejected" : "Pending Approval"})`
                     : `You traveled ${effectiveKm.toFixed(1)} km today (over 50 km). Submit your daily travel expense before 12 AM.`}
                 </Text>
               </View>

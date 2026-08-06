@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "ef520f6b-8937-4515-8788-a1a6aceeba77"
+      }
+    },
+    "android": {
+      "package": "com.bishnusahu.stafftrack"
+    }
+  }
+}

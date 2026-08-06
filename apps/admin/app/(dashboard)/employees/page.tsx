@@ -643,98 +643,114 @@ ${htmlContent}
   };
  
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Employees</h1>
-          <p className="mt-1 text-slate-500">Manage, track and organize your field and office team activity.</p>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900">Employees</h1>
+            <p className="mt-1 text-slate-500">Manage, track and organize your field and office team activity.</p>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 mr-2 bg-white px-3 h-10 rounded-xl border border-slate-200 shadow-sm">
-               <Calendar className="h-4 w-4 text-slate-400" />
-               <input 
-                 type="date" 
-                 className="bg-transparent border-none text-xs font-bold text-slate-650 focus:outline-none"
-                 value={selectedUserDate}
-                 onChange={e => setSelectedUserDate(e.target.value || dayjs().format("YYYY-MM-DD"))}
-               />
-            </div>
-            <div className="flex items-center gap-2 mr-2">
-              <Select value={workModeFilter} onValueChange={(v: any) => setWorkModeFilter(v)}>
-                <SelectTrigger className="h-10 rounded-xl border-slate-200 text-xs font-bold text-slate-600 bg-white shadow-sm w-[140px]">
-                  <Globe className="h-4 w-4 mr-2 text-slate-400" />
-                  <SelectValue placeholder="Work Mode" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">All Modes</SelectItem>
-                  <SelectItem value="FIELD">Field Work</SelectItem>
-                  <SelectItem value="OFFICE">Office Work</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-2 mr-4">
-              <Select value={roleFilter} onValueChange={(v: any) => setRoleFilter(v)}>
-                <SelectTrigger className="h-10 rounded-xl border-slate-200 text-xs font-bold text-slate-600 bg-white shadow-sm w-[140px]">
-                  <UserIcon className="h-4 w-4 mr-2 text-slate-400" />
-                  <SelectValue placeholder="Role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">All Roles</SelectItem>
-                  <SelectItem value="MANAGER">Managers</SelectItem>
-                  <SelectItem value="EMPLOYEE">Staff</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-2 mr-4">
-              <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
-                <SelectTrigger className="h-10 rounded-xl border-slate-200 text-xs font-bold text-slate-600 bg-white shadow-sm w-[140px]">
-                  <CheckCircle className="h-4 w-4 mr-2 text-slate-400" />
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">All Statuses</SelectItem>
-                  <SelectItem value="ACTIVE">Active (Punch In)</SelectItem>
-                  <SelectItem value="INACTIVE">Inactive (Punch Out)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-2 mr-4">
-              <Select value={departmentFilter} onValueChange={(v: any) => setDepartmentFilter(v)}>
-                <SelectTrigger className="h-10 rounded-xl border-slate-200 text-xs font-bold text-slate-600 bg-white shadow-sm w-[160px]">
-                  <Users className="h-4 w-4 mr-2 text-slate-400" />
-                  <SelectValue placeholder="Department" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">All Departments</SelectItem>
-                  {(groupsQuery.data ?? []).map((group: any) => (
-                    <SelectItem key={group.id} value={group.id}>
-                      {group.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+
+        {/* 2-Column Grid for filters and menus */}
+        <div className="grid grid-cols-2 gap-3 w-full bg-slate-50/50 p-4 rounded-2xl border border-slate-100 shadow-inner">
+          {/* Row 1 */}
+          <div className="flex items-center gap-2 bg-white px-3 h-10 rounded-xl border border-slate-200 shadow-sm w-full">
+            <Calendar className="h-4 w-4 text-slate-400" />
+            <input 
+              type="date" 
+              className="bg-transparent border-none text-xs font-bold text-slate-650 focus:outline-none w-full cursor-pointer"
+              value={selectedUserDate}
+              onChange={e => setSelectedUserDate(e.target.value || dayjs().format("YYYY-MM-DD"))}
+            />
+          </div>
+          <div>
+            <Select value={workModeFilter} onValueChange={(v: any) => setWorkModeFilter(v)}>
+              <SelectTrigger className="h-10 rounded-xl border-slate-200 text-xs font-bold text-slate-600 bg-white shadow-sm w-full">
+                <Globe className="h-4 w-4 mr-2 text-slate-400" />
+                <SelectValue placeholder="Work Mode" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Modes</SelectItem>
+                <SelectItem value="FIELD">Field Work</SelectItem>
+                <SelectItem value="OFFICE">Office Work</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Row 2 */}
+          <div>
+            <Select value={roleFilter} onValueChange={(v: any) => setRoleFilter(v)}>
+              <SelectTrigger className="h-10 rounded-xl border-slate-200 text-xs font-bold text-slate-600 bg-white shadow-sm w-full">
+                <UserIcon className="h-4 w-4 mr-2 text-slate-400" />
+                <SelectValue placeholder="Role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Roles</SelectItem>
+                <SelectItem value="MANAGER">Managers</SelectItem>
+                <SelectItem value="EMPLOYEE">Staff</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
+              <SelectTrigger className="h-10 rounded-xl border-slate-200 text-xs font-bold text-slate-600 bg-white shadow-sm w-full">
+                <CheckCircle className="h-4 w-4 mr-2 text-slate-400" />
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Statuses</SelectItem>
+                <SelectItem value="ACTIVE">Active (Punch In)</SelectItem>
+                <SelectItem value="INACTIVE">Inactive (Punch Out)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Row 3 */}
+          <div>
+            <Select value={departmentFilter} onValueChange={(v: any) => setDepartmentFilter(v)}>
+              <SelectTrigger className="h-10 rounded-xl border-slate-200 text-xs font-bold text-slate-600 bg-white shadow-sm w-full">
+                <Users className="h-4 w-4 mr-2 text-slate-400" />
+                <SelectValue placeholder="Department" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Departments</SelectItem>
+                {(groupsQuery.data ?? []).map((group: any) => (
+                  <SelectItem key={group.id} value={group.id}>
+                    {group.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
             <Button 
               variant="outline" 
-              className="border-slate-200 bg-white rounded-xl px-4 h-10 font-bold text-slate-600 shadow-sm gap-2 text-xs mr-2 hover:bg-slate-50 transition-all"
+              className="border-slate-200 bg-white rounded-xl px-4 h-10 font-bold text-slate-600 shadow-sm gap-2 text-xs w-full hover:bg-slate-50 transition-all"
               onClick={downloadCSV}
               disabled={filteredUsers.length === 0}
             >
               <Download className="h-4 w-4 text-slate-500" />
               Export CSV
             </Button>
+          </div>
+
+          {/* Row 4 */}
+          <div>
             <DepartmentManagementDialog
               trigger={
-                <Button variant="outline" className="border-slate-200 bg-white rounded-xl px-5 h-10 font-bold text-slate-700 shadow-sm text-xs mr-2 hover:bg-slate-50 transition-all">
+                <Button variant="outline" className="border-slate-200 bg-white rounded-xl px-5 h-10 font-bold text-slate-700 shadow-sm text-xs w-full hover:bg-slate-50 transition-all">
                   <Users className="mr-2 h-4 w-4 text-blue-500" />
                   Manage Departments
                 </Button>
               }
             />
-           <Dialog open={isAddManagerOpen} onOpenChange={setIsAddManagerOpen}>
+          </div>
+          <div className="flex gap-2">
+            <Dialog open={isAddManagerOpen} onOpenChange={setIsAddManagerOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" className="border-slate-200 bg-white rounded-xl px-5 h-10 font-bold text-slate-700 shadow-sm text-xs">
-                  <UserPlus className="mr-2 h-4 w-4" />
+                <Button variant="outline" className="border-slate-200 bg-white rounded-xl px-3 h-10 font-bold text-slate-700 shadow-sm text-xs w-full">
+                  <UserPlus className="mr-2 h-4 w-4 text-emerald-600" />
                   Add Manager
                 </Button>
               </DialogTrigger>
@@ -747,10 +763,10 @@ ${htmlContent}
                   queryClient.invalidateQueries({ queryKey: ["users"] });
                 }}
               />
-           </Dialog>
-           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+            </Dialog>
+            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100 rounded-xl px-5 h-10 font-bold">
+                <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100 rounded-xl px-3 h-10 font-bold w-full">
                   <Plus className="mr-2 h-4 w-4" />
                   Add Employee
                 </Button>
@@ -764,7 +780,8 @@ ${htmlContent}
                   queryClient.invalidateQueries({ queryKey: ["users"] });
                 }} 
               />
-           </Dialog>
+            </Dialog>
+          </div>
         </div>
       </div>
  
