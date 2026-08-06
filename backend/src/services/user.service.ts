@@ -8,8 +8,24 @@ const PASSWORD_ROUNDS = 12;
 
 export function extendUserWithConfig(user: any) {
   if (!user) return user;
+  
+  let designation = user.designation;
+  if (designation) {
+    const d = designation.trim().toLowerCase();
+    if (
+      d.includes("field assistant") ||
+      d.includes("f/a") ||
+      d.includes("f.a") ||
+      d.includes("field-assistant") ||
+      d.includes("assistant")
+    ) {
+      designation = "Field Officer";
+    }
+  }
+
   return {
     ...user,
+    designation,
     trackingInterval: Number(process.env.TRACKING_INTERVAL || 60000)
   };
 }
