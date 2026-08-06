@@ -126,8 +126,9 @@ export async function rejectAttendanceRequest(req: Request, res: Response): Prom
 }
 
 export async function getPendingLateCheckIns(req: Request, res: Response): Promise<void> {
-  const result = await attendanceService.getPendingLateCheckIns(req.user!);
-  sendSuccess(res, result, "Pending late check-ins fetched");
+  const status = (req.query.status as string) || "PENDING";
+  const result = await attendanceService.getPendingLateCheckIns(req.user!, status);
+  sendSuccess(res, result, "Late check-ins fetched");
 }
 
 export async function approveLateCheckIn(req: Request, res: Response): Promise<void> {

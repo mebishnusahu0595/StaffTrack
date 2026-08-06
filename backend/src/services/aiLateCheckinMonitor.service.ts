@@ -105,7 +105,16 @@ async function autoReject(
   companyId: string,
   lateCount: number
 ) {
-  await prisma.attendance.delete({ where: { id: attendanceId } });
+  await prisma.attendance.update({
+    where: { id: attendanceId },
+    data: {
+      isCheckInPending: false,
+      checkInApproved: false,
+      checkInApprovedBy: "AI_MONITOR",
+      checkInApprovedAt: new Date(),
+      status: "ABSENT"
+    }
+  });
 
   console.log(
     `[AI Late Checkin Monitor] AUTO-REJECTED attendance ${attendanceId} for user ${userId} (late #${lateCount} this month — exceeds 3-forgive limit)`

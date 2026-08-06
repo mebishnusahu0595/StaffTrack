@@ -614,8 +614,9 @@ export async function rejectAttendanceRequest(id: string) {
 }
 
 // Late Check-in Approvals
-export async function fetchPendingLateCheckIns() {
-  const response = await api.get<{ data: any[] }>("/attendance/late-checkins/pending");
+export async function fetchPendingLateCheckIns(status: string | any = "PENDING") {
+  const actualStatus = typeof status === "string" ? status : "PENDING";
+  const response = await api.get<{ data: any[] }>(`/attendance/late-checkins/pending?status=${actualStatus}`);
   return response.data.data;
 }
 

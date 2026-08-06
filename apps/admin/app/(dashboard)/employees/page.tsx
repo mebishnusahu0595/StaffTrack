@@ -652,8 +652,8 @@ ${htmlContent}
           </div>
         </div>
 
-        {/* 2-Column Grid for filters and menus */}
-        <div className="grid grid-cols-2 gap-3 w-full bg-slate-50/50 p-4 rounded-2xl border border-slate-100 shadow-inner">
+        {/* Responsive Grid for filters and menus (4 columns on desktop, 2 on tablet, stacked on mobile) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 w-full bg-slate-50/50 p-4 rounded-2xl border border-slate-100 shadow-inner">
           {/* Row 1 */}
           <div className="flex items-center gap-2 bg-white px-3 h-10 rounded-xl border border-slate-200 shadow-sm w-full">
             <Calendar className="h-4 w-4 text-slate-400" />

@@ -17,7 +17,9 @@ import {
   ChevronRight,
   ExternalLink,
   MoreVertical,
-  Eye
+  Eye,
+  MapPin,
+  Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -33,7 +35,27 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { fetchAttendanceRequests, approveAttendanceRequest, rejectAttendanceRequest, fetchPendingLateCheckIns, approveLateCheckIn, rejectLateCheckIn } from "@/lib/api";
+
+function PhotoViewer({ url, title, children }: { url: string; title: string; children: React.ReactNode }) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        {children}
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[600px] p-0 overflow-hidden border-none bg-transparent shadow-none">
+        <div className="relative aspect-square max-h-[85vh] w-full bg-slate-950/80 rounded-2xl overflow-hidden flex items-center justify-center border border-white/10 shadow-2xl backdrop-blur">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={url} alt={title} className="max-h-full max-w-full object-contain" />
+          <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 text-white text-xs font-black uppercase tracking-wider">
+            {title}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export default function ApprovalRequestsPage() {
   const [mainTab, setMainTab] = useState<"ADJUSTMENTS" | "LATE_CHECKINS">("ADJUSTMENTS");
@@ -42,8 +64,11 @@ export default function ApprovalRequestsPage() {
   const [filterType, setFilterType] = useState("ALL");
   const [appliedName, setAppliedName] = useState("");
   const [appliedType, setAppliedType] = useState("ALL");
-  // Shared date filter (empty = all dates). Used by both tabs with day-step arrows.
-  const [dateFilter, setDateFilter] = useState("");
+  // Shared date filter (defaults to today's date). Used by both tabs with day-step arrows.
+  const [dateFilter, setDateFilter] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  });
 
   const queryClient = useQueryClient();
 
@@ -68,8 +93,8 @@ export default function ApprovalRequestsPage() {
   });
 
   const { data: lateCheckIns = [], isLoading: isLateCheckInsLoading } = useQuery({
-    queryKey: ["pendingLateCheckIns"],
-    queryFn: fetchPendingLateCheckIns,
+    queryKey: ["pendingLateCheckIns", activeTab],
+    queryFn: () => fetchPendingLateCheckIns(activeTab),
     enabled: mainTab === "LATE_CHECKINS"
   });
 
@@ -231,6 +256,32 @@ export default function ApprovalRequestsPage() {
         )}
       </div>
 
+      {/* Dynamic Tab Selector (Shared for both Adjustments and Late Checkins) */}
+      <div className="flex border-b border-slate-200">
+        {[
+          { id: "PENDING", label: "Pending" },
+          { id: "APPROVED", label: "Approved" },
+          { id: "REJECTED", label: "Rejected" }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`py-4 px-6 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${
+              activeTab === tab.id
+                ? "border-blue-600 text-blue-600 font-extrabold"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            {tab.label}
+            {activeTab === tab.id && (
+              <Badge className="bg-blue-50 text-blue-600 hover:bg-blue-50 border-none font-bold text-xs rounded-full">
+                {mainTab === "LATE_CHECKINS" ? filteredLateCheckIns.length : filteredData.length}
+              </Badge>
+            )}
+          </button>
+        ))}
+      </div>
+
       {mainTab === "LATE_CHECKINS" ? (
         <Card className="border-none shadow-sm shadow-slate-200/60 ring-1 ring-slate-200/50 overflow-hidden bg-white">
           <Table>
@@ -239,13 +290,14 @@ export default function ApprovalRequestsPage() {
                 <TableHead className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400">Employee</TableHead>
                 <TableHead className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400">Scheduled Shift Start</TableHead>
                 <TableHead className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400">Actual Check-In Time</TableHead>
-                <TableHead className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400 text-right">Actions</TableHead>
+                <TableHead className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400">Verification Specs</TableHead>
+                <TableHead className="py-4 px-6 text-[10px] font-black uppercase tracking-wider text-slate-400 text-right">Actions / Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLateCheckInsLoading ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="h-48 text-center">
+                  <TableCell colSpan={5} className="h-48 text-center">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="h-6 w-6 border-2 border-blue-600 border-t-transparent animate-spin rounded-full" />
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Loading Late Check-Ins...</span>
@@ -254,10 +306,10 @@ export default function ApprovalRequestsPage() {
                 </TableRow>
               ) : filteredLateCheckIns.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="h-48 text-center">
+                  <TableCell colSpan={5} className="h-48 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-slate-300">
                       <FileCheck className="h-10 w-10 opacity-20" />
-                      <span className="text-xs font-bold uppercase tracking-widest">No pending late check-in requests</span>
+                      <span className="text-xs font-bold uppercase tracking-widest">No {activeTab.toLowerCase()} late check-in requests</span>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -315,25 +367,98 @@ export default function ApprovalRequestsPage() {
                       </div>
                     </TableCell>
 
+                    <TableCell className="py-5 px-6">
+                      <div className="flex flex-wrap items-center gap-4">
+                        {item.checkInPhotoUrl && (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[9px] font-black text-slate-400 uppercase">Selfie</span>
+                            <PhotoViewer url={item.checkInPhotoUrl} title="Check In Selfie">
+                              <div className="h-10 w-10 rounded-lg border border-slate-200 bg-slate-50 overflow-hidden cursor-zoom-in relative">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={item.checkInPhotoUrl} className="h-full w-full object-cover" alt="Selfie" />
+                                {item.checkInAiAnalysis?.faceAi?.isScreenOrPrintout && (
+                                  <div className="absolute inset-0 bg-rose-500/30 flex items-center justify-center">
+                                    <span className="text-[8px] font-black text-white bg-rose-600 px-1 rounded">SCREEN</span>
+                                  </div>
+                                )}
+                              </div>
+                            </PhotoViewer>
+                          </div>
+                        )}
+
+                        {item.punchType === "FIELD" && item.startOdometerPhotoUrl && (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[9px] font-black text-slate-400 uppercase">Odometer ({item.startOdometer || 0} KM)</span>
+                            <PhotoViewer url={item.startOdometerPhotoUrl} title={`Odometer: ${item.startOdometer || 0} KM`}>
+                              <div className="h-10 w-16 rounded-lg border border-slate-200 bg-slate-50 overflow-hidden cursor-zoom-in relative">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={item.startOdometerPhotoUrl} className="h-full w-full object-cover" alt="Odometer" />
+                              </div>
+                            </PhotoViewer>
+                          </div>
+                        )}
+
+                        {item.checkInLat != null && item.checkInLng != null && (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[9px] font-black text-slate-400 uppercase">Location</span>
+                            <a 
+                              href={`https://www.google.com/maps/search/?api=1&query=${item.checkInLat},${item.checkInLng}`} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="h-10 px-2 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-1.5 hover:bg-blue-50 transition-all text-blue-600"
+                              title="Google Maps"
+                            >
+                              <MapPin className="h-3.5 w-3.5" />
+                              <span className="text-[9px] font-bold text-slate-600 uppercase">Map</span>
+                            </a>
+                          </div>
+                        )}
+
+                        {item.checkInApprovedBy && (
+                          <div className="flex flex-col gap-0.5 bg-slate-50 p-2 rounded-lg border border-slate-100 min-w-[120px]">
+                            <span className="text-[8px] font-black text-slate-400 uppercase">Decision Log</span>
+                            <span className="text-[10px] font-bold text-slate-700">
+                              {item.checkInApprovedBy === "AI_MONITOR" ? "🤖 AI Monitor" : `👤 ${item.checkInApprovedBy}`}
+                            </span>
+                            <span className="text-[9px] text-slate-400">
+                              {item.checkInApprovedAt ? new Date(item.checkInApprovedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+
                     <TableCell className="py-5 px-6 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          onClick={() => rejectLateCheckInMutation.mutate(item.id)}
-                          disabled={rejectLateCheckInMutation.isPending || approveLateCheckInMutation.isPending}
-                          className="h-8 w-8 rounded-lg border-slate-200 text-rose-500 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-100 shadow-sm"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          onClick={() => approveLateCheckInMutation.mutate(item.id)}
-                          disabled={approveLateCheckInMutation.isPending || rejectLateCheckInMutation.isPending}
-                          className="h-8 w-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-100"
-                        >
-                          <Check className="h-4 w-4" />
-                        </Button>
+                        {activeTab === "PENDING" ? (
+                          <>
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              onClick={() => rejectLateCheckInMutation.mutate(item.id)}
+                              disabled={rejectLateCheckInMutation.isPending || approveLateCheckInMutation.isPending}
+                              className="h-8 w-8 rounded-lg border-slate-200 text-rose-500 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-100 shadow-sm"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              onClick={() => approveLateCheckInMutation.mutate(item.id)}
+                              disabled={approveLateCheckInMutation.isPending || rejectLateCheckInMutation.isPending}
+                              className="h-8 w-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-100"
+                            >
+                              <Check className="h-4 w-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          <Badge className={
+                            item.checkInApproved
+                              ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-50 border-none font-bold text-[10px] px-2.5 py-1"
+                              : "bg-rose-50 text-rose-600 hover:bg-rose-50 border-none font-bold text-[10px] px-2.5 py-1"
+                          }>
+                            {item.checkInApproved ? "APPROVED" : "REJECTED"}
+                          </Badge>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -344,32 +469,6 @@ export default function ApprovalRequestsPage() {
         </Card>
       ) : (
         <>
-          {/* Dynamic Tab Selector */}
-          <div className="flex border-b border-slate-200">
-            {[
-              { id: "PENDING", label: "Pending" },
-              { id: "APPROVED", label: "Approved" },
-              { id: "REJECTED", label: "Rejected" }
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`py-4 px-6 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${
-                  activeTab === tab.id
-                    ? "border-blue-600 text-blue-600"
-                    : "border-transparent text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                {tab.label}
-                {activeTab === tab.id && (
-                  <Badge className="bg-blue-50 text-blue-600 hover:bg-blue-50 border-none font-bold text-xs rounded-full">
-                    {filteredData.length}
-                  </Badge>
-                )}
-              </button>
-            ))}
-          </div>
-
           {/* Filter and Search Box */}
           <Card className="border-none shadow-sm shadow-slate-100 ring-1 ring-slate-100 bg-white">
             <CardContent className="p-5 flex flex-col md:flex-row md:items-end gap-4">

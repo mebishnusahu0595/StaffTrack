@@ -1000,7 +1000,7 @@ function AttendanceDetailDialog({
 
   return (
     <Dialog open={!!propRecord} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl p-0 overflow-hidden border-none shadow-2xl bg-white">
+      <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-y-auto p-0 border-none shadow-2xl bg-white rounded-2xl">
         <div className="bg-slate-900 p-8 text-white">
            <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">

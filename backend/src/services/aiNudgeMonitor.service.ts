@@ -117,8 +117,8 @@ export async function runAiNudgeMonitor() {
       if (nowMs - lastLocNudge > 2 * 60 * 60 * 1000) {
         const fallback = `📍 location off warning! ${user.name}, aapne location band kyu rakha hai? Please immediate location ON karein!`;
         const prompt = `You are a witty assistant for an attendance app (delivery-app style). 
-Generate a short 1-2 line Hinglish (Hindi + English) reminder for employee ${user.name} asking why they turned off their location and warning them to turn it back ON immediately so their attendance stays active. Use emojis.
-Reply with ONLY the final message text, no quotes or markdown.`;
+Generate a super short, single-line Hinglish (Hindi + English) reminder (strictly under 100 characters) for employee ${user.name} asking why they turned off their location and urging them to turn it back ON immediately. Use emojis.
+Reply with ONLY the final message text, no quotes, no markdown, no introduction.`;
 
         const message = await askGeminiForNudge(prompt, fallback);
         try {
@@ -153,9 +153,9 @@ Reply with ONLY the final message text, no quotes or markdown.`;
           if (nowMs - lastTaskNudge > 3 * 60 * 60 * 1000) {
             const fallback = `📝 Task Reminder: ${user.name}, you have ${pending} pending tasks today. Complete them soon!`;
             const prompt = `You are a fun Swiggy/Zomato style notification writer. 
-Generate a short 1-2 line Hinglish message for employee ${user.name} who has completed ${completed} out of ${total} tasks today (pending tasks: ${pending}). 
-Ask them wittily how much more time they need, nudge them to finish the pending tasks, and include motivational emojis.
-Reply with ONLY the final message text, no quotes or markdown.`;
+Generate a super short, single-line Hinglish message (strictly under 100 characters) for employee ${user.name} who has completed ${completed} out of ${total} tasks today (pending tasks: ${pending}). 
+Nudge them wittily to finish pending tasks. Use emojis.
+Reply with ONLY the final message text, no quotes, no markdown, no introduction.`;
 
             const message = await askGeminiForNudge(prompt, fallback);
             await createNotification(user.id, "📝 Tasks Pending Reminder", message, "TASK_NUDGE");
@@ -167,9 +167,8 @@ Reply with ONLY the final message text, no quotes or markdown.`;
           // Appreciate once per day if they completed all tasks
           const fallback = `🎉 Great work! ${user.name}, you have completed all tasks today. You are a superstar!`;
           const prompt = `You are a fun Swiggy/Zomato style notification writer.
-Generate a short, highly appreciative 1-2 line Hinglish message for employee ${user.name} who has successfully completed all their tasks today. 
-Praise them for their speed and hard work, and use happy/celebratory emojis.
-Reply with ONLY the final message text, no quotes or markdown.`;
+Generate a super short, single-line Hinglish message (strictly under 100 characters) for employee ${user.name} who has completed all tasks today. Praise them and use emojis.
+Reply with ONLY the final message text, no quotes, no markdown, no introduction.`;
 
           const message = await askGeminiForNudge(prompt, fallback);
           await createNotification(user.id, "🎉 Task Completed Appreciation!", message, "TASK_APPRECIATION");

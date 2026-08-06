@@ -1195,7 +1195,7 @@ export async function rejectAttendanceRequest(actor: AuthUser, requestId: string
   return { success: true };
 }
 
-export async function getPendingLateCheckIns(actor: AuthUser) {
+export async function getPendingLateCheckIns(actor: AuthUser, status: string = "PENDING") {
   if (actor.role === UserRole.EMPLOYEE) {
     throw new Error("Unauthorized");
   }
@@ -1219,11 +1219,25 @@ export async function getPendingLateCheckIns(actor: AuthUser) {
         }
       : { companyId };
 
+  const whereClause: any = {
+    user: userWhere
+  };
+
+  if (status === "APPROVED") {
+    whereClause.isCheckInPending = false;
+    whereClause.checkInApproved = true;
+    whereClause.checkInApprovedBy = { not: null };
+  } else if (status === "REJECTED") {
+    whereClause.isCheckInPending = false;
+    whereClause.checkInApproved = false;
+    whereClause.checkInApprovedBy = { not: null };
+  } else {
+    // Default to PENDING
+    whereClause.isCheckInPending = true;
+  }
+
   const pendingList = await prisma.attendance.findMany({
-    where: {
-      isCheckInPending: true,
-      user: userWhere
-    },
+    where: whereClause,
     include: {
       user: {
         select: {
@@ -1276,7 +1290,18 @@ export async function getPendingLateCheckIns(actor: AuthUser) {
     checkInTime: item.checkInTime ? item.checkInTime.toISOString() : null,
     shiftStart: item.user.shiftStart,
     createdAt: item.checkInTime ? item.checkInTime.toISOString() : new Date().toISOString(),
-    lateCheckInsCount: countsMap[item.userId] || 0
+    lateCheckInsCount: countsMap[item.userId] || 0,
+    punchType: item.punchType,
+    checkInPhotoUrl: item.checkInPhotoUrl,
+    startOdometer: item.startOdometer,
+    startOdometerPhotoUrl: item.startOdometerPhotoUrl,
+    checkInLat: item.checkInLat,
+    checkInLng: item.checkInLng,
+    checkInAiAnalysis: item.checkInAiAnalysis,
+    checkInApproved: item.checkInApproved,
+    checkInApprovedBy: item.checkInApprovedBy,
+    checkInApprovedAt: item.checkInApprovedAt ? item.checkInApprovedAt.toISOString() : null,
+    status: item.status
   }));
 }
 
@@ -1362,8 +1387,15 @@ export async function rejectLateCheckIn(actor: AuthUser, id: string) {
     await ensureManagerCanUseEmployee(actor, attendance.userId);
   }
 
-  await prisma.attendance.delete({
-    where: { id }
+  const result = await prisma.attendance.update({
+    where: { id },
+    data: {
+      isCheckInPending: false,
+      checkInApproved: false,
+      checkInApprovedBy: actor.id,
+      checkInApprovedAt: new Date(),
+      status: AttendanceStatus.ABSENT
+    }
   });
 
   try {
