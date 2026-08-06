@@ -1317,7 +1317,7 @@ function AttendanceDetailDialog({
                   </span>
                 </div>
 
-                {record.punchType === "FIELD" && (
+                {record.punchType === "FIELD" && record.startOdometerPhotoUrl && (
                   <>
                     <div className="flex justify-between text-[11px]">
                       <span className="text-slate-500 font-medium">Odometer Meter:</span>
@@ -1379,7 +1379,7 @@ function AttendanceDetailDialog({
                     </span>
                   </div>
 
-                  {record.punchType === "FIELD" && (
+                  {record.punchType === "FIELD" && record.endOdometerPhotoUrl && (
                     <>
                       <div className="flex justify-between text-[11px]">
                         <span className="text-slate-500 font-medium">Odometer Meter:</span>

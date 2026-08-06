@@ -113,6 +113,25 @@ function parseGeminiJson<T>(rawText: string): T | null {
     } else if (clean.startsWith("```")) {
       clean = clean.replace(/^```/, "").replace(/```$/, "").trim();
     }
+    
+    // Fallback JSON repair for truncated/unclosed JSON blocks
+    if (clean.startsWith("{") && !clean.endsWith("}")) {
+      // 1. Try simply adding a closing brace
+      try {
+        return JSON.parse(clean + "}") as T;
+      } catch {}
+
+      // 2. Try closing open warningMessage string first
+      if (clean.includes('"warningMessage": "') && !clean.endsWith('"')) {
+        try {
+          return JSON.parse(clean + '"}') as T;
+        } catch {}
+        try {
+          return JSON.parse(clean + '" }') as T;
+        } catch {}
+      }
+    }
+    
     return JSON.parse(clean) as T;
   } catch (err) {
     console.error("[AI Vision] JSON Parse Error:", err, "Raw:", rawText);
@@ -203,7 +222,7 @@ Return ONLY valid JSON (no explanation):
       ],
       generationConfig: {
         temperature: 0.0,
-        maxOutputTokens: 200,
+        maxOutputTokens: 1024,
         responseMimeType: "application/json",
         thinkingConfig: { thinkingBudget: 0 }
       }
@@ -285,7 +304,7 @@ Rules: detectedReading must be the KM number shown on the odometer dial (integer
       ],
       generationConfig: {
         temperature: 0.0,
-        maxOutputTokens: 200,
+        maxOutputTokens: 1024,
         responseMimeType: "application/json",
         thinkingConfig: { thinkingBudget: 0 }
       }
