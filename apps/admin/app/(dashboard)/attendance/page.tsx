@@ -2,7 +2,7 @@
  
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download, Battery, CheckCircle2, XCircle, AlertCircle, CalendarX, Search, Pencil, Upload, ImageIcon, Loader2, Trash2, ClipboardEdit, Printer, Gauge, Sparkles, Bot } from "lucide-react";
+import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download, Battery, CheckCircle2, XCircle, AlertCircle, CalendarX, Search, Pencil, Upload, ImageIcon, Loader2, Trash2, ClipboardEdit, Printer, Gauge, Sparkles, Bot, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -50,6 +50,7 @@ export default function AttendancePage() {
   const [employeeFilter, setEmployeeFilter] = useState("all");
   const [selectedDepartment, setSelectedDepartment] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<string>("date-desc");
   const [viewingRecord, setViewingRecord] = useState<(AttendanceRecord & { user: User }) | null>(null);
   const [isMarkDialogOpen, setIsMarkDialogOpen] = useState(false);
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
@@ -100,10 +101,47 @@ export default function AttendancePage() {
         record.user?.email?.toLowerCase().includes(q)
       );
     }
-    // Sort alphabetically by employee name
-    data.sort((a, b) => (a.user?.name || "").localeCompare(b.user?.name || "", "en", { sensitivity: "base" }));
+    // Dynamic Sorting logic
+    data.sort((a, b) => {
+      if (sortBy === "name-asc") {
+        return (a.user?.name || "").localeCompare(b.user?.name || "", "en", { sensitivity: "base" });
+      }
+      if (sortBy === "name-desc") {
+        return (b.user?.name || "").localeCompare(a.user?.name || "", "en", { sensitivity: "base" });
+      }
+      if (sortBy === "date-desc") {
+        const timeA = new Date(a.date || a.checkInTime || 0).getTime();
+        const timeB = new Date(b.date || b.checkInTime || 0).getTime();
+        if (timeA !== timeB) return timeB - timeA;
+        return (a.user?.name || "").localeCompare(b.user?.name || "");
+      }
+      if (sortBy === "date-asc") {
+        const timeA = new Date(a.date || a.checkInTime || 0).getTime();
+        const timeB = new Date(b.date || b.checkInTime || 0).getTime();
+        if (timeA !== timeB) return timeA - timeB;
+        return (a.user?.name || "").localeCompare(b.user?.name || "");
+      }
+      if (sortBy === "checkin-asc") {
+        const timeA = a.checkInTime ? new Date(a.checkInTime).getTime() : Number.MAX_SAFE_INTEGER;
+        const timeB = b.checkInTime ? new Date(b.checkInTime).getTime() : Number.MAX_SAFE_INTEGER;
+        return timeA - timeB;
+      }
+      if (sortBy === "checkin-desc") {
+        const timeA = a.checkInTime ? new Date(a.checkInTime).getTime() : 0;
+        const timeB = b.checkInTime ? new Date(b.checkInTime).getTime() : 0;
+        return timeB - timeA;
+      }
+      if (sortBy === "status") {
+        const order: Record<string, number> = { PRESENT: 1, HALF_DAY: 2, ON_LEAVE: 3, ABSENT: 4 };
+        const scoreA = order[a.status] || 5;
+        const scoreB = order[b.status] || 5;
+        if (scoreA !== scoreB) return scoreA - scoreB;
+        return (a.user?.name || "").localeCompare(b.user?.name || "");
+      }
+      return 0;
+    });
     return data;
-  }, [attendanceData, employeeFilter, selectedDepartment, searchQuery]);
+  }, [attendanceData, employeeFilter, selectedDepartment, searchQuery, sortBy]);
 
   const summaryCounts = useMemo(() => {
     let present = 0;
@@ -559,6 +597,24 @@ export default function AttendancePage() {
                  </SelectContent>
                </Select>
 
+               <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-[170px] h-9 rounded-lg border-slate-200 bg-white text-xs font-semibold shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <ArrowUpDown className="h-3.5 w-3.5 text-blue-600" />
+                      <SelectValue placeholder="Sort By" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="date-desc">Date: Newest First</SelectItem>
+                    <SelectItem value="date-asc">Date: Oldest First</SelectItem>
+                    <SelectItem value="name-asc">Name: A to Z</SelectItem>
+                    <SelectItem value="name-desc">Name: Z to A</SelectItem>
+                    <SelectItem value="checkin-asc">Check-in: Earliest</SelectItem>
+                    <SelectItem value="checkin-desc">Check-in: Latest</SelectItem>
+                    <SelectItem value="status">Status</SelectItem>
+                  </SelectContent>
+                </Select>
+
                <Button 
                  variant="outline" 
                  size="sm" 
@@ -589,14 +645,38 @@ export default function AttendancePage() {
           <TableHeader className="bg-slate-50/50">
             <TableRow className="hover:bg-transparent border-slate-100">
               <TableHead className="py-4 px-4 text-[11px] font-black uppercase tracking-wider text-slate-400 text-center w-12">S.No.</TableHead>
-              <TableHead className="py-4 px-8 text-[11px] font-black uppercase tracking-wider text-slate-400">Employee</TableHead>
-              <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Check In</TableHead>
+              <TableHead 
+                className="py-4 px-8 text-[11px] font-black uppercase tracking-wider text-slate-400 cursor-pointer hover:text-blue-600 transition-colors select-none"
+                onClick={() => setSortBy(prev => prev === "name-asc" ? "name-desc" : "name-asc")}
+              >
+                <div className="flex items-center gap-1">
+                  Employee
+                  <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                </div>
+              </TableHead>
+              <TableHead 
+                className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400 cursor-pointer hover:text-blue-600 transition-colors select-none"
+                onClick={() => setSortBy(prev => prev === "checkin-asc" ? "checkin-desc" : "checkin-asc")}
+              >
+                <div className="flex items-center gap-1">
+                  Check In
+                  <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                </div>
+              </TableHead>
               <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400">Check Out</TableHead>
               <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400 text-center">Type</TableHead>
               <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400 text-center">Duration</TableHead>
               <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-amber-600 text-center">KM Travelled</TableHead>
               <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-slate-400 text-center">Verification</TableHead>
-              <TableHead className="py-4 px-8 text-[11px] font-black uppercase tracking-wider text-slate-400 text-right">Status</TableHead>
+              <TableHead 
+                className="py-4 px-8 text-[11px] font-black uppercase tracking-wider text-slate-400 text-right cursor-pointer hover:text-blue-600 transition-colors select-none"
+                onClick={() => setSortBy("status")}
+              >
+                <div className="flex items-center justify-end gap-1">
+                  Status
+                  <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                </div>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
