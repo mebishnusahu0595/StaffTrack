@@ -23,6 +23,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-stafftrack}
     ports:
       - "4000:4000"
+    volumes:
+      - ./backend/uploads:/app/uploads
 
   admin:
     build: ./apps/admin
