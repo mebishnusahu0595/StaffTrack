@@ -36,7 +36,8 @@ import {
   Battery,
   Clock,
   UploadCloud,
-  Store
+  Store,
+  Image as ImageIcon
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth-provider";
@@ -74,6 +75,7 @@ const navItems: { href: string; label: string; icon: any; roles?: Role[] }[] = [
   { href: "/issues", label: "Issues", icon: AlertTriangle },
   { href: "/forms", label: "Forms", icon: FileSpreadsheet },
   { href: "/company-files", label: "Uploads", icon: UploadCloud },
+  { href: "/gallery", label: "Media Gallery", icon: ImageIcon, roles: ["SUPERADMIN", "ADMIN"] },
   { href: "/broadcast", label: "Broadcast", icon: Send, roles: ["SUPERADMIN", "ADMIN", "MANAGER"] },
   { href: "/expenses", label: "Expenses", icon: Receipt },
   { href: "/leaves", label: "Leaves", icon: Calendar },

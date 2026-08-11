@@ -851,8 +851,40 @@ export async function sendSmartNotifications(
   return response.data.data;
 }
 
+export interface GalleryParams {
+  page?: number;
+  pageSize?: number;
+  category?: string;
+  search?: string;
+  startDate?: string;
+  endDate?: string;
+}
 
+export interface GalleryMediaItem {
+  id: string;
+  url: string;
+  category: "ATTENDANCE" | "ODOMETER" | "EXPENSE" | "TASK" | "ISSUE" | "FORM" | "FILE";
+  title: string;
+  subtitle?: string;
+  userName?: string;
+  userEmail?: string;
+  userId?: string;
+  createdAt: string;
+  extraInfo?: string;
+}
 
+export interface GalleryResponse {
+  success: boolean;
+  data: GalleryMediaItem[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    totalPages: number;
+  };
+}
 
-
-
+export async function fetchGalleryMedia(params?: GalleryParams): Promise<GalleryResponse> {
+  const response = await api.get<GalleryResponse>("/gallery", { params });
+  return response.data;
+}
