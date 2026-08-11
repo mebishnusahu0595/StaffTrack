@@ -1,8 +1,14 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma";
 import { asyncHandler } from "../lib/asyncHandler";
+import { roleGuard } from "../middleware/roleGuard";
+import { UserRole } from "@prisma/client";
 
 const router = Router();
+
+// Only SUPERADMIN can access gallery routes
+router.use(roleGuard(UserRole.SUPERADMIN));
+
 
 export interface MediaItem {
   id: string;

@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { useAuth } from "@/components/auth-provider";
 import { fetchGalleryMedia, type GalleryMediaItem } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +43,7 @@ const CATEGORIES = [
 ];
 
 export default function GalleryPage() {
+  const { user } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -164,9 +166,22 @@ export default function GalleryPage() {
       case "ISSUE":
         return "bg-rose-50 text-rose-700 border-rose-200";
       default:
-        return "bg-slate-50 text-slate-700 border-slate-200";
     }
   };
+
+  if (user && user.role !== "SUPERADMIN") {
+    return (
+      <div className="py-20 text-center space-y-4">
+        <div className="h-16 w-16 bg-rose-50 text-rose-500 rounded-3xl mx-auto flex items-center justify-center shadow-lg border border-rose-100">
+          <AlertTriangle className="h-8 w-8" />
+        </div>
+        <h2 className="text-xl font-black text-slate-900">Super Admin Access Required</h2>
+        <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+          The Media Gallery is strictly restricted to Super Admin accounts. You do not have permissions to access this page.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 pb-16">

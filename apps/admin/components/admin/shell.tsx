@@ -75,7 +75,7 @@ const navItems: { href: string; label: string; icon: any; roles?: Role[] }[] = [
   { href: "/issues", label: "Issues", icon: AlertTriangle },
   { href: "/forms", label: "Forms", icon: FileSpreadsheet },
   { href: "/company-files", label: "Uploads", icon: UploadCloud },
-  { href: "/gallery", label: "Media Gallery", icon: ImageIcon, roles: ["SUPERADMIN", "ADMIN"] },
+  { href: "/gallery", label: "Media Gallery", icon: ImageIcon, roles: ["SUPERADMIN"] },
   { href: "/broadcast", label: "Broadcast", icon: Send, roles: ["SUPERADMIN", "ADMIN", "MANAGER"] },
   { href: "/expenses", label: "Expenses", icon: Receipt },
   { href: "/leaves", label: "Leaves", icon: Calendar },
