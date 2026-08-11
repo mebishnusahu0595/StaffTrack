@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/components/auth-provider";
 import { format } from "date-fns";
+import { MediaGalleryTab } from "@/components/superadmin/media-gallery-tab";
 
 type AttRow = AttendanceRecord & { user: { name: string; email: string } };
 type ManagerLite = { id: string; name: string; role: string };
@@ -481,7 +482,18 @@ export default function SuperDashboardPage() {
               <CheckSquare className="w-4 h-4" />
               Tasks
             </TabsTrigger>
+            <TabsTrigger value="gallery" className="rounded-lg gap-2 px-6">
+              <ImageIcon className="w-4 h-4" />
+              Media Gallery
+            </TabsTrigger>
           </TabsList>
+
+          {/* GALLERY */}
+          <TabsContent value="gallery">
+            <Card className="border-none shadow-xl shadow-slate-200/50 p-6">
+              <MediaGalleryTab />
+            </Card>
+          </TabsContent>
 
           {/* USERS */}
           <TabsContent value="users">
