@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Image as ImageIcon,
@@ -64,6 +64,35 @@ export function MediaGalleryTab() {
   const mediaItems = response?.data ?? [];
   const pagination = response?.pagination ?? { page: 1, pageSize: 24, totalCount: 0, totalPages: 1 };
 
+  const selectedIndex = selectedMedia
+    ? mediaItems.findIndex((m) => m.id === selectedMedia.id)
+    : -1;
+
+  const handlePrevMedia = useCallback(() => {
+    if (selectedIndex > 0) {
+      setSelectedMedia(mediaItems[selectedIndex - 1]);
+    }
+  }, [selectedIndex, mediaItems]);
+
+  const handleNextMedia = useCallback(() => {
+    if (selectedIndex >= 0 && selectedIndex < mediaItems.length - 1) {
+      setSelectedMedia(mediaItems[selectedIndex + 1]);
+    }
+  }, [selectedIndex, mediaItems]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!selectedMedia) return;
+      if (e.key === "ArrowLeft") {
+        handlePrevMedia();
+      } else if (e.key === "ArrowRight") {
+        handleNextMedia();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedMedia, handlePrevMedia, handleNextMedia]);
+
   const handleCategoryChange = (catId: string) => {
     setSelectedCategory(catId);
     setPage(1);
@@ -101,7 +130,7 @@ export function MediaGalleryTab() {
           size="sm"
           disabled={current <= 1}
           onClick={() => setPage((p) => Math.max(1, p - 1))}
-          className="h-9 px-3 rounded-xl border-slate-200 text-xs font-bold gap-1 shadow-xs"
+          className="h-9 px-3 rounded-xl border-slate-200 text-xs font-bold gap-1 shadow-xs cursor-pointer"
         >
           <ChevronLeft className="h-4 w-4" /> Prev
         </Button>
@@ -122,7 +151,7 @@ export function MediaGalleryTab() {
               size="sm"
               onClick={() => setPage(p)}
               className={cn(
-                "h-9 min-w-[36px] rounded-xl text-xs font-black transition-all shadow-xs",
+                "h-9 min-w-[36px] rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer",
                 isSelected
                   ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200"
                   : "border-slate-200 text-slate-700 hover:bg-slate-100"
@@ -138,7 +167,7 @@ export function MediaGalleryTab() {
           size="sm"
           disabled={current >= totalPages}
           onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          className="h-9 px-3 rounded-xl border-slate-200 text-xs font-bold gap-1 shadow-xs"
+          className="h-9 px-3 rounded-xl border-slate-200 text-xs font-bold gap-1 shadow-xs cursor-pointer"
         >
           Next <ChevronRight className="h-4 w-4" />
         </Button>
@@ -175,7 +204,7 @@ export function MediaGalleryTab() {
               key={cat.id}
               onClick={() => handleCategoryChange(cat.id)}
               className={cn(
-                "flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all shrink-0 border shadow-xs",
+                "flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all shrink-0 border shadow-xs cursor-pointer",
                 isActive
                   ? `${cat.color} border-transparent shadow-md scale-102`
                   : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900"
@@ -233,7 +262,7 @@ export function MediaGalleryTab() {
                 variant="ghost"
                 size="sm"
                 onClick={handleResetFilters}
-                className="h-10 px-3 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                className="h-10 px-3 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
               >
                 Reset Filters
               </Button>
@@ -281,7 +310,7 @@ export function MediaGalleryTab() {
               variant="outline"
               size="sm"
               onClick={handleResetFilters}
-              className="mt-2 rounded-xl font-bold text-xs"
+              className="mt-2 rounded-xl font-bold text-xs cursor-pointer"
             >
               Clear All Filters
             </Button>
@@ -353,23 +382,56 @@ export function MediaGalleryTab() {
 
       {/* High-Res Image Inspector Modal */}
       <Dialog open={Boolean(selectedMedia)} onOpenChange={(open) => !open && setSelectedMedia(null)}>
-        <DialogContent className="sm:max-w-[850px] p-0 overflow-hidden border-none bg-slate-950 shadow-2xl rounded-3xl">
+        <DialogContent className="sm:max-w-[900px] p-0 overflow-hidden border-none bg-slate-950 shadow-2xl rounded-3xl">
           {selectedMedia && (
-            <div className="flex flex-col md:flex-row min-h-[480px]">
-              <div className="flex-1 bg-black flex items-center justify-center p-4 relative group">
+            <div className="flex flex-col md:flex-row min-h-[500px]">
+              {/* Image View Stage with Arrow Navigation */}
+              <div className="flex-1 bg-black flex items-center justify-center p-4 relative group select-none">
+                {/* Left Navigation Arrow */}
+                <button
+                  type="button"
+                  disabled={selectedIndex <= 0}
+                  onClick={handlePrevMedia}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-slate-900/80 text-white border border-slate-700/80 backdrop-blur-md flex items-center justify-center hover:bg-slate-800 disabled:opacity-20 disabled:cursor-not-allowed transition-all shadow-xl z-20 hover:scale-110 active:scale-90 cursor-pointer"
+                  title="Previous Image (Left Arrow)"
+                >
+                  <ChevronLeft className="h-6 w-6" />
+                </button>
+
+                {/* Right Navigation Arrow */}
+                <button
+                  type="button"
+                  disabled={selectedIndex < 0 || selectedIndex >= mediaItems.length - 1}
+                  onClick={handleNextMedia}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-slate-900/80 text-white border border-slate-700/80 backdrop-blur-md flex items-center justify-center hover:bg-slate-800 disabled:opacity-20 disabled:cursor-not-allowed transition-all shadow-xl z-20 hover:scale-110 active:scale-90 cursor-pointer"
+                  title="Next Image (Right Arrow)"
+                >
+                  <ChevronRight className="h-6 w-6" />
+                </button>
+
                 <img
                   src={selectedMedia.url}
                   alt={selectedMedia.title}
                   className="max-h-[550px] w-auto max-w-full object-contain rounded-xl shadow-2xl"
                 />
+
                 <button
+                  type="button"
                   onClick={() => setSelectedMedia(null)}
                   className="absolute top-4 right-4 h-9 w-9 rounded-full bg-black/60 text-white backdrop-blur-md flex items-center justify-center hover:bg-black/90 transition-colors md:hidden"
                 >
                   <X className="h-5 w-5" />
                 </button>
+
+                {/* Image counter indicator */}
+                {selectedIndex >= 0 && (
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-slate-900/80 text-white text-[11px] font-bold px-3 py-1 rounded-full border border-slate-700/60 backdrop-blur-md">
+                    {selectedIndex + 1} / {mediaItems.length}
+                  </div>
+                )}
               </div>
 
+              {/* Inspector Details Sidebar */}
               <div className="w-full md:w-80 bg-slate-900 p-6 flex flex-col justify-between text-slate-200 border-l border-slate-800">
                 <div className="space-y-6">
                   <div>
@@ -423,7 +485,7 @@ export function MediaGalleryTab() {
                     rel="noopener noreferrer"
                     className="flex-1"
                   >
-                    <Button variant="outline" className="w-full h-11 rounded-xl bg-slate-800 border-slate-700 text-white font-bold text-xs hover:bg-slate-700 gap-2">
+                    <Button variant="outline" className="w-full h-11 rounded-xl bg-slate-800 border-slate-700 text-white font-bold text-xs hover:bg-slate-700 gap-2 cursor-pointer">
                       <ExternalLink className="h-4 w-4" /> Open Full
                     </Button>
                   </a>
@@ -432,7 +494,7 @@ export function MediaGalleryTab() {
                     download
                     className="flex-1"
                   >
-                    <Button className="w-full h-11 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 gap-2 shadow-lg shadow-blue-900/50">
+                    <Button className="w-full h-11 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 gap-2 shadow-lg shadow-blue-900/50 cursor-pointer">
                       <Download className="h-4 w-4" /> Download
                     </Button>
                   </a>

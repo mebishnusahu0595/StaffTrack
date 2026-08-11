@@ -6,8 +6,8 @@ import { UserRole } from "@prisma/client";
 
 const router = Router();
 
-// Only SUPERADMIN can access gallery routes
-router.use(roleGuard(UserRole.SUPERADMIN));
+// Allow SUPERADMIN and ADMIN roles for gallery routes
+router.use(roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN));
 
 
 export interface MediaItem {
