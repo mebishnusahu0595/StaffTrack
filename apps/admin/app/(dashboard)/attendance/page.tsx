@@ -16,6 +16,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { formatTime } from "@/lib/format";
 import { calculateDurations, formatDurationLabel } from "@/lib/timeTracking";
 import { Badge } from "@/components/ui/badge";
+import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { AttendanceRecord, AttendanceStatus, User } from "@/lib/types";
@@ -198,22 +199,43 @@ export default function AttendancePage() {
 
   const downloadCSV = () => {
     if (filteredData.length === 0) return;
-    const headers = [
-      "Employee Name",
-      "Email",
-      "Work Mode",
-      "Check In Time",
-      "Check In Lat/Lng",
-      "Check Out Time",
-      "Check Out Lat/Lng",
-      "Type",
-      "Duration",
-      "KM Travelled",
-      "Start Odometer",
-      "End Odometer",
-      "Status"
-    ];
+
+    const uniqueUserIds = Array.from(new Set(filteredData.map(r => r.userId || r.user?.id).filter(Boolean)));
+    const isSingleUserReport = uniqueUserIds.length === 1;
+
+    const headers = isSingleUserReport
+      ? [
+          "Date",
+          "Check In Time",
+          "Check In Lat/Lng",
+          "Check Out Time",
+          "Check Out Lat/Lng",
+          "Type",
+          "Duration",
+          "KM Travelled",
+          "Start Odometer",
+          "End Odometer",
+          "Status"
+        ]
+      : [
+          "Date",
+          "Employee Name",
+          "Email",
+          "Work Mode",
+          "Check In Time",
+          "Check In Lat/Lng",
+          "Check Out Time",
+          "Check Out Lat/Lng",
+          "Type",
+          "Duration",
+          "KM Travelled",
+          "Start Odometer",
+          "End Odometer",
+          "Status"
+        ];
+
     const rows = filteredData.map(r => {
+      const recDateStr = r.date ? dayjs(r.date).format("DD MMM YYYY") : "--";
       const durationStr = formatDurationLabel(calculateDurations([r]).officeTimeMs + calculateDurations([r]).fieldTimeMs);
       const kmStr = r.punchType === "FIELD"
         ? (r.startOdometer != null && r.endOdometer != null && r.endOdometer >= r.startOdometer
@@ -221,21 +243,36 @@ export default function AttendancePage() {
             : (r.startOdometer != null ? `Start: ${r.startOdometer}` : "--"))
         : "--";
 
-      return [
-        r.user?.name || "--",
-        r.user?.email || "--",
-        r.user?.workMode || "--",
-        r.checkInTime ? formatTime(r.checkInTime) : "--",
-        formatCoords(r.checkInLat, r.checkInLng, 6),
-        r.checkOutTime ? formatTime(r.checkOutTime) : "--",
-        formatCoords(r.checkOutLat, r.checkOutLng, 6),
-        r.punchType || "MANUAL",
-        durationStr,
-        kmStr,
-        r.startOdometer ?? "--",
-        r.endOdometer ?? "--",
-        r.status || ""
-      ];
+      return isSingleUserReport
+        ? [
+            recDateStr,
+            r.checkInTime ? formatTime(r.checkInTime) : "--",
+            formatCoords(r.checkInLat, r.checkInLng, 6),
+            r.checkOutTime ? formatTime(r.checkOutTime) : "--",
+            formatCoords(r.checkOutLat, r.checkOutLng, 6),
+            r.punchType || "MANUAL",
+            durationStr,
+            kmStr,
+            r.startOdometer ?? "--",
+            r.endOdometer ?? "--",
+            r.status || ""
+          ]
+        : [
+            recDateStr,
+            r.user?.name || "--",
+            r.user?.email || "--",
+            r.user?.workMode || "--",
+            r.checkInTime ? formatTime(r.checkInTime) : "--",
+            formatCoords(r.checkInLat, r.checkInLng, 6),
+            r.checkOutTime ? formatTime(r.checkOutTime) : "--",
+            formatCoords(r.checkOutLat, r.checkOutLng, 6),
+            r.punchType || "MANUAL",
+            durationStr,
+            kmStr,
+            r.startOdometer ?? "--",
+            r.endOdometer ?? "--",
+            r.status || ""
+          ];
     });
     
     const csvString = [
@@ -258,7 +295,13 @@ export default function AttendancePage() {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
+    const uniqueUserIds = Array.from(new Set(filteredData.map(r => r.userId || r.user?.id).filter(Boolean)));
+    const isSingleUserReport = uniqueUserIds.length === 1;
+    const singleUser = isSingleUserReport ? filteredData[0]?.user : null;
+
     const tableRowsHtml = filteredData.map((r, idx) => {
+      const recDateStr = r.date ? dayjs(r.date).format("DD MMM YYYY") : "--";
+      const recDayStr = r.date ? dayjs(r.date).format("dddd") : "";
       const durationStr = formatDurationLabel(calculateDurations([r]).officeTimeMs + calculateDurations([r]).fieldTimeMs);
       const kmDisplay = r.punchType === "FIELD"
         ? (r.startOdometer != null && r.endOdometer != null && r.endOdometer >= r.startOdometer
@@ -268,13 +311,23 @@ export default function AttendancePage() {
 
       const typeBadgeClass = r.punchType === "FIELD" ? "background: #fef3c7; color: #d97706;" : "background: #eff6ff; color: #2563eb;";
 
+      const employeeOrDateCell = isSingleUserReport
+        ? `<td style="padding: 8px;">
+             <strong style="color: #0f172a; font-size: 11px;">${recDateStr}</strong>
+             <span style="font-size: 9px; color: #64748b; margin-left: 6px; font-weight: 600;">(${recDayStr})</span>
+           </td>`
+        : `<td style="padding: 8px;">
+             <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+               <strong style="color: #0f172a; font-size: 11px;">${r.user?.name || "--"}</strong>
+               <span style="font-size: 8.5px; font-weight: 800; color: #1e40af; background: #dbeafe; border: 1px solid #93c5fd; padding: 1.5px 6px; border-radius: 4px; white-space: nowrap;">📅 ${recDateStr}</span>
+             </div>
+             <span style="font-size: 8.5px; color: #64748b;">${r.user?.email || ""} / ${r.user?.workMode || ""}</span>
+           </td>`;
+
       return `
         <tr style="border-bottom: 1px solid #e2e8f0; font-size: 10px;">
           <td style="padding: 8px; text-align: center; font-weight: bold; color: #64748b;">${idx + 1}</td>
-          <td style="padding: 8px;">
-            <strong style="color: #0f172a;">${r.user?.name || "--"}</strong><br/>
-            <span style="font-size: 8.5px; color: #64748b;">${r.user?.email || ""} / ${r.user?.workMode || ""}</span>
-          </td>
+          ${employeeOrDateCell}
           <td style="padding: 8px;">${r.checkInTime ? formatTime(r.checkInTime) : "--"}</td>
           <td style="padding: 8px;">${r.checkOutTime ? formatTime(r.checkOutTime) : "Active"}</td>
           <td style="padding: 8px; text-align: center;">
@@ -288,6 +341,15 @@ export default function AttendancePage() {
         </tr>
       `;
     }).join("");
+
+    const singleUserInfoHtml = isSingleUserReport && singleUser ? `
+      <div style="margin-top: 6px; font-size: 12px; font-weight: 800; color: #0f172a; background: #eff6ff; border: 1px solid #bfdbfe; padding: 6px 14px; border-radius: 8px; display: inline-block;">
+        👤 EMPLOYEE: <span style="color: #1d4ed8; font-size: 13px; font-weight: 900;">${singleUser.name}</span>
+        <span style="font-size: 10px; color: #475569; font-weight: 600; margin-left: 8px;">(${singleUser.email || ""} | ${singleUser.workMode || ""})</span>
+      </div>
+    ` : "";
+
+    const columnTitle = isSingleUserReport ? "Date" : "Employee";
 
     const htmlContent = `
 <!DOCTYPE html>
@@ -313,6 +375,7 @@ export default function AttendancePage() {
     <div>
       <div class="title">STAFFTRACK ATTENDANCE LOG</div>
       <div class="subtitle">Date Range: ${startDate} to ${endDate} | Total Records: ${filteredData.length}</div>
+      ${singleUserInfoHtml}
     </div>
     <div style="text-align: right; font-size: 9.5px; font-weight: 600; color: #64748b;">
       Generated on: ${new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
@@ -332,7 +395,7 @@ export default function AttendancePage() {
     <thead>
       <tr>
         <th style="text-align: center; width: 30px;">#</th>
-        <th>Employee</th>
+        <th>${columnTitle}</th>
         <th>Check In</th>
         <th>Check Out</th>
         <th style="text-align: center;">Type</th>
