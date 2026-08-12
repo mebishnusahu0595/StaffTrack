@@ -88,7 +88,7 @@ export default function OverviewPage() {
   const router = useRouter();
 
   const usersQuery  = useQuery({ queryKey: ["users"],    queryFn: () => fetchUsers({ page: 1, pageSize: 100 }) });
-  const tasksQuery  = useQuery({ queryKey: ["tasks"],    queryFn: fetchTasks });
+  const tasksQuery  = useQuery({ queryKey: ["tasks"],    queryFn: () => fetchTasks() });
   const reportsQuery= useQuery({ queryKey: ["reports"],  queryFn: () => fetchAllReports() });
   const projectsQuery=useQuery({ queryKey: ["projects"], queryFn: () => fetchProjects() });
   const issuesQuery = useQuery({ queryKey: ["issues"],   queryFn: () => fetchIssues() });

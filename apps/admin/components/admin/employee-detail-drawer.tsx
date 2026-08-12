@@ -77,7 +77,7 @@ export function EmployeeDetailDrawer({
 
   const tasksQuery = useQuery({
     queryKey: ["tasks"],
-    queryFn: fetchTasks,
+    queryFn: () => fetchTasks(),
     enabled: !!employeeId && isOpen,
   });
 

@@ -169,8 +169,8 @@ export async function fetchUser(id: string) {
   return response.data.data;
 }
 
-export async function fetchTasks() {
-  const response = await api.get<{ data: Task[] }>("/tasks");
+export async function fetchTasks(params?: { date?: string }) {
+  const response = await api.get<{ data: Task[] }>("/tasks", { params });
   return response.data.data;
 }
 

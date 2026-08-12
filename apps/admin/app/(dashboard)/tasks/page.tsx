@@ -134,8 +134,8 @@ export default function TasksPage() {
   const pageSize = 10;
 
   const { data: tasks = [], isLoading } = useQuery({
-    queryKey: ["tasks"],
-    queryFn: fetchTasks
+    queryKey: ["tasks", filterDate],
+    queryFn: () => fetchTasks(filterDate ? { date: filterDate } : { date: "all" })
   });
 
   const activeViewingTask = useMemo(() => {

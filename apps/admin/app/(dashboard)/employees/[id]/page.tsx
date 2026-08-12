@@ -19,7 +19,7 @@ export default function EmployeeDetailPage() {
   const userQuery = useQuery({ queryKey: ["user", id], queryFn: () => fetchUser(id) });
   const managersQuery = useQuery({ queryKey: ["users", "managers"], queryFn: () => fetchUsers({ page: 1, pageSize: 100 }) });
   const attendanceQuery = useQuery({ queryKey: ["attendance", id], queryFn: () => fetchAttendance(id) });
-  const tasksQuery = useQuery({ queryKey: ["tasks"], queryFn: fetchTasks });
+  const tasksQuery = useQuery({ queryKey: ["tasks"], queryFn: () => fetchTasks() });
   const reportsQuery = useQuery({ queryKey: ["reports", id], queryFn: () => fetchDerHistory(id) });
   const expensesQuery = useQuery({ queryKey: ["expenses", id], queryFn: () => fetchExpenses({ userId: id }) });
   const locationQuery = useQuery({

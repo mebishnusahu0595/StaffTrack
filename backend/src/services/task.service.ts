@@ -159,11 +159,6 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
 }
 
 export async function listTasks(actor: AuthUser, dateStr?: string) {
-  // Backfill missing series occurrences for repeating tasks before listing
-  backfillMissingSeriesOccurrences().catch(err =>
-    console.error("[Task Service] Backfill series occurrences error:", err)
-  );
-
   const tasks = await prisma.task.findMany({
     where: await taskAccessWhere(actor, dateStr),
     include: taskInclude,
@@ -744,10 +739,33 @@ async function taskAccessWhere(actor: AuthUser, dateStr?: string): Promise<Prism
       const start = getStartOfDayIST(requestedDate);
       const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
       dateFilter = {
-        dueDate: {
-          gte: start,
-          lte: end
-        }
+        OR: [
+          {
+            dueDate: {
+              gte: start,
+              lte: end
+            }
+          },
+          {
+            startDate: {
+              gte: start,
+              lte: end
+            }
+          },
+          {
+            completedAt: {
+              gte: start,
+              lte: end
+            }
+          },
+          {
+            isRepeating: true,
+            OR: [
+              { startDate: null },
+              { startDate: { lte: end } }
+            ]
+          }
+        ]
       };
     }
   } else if (actor.role === UserRole.EMPLOYEE) {

@@ -269,7 +269,7 @@ export default function EmployeesPage() {
  
   const tasksQuery = useQuery({
     queryKey: ["tasks"],
-    queryFn: fetchTasks,
+    queryFn: () => fetchTasks(),
     enabled: !!expandedId,
   });
  
