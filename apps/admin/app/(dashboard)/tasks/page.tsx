@@ -391,9 +391,9 @@ export default function TasksPage() {
       const getLocalDateStr = (d: any) => {
         if (!d) return "";
         try {
-          const utcTime = new Date(d).getTime();
-          const istDate = new Date(utcTime + 5.5 * 60 * 60 * 1000);
-          return istDate.toISOString().split("T")[0];
+          const dateObj = new Date(d);
+          if (isNaN(dateObj.getTime())) return "";
+          return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(dateObj);
         } catch {
           return "";
         }
@@ -402,11 +402,18 @@ export default function TasksPage() {
         const taskDueStr = getLocalDateStr(t.dueDate);
         const taskStartStr = getLocalDateStr(t.startDate || t.createdAt);
         const taskEndStr = getLocalDateStr(t.endDate);
+        const taskCompletedStr = getLocalDateStr(t.completedAt);
 
         // 1. Direct due date match
         if (filterDate === taskDueStr) return true;
 
-        // 2. Repeating / Everyday task active on filterDate
+        // 2. Direct completion date match
+        if (taskCompletedStr && filterDate === taskCompletedStr) return true;
+
+        // 3. Direct start/created date match
+        if (taskStartStr && filterDate === taskStartStr) return true;
+
+        // 4. Repeating / Everyday task active on filterDate
         const isRepeatingTask = Boolean(t.isRepeating || t.repeatFrequency);
         if (isRepeatingTask) {
           const startMatches = !taskStartStr || filterDate >= taskStartStr;

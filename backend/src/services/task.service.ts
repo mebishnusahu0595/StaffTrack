@@ -735,24 +735,25 @@ export async function updateTaskStatus(
 }
 
 async function taskAccessWhere(actor: AuthUser, dateStr?: string): Promise<Prisma.TaskWhereInput> {
-  let dateFilter: any;
+  let dateFilter: any = {};
 
-  if (dateStr) {
-    // If a specific date is requested (e.g. from calendar navigation), filter to that single day in IST
+  if (dateStr && dateStr.toLowerCase() !== "all") {
+    // If a specific date is requested (e.g. "2026-08-11"), filter to that single day in IST
     const requestedDate = new Date(dateStr);
-    const start = getStartOfDayIST(requestedDate);
-    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
-    dateFilter = {
-      dueDate: {
-        gte: start,
-        lte: end
-      }
-    };
-  } else {
-    // Default to Today in IST when no dateStr is specified (e.g. mobile app home screen)
+    if (!isNaN(requestedDate.getTime())) {
+      const start = getStartOfDayIST(requestedDate);
+      const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
+      dateFilter = {
+        dueDate: {
+          gte: start,
+          lte: end
+        }
+      };
+    }
+  } else if (actor.role === UserRole.EMPLOYEE) {
+    // Default to Today in IST for mobile app employees when no dateStr is specified
     const todayStart = getStartOfDayIST(new Date());
     const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
-
     dateFilter = {
       dueDate: {
         gte: todayStart,
@@ -774,7 +775,7 @@ async function taskAccessWhere(actor: AuthUser, dateStr?: string): Promise<Prism
     };
   }
 
-  // Employees see tasks within the selected window to allow date navigation.
+  // Employees see tasks matching dateFilter for themselves
   return {
     assignedToId: actor.id,
     ...dateFilter
