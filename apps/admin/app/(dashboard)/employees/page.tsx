@@ -119,17 +119,15 @@ export default function EmployeesPage() {
       page: 1,
       pageSize: 1000 // Fetch all matching users for correct client-side filtering and pagination
     }),
-    // Live location status (isLocationOn) and batteryLevel ride on the user
-    // record and change with every device ping. Poll so the online dot and
-    // battery % stay current even if the socket connection drops.
-    refetchInterval: 20_000,
-    refetchOnWindowFocus: true
+    staleTime: 30_000,
+    refetchOnWindowFocus: false
   });
 
   const todayAttendanceQuery = useQuery({
     queryKey: ["attendance", "overview", selectedUserDate],
     queryFn: () => fetchAllAttendance(selectedUserDate),
-    refetchInterval: selectedUserDate === dayjs().format("YYYY-MM-DD") ? 20_000 : false
+    staleTime: 30_000,
+    refetchOnWindowFocus: false
   });
 
   const latestTodayAttendanceByUser = useMemo(() => {
@@ -155,7 +153,9 @@ export default function EmployeesPage() {
 
   const managersQuery = useQuery({
     queryKey: ["users", "managers"],
-    queryFn: () => fetchUsers({ page: 1, pageSize: 100, role: "MANAGER" })
+    queryFn: () => fetchUsers({ page: 1, pageSize: 100, role: "MANAGER" }),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false
   });
  
   const filteredUsers = useMemo(() => {
@@ -179,10 +179,11 @@ export default function EmployeesPage() {
       items = items.filter((user) => user.groupId === departmentFilter);
     }
 
-    // Sort alphabetically by name
-    items.sort((a, b) => (a.name || "").localeCompare(b.name || "", "en", { sensitivity: "base" }));
+    // Sort alphabetically by name (immutable copy to prevent lag)
+    const sorted = [...items];
+    sorted.sort((a, b) => (a.name || "").localeCompare(b.name || "", "en", { sensitivity: "base" }));
 
-    return items;
+    return sorted;
   }, [latestTodayAttendanceByUser, usersQuery.data?.items, workModeFilter, statusFilter, departmentFilter]);
 
   useEffect(() => {

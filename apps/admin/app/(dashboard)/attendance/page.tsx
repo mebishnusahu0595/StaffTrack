@@ -70,17 +70,23 @@ export default function AttendancePage() {
   
   const attendanceQuery = useQuery({ 
     queryKey: ["attendance", startDate, endDate], 
-    queryFn: () => fetchAllAttendance(undefined, startDate, endDate) 
+    queryFn: () => fetchAllAttendance(undefined, startDate, endDate),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false
   });
  
   const usersQuery = useQuery({ 
     queryKey: ["users", "attendance"], 
-    queryFn: () => fetchUsers({ page: 1, pageSize: 1000 }) 
+    queryFn: () => fetchUsers({ page: 1, pageSize: 1000 }),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false
   });
 
   const groupsQuery = useQuery({
     queryKey: ["groups", "attendance"],
-    queryFn: fetchGroups
+    queryFn: fetchGroups,
+    staleTime: 300_000,
+    refetchOnWindowFocus: false
   });
  
   const employees = usersQuery.data?.items ?? [];
@@ -102,8 +108,9 @@ export default function AttendancePage() {
         record.user?.email?.toLowerCase().includes(q)
       );
     }
-    // Dynamic Sorting logic
-    data.sort((a, b) => {
+    // Dynamic Sorting logic (use immutable copy to prevent React re-render lag)
+    const sortedData = [...data];
+    sortedData.sort((a, b) => {
       if (sortBy === "name-asc") {
         return (a.user?.name || "").localeCompare(b.user?.name || "", "en", { sensitivity: "base" });
       }
@@ -141,7 +148,7 @@ export default function AttendancePage() {
       }
       return 0;
     });
-    return data;
+    return sortedData;
   }, [attendanceData, employeeFilter, selectedDepartment, searchQuery, sortBy]);
 
   const summaryCounts = useMemo(() => {
@@ -1002,12 +1009,21 @@ function AttendanceDetailDialog({
     }
   };
 
+  const toLocalISOInputString = (d: Date | string | null | undefined) => {
+    if (!d) return "";
+    const dateObj = new Date(d);
+    if (isNaN(dateObj.getTime())) return "";
+    const tzOffset = dateObj.getTimezoneOffset() * 60000;
+    const localTime = new Date(dateObj.getTime() - tzOffset);
+    return localTime.toISOString().slice(0, 16);
+  };
+
   const handleOpenFullEdit = () => {
     setEditData({
       status: record.status,
       punchType: record.punchType || "OFFICE",
-      checkInTime: record.checkInTime ? new Date(record.checkInTime).toISOString().slice(0, 16) : "",
-      checkOutTime: record.checkOutTime ? new Date(record.checkOutTime).toISOString().slice(0, 16) : "",
+      checkInTime: record.checkInTime ? toLocalISOInputString(record.checkInTime) : "",
+      checkOutTime: record.checkOutTime ? toLocalISOInputString(record.checkOutTime) : "",
       checkInPhotoUrl: record.checkInPhotoUrl ?? null,
       checkOutPhotoUrl: record.checkOutPhotoUrl ?? null,
       startOdometerPhotoUrl: record.startOdometerPhotoUrl ?? null,
@@ -1040,8 +1056,8 @@ function AttendanceDetailDialog({
         date: record.date,
         status: editData.status as any,
         punchType: editData.punchType as any,
-        checkInTime: editData.checkInTime || null,
-        checkOutTime: editData.checkOutTime || null,
+        checkInTime: editData.checkInTime ? new Date(editData.checkInTime).toISOString() : null,
+        checkOutTime: editData.checkOutTime ? new Date(editData.checkOutTime).toISOString() : null,
         checkInPhotoUrl: editData.checkInPhotoUrl,
         checkOutPhotoUrl: editData.checkOutPhotoUrl,
         startOdometerPhotoUrl: editData.startOdometerPhotoUrl,
