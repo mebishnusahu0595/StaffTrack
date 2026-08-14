@@ -98,17 +98,8 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
   const localHour = parseInt(now.toLocaleTimeString("en-US", { timeZone: "Asia/Kolkata", hour12: false, hour: "numeric" }));
   const localMinute = parseInt(now.toLocaleTimeString("en-US", { timeZone: "Asia/Kolkata", hour12: false, minute: "numeric" }));
 
-  let shiftH = 9;
-  let shiftM = 30;
-  if (user.shiftStart && user.shiftStart.includes(":")) {
-    const [h, m] = user.shiftStart.split(":").map(Number);
-    if (!isNaN(h) && !isNaN(m)) {
-      shiftH = h;
-      shiftM = m;
-    }
-  }
-
-  if (localHour > shiftH || (localHour === shiftH && localMinute > shiftM)) {
+  // Strict 9:30 AM late check-in threshold for ALL users
+  if (localHour > 9 || (localHour === 9 && localMinute > 30)) {
     isCheckInPending = true;
     checkInApproved = false;
   }
