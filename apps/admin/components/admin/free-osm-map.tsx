@@ -6,12 +6,11 @@ import {
   Navigation, 
   Battery, 
   Clock, 
-  Wifi, 
   RefreshCw, 
   Compass, 
   Layers, 
-  Eye,
-  Globe
+  Globe,
+  Crosshair
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -45,9 +44,11 @@ export function FreeOsmMap({
   const labelsLayerRef = useRef<any>(null);
   const polylineRef = useRef<any>(null);
   const markersGroupRef = useRef<any>(null);
+  const hasFittedBoundsRef = useRef<boolean>(false);
+  const prevLogsCountRef = useRef<number>(0);
 
   const [isLeafletReady, setIsLeafletReady] = useState(false);
-  const [mapLayerType, setMapLayerType] = useState<"streets" | "satellite">("satellite");
+  const [mapLayerType, setMapLayerType] = useState<"satellite" | "streets">("satellite");
 
   // Sanitize and sort chronologically strictly from morning/start (0) to latest ping (last)
   const chronoLogs = useMemo(() => {
@@ -126,7 +127,7 @@ export function FreeOsmMap({
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         {
           maxZoom: 19,
-          attribution: "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
+          attribution: "Tiles &copy; Esri"
         }
       ).addTo(map);
 
@@ -196,18 +197,18 @@ export function FreeOsmMap({
 
     if (chronoLogs.length === 0) {
       map.setView(defaultCenter, 5);
+      hasFittedBoundsRef.current = false;
       return;
     }
 
     // Coordinates path for polyline in exact chronological order
     const latLngs = chronoLogs.map((l) => [l.lat, l.lng]);
 
-    // 1. Draw bright glowing breadcrumb trail
+    // 1. Draw solid bright glowing travel route path (No confusing dashed lines)
     polylineRef.current = L.polyline(latLngs, {
-      color: "#38bdf8", // Glowing cyan blue on satellite
-      weight: 5,
-      opacity: 0.95,
-      dashArray: "6, 6",
+      color: mapLayerType === "satellite" ? "#38bdf8" : "#2563eb", // Glowing cyan on satellite, deep blue on streets
+      weight: 4.5,
+      opacity: 0.9,
       smoothFactor: 1
     }).addTo(map);
 
@@ -248,28 +249,47 @@ export function FreeOsmMap({
         // Intermediate path node dot
         const dotIcon = L.divIcon({
           className: "custom-osm-dot",
-          html: `<div style="background-color: #38bdf8; width: 10px; height: 10px; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.5);"></div>`,
-          iconSize: [10, 10],
-          iconAnchor: [5, 5]
+          html: `<div style="background-color: ${mapLayerType === "satellite" ? "#38bdf8" : "#2563eb"}; width: 9px; height: 9px; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.5);"></div>`,
+          iconSize: [9, 9],
+          iconAnchor: [4.5, 4.5]
         });
         const dotMarker = L.marker([log.lat, log.lng], { icon: dotIcon }).addTo(markersGroup);
         dotMarker.bindPopup(`<b>Trail Ping #${idx + 1}</b><br/>Time: ${timeStr}<br/>Battery: ${log.batteryLevel ?? "—"}%`);
       }
     });
 
-    // Auto-fit bounds
-    try {
-      if (chronoLogs.length > 1) {
-        map.fitBounds(polylineRef.current.getBounds(), { padding: [40, 40], maxZoom: 17 });
-      } else if (chronoLogs.length === 1) {
-        map.setView([chronoLogs[0].lat, chronoLogs[0].lng], 16);
+    // Fit bounds ONLY ON INITIAL LOAD — Do NOT zoom out on new pings!
+    if (!hasFittedBoundsRef.current && chronoLogs.length > 0) {
+      try {
+        if (chronoLogs.length > 1) {
+          map.fitBounds(polylineRef.current.getBounds(), { padding: [40, 40], maxZoom: 17 });
+        } else {
+          map.setView([chronoLogs[0].lat, chronoLogs[0].lng], 16);
+        }
+        hasFittedBoundsRef.current = true;
+      } catch {
+        map.setView(defaultCenter, 15);
       }
-    } catch {
-      map.setView(defaultCenter, 15);
+    } else if (isLive && chronoLogs.length > prevLogsCountRef.current) {
+      // Smoothly pan to the new live location without resetting zoom level!
+      const latest = chronoLogs[chronoLogs.length - 1];
+      map.panTo([latest.lat, latest.lng], { animate: true, duration: 0.8 });
     }
-  }, [isLeafletReady, chronoLogs, isLive, employeeName]);
+
+    prevLogsCountRef.current = chronoLogs.length;
+  }, [isLeafletReady, chronoLogs, isLive, employeeName, mapLayerType]);
 
   const latestPing = chronoLogs.length > 0 ? chronoLogs[chronoLogs.length - 1] : null;
+
+  const handleCenterLive = () => {
+    if (!mapInstanceRef.current || !latestPing) return;
+    mapInstanceRef.current.setView([latestPing.lat, latestPing.lng], 17, { animate: true });
+  };
+
+  const handleFitAllRoute = () => {
+    if (!mapInstanceRef.current || !polylineRef.current || chronoLogs.length === 0) return;
+    mapInstanceRef.current.fitBounds(polylineRef.current.getBounds(), { padding: [40, 40], maxZoom: 17 });
+  };
 
   return (
     <div className="space-y-3">
@@ -283,17 +303,22 @@ export function FreeOsmMap({
         <div className="flex items-center gap-3.5 flex-wrap text-xs font-semibold">
           <div className="flex items-center gap-1.5">
             <span className="h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-white/30 shrink-0"></span>
-            <span className="text-slate-200">🟢 <strong>START</strong> (Din ka pehla point)</span>
+            <span className="text-slate-200">🟢 <strong>START</strong> (Subah ka pehla point)</span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="h-1.5 w-5 rounded-full bg-sky-400 shrink-0"></span>
+            <span className="text-slate-200">🛣️ <strong>Solid Line</strong> (Safar ka Rasta)</span>
           </div>
 
           <div className="flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-sky-400 ring-1 ring-white/30 shrink-0"></span>
-            <span className="text-slate-200">🔵 <strong>PINGS</strong> (Travel Route)</span>
+            <span className="text-slate-200">🔵 <strong>PINGS</strong> (Route Points)</span>
           </div>
 
           <div className="flex items-center gap-1.5">
             <span className="h-3 w-3 rounded-full bg-rose-500 ring-2 ring-white/30 shrink-0"></span>
-            <span className="text-slate-200">🔴 <strong>END</strong> (Last point)</span>
+            <span className="text-slate-200">🔴 <strong>END</strong> (Last recorded point)</span>
           </div>
 
           <div className="flex items-center gap-1.5">
@@ -331,8 +356,21 @@ export function FreeOsmMap({
             )}
           </div>
 
-          {/* Top Right: Satellite / Street Layer Switcher & Refresh */}
+          {/* Top Right: Satellite / Street Layer Switcher, Center Live & Refresh */}
           <div className="flex items-center gap-2 pointer-events-auto">
+            {latestPing && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleCenterLive}
+                className="h-8 px-2.5 rounded-xl bg-slate-900/80 text-sky-300 hover:text-white hover:bg-slate-800 backdrop-blur-md border border-white/20 shadow-md text-xs font-bold gap-1"
+                title="Focus on Live Staff Location"
+              >
+                <Crosshair className="h-3.5 w-3.5 text-sky-400" />
+                Live Pin
+              </Button>
+            )}
+
             <div className="bg-slate-900/80 backdrop-blur-md p-1 rounded-xl border border-white/20 shadow-md flex items-center gap-1">
               <Button
                 size="sm"
@@ -368,7 +406,7 @@ export function FreeOsmMap({
                 size="sm"
                 variant="secondary"
                 onClick={onRefresh}
-                className="h-9 px-2.5 rounded-xl bg-white/90 text-slate-700 hover:bg-white backdrop-blur-md border border-slate-200 shadow-sm text-xs font-bold gap-1"
+                className="h-8 px-2.5 rounded-xl bg-white/90 text-slate-700 hover:bg-white backdrop-blur-md border border-slate-200 shadow-sm text-xs font-bold gap-1"
               >
                 <RefreshCw className="h-3.5 w-3.5 text-blue-600" />
                 Refresh
