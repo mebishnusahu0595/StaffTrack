@@ -80,8 +80,13 @@ export function EmployeeFullReportModal({
   // Photo viewer dialog
   const [previewPhoto, setPreviewPhoto] = useState<{ url: string; label: string } | null>(null);
 
-  // Local search filter for tasks tab
-  const [taskSearchQuery, setTaskSearchQuery] = useState("");
+  // Task scope filter: 'day' (Today's tasks only) or 'all' (All tasks)
+  const [taskScope, setTaskScope] = useState<"day" | "all">("day");
+
+  // Displayed tasks based on scope
+  const displayedTasks = useMemo(() => {
+    return taskScope === "day" ? dayTasks : allEmployeeTasks;
+  }, [taskScope, dayTasks, allEmployeeTasks]);
 
   // Targeted WebSocket live location state for ONLY this employee while modal is open
   const [liveLocationLogs, setLiveLocationLogs] = useState<LocationPing[]>([]);
@@ -460,7 +465,7 @@ export function EmployeeFullReportModal({
                     <Clock className="h-3.5 w-3.5" /> 📅 Attendance & Odometer
                   </TabsTrigger>
                   <TabsTrigger value="tasks" className="rounded-xl font-bold text-xs gap-1.5 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> 📋 Tasks & Form Submissions ({allEmployeeTasks.length})
+                    <CheckCircle2 className="h-3.5 w-3.5" /> 📋 Tasks & Form Submissions ({dayTasks.length})
                   </TabsTrigger>
                   <TabsTrigger value="der" className="rounded-xl font-bold text-xs gap-1.5 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm">
                     <FileText className="h-3.5 w-3.5" /> 📊 Day End Reports (DER)
@@ -671,25 +676,54 @@ export function EmployeeFullReportModal({
                     />
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs font-bold border-slate-200 bg-white">
-                      Today&apos;s Tasks: {dayTasks.length}
-                    </Badge>
-                    <Badge variant="outline" className="text-xs font-bold border-slate-200 bg-white">
-                      All Assigned Tasks: {allEmployeeTasks.length}
-                    </Badge>
+                  <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setTaskScope("day")}
+                      className={`h-7 px-3 rounded-lg text-xs font-bold transition-all ${
+                        taskScope === "day"
+                          ? "bg-white text-blue-600 shadow-sm"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      📅 Today&apos;s Tasks ({dayTasks.length})
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setTaskScope("all")}
+                      className={`h-7 px-3 rounded-lg text-xs font-bold transition-all ${
+                        taskScope === "all"
+                          ? "bg-white text-blue-600 shadow-sm"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      📁 All Assigned ({allEmployeeTasks.length})
+                    </Button>
                   </div>
                 </div>
 
                 {/* Tasks Table / Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {allEmployeeTasks
-                    .filter((t: any) => 
-                      !taskSearchQuery || 
-                      t.title?.toLowerCase().includes(taskSearchQuery.toLowerCase()) ||
-                      t.description?.toLowerCase().includes(taskSearchQuery.toLowerCase())
-                    )
-                    .map((task: any) => {
+                  {displayedTasks.length === 0 ? (
+                    <div className="col-span-full py-12 text-center bg-white rounded-2xl border border-slate-200/80 text-slate-400 space-y-2">
+                      <CheckCircle2 className="h-8 w-8 mx-auto opacity-30 text-emerald-500" />
+                      <p className="text-sm font-bold text-slate-700">
+                        {taskScope === "day" 
+                          ? `No tasks scheduled for ${dayjs(selectedDate).format("DD MMM YYYY")}` 
+                          : "No tasks assigned to this employee"}
+                      </p>
+                    </div>
+                  ) : (
+                    displayedTasks
+                      .filter((t: any) => 
+                        !taskSearchQuery || 
+                        t.title?.toLowerCase().includes(taskSearchQuery.toLowerCase()) ||
+                        t.description?.toLowerCase().includes(taskSearchQuery.toLowerCase())
+                      )
+                      .map((task: any) => {
                       const hasFormOrChecklist = Boolean(
                         task.checklistResponses?.length || 
                         task.checklist?.length || 
