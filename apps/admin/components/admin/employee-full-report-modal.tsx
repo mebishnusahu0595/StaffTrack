@@ -83,11 +83,6 @@ export function EmployeeFullReportModal({
   // Task scope filter: 'day' (Today's tasks only) or 'all' (All tasks)
   const [taskScope, setTaskScope] = useState<"day" | "all">("day");
 
-  // Displayed tasks based on scope
-  const displayedTasks = useMemo(() => {
-    return taskScope === "day" ? dayTasks : allEmployeeTasks;
-  }, [taskScope, dayTasks, allEmployeeTasks]);
-
   // Targeted WebSocket live location state for ONLY this employee while modal is open
   const [liveLocationLogs, setLiveLocationLogs] = useState<LocationPing[]>([]);
 
@@ -236,6 +231,11 @@ export function EmployeeFullReportModal({
       return dueStr === selectedDate || compStr === selectedDate || startStr === selectedDate;
     });
   }, [allEmployeeTasks, selectedDate]);
+
+  // Displayed tasks based on active scope (Today's tasks vs All tasks)
+  const displayedTasks = useMemo(() => {
+    return taskScope === "day" ? dayTasks : allEmployeeTasks;
+  }, [taskScope, dayTasks, allEmployeeTasks]);
 
   // Calculate task points / coins earned
   const totalCoinsEarned = useMemo(() => {
