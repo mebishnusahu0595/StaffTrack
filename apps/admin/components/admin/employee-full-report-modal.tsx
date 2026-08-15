@@ -83,6 +83,9 @@ export function EmployeeFullReportModal({
   // Task scope filter: 'day' (Today's tasks only) or 'all' (All tasks)
   const [taskScope, setTaskScope] = useState<"day" | "all">("day");
 
+  // Local search filter for tasks tab
+  const [taskSearchQuery, setTaskSearchQuery] = useState("");
+
   // Targeted WebSocket live location state for ONLY this employee while modal is open
   const [liveLocationLogs, setLiveLocationLogs] = useState<LocationPing[]>([]);
 
