@@ -1,7 +1,18 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { MapPin, Navigation, Battery, Clock, Wifi, RefreshCw, Compass, Info } from "lucide-react";
+import { 
+  MapPin, 
+  Navigation, 
+  Battery, 
+  Clock, 
+  Wifi, 
+  RefreshCw, 
+  Compass, 
+  Layers, 
+  Eye,
+  Globe
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -25,17 +36,20 @@ export function FreeOsmMap({
   logs = [],
   isLive = false,
   employeeName = "Staff Member",
-  height = "440px",
+  height = "460px",
   onRefresh
 }: FreeOsmMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
+  const tileLayerRef = useRef<any>(null);
+  const labelsLayerRef = useRef<any>(null);
   const polylineRef = useRef<any>(null);
   const markersGroupRef = useRef<any>(null);
 
   const [isLeafletReady, setIsLeafletReady] = useState(false);
+  const [mapLayerType, setMapLayerType] = useState<"streets" | "satellite">("satellite");
 
-  // Sanitize and sort chronologically from morning/start to latest ping
+  // Sanitize and sort chronologically strictly from morning/start (0) to latest ping (last)
   const chronoLogs = useMemo(() => {
     if (!Array.isArray(logs)) return [];
     return logs
@@ -88,7 +102,56 @@ export function FreeOsmMap({
     }
   }, []);
 
-  // Initialize and update Leaflet Map
+  // Handle Map Tile Layer Switch (Streets vs Satellite)
+  useEffect(() => {
+    if (!isLeafletReady || !mapInstanceRef.current) return;
+    const L = (window as any).L;
+    if (!L) return;
+
+    const map = mapInstanceRef.current;
+
+    // Remove old base layer
+    if (tileLayerRef.current) {
+      map.removeLayer(tileLayerRef.current);
+      tileLayerRef.current = null;
+    }
+    if (labelsLayerRef.current) {
+      map.removeLayer(labelsLayerRef.current);
+      labelsLayerRef.current = null;
+    }
+
+    if (mapLayerType === "satellite") {
+      // 🛰️ High-Resolution ESRI World Satellite Imagery (100% Free)
+      tileLayerRef.current = L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+          maxZoom: 19,
+          attribution: "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
+        }
+      ).addTo(map);
+
+      // CartoDB Reference Labels Overlay for Roads & Cities
+      labelsLayerRef.current = L.tileLayer(
+        "https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png",
+        {
+          subdomains: "abcd",
+          maxZoom: 19,
+          opacity: 0.9
+        }
+      ).addTo(map);
+    } else {
+      // 🗺️ Standard OpenStreetMap Streets
+      tileLayerRef.current = L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+          maxZoom: 19,
+          attribution: "&copy; OpenStreetMap contributors"
+        }
+      ).addTo(map);
+    }
+  }, [isLeafletReady, mapLayerType]);
+
+  // Initialize and update Leaflet Map & Trails
   useEffect(() => {
     if (!isLeafletReady || !mapContainerRef.current) return;
     const L = (window as any).L;
@@ -105,10 +168,16 @@ export function FreeOsmMap({
         attributionControl: false
       }).setView(defaultCenter, chronoLogs.length > 0 ? 15 : 5);
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
-      }).addTo(map);
+      // Initial Satellite Layer
+      tileLayerRef.current = L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        { maxZoom: 19 }
+      ).addTo(map);
+
+      labelsLayerRef.current = L.tileLayer(
+        "https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png",
+        { subdomains: "abcd", maxZoom: 19, opacity: 0.9 }
+      ).addTo(map);
 
       markersGroupRef.current = L.featureGroup().addTo(map);
       mapInstanceRef.current = map;
@@ -130,14 +199,14 @@ export function FreeOsmMap({
       return;
     }
 
-    // Coordinates path for polyline in chronological order
+    // Coordinates path for polyline in exact chronological order
     const latLngs = chronoLogs.map((l) => [l.lat, l.lng]);
 
-    // 1. Draw smooth breadcrumb trail
+    // 1. Draw bright glowing breadcrumb trail
     polylineRef.current = L.polyline(latLngs, {
-      color: "#2563eb",
-      weight: 4,
-      opacity: 0.85,
+      color: "#38bdf8", // Glowing cyan blue on satellite
+      weight: 5,
+      opacity: 0.95,
       dashArray: "6, 6",
       smoothFactor: 1
     }).addTo(map);
@@ -152,26 +221,26 @@ export function FreeOsmMap({
         // Start Location Marker (Green)
         const startIcon = L.divIcon({
           className: "custom-osm-start-marker",
-          html: `<div style="background-color: #10b981; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 10px; border: 3px solid white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);">START</div>`,
+          html: `<div style="background-color: #10b981; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 10px; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">START</div>`,
           iconSize: [28, 28],
           iconAnchor: [14, 14]
         });
         const startMarker = L.marker([log.lat, log.lng], { icon: startIcon }).addTo(markersGroup);
         startMarker.bindPopup(`<b>🟢 Start Location Point</b><br/>Time: ${timeStr}`);
       } else if (isLast) {
-        // Current / Latest Location Marker (Pulsing Blue if live or Red if historic end)
+        // Current / Latest Location Marker (Pulsing Cyan/Blue Pin)
         const liveHtml = isLive
-          ? `<div style="position: relative; width: 34px; height: 34px;">
-              <div style="position: absolute; width: 34px; height: 34px; border-radius: 50%; background: #3b82f6; opacity: 0.4; animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
-              <div style="position: absolute; top: 4px; left: 4px; background: #2563eb; color: white; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 13px; border: 3px solid white; box-shadow: 0 4px 10px rgba(37,99,235,0.5);">📍</div>
+          ? `<div style="position: relative; width: 36px; height: 36px;">
+              <div style="position: absolute; width: 36px; height: 36px; border-radius: 50%; background: #38bdf8; opacity: 0.6; animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+              <div style="position: absolute; top: 4px; left: 4px; background: #0284c7; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 14px; border: 3px solid white; box-shadow: 0 4px 12px rgba(2,132,199,0.7);">📍</div>
             </div>`
-          : `<div style="background-color: #ef4444; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 10px; border: 3px solid white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);">END</div>`;
+          : `<div style="background-color: #ef4444; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 10px; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">END</div>`;
 
         const endIcon = L.divIcon({
           className: "custom-osm-end-marker",
           html: liveHtml,
-          iconSize: [34, 34],
-          iconAnchor: [17, 17]
+          iconSize: [36, 36],
+          iconAnchor: [18, 18]
         });
         const endMarker = L.marker([log.lat, log.lng], { icon: endIcon }).addTo(markersGroup);
         endMarker.bindPopup(`<b>${isLive ? "📍 Live Location of " + employeeName : "🔴 Last Location Ping"}</b><br/>Time: ${timeStr}<br/>Battery: ${log.batteryLevel ?? "—"}%`);
@@ -179,7 +248,7 @@ export function FreeOsmMap({
         // Intermediate path node dot
         const dotIcon = L.divIcon({
           className: "custom-osm-dot",
-          html: `<div style="background-color: #3b82f6; width: 10px; height: 10px; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"></div>`,
+          html: `<div style="background-color: #38bdf8; width: 10px; height: 10px; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.5);"></div>`,
           iconSize: [10, 10],
           iconAnchor: [5, 5]
         });
@@ -207,7 +276,7 @@ export function FreeOsmMap({
       {/* Map Legend / Nishan Label Guide */}
       <div className="bg-slate-900 text-white px-4 py-2.5 rounded-2xl flex items-center justify-between flex-wrap gap-2 text-xs shadow-md border border-slate-800">
         <div className="flex items-center gap-1.5 font-black text-[11px] uppercase tracking-wider text-slate-300">
-          <Compass className="h-4 w-4 text-blue-400" />
+          <Compass className="h-4 w-4 text-sky-400" />
           <span>Map Guide (Nishan ka Matlab):</span>
         </div>
 
@@ -218,7 +287,7 @@ export function FreeOsmMap({
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-blue-500 ring-1 ring-white/30 shrink-0"></span>
+            <span className="h-2.5 w-2.5 rounded-full bg-sky-400 ring-1 ring-white/30 shrink-0"></span>
             <span className="text-slate-200">🔵 <strong>PINGS</strong> (Travel Route)</span>
           </div>
 
@@ -228,18 +297,18 @@ export function FreeOsmMap({
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded-full bg-blue-600 ring-2 ring-blue-300 animate-ping shrink-0"></span>
+            <span className="h-3 w-3 rounded-full bg-sky-500 ring-2 ring-sky-300 animate-ping shrink-0"></span>
             <span className="text-emerald-400 font-bold">📍 <strong>LIVE PIN</strong> (Staff Current)</span>
           </div>
         </div>
 
-        <Badge variant="outline" className="text-blue-300 border-blue-800 bg-blue-950/60 text-[10px] font-bold">
-          {validLogs.length} Pings Today
+        <Badge variant="outline" className="text-sky-300 border-sky-800 bg-sky-950/60 text-[10px] font-bold">
+          {chronoLogs.length} Pings Today
         </Badge>
       </div>
 
       {/* Map Container */}
-      <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 shadow-inner group">
+      <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-900 shadow-inner group">
         {/* Top Floating Controls */}
         <div className="absolute top-3 left-3 right-3 z-[1000] flex items-center justify-between pointer-events-none">
           <div className="flex items-center gap-2 pointer-events-auto">
@@ -249,8 +318,8 @@ export function FreeOsmMap({
                 Live GPS Active
               </Badge>
             ) : (
-              <Badge variant="secondary" className="bg-slate-900/80 text-white backdrop-blur-md text-[11px] font-bold px-3 py-1 shadow-md">
-                GPS History ({validLogs.length} Pings)
+              <Badge variant="secondary" className="bg-slate-900/90 text-white backdrop-blur-md text-[11px] font-bold px-3 py-1 shadow-md">
+                GPS History ({chronoLogs.length} Pings)
               </Badge>
             )}
 
@@ -262,46 +331,79 @@ export function FreeOsmMap({
             )}
           </div>
 
-          {onRefresh && (
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={onRefresh}
-              className="pointer-events-auto h-8 px-2.5 rounded-xl bg-white/90 text-slate-700 hover:bg-white backdrop-blur-md border border-slate-200 shadow-sm text-xs font-bold gap-1"
-            >
-              <RefreshCw className="h-3.5 w-3.5 text-blue-600" />
-              Refresh Map
-            </Button>
-          )}
+          {/* Top Right: Satellite / Street Layer Switcher & Refresh */}
+          <div className="flex items-center gap-2 pointer-events-auto">
+            <div className="bg-slate-900/80 backdrop-blur-md p-1 rounded-xl border border-white/20 shadow-md flex items-center gap-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setMapLayerType("satellite")}
+                className={`h-7 px-2.5 rounded-lg text-xs font-black transition-all ${
+                  mapLayerType === "satellite"
+                    ? "bg-sky-500 text-white shadow-sm"
+                    : "text-slate-300 hover:text-white hover:bg-white/10"
+                }`}
+              >
+                <Globe className="h-3 w-3 mr-1" />
+                🛰️ Satellite
+              </Button>
+
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setMapLayerType("streets")}
+                className={`h-7 px-2.5 rounded-lg text-xs font-black transition-all ${
+                  mapLayerType === "streets"
+                    ? "bg-sky-500 text-white shadow-sm"
+                    : "text-slate-300 hover:text-white hover:bg-white/10"
+                }`}
+              >
+                <Layers className="h-3 w-3 mr-1" />
+                🗺️ Streets
+              </Button>
+            </div>
+
+            {onRefresh && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={onRefresh}
+                className="h-9 px-2.5 rounded-xl bg-white/90 text-slate-700 hover:bg-white backdrop-blur-md border border-slate-200 shadow-sm text-xs font-bold gap-1"
+              >
+                <RefreshCw className="h-3.5 w-3.5 text-blue-600" />
+                Refresh
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Leaflet Map Div */}
         <div 
           ref={mapContainerRef} 
           style={{ height, width: "100%", zIndex: 1 }}
-          className="w-full bg-slate-100"
+          className="w-full bg-slate-900"
         />
 
-        {validLogs.length === 0 && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50/90 backdrop-blur-sm z-[999] p-6 text-center">
-            <div className="h-12 w-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-3 shadow-inner">
+        {chronoLogs.length === 0 && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-sm z-[999] p-6 text-center text-white">
+            <div className="h-12 w-12 rounded-2xl bg-sky-500/20 text-sky-400 flex items-center justify-center mb-3 shadow-inner">
               <MapPin className="h-6 w-6" />
             </div>
-            <p className="text-sm font-bold text-slate-800">No GPS Location Logs for this Date</p>
-            <p className="text-xs text-slate-500 max-w-xs mt-1">
+            <p className="text-sm font-bold text-slate-200">No GPS Location Logs for this Date</p>
+            <p className="text-xs text-slate-400 max-w-xs mt-1">
               GPS trail will appear here automatically when employee checks in or turns on location.
             </p>
           </div>
         )}
 
-        {/* Bottom Ping Status Bar */}
+        {/* Bottom Ping Status Bar (Shows Latest Ping) */}
         {latestPing && (
-          <div className="absolute bottom-3 left-3 right-3 z-[1000] bg-white/95 backdrop-blur-md p-2.5 rounded-xl border border-slate-200/80 shadow-md flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2 text-slate-700 font-medium">
-              <Clock className="h-3.5 w-3.5 text-blue-600" />
-              <span>Last Ping Time: <strong className="text-slate-900">{latestPing.timestamp ? new Date(latestPing.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }) : "—"}</strong></span>
+          <div className="absolute bottom-3 left-3 right-3 z-[1000] bg-slate-900/95 text-white backdrop-blur-md p-2.5 rounded-xl border border-slate-700/80 shadow-md flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 font-medium">
+              <Clock className="h-3.5 w-3.5 text-sky-400" />
+              <span>Latest Live Ping: <strong className="text-sky-300 font-bold">{latestPing.timestamp ? new Date(latestPing.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }) : "—"}</strong></span>
             </div>
-            <div className="text-[11px] text-slate-500 font-mono font-bold">
+            <div className="text-[11px] text-slate-400 font-mono font-bold">
               {Number(latestPing.lat).toFixed(5)}, {Number(latestPing.lng).toFixed(5)}
             </div>
           </div>
