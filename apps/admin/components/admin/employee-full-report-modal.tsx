@@ -185,6 +185,13 @@ export function EmployeeFullReportModal({
     }));
   }, [liveLocationLogs]);
 
+  // Sort newest ping first (descending) for the timeline list
+  const newestFirstLocationLogs = useMemo(() => {
+    return [...sanitizedLocationLogs].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  }, [sanitizedLocationLogs]);
+
   // 3. Fetch All Tasks for this employee
   const tasksQuery = useQuery({
     queryKey: ["tasks", "employee", employee?.id],
@@ -500,7 +507,7 @@ export function EmployeeFullReportModal({
                             <p className="text-[11px]">Staff did not transmit location on this day.</p>
                           </div>
                         ) : (
-                          [...sanitizedLocationLogs].reverse().map((ping, idx) => (
+                          newestFirstLocationLogs.map((ping, idx) => (
                             <div
                               key={idx}
                               className="p-2.5 rounded-xl border border-slate-100 hover:border-blue-200 bg-slate-50/50 hover:bg-blue-50/30 transition-all flex items-center justify-between text-xs"

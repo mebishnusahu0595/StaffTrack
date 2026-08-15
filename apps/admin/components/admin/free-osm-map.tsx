@@ -35,19 +35,22 @@ export function FreeOsmMap({
 
   const [isLeafletReady, setIsLeafletReady] = useState(false);
 
-  // Sanitize and filter valid numeric lat/lng logs only
-  const validLogs = useMemo(() => {
+  // Sanitize and sort chronologically from morning/start to latest ping
+  const chronoLogs = useMemo(() => {
     if (!Array.isArray(logs)) return [];
-    return logs.filter((l) => {
-      if (!l) return false;
-      const lat = typeof l.lat === "number" ? l.lat : parseFloat(String(l.lat));
-      const lng = typeof l.lng === "number" ? l.lng : parseFloat(String(l.lng));
-      return !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
-    }).map((l) => ({
-      ...l,
-      lat: typeof l.lat === "number" ? l.lat : parseFloat(String(l.lat)),
-      lng: typeof l.lng === "number" ? l.lng : parseFloat(String(l.lng))
-    }));
+    return logs
+      .filter((l) => {
+        if (!l) return false;
+        const lat = typeof l.lat === "number" ? l.lat : parseFloat(String(l.lat));
+        const lng = typeof l.lng === "number" ? l.lng : parseFloat(String(l.lng));
+        return !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
+      })
+      .map((l) => ({
+        ...l,
+        lat: typeof l.lat === "number" ? l.lat : parseFloat(String(l.lat)),
+        lng: typeof l.lng === "number" ? l.lng : parseFloat(String(l.lng))
+      }))
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   }, [logs]);
 
   // Load Leaflet CSS and JS dynamically from CDN if not already loaded
@@ -60,6 +63,7 @@ export function FreeOsmMap({
       link.id = leafletCssId;
       link.rel = "stylesheet";
       link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      link.integrity = "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=";
       link.crossOrigin = "";
       document.head.appendChild(link);
     }
@@ -74,6 +78,7 @@ export function FreeOsmMap({
       const script = document.createElement("script");
       script.id = leafletScriptId;
       script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      script.integrity = "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=";
       script.crossOrigin = "";
       script.onload = () => setIsLeafletReady(true);
       document.body.appendChild(script);
@@ -89,8 +94,8 @@ export function FreeOsmMap({
     const L = (window as any).L;
     if (!L) return;
 
-    const defaultCenter: [number, number] = validLogs.length > 0 
-      ? [validLogs[validLogs.length - 1].lat, validLogs[validLogs.length - 1].lng]
+    const defaultCenter: [number, number] = chronoLogs.length > 0 
+      ? [chronoLogs[chronoLogs.length - 1].lat, chronoLogs[chronoLogs.length - 1].lng]
       : [20.5937, 78.9629]; // Default India center
 
     // Initialize map instance once
@@ -98,7 +103,7 @@ export function FreeOsmMap({
       const map = L.map(mapContainerRef.current, {
         zoomControl: true,
         attributionControl: false
-      }).setView(defaultCenter, validLogs.length > 0 ? 15 : 5);
+      }).setView(defaultCenter, chronoLogs.length > 0 ? 15 : 5);
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
@@ -120,13 +125,13 @@ export function FreeOsmMap({
       polylineRef.current = null;
     }
 
-    if (validLogs.length === 0) {
+    if (chronoLogs.length === 0) {
       map.setView(defaultCenter, 5);
       return;
     }
 
-    // Coordinates path for polyline
-    const latLngs = validLogs.map((l) => [l.lat, l.lng]);
+    // Coordinates path for polyline in chronological order
+    const latLngs = chronoLogs.map((l) => [l.lat, l.lng]);
 
     // 1. Draw smooth breadcrumb trail
     polylineRef.current = L.polyline(latLngs, {
@@ -138,10 +143,10 @@ export function FreeOsmMap({
     }).addTo(map);
 
     // 2. Add intermediate breadcrumb dots & markers
-    validLogs.forEach((log, idx) => {
+    chronoLogs.forEach((log, idx) => {
       const isFirst = idx === 0;
-      const isLast = idx === validLogs.length - 1;
-      const timeStr = log.timestamp ? new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }) : "—";
+      const isLast = idx === chronoLogs.length - 1;
+      const timeStr = log.timestamp ? new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }) : "—";
 
       if (isFirst) {
         // Start Location Marker (Green)
@@ -185,17 +190,17 @@ export function FreeOsmMap({
 
     // Auto-fit bounds
     try {
-      if (validLogs.length > 1) {
+      if (chronoLogs.length > 1) {
         map.fitBounds(polylineRef.current.getBounds(), { padding: [40, 40], maxZoom: 17 });
-      } else if (validLogs.length === 1) {
-        map.setView([validLogs[0].lat, validLogs[0].lng], 16);
+      } else if (chronoLogs.length === 1) {
+        map.setView([chronoLogs[0].lat, chronoLogs[0].lng], 16);
       }
     } catch {
       map.setView(defaultCenter, 15);
     }
-  }, [isLeafletReady, validLogs, isLive, employeeName]);
+  }, [isLeafletReady, chronoLogs, isLive, employeeName]);
 
-  const latestPing = validLogs.length > 0 ? validLogs[validLogs.length - 1] : null;
+  const latestPing = chronoLogs.length > 0 ? chronoLogs[chronoLogs.length - 1] : null;
 
   return (
     <div className="space-y-3">

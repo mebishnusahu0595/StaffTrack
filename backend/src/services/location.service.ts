@@ -188,18 +188,20 @@ export async function updateLocationStatus(
 export async function getTodayLocationLogs(actor: AuthUser, userId: string, dateStr?: string) {
   await ensureCanAccessUser(actor, userId);
 
-  const baseDate = dateStr ? new Date(dateStr) : new Date();
-  const dayStart = startOfDay(baseDate);
+  // Exact Indian Standard Time (IST) day bounds (00:00:00 to 23:59:59.999 IST)
+  const targetDateStr = dateStr || new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const dayStart = new Date(`${targetDateStr}T00:00:00.000+05:30`);
+  const dayEnd = new Date(`${targetDateStr}T23:59:59.999+05:30`);
 
   return prisma.locationLog.findMany({
     where: {
       userId,
       timestamp: {
         gte: dayStart,
-        lt: nextDay(dayStart)
+        lte: dayEnd
       }
     },
-    orderBy: { timestamp: "desc" }
+    orderBy: { timestamp: "asc" }
   });
 }
 
