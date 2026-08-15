@@ -777,7 +777,7 @@ export function EmployeeFullReportModal({
                           </div>
                         </Card>
                       );
-                    })}
+                    }))}
                 </div>
               </TabsContent>
 
