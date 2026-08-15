@@ -9,17 +9,13 @@ import {
   Clock, 
   MapPin, 
   Gauge, 
-  Sparkles, 
   ChevronRight, 
   Filter, 
   RefreshCw, 
   Building2, 
-  ShieldCheck, 
-  FileText,
-  Calendar,
-  Coins
+  Briefcase
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +42,7 @@ export default function ReportsPage() {
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [workModeFilter, setWorkModeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [punchTypeFilter, setPunchTypeFilter] = useState("all");
 
   // Selected Employee for 360° Full Screen Modal
   const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null);
@@ -120,6 +117,8 @@ export default function ReportsPage() {
     );
 
     return users.filter((u) => {
+      const att = attendanceByUserId.get(u.id);
+
       // 1. Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -149,12 +148,18 @@ export default function ReportsPage() {
 
       // 4. Today's Attendance Status Filter
       if (statusFilter !== "all") {
-        const att = attendanceByUserId.get(u.id);
         const status = att?.status || "ABSENT";
         if (statusFilter === "PRESENT" && status !== "PRESENT") return false;
         if (statusFilter === "ABSENT" && status !== "ABSENT") return false;
         if (statusFilter === "HALF_DAY" && status !== "HALF_DAY") return false;
         if (statusFilter === "ON_LEAVE" && status !== "ON_LEAVE") return false;
+      }
+
+      // 5. Punch Type Filter (FIELD / OFFICE / NONE)
+      if (punchTypeFilter !== "all") {
+        if (punchTypeFilter === "FIELD" && (!att || att.punchType !== "FIELD")) return false;
+        if (punchTypeFilter === "OFFICE" && (!att || att.punchType !== "OFFICE")) return false;
+        if (punchTypeFilter === "NONE" && att && att.checkInTime) return false;
       }
 
       return true;
@@ -165,54 +170,8 @@ export default function ReportsPage() {
     departmentFilter, 
     workModeFilter, 
     statusFilter, 
+    punchTypeFilter,
     attendanceByUserId
-  ]);
-
-  // Top KPI Stats
-  const topStats = useMemo(() => {
-    const allUsers = (usersQuery.data?.items || []).filter(
-      (u) => u.role !== "ADMIN" && u.role !== "SUPERADMIN"
-    );
-    const totalStaff = allUsers.length;
-
-    let presentToday = 0;
-    allUsers.forEach((u) => {
-      const att = attendanceByUserId.get(u.id);
-      if (att && att.status === "PRESENT") {
-        presentToday++;
-      }
-    });
-
-    let todayTasksTotal = 0;
-    let todayTasksCompleted = 0;
-    (tasksQuery.data || []).forEach((t: any) => {
-      const dueStr = t.dueDate ? dayjs(t.dueDate).format("YYYY-MM-DD") : "";
-      if (dueStr === todayDateStr && !t.isSubtask) {
-        todayTasksTotal++;
-        if (t.status === "COMPLETED") todayTasksCompleted++;
-      }
-    });
-
-    let totalKmToday = 0;
-    (todayAttendanceQuery.data || []).forEach((a: any) => {
-      if (a.endOdometer && a.startOdometer && a.endOdometer > a.startOdometer) {
-        totalKmToday += (a.endOdometer - a.startOdometer);
-      }
-    });
-
-    return {
-      totalStaff,
-      presentToday,
-      todayTasksTotal,
-      todayTasksCompleted,
-      totalKmToday
-    };
-  }, [
-    usersQuery.data?.items, 
-    attendanceByUserId, 
-    tasksQuery.data, 
-    todayAttendanceQuery.data, 
-    todayDateStr
   ]);
 
   const handleOpenReport = (employee: any) => {
@@ -221,111 +180,25 @@ export default function ReportsPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16">
-      {/* Top Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-black tracking-tight text-slate-900">
-              Employee 360° Activity Reports
-            </h1>
-            <Badge className="bg-blue-600 text-white font-black text-xs px-2.5 py-0.5">
-              Live Monitoring
-            </Badge>
-          </div>
-          <p className="text-xs text-slate-500 font-medium mt-1">
-            Real-time GPS trails, daily attendance logs, task completion, and odometer reports for all staff members.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              usersQuery.refetch();
-              todayAttendanceQuery.refetch();
-              tasksQuery.refetch();
-            }}
-            className="h-9 px-3 rounded-xl border-slate-200 text-xs font-bold gap-1.5 shadow-sm hover:bg-slate-50"
-          >
-            <RefreshCw className="h-3.5 w-3.5 text-blue-600" />
-            Refresh
-          </Button>
-        </div>
-      </div>
-
-      {/* Top Summary KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="rounded-3xl border-slate-200/80 bg-white p-5 shadow-sm hover:shadow-md transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total Staff</span>
-            <div className="h-9 w-9 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-              <Users className="h-4 w-4" />
-            </div>
-          </div>
-          <p className="text-2xl font-black text-slate-900 mt-2">{topStats.totalStaff}</p>
-          <p className="text-[11px] text-slate-500 font-medium mt-1">Registered employees</p>
-        </Card>
-
-        <Card className="rounded-3xl border-slate-200/80 bg-white p-5 shadow-sm hover:shadow-md transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600">Present Today</span>
-            <div className="h-9 w-9 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-              <CheckCircle2 className="h-4 w-4" />
-            </div>
-          </div>
-          <p className="text-2xl font-black text-emerald-600 mt-2">{topStats.presentToday}</p>
-          <p className="text-[11px] text-slate-500 font-medium mt-1">
-            {topStats.totalStaff > 0 ? Math.round((topStats.presentToday / topStats.totalStaff) * 100) : 0}% Attendance Rate
-          </p>
-        </Card>
-
-        <Card className="rounded-3xl border-slate-200/80 bg-white p-5 shadow-sm hover:shadow-md transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-blue-600">Today&apos;s Tasks</span>
-            <div className="h-9 w-9 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-              <Sparkles className="h-4 w-4" />
-            </div>
-          </div>
-          <p className="text-2xl font-black text-slate-900 mt-2">
-            {topStats.todayTasksCompleted} / {topStats.todayTasksTotal}
-          </p>
-          <p className="text-[11px] text-slate-500 font-medium mt-1">
-            {topStats.todayTasksTotal > 0 ? Math.round((topStats.todayTasksCompleted / topStats.todayTasksTotal) * 100) : 0}% Tasks Completed
-          </p>
-        </Card>
-
-        <Card className="rounded-3xl border-slate-200/80 bg-white p-5 shadow-sm hover:shadow-md transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-amber-600">Distance Travelled Today</span>
-            <div className="h-9 w-9 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-              <Gauge className="h-4 w-4" />
-            </div>
-          </div>
-          <p className="text-2xl font-black text-slate-900 mt-2">{topStats.totalKmToday.toFixed(1)} KM</p>
-          <p className="text-[11px] text-slate-500 font-medium mt-1">Odometer field travel</p>
-        </Card>
-      </div>
-
-      {/* Search & Filter Bar */}
-      <Card className="rounded-3xl border-slate-200/80 bg-white p-4 shadow-sm space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="space-y-4 max-w-7xl mx-auto pb-16">
+      {/* Search & Filter Bar with Refresh */}
+      <Card className="rounded-2xl border-slate-200/80 bg-white p-3.5 shadow-sm space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2.5">
           {/* Live Search */}
-          <div className="relative flex-1 min-w-[280px]">
-            <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+          <div className="relative flex-1 min-w-[240px]">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
             <Input
               placeholder="Search by staff name, email, phone, designation or department..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 h-10 text-xs rounded-2xl bg-slate-50 border-slate-200 font-medium"
+              className="pl-9 h-9 text-xs rounded-xl bg-slate-50 border-slate-200 font-medium"
             />
           </div>
 
           {/* Department Filter */}
-          <div className="w-44">
+          <div className="w-40">
             <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-              <SelectTrigger className="h-10 text-xs rounded-2xl bg-slate-50 border-slate-200 font-bold">
+              <SelectTrigger className="h-9 text-xs rounded-xl bg-slate-50 border-slate-200 font-bold">
                 <SelectValue placeholder="Department" />
               </SelectTrigger>
               <SelectContent>
@@ -340,9 +213,9 @@ export default function ReportsPage() {
           </div>
 
           {/* Work Mode Filter */}
-          <div className="w-36">
+          <div className="w-32">
             <Select value={workModeFilter} onValueChange={setWorkModeFilter}>
-              <SelectTrigger className="h-10 text-xs rounded-2xl bg-slate-50 border-slate-200 font-bold">
+              <SelectTrigger className="h-9 text-xs rounded-xl bg-slate-50 border-slate-200 font-bold">
                 <SelectValue placeholder="Work Mode" />
               </SelectTrigger>
               <SelectContent>
@@ -354,11 +227,26 @@ export default function ReportsPage() {
             </Select>
           </div>
 
-          {/* Today Attendance Filter */}
+          {/* Check-in Type (Field / Office) Filter */}
           <div className="w-36">
+            <Select value={punchTypeFilter} onValueChange={setPunchTypeFilter}>
+              <SelectTrigger className="h-9 text-xs rounded-xl bg-slate-50 border-slate-200 font-bold">
+                <SelectValue placeholder="Check-in Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Check-in Types</SelectItem>
+                <SelectItem value="FIELD">📍 Field Punch</SelectItem>
+                <SelectItem value="OFFICE">🏢 Office Punch</SelectItem>
+                <SelectItem value="NONE">❌ Not Punched In</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Today Attendance Filter */}
+          <div className="w-32">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-10 text-xs rounded-2xl bg-slate-50 border-slate-200 font-bold">
-                <SelectValue placeholder="Today Status" />
+              <SelectTrigger className="h-9 text-xs rounded-xl bg-slate-50 border-slate-200 font-bold">
+                <SelectValue placeholder="Attendance" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
@@ -369,17 +257,32 @@ export default function ReportsPage() {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Refresh Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              usersQuery.refetch();
+              todayAttendanceQuery.refetch();
+              tasksQuery.refetch();
+            }}
+            className="h-9 px-3 rounded-xl border-slate-200 text-xs font-bold gap-1 shadow-sm hover:bg-slate-50 shrink-0"
+          >
+            <RefreshCw className="h-3.5 w-3.5 text-blue-600" />
+            Refresh
+          </Button>
         </div>
       </Card>
 
       {/* Main Employee Reports Table */}
-      <Card className="rounded-3xl border-slate-200/80 bg-white shadow-sm overflow-hidden">
+      <Card className="rounded-2xl border-slate-200/80 bg-white shadow-sm overflow-hidden">
         <Table>
           <TableHeader className="bg-slate-50/80 border-b border-slate-200">
             <TableRow>
-              <TableHead className="w-14 font-black text-xs text-slate-500 uppercase text-center">#</TableHead>
+              <TableHead className="w-12 font-black text-xs text-slate-500 uppercase text-center">#</TableHead>
               <TableHead className="font-black text-xs text-slate-500 uppercase">Employee Details</TableHead>
-              <TableHead className="font-black text-xs text-slate-500 uppercase">Today Attendance</TableHead>
+              <TableHead className="font-black text-xs text-slate-500 uppercase">Today Attendance & Punch Type</TableHead>
               <TableHead className="font-black text-xs text-slate-500 uppercase">Today&apos;s Tasks</TableHead>
               <TableHead className="font-black text-xs text-slate-500 uppercase">Today Distance</TableHead>
               <TableHead className="text-right font-black text-xs text-slate-500 uppercase pr-6">Action</TableHead>
@@ -391,7 +294,7 @@ export default function ReportsPage() {
                 <TableCell colSpan={6} className="text-center py-12 text-slate-400 space-y-2">
                   <Users className="h-8 w-8 mx-auto opacity-30" />
                   <p className="text-sm font-bold text-slate-600">No Employees Match Filter</p>
-                  <p className="text-xs">Try adjusting your search query or department filter.</p>
+                  <p className="text-xs">Try adjusting your search query or filters.</p>
                 </TableCell>
               </TableRow>
             ) : (
@@ -462,18 +365,28 @@ export default function ReportsPage() {
                       </div>
                     </TableCell>
 
-                    {/* Today Attendance */}
+                    {/* Today Attendance & Punch Type */}
                     <TableCell>
                       {todayAtt ? (
                         <div className="space-y-1">
-                          <Badge className={cn(
-                            "text-[10px] font-black uppercase px-2.5 py-0.5",
-                            todayAtt.status === "PRESENT" ? "bg-emerald-600 text-white" :
-                            todayAtt.status === "HALF_DAY" ? "bg-amber-500 text-white" :
-                            todayAtt.status === "ON_LEAVE" ? "bg-purple-600 text-white" : "bg-rose-500 text-white"
-                          )}>
-                            {todayAtt.status}
-                          </Badge>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Badge className={cn(
+                              "text-[10px] font-black uppercase px-2 py-0.5",
+                              todayAtt.status === "PRESENT" ? "bg-emerald-600 text-white" :
+                              todayAtt.status === "HALF_DAY" ? "bg-amber-500 text-white" :
+                              todayAtt.status === "ON_LEAVE" ? "bg-purple-600 text-white" : "bg-rose-500 text-white"
+                            )}>
+                              {todayAtt.status}
+                            </Badge>
+                            {todayAtt.punchType && (
+                              <Badge variant="outline" className={cn(
+                                "text-[10px] font-bold px-1.5 py-0.2",
+                                todayAtt.punchType === "FIELD" ? "border-blue-300 text-blue-700 bg-blue-50/50" : "border-slate-300 text-slate-700 bg-slate-50"
+                              )}>
+                                {todayAtt.punchType === "FIELD" ? "📍 FIELD" : "🏢 OFFICE"}
+                              </Badge>
+                            )}
+                          </div>
                           {todayAtt.checkInTime && (
                             <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
                               <Clock className="h-3 w-3 text-slate-400" />
