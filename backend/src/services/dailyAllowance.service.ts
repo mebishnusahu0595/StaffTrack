@@ -86,16 +86,15 @@ export async function getTodayAllowanceStatus(actor: AuthUser) {
     }
   });
 
-  const thresholdExceeded = gpsKm >= 50.0;
+  const thresholdExceeded = gpsKm >= 80.0;
 
-  // Send push notification if >= 50km and allowance not yet submitted and notification not sent today
+  // Send push notification if >= 80km and allowance not yet submitted and notification not sent today
   if (thresholdExceeded && !allowance) {
     try {
-      const notificationKey = `DA_50KM_ALERT_${actor.id}_${today.toISOString().slice(0, 10)}`;
       const existingNotif = await prisma.notification.findFirst({
         where: {
           userId: actor.id,
-          type: "DA_50KM_ALERT",
+          type: "DA_80KM_ALERT",
           createdAt: { gte: today }
         }
       });
@@ -104,12 +103,12 @@ export async function getTodayAllowanceStatus(actor: AuthUser) {
         await notificationService.createNotification(
           actor.id,
           "Daily Allowance Eligible!",
-          `You have traveled ${gpsKm} km today (>50 km). Please submit your Daily Allowance in the app.`,
-          "DA_50KM_ALERT"
+          `You have traveled ${gpsKm} km today (≥80 km). Please submit your Daily Allowance in the app.`,
+          "DA_80KM_ALERT"
         );
       }
     } catch (err) {
-      console.warn("[DailyAllowance] Failed to send 50km alert notification:", err);
+      console.warn("[DailyAllowance] Failed to send 80km alert notification:", err);
     }
   }
 
@@ -123,6 +122,10 @@ export async function getTodayAllowanceStatus(actor: AuthUser) {
 export async function submitDailyAllowance(actor: AuthUser, input: { amount: number; remark?: string }) {
   const today = startOfDay(new Date());
   const gpsKm = await calculateTodayGpsKm(actor.id, today);
+
+  if (gpsKm < 80.0) {
+    throw new Error("Daily allowance requires at least 80 km of travel today");
+  }
 
   if (input.amount <= 0) {
     throw new Error("Daily allowance amount must be greater than 0");
