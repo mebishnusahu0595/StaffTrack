@@ -81,13 +81,35 @@ export function useSocket(companyId?: string) {
     });
 
     socket.on("location-update", (data) => {
-      console.log("WS Location Update:", data);
-      // Refresh the live map pings for this user...
-      void queryClient.invalidateQueries({ queryKey: ["location", data.userId] });
-      // ...and the employee list itself, since each ping also updates the
-      // user's isLocationOn flag and batteryLevel on the backend. Without this
-      // the online dot and battery % stay frozen at whatever they were on load.
-      void queryClient.invalidateQueries({ queryKey: ["users"] });
+      // Invalidate targeted location query for open modals
+      if (data?.userId) {
+        void queryClient.invalidateQueries({ queryKey: ["location", data.userId] });
+      }
+      
+      // Smoothly update user battery & online state in cache without freezing UI with full refetches
+      if (data?.userId) {
+        queryClient.setQueriesData({ queryKey: ["users"] }, (oldData: any) => {
+          if (!oldData) return oldData;
+          if (Array.isArray(oldData.items)) {
+            return {
+              ...oldData,
+              items: oldData.items.map((u: any) => 
+                u.id === data.userId 
+                  ? { ...u, isLocationOn: true, batteryLevel: data.batteryLevel ?? u.batteryLevel }
+                  : u
+              )
+            };
+          }
+          if (Array.isArray(oldData)) {
+            return oldData.map((u: any) => 
+              u.id === data.userId 
+                ? { ...u, isLocationOn: true, batteryLevel: data.batteryLevel ?? u.batteryLevel }
+                : u
+            );
+          }
+          return oldData;
+        });
+      }
     });
 
     socket.on("LOCATION_OFF_EVENT", (data) => {

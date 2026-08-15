@@ -145,16 +145,23 @@ export function EmployeeFullReportModal({
     socket.on("location-update", (data: any) => {
       // ONLY update if event is for this specific employee
       if (data && data.userId === employee.id) {
-        setLiveLocationLogs((prev) => {
-          const newPing: LocationPing = {
-            lat: data.lat,
-            lng: data.lng,
-            accuracy: data.accuracy,
-            batteryLevel: data.batteryLevel,
-            timestamp: data.timestamp || new Date().toISOString()
-          };
-          return [...prev, newPing];
-        });
+        const rawLat = data.lat !== undefined ? data.lat : data.location?.lat;
+        const rawLng = data.lng !== undefined ? data.lng : data.location?.lng;
+        const lat = typeof rawLat === "number" ? rawLat : parseFloat(String(rawLat));
+        const lng = typeof rawLng === "number" ? rawLng : parseFloat(String(rawLng));
+
+        if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+          setLiveLocationLogs((prev) => {
+            const newPing: LocationPing = {
+              lat,
+              lng,
+              accuracy: data.accuracy ?? data.location?.accuracy,
+              batteryLevel: data.batteryLevel ?? data.location?.batteryLevel,
+              timestamp: data.timestamp || data.location?.timestamp || new Date().toISOString()
+            };
+            return [...prev, newPing];
+          });
+        }
       }
     });
 
@@ -162,6 +169,21 @@ export function EmployeeFullReportModal({
       socket.disconnect();
     };
   }, [isOpen, employee?.id, employee?.companyId]);
+
+  // Sanitize all location logs to prevent NaN or undefined errors
+  const sanitizedLocationLogs = useMemo(() => {
+    if (!Array.isArray(liveLocationLogs)) return [];
+    return liveLocationLogs.filter((l) => {
+      if (!l) return false;
+      const lat = typeof l.lat === "number" ? l.lat : parseFloat(String(l.lat));
+      const lng = typeof l.lng === "number" ? l.lng : parseFloat(String(l.lng));
+      return !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
+    }).map((l) => ({
+      ...l,
+      lat: typeof l.lat === "number" ? l.lat : parseFloat(String(l.lat)),
+      lng: typeof l.lng === "number" ? l.lng : parseFloat(String(l.lng))
+    }));
+  }, [liveLocationLogs]);
 
   // 3. Fetch All Tasks for this employee
   const tasksQuery = useQuery({
@@ -449,10 +471,10 @@ export function EmployeeFullReportModal({
                   {/* Interactive Map (2 Columns) */}
                   <div className="lg:col-span-2 space-y-3">
                     <FreeOsmMap
-                      logs={liveLocationLogs}
+                      logs={sanitizedLocationLogs}
                       isLive={Boolean(employee.isLocationOn && selectedDate === dayjs().format("YYYY-MM-DD"))}
                       employeeName={employee.name}
-                      height="460px"
+                      height="440px"
                       onRefresh={() => locationQuery.refetch()}
                     />
                   </div>
@@ -466,19 +488,19 @@ export function EmployeeFullReportModal({
                           <p className="text-xs font-black uppercase text-slate-800">GPS Ping Timeline</p>
                         </div>
                         <Badge variant="secondary" className="font-bold text-[10px]">
-                          {liveLocationLogs.length} Pings
+                          {sanitizedLocationLogs.length} Pings
                         </Badge>
                       </div>
 
                       <div className="p-3 max-h-[390px] overflow-y-auto space-y-2">
-                        {liveLocationLogs.length === 0 ? (
+                        {sanitizedLocationLogs.length === 0 ? (
                           <div className="p-8 text-center text-slate-400 space-y-2">
                             <MapPin className="h-8 w-8 mx-auto opacity-30" />
                             <p className="text-xs font-bold">No GPS Pings Logged</p>
                             <p className="text-[11px]">Staff did not transmit location on this day.</p>
                           </div>
                         ) : (
-                          [...liveLocationLogs].reverse().map((ping, idx) => (
+                          [...sanitizedLocationLogs].reverse().map((ping, idx) => (
                             <div
                               key={idx}
                               className="p-2.5 rounded-xl border border-slate-100 hover:border-blue-200 bg-slate-50/50 hover:bg-blue-50/30 transition-all flex items-center justify-between text-xs"
@@ -487,7 +509,7 @@ export function EmployeeFullReportModal({
                                 <div className="flex items-center gap-2">
                                   <Clock className="h-3 w-3 text-slate-400" />
                                   <span className="font-bold text-slate-800">
-                                    {dayjs(ping.timestamp).format("hh:mm:ss A")}
+                                    {ping.timestamp ? dayjs(ping.timestamp).format("hh:mm:ss A") : "—"}
                                   </span>
                                   {ping.batteryLevel !== undefined && ping.batteryLevel !== null && (
                                     <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
@@ -495,8 +517,8 @@ export function EmployeeFullReportModal({
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-[10px] text-slate-400 font-mono">
-                                  {ping.lat.toFixed(5)}, {ping.lng.toFixed(5)}
+                                <p className="text-[10px] text-slate-400 font-mono font-bold">
+                                  {Number(ping.lat).toFixed(5)}, {Number(ping.lng).toFixed(5)}
                                 </p>
                               </div>
 
