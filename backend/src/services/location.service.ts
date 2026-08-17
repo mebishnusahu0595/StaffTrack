@@ -20,6 +20,27 @@ export async function createLocationLogs(
 ) {
   const logs = Array.isArray(input) ? input : input.logs;
 
+  // Strict check: Only accept and record location logs if employee is actively checked-in today!
+  const today = startOfDay(new Date());
+  const activeAttendance = await prisma.attendance.findFirst({
+    where: {
+      userId: actor.id,
+      date: { gte: today },
+      checkInTime: { not: null },
+      checkOutTime: null
+    }
+  });
+
+  if (!activeAttendance) {
+    // User is NOT checked in today or already checked out.
+    // Ensure isLocationOn is marked false so admin dashboard doesn't show active location
+    await prisma.user.update({
+      where: { id: actor.id },
+      data: { isLocationOn: false }
+    });
+    return { count: 0 };
+  }
+
   const result = await prisma.locationLog.createMany({
     data: logs.map((log) => ({
       userId: actor.id,
@@ -60,11 +81,24 @@ export async function updateLocationStatus(
   actor: AuthUser,
   input: { isLocationOn: boolean; batteryLevel?: number; isStale?: boolean }
 ) {
+  // Only allow isLocationOn = true if the user currently has an active check-in today
+  const today = startOfDay(new Date());
+  const activeAttendance = await prisma.attendance.findFirst({
+    where: {
+      userId: actor.id,
+      date: { gte: today },
+      checkInTime: { not: null },
+      checkOutTime: null
+    }
+  });
+
+  const shouldBeLocationOn = input.isLocationOn && Boolean(activeAttendance);
+
   const user = await prisma.user.update({
     where: { id: actor.id },
     data: {
-      isLocationOn: input.isLocationOn,
-      locationOffAt: input.isLocationOn ? null : new Date(),
+      isLocationOn: shouldBeLocationOn,
+      locationOffAt: shouldBeLocationOn ? null : new Date(),
       ...(input.batteryLevel !== undefined && { batteryLevel: input.batteryLevel })
     }
   });
