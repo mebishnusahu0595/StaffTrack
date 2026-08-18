@@ -845,24 +845,7 @@ async function taskAccessWhere(actor: AuthUser, dateStr?: string): Promise<Prism
     };
   }
 
-  if (actor.role === UserRole.MANAGER) {
-    const managerGroupId = await getManagerGroupId(actor.id);
-    return {
-      AND: [
-        {
-          OR: [
-            { assignedToId: actor.id },
-            { assignedTo: { managerId: actor.id } },
-            ...(managerGroupId ? [{ assignedTo: { groupId: managerGroupId } }] : []),
-            { assignedById: actor.id }
-          ]
-        },
-        dateFilter
-      ]
-    };
-  }
-
-  // Employees see tasks matching dateFilter for themselves
+  // Managers and Employees see tasks assigned directly to themselves
   return {
     assignedToId: actor.id,
     ...dateFilter
