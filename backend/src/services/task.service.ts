@@ -836,12 +836,29 @@ async function taskAccessWhere(actor: AuthUser, dateStr?: string): Promise<Prism
     return dateFilter;
   }
 
-  if (actor.role === UserRole.ADMIN || actor.role === UserRole.MANAGER) {
+  if (actor.role === UserRole.ADMIN) {
     return {
       assignedTo: {
         companyId: actor.companyId
       },
       ...dateFilter
+    };
+  }
+
+  if (actor.role === UserRole.MANAGER) {
+    const managerGroupId = await getManagerGroupId(actor.id);
+    return {
+      AND: [
+        {
+          OR: [
+            { assignedToId: actor.id },
+            { assignedTo: { managerId: actor.id } },
+            ...(managerGroupId ? [{ assignedTo: { groupId: managerGroupId } }] : []),
+            { assignedById: actor.id }
+          ]
+        },
+        dateFilter
+      ]
     };
   }
 
