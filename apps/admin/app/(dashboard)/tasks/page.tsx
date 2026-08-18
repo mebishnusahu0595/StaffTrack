@@ -43,7 +43,7 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
-import { fetchTasks, deleteTask, bulkDeleteTasks, deleteAllTasks, updateTask, createTask as apiCreateTask, fetchUsers, createTemplate, fetchProjects, createProject as apiCreateProject, fetchGroups, fetchDealers, createDealer } from "@/lib/api";
+import { fetchTasks, deleteTask, bulkDeleteTasks, deleteAllTasks, deleteUserTasks, updateTask, createTask as apiCreateTask, fetchUsers, createTemplate, fetchProjects, createProject as apiCreateProject, fetchGroups, fetchDealers, createDealer } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -208,6 +208,25 @@ export default function TasksPage() {
       alert(err?.response?.data?.message || err?.message || "Failed to delete all tasks");
     }
   });
+
+  const deleteUserTasksMutation = useMutation({
+    mutationFn: (userId: string) => deleteUserTasks(userId, "all"),
+    onSuccess: (result: { count: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      alert(`Successfully deleted ${result?.count ?? 0} task(s) for this user.`);
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message || err?.message || "Failed to delete user tasks");
+    }
+  });
+
+  const handleDeleteUserTasks = () => {
+    if (!selectedAssignee || selectedAssignee === "ALL") return;
+    const targetUserName = users.items?.find((u: any) => u.id === selectedAssignee)?.name || "this user";
+    const first = confirm(`Are you sure you want to delete ALL tasks assigned to ${targetUserName}? This is permanent.`);
+    if (!first) return;
+    deleteUserTasksMutation.mutate(selectedAssignee);
+  };
 
   const handleDeleteAllTasks = () => {
     const first = confirm("Delete ALL tasks for the company? This is permanent and cannot be undone.");
@@ -706,6 +725,16 @@ export default function TasksPage() {
                     <Trash2 className="h-4 w-4" /> {bulkDeleteMutation.isPending ? "Deleting..." : `Delete Selected (${selectedTaskIds.length})`}
                   </Button>
                 )}
+                {selectedAssignee && selectedAssignee !== "ALL" && (
+                   <Button
+                     variant="outline"
+                     className="h-10 rounded-lg px-4 font-bold text-xs gap-2 border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100 shadow-sm"
+                     onClick={handleDeleteUserTasks}
+                     disabled={deleteUserTasksMutation.isPending}
+                   >
+                     <Trash2 className="h-4 w-4" /> {deleteUserTasksMutation.isPending ? "Deleting..." : `Delete All Tasks of ${users.items?.find((u: any) => u.id === selectedAssignee)?.name?.split(" ")[0] || "User"}`}
+                   </Button>
+                 )}
                <Button
                  variant="outline"
                  className="h-10 rounded-lg px-4 font-bold text-xs gap-2 border-rose-200 text-rose-600 hover:bg-rose-50"

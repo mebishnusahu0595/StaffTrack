@@ -605,6 +605,44 @@ export async function deleteAllTasks(actor: AuthUser) {
   return prisma.task.deleteMany({ where });
 }
 
+export async function deleteUserTasks(actor: AuthUser, userId: string, option: string = "all") {
+  if (actor.role !== UserRole.SUPERADMIN && actor.role !== UserRole.ADMIN && actor.role !== UserRole.MANAGER) {
+    forbidden("Only admins and managers can delete user tasks");
+  }
+
+  const targetUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, companyId: true, managerId: true, groupId: true }
+  });
+
+  if (!targetUser) {
+    notFound("User not found");
+  }
+
+  if (actor.role !== UserRole.SUPERADMIN && targetUser.companyId !== actor.companyId) {
+    forbidden("User belongs to a different company");
+  }
+
+  let whereClause: Prisma.TaskWhereInput = {
+    assignedToId: userId
+  };
+
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+
+  if (option === "future") {
+    whereClause.dueDate = { gte: todayStart };
+  } else if (option === "pending") {
+    whereClause.status = TaskStatus.PENDING;
+  }
+
+  const result = await prisma.task.deleteMany({
+    where: whereClause
+  });
+
+  return { count: result.count };
+}
+
 export async function updateTaskStatus(
   actor: AuthUser, 
   taskId: string, 

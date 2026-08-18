@@ -42,6 +42,11 @@ router.delete(
   asyncHandler(taskController.deleteAllTasks)
 );
 router.delete(
+  "/user/:userId",
+  roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER),
+  asyncHandler(taskController.deleteUserTasks)
+);
+router.delete(
   "/:id",
   roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER),
   validate({ params: taskIdParamSchema }),

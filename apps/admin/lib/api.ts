@@ -231,6 +231,11 @@ export async function deleteAllTasks() {
   return response.data.data;
 }
 
+export async function deleteUserTasks(userId: string, option: string = "all") {
+  const response = await api.delete<{ data: { count: number } }>(`/tasks/user/${userId}`, { params: { option } });
+  return response.data.data;
+}
+
 export async function fetchAttendance(userId: string, params?: { month?: number; year?: number }) {
   const response = await api.get<{ data: AttendanceRecord[] }>(`/attendance/${userId}`, { params });
   return response.data.data;
