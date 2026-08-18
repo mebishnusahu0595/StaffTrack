@@ -469,7 +469,7 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
   return updatedTask;
 }
 
-export async function deleteTask(actor: AuthUser, taskId: string) {
+export async function deleteTask(actor: AuthUser, taskId: string, deleteAllSeries: boolean = true) {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     include: {
@@ -491,8 +491,8 @@ export async function deleteTask(actor: AuthUser, taskId: string) {
   // Security checks
   if (actor.role === UserRole.MANAGER) {
     const managerGroupId = await getManagerGroupId(actor.id);
-    const isDirectReport = task.assignedTo.managerId === actor.id;
-    const isInGroup = managerGroupId && task.assignedTo.groupId === managerGroupId;
+    const isDirectReport = task.assignedTo?.managerId === actor.id;
+    const isInGroup = managerGroupId && task.assignedTo?.groupId === managerGroupId;
     const isCreator = task.assignedById === actor.id;
     if (!isDirectReport && !isInGroup && !isCreator) {
       forbidden("Insufficient permissions to delete this task");
@@ -501,23 +501,25 @@ export async function deleteTask(actor: AuthUser, taskId: string) {
     forbidden("Only admins and managers can delete tasks");
   }
 
-  if (actor.role !== UserRole.SUPERADMIN && actor.role !== UserRole.ADMIN && task.assignedTo.companyId !== actor.companyId) {
+  if (actor.role !== UserRole.SUPERADMIN && actor.role !== UserRole.ADMIN && task.assignedTo?.companyId !== actor.companyId) {
     forbidden("Task is outside your company");
   }
 
-  // If this task has a series or is a repeating parent, clean up all series occurrences
-  const parentId = task.parentTaskId || (task.isRepeating ? task.id : null);
-  if (parentId) {
-    await prisma.task.deleteMany({
-      where: {
-        OR: [
-          { parentTaskId: parentId },
-          { id: parentId },
-          { id: taskId }
-        ]
-      }
-    });
-    return { id: taskId };
+  // If this task has a series or is a repeating parent and deleteAllSeries is true, clean up all series occurrences
+  if (deleteAllSeries) {
+    const parentId = task.parentTaskId || (task.isRepeating ? task.id : null);
+    if (parentId) {
+      await prisma.task.deleteMany({
+        where: {
+          OR: [
+            { parentTaskId: parentId },
+            { id: parentId },
+            { id: taskId }
+          ]
+        }
+      });
+      return { id: taskId };
+    }
   }
 
   return prisma.task.delete({
@@ -525,7 +527,7 @@ export async function deleteTask(actor: AuthUser, taskId: string) {
   });
 }
 
-export async function bulkDeleteTasks(actor: AuthUser, taskIds: string[]) {
+export async function bulkDeleteTasks(actor: AuthUser, taskIds: string[], deleteAllSeries: boolean = true) {
   if (actor.role !== UserRole.SUPERADMIN && actor.role !== UserRole.ADMIN && actor.role !== UserRole.MANAGER) {
     forbidden("Only admins and managers can delete tasks");
   }
@@ -569,23 +571,33 @@ export async function bulkDeleteTasks(actor: AuthUser, taskIds: string[]) {
     return { count: 0 };
   }
 
-  // Find all parent IDs and repeating series IDs to wipe out all occurrences completely
-  const parentIds = Array.from(new Set(
-    allowedTasks.map(t => t.parentTaskId || (t.isRepeating ? t.id : null)).filter(Boolean) as string[]
-  ));
+  if (deleteAllSeries) {
+    // Find all parent IDs and repeating series IDs to wipe out all occurrences completely
+    const parentIds = Array.from(new Set(
+      allowedTasks.map(t => t.parentTaskId || (t.isRepeating ? t.id : null)).filter(Boolean) as string[]
+    ));
 
-  const deleteConditions: Prisma.TaskWhereInput[] = [
-    { id: { in: allowedIds } }
-  ];
+    const deleteConditions: Prisma.TaskWhereInput[] = [
+      { id: { in: allowedIds } }
+    ];
 
-  if (parentIds.length > 0) {
-    deleteConditions.push({ parentTaskId: { in: parentIds } });
-    deleteConditions.push({ id: { in: parentIds } });
+    if (parentIds.length > 0) {
+      deleteConditions.push({ parentTaskId: { in: parentIds } });
+      deleteConditions.push({ id: { in: parentIds } });
+    }
+
+    const result = await prisma.task.deleteMany({
+      where: {
+        OR: deleteConditions
+      }
+    });
+
+    return { count: result.count };
   }
 
   const result = await prisma.task.deleteMany({
     where: {
-      OR: deleteConditions
+      id: { in: allowedIds }
     }
   });
 

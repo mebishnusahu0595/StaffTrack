@@ -90,7 +90,7 @@ type FilterType = "ALL" | "ACTIVE" | "INACTIVE" | "TODAYS" | "ONGOING" | "OVERDU
 export default function TasksPage() {
   const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<ViewMode>("LIST");
-  const [activeFilter, setActiveFilter] = useState<FilterType>("ALL");
+  const [activeFilter, setActiveFilter] = useState<FilterType>("TODAYS");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDate, setFilterDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
   const [centerDate, setCenterDate] = useState<Date>(new Date());
@@ -116,6 +116,7 @@ export default function TasksPage() {
   const [viewDensity, setViewDensity] = useState<"COMPACT" | "COZY">("COZY");
 
   useEffect(() => {
+    setSelectedTaskIds([]);
     setPage(1);
   }, [searchQuery, activeFilter, filterDate, selectedAssignee, selectedPriority, selectedFrequency, selectedDepartment]);
 
@@ -134,8 +135,8 @@ export default function TasksPage() {
   const pageSize = 10;
 
   const { data: tasks = [], isLoading } = useQuery({
-    queryKey: ["tasks", filterDate],
-    queryFn: () => fetchTasks(filterDate ? { date: filterDate } : { date: "all" })
+    queryKey: ["tasks", activeFilter === "ALL" ? "all" : filterDate],
+    queryFn: () => fetchTasks(activeFilter === "ALL" ? { date: "all" } : (filterDate ? { date: filterDate } : { date: "all" }))
   });
 
   const activeViewingTask = useMemo(() => {
@@ -189,7 +190,7 @@ export default function TasksPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: deleteTask,
+    mutationFn: ({ id, deleteAllSeries }: { id: string; deleteAllSeries: boolean }) => deleteTask(id, deleteAllSeries),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
@@ -197,6 +198,15 @@ export default function TasksPage() {
       alert(err?.response?.data?.message || err?.message || "Failed to delete task");
     }
   });
+
+  const handleDeleteSingleTask = (task: any) => {
+    const isTodayTab = activeFilter === "TODAYS";
+    const msg = isTodayTab
+      ? "Delete today's task occurrence only? (Future repeats will remain)"
+      : "Delete this entire task and all repeating series permanently?";
+    if (!confirm(msg)) return;
+    deleteMutation.mutate({ id: task.id, deleteAllSeries: !isTodayTab });
+  };
 
   const deleteAllMutation = useMutation({
     mutationFn: deleteAllTasks,
@@ -564,7 +574,7 @@ export default function TasksPage() {
   }, [filteredTasks, page]);
 
   const bulkDeleteMutation = useMutation({
-    mutationFn: bulkDeleteTasks,
+    mutationFn: ({ ids, deleteAllSeries }: { ids: string[]; deleteAllSeries: boolean }) => bulkDeleteTasks(ids, deleteAllSeries),
     onSuccess: (result: { count: number }) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       alert(`Deleted ${result?.count ?? 0} selected task(s).`);
@@ -601,9 +611,13 @@ export default function TasksPage() {
 
   const handleBulkDelete = () => {
     if (selectedTaskIds.length === 0) return;
-    const confirmDelete = confirm(`Are you sure you want to delete the ${selectedTaskIds.length} selected task(s)? This is permanent and cannot be undone.`);
+    const isTodayTab = activeFilter === "TODAYS";
+    const msg = isTodayTab
+      ? `Delete today's occurrence for the ${selectedTaskIds.length} selected task(s)? (Future repeats will remain)`
+      : `Are you sure you want to permanently delete the ${selectedTaskIds.length} selected task(s) and all their repeating series?`;
+    const confirmDelete = confirm(msg);
     if (!confirmDelete) return;
-    bulkDeleteMutation.mutate(selectedTaskIds);
+    bulkDeleteMutation.mutate({ ids: selectedTaskIds, deleteAllSeries: !isTodayTab });
   };
 
   // Calendar cells calculation helper
@@ -883,10 +897,10 @@ export default function TasksPage() {
         {/* Sub Navigation Tabs */}
         <div className="px-6 border-b border-slate-50 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
            <div className="flex items-center gap-8 min-w-max">
+              <FilterTab active={activeFilter === "TODAYS"} onClick={() => setActiveFilter("TODAYS")} label="Today's Tasks" />
               <FilterTab active={activeFilter === "ALL"} onClick={() => setActiveFilter("ALL")} label="All Tasks" />
               <FilterTab active={activeFilter === "ACTIVE"} onClick={() => setActiveFilter("ACTIVE")} label="Active Tasks" />
               <FilterTab active={activeFilter === "INACTIVE"} onClick={() => setActiveFilter("INACTIVE")} label="Inactive Tasks" />
-              <FilterTab active={activeFilter === "TODAYS"} onClick={() => setActiveFilter("TODAYS")} label="Todays Tasks" />
               <FilterTab active={activeFilter === "ONGOING"} onClick={() => setActiveFilter("ONGOING")} label="Ongoing" />
               <FilterTab active={activeFilter === "OVERDUE"} onClick={() => setActiveFilter("OVERDUE")} label="Overdue" />
               <FilterTab active={activeFilter === "MISSED"} onClick={() => setActiveFilter("MISSED")} label="Missed" />
@@ -1248,11 +1262,7 @@ export default function TasksPage() {
                                           </DropdownMenuItem>
                                           <DropdownMenuItem 
                                             className="text-xs font-bold gap-2 text-rose-600 cursor-pointer"
-                                            onClick={() => {
-                                              if (confirm("Are you sure you want to delete this task permanently from everywhere?")) {
-                                                deleteMutation.mutate(task.id);
-                                              }
-                                            }}
+                                            onClick={() => handleDeleteSingleTask(task)}
                                           >
                                             Delete Task
                                           </DropdownMenuItem>
@@ -1384,11 +1394,7 @@ export default function TasksPage() {
                                   </DropdownMenuItem>
                                   <DropdownMenuItem 
                                     className="text-xs font-bold gap-2 text-rose-600 cursor-pointer"
-                                    onClick={() => {
-                                      if (confirm("Are you sure you want to delete this task permanently from everywhere?")) {
-                                        deleteMutation.mutate(task.id);
-                                      }
-                                    }}
+                                    onClick={() => handleDeleteSingleTask(task)}
                                   >
                                     Delete Task
                                   </DropdownMenuItem>
@@ -1490,11 +1496,7 @@ export default function TasksPage() {
                                 </DropdownMenuItem>
                                 <DropdownMenuItem 
                                   className="text-xs font-bold gap-2 text-rose-600 cursor-pointer"
-                                  onClick={() => {
-                                    if (confirm("Are you sure you want to delete this task permanently from everywhere?")) {
-                                      deleteMutation.mutate(task.id);
-                                    }
-                                  }}
+                                  onClick={() => handleDeleteSingleTask(task)}
                                 >
                                   Delete Task
                                 </DropdownMenuItem>

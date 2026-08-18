@@ -217,12 +217,12 @@ export async function updateTask(id: string, input: any) {
   return response.data.data;
 }
 
-export async function deleteTask(id: string) {
-  await api.delete(`/tasks/${id}`);
+export async function deleteTask(id: string, deleteAllSeries: boolean = true) {
+  await api.delete(`/tasks/${id}`, { params: { deleteAllSeries } });
 }
 
-export async function bulkDeleteTasks(ids: string[]) {
-  const response = await api.post<{ data: { count: number } }>("/tasks/bulk-delete", { ids });
+export async function bulkDeleteTasks(ids: string[], deleteAllSeries: boolean = true) {
+  const response = await api.post<{ data: { count: number } }>("/tasks/bulk-delete", { ids, deleteAllSeries });
   return response.data.data;
 }
 

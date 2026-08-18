@@ -58,7 +58,8 @@ export async function deleteAllTasks(req: Request, res: Response): Promise<void>
 }
 
 export async function deleteTask(req: Request, res: Response): Promise<void> {
-  await taskService.deleteTask(req.user!, req.params.id);
+  const deleteAllSeries = req.query.deleteAllSeries !== "false";
+  await taskService.deleteTask(req.user!, req.params.id, deleteAllSeries);
   
   // Emit WebSocket event
   getIO().to(`company:${req.user!.companyId}`).emit(SOCKET_EVENTS.TASK_UPDATE, {
@@ -70,12 +71,13 @@ export async function deleteTask(req: Request, res: Response): Promise<void> {
 }
 
 export async function bulkDeleteTasks(req: Request, res: Response): Promise<void> {
-  const { ids } = req.body;
+  const { ids, deleteAllSeries } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
     sendSuccess(res, { count: 0 }, "No tasks specified for deletion");
     return;
   }
-  const result = await taskService.bulkDeleteTasks(req.user!, ids);
+  const shouldDeleteAllSeries = deleteAllSeries !== false && req.query.deleteAllSeries !== "false";
+  const result = await taskService.bulkDeleteTasks(req.user!, ids, shouldDeleteAllSeries);
   
   // Emit WebSocket event
   getIO().to(`company:${req.user!.companyId}`).emit(SOCKET_EVENTS.TASK_UPDATE, {
