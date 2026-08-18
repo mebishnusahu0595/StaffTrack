@@ -505,16 +505,20 @@ export async function deleteTask(actor: AuthUser, taskId: string) {
     forbidden("Task is outside your company");
   }
 
-  // If this task has a series, clean up all future pending child occurrences
-  const parentId = task.parentTaskId || task.id;
-  await prisma.task.deleteMany({
-    where: {
-      parentTaskId: parentId,
-      status: TaskStatus.PENDING,
-      dueDate: { gte: new Date() },
-      id: { not: taskId }
-    }
-  });
+  // If this task has a series or is a repeating parent, clean up all series occurrences
+  const parentId = task.parentTaskId || (task.isRepeating ? task.id : null);
+  if (parentId) {
+    await prisma.task.deleteMany({
+      where: {
+        OR: [
+          { parentTaskId: parentId },
+          { id: parentId },
+          { id: taskId }
+        ]
+      }
+    });
+    return { id: taskId };
+  }
 
   return prisma.task.delete({
     where: { id: taskId }
@@ -565,25 +569,23 @@ export async function bulkDeleteTasks(actor: AuthUser, taskIds: string[]) {
     return { count: 0 };
   }
 
-  // Find repeat parent task IDs to clean up future occurrences of repeat series
+  // Find all parent IDs and repeating series IDs to wipe out all occurrences completely
   const parentIds = Array.from(new Set(
-    allowedTasks.map(t => t.parentTaskId || t.id).filter(Boolean) as string[]
+    allowedTasks.map(t => t.parentTaskId || (t.isRepeating ? t.id : null)).filter(Boolean) as string[]
   ));
 
+  const deleteConditions: Prisma.TaskWhereInput[] = [
+    { id: { in: allowedIds } }
+  ];
+
   if (parentIds.length > 0) {
-    await prisma.task.deleteMany({
-      where: {
-        parentTaskId: { in: parentIds },
-        status: TaskStatus.PENDING,
-        dueDate: { gte: new Date() },
-        id: { notIn: allowedIds }
-      }
-    });
+    deleteConditions.push({ parentTaskId: { in: parentIds } });
+    deleteConditions.push({ id: { in: parentIds } });
   }
 
   const result = await prisma.task.deleteMany({
     where: {
-      id: { in: allowedIds }
+      OR: deleteConditions
     }
   });
 
