@@ -882,27 +882,42 @@ export function EmployeeFullReportModal({
 
               {/* Checklist & Form Items */}
               {inspectingTask.checklistResponses && (inspectingTask.checklistResponses as any[]).length > 0 && (
-                <div className="space-y-2.5 pt-3 border-t border-slate-100">
+                <div className="space-y-3 pt-3 border-t border-slate-100">
                   <p className="text-[10px] font-black uppercase tracking-wider text-blue-600">Filled Form / Checklist Responses</p>
-                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                    {(inspectingTask.checklistResponses as any[]).map((item: any, idx: number) => (
-                      <div key={idx} className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl space-y-1.5 text-xs">
-                        <p className="font-bold text-slate-800">{item.title || item.label || `Field #${idx + 1}`}</p>
-                        {item.fileUrl && (
-                          <div
-                            onClick={() => setPreviewPhoto({ url: item.fileUrl, label: item.title || "Form Attachment" })}
-                            className="w-28 h-28 rounded-lg overflow-hidden border border-slate-200 cursor-pointer"
-                          >
-                            <img src={item.fileUrl} alt="Submission" className="w-full h-full object-cover" />
-                          </div>
-                        )}
-                        {item.response && (
-                          <p className="text-slate-600 font-medium bg-white p-2 rounded-lg border border-slate-100">
-                            {item.response}
-                          </p>
-                        )}
-                      </div>
-                    ))}
+                  <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                    {(inspectingTask.checklistResponses as any[]).map((item: any, idx: number) => {
+                      const displayVal = item.value !== undefined ? String(item.value) : (item.response !== undefined ? String(item.response) : (item.text !== undefined ? String(item.text) : (item.answer !== undefined ? String(item.answer) : "")));
+                      const fileUrl = item.fileUrl || item.photoUrl || item.image || item.url || (item.file && item.file.url);
+                      const isImage = item.type === "IMAGE" || (fileUrl && /\.(jpg|jpeg|png|webp|gif)/i.test(fileUrl));
+
+                      return (
+                        <div key={idx} className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl space-y-1.5 text-xs">
+                          <p className="font-bold text-slate-800">{item.title || item.label || `Field #${idx + 1}`}</p>
+                          {fileUrl && isImage && (
+                            <div
+                              onClick={() => setPreviewPhoto({ url: fileUrl, label: item.title || "Form Attachment" })}
+                              className="w-32 h-32 rounded-xl overflow-hidden border border-slate-200 cursor-pointer shadow-sm hover:scale-105 transition-transform"
+                            >
+                              <img src={fileUrl} alt="Submission" className="w-full h-full object-cover" />
+                            </div>
+                          )}
+                          {fileUrl && !isImage && (
+                            <a href={fileUrl} target="_blank" rel="noreferrer" className="text-blue-600 font-bold underline inline-flex items-center gap-1">
+                              📎 View Attachment
+                            </a>
+                          )}
+                          {displayVal ? (
+                            <p className="text-slate-900 font-semibold bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-xs">
+                              {displayVal}
+                            </p>
+                          ) : !fileUrl ? (
+                            <p className="text-slate-400 italic bg-white p-2 rounded-lg border border-slate-100">
+                              (Empty response)
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
