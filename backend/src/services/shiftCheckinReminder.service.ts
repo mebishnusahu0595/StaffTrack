@@ -49,7 +49,6 @@ IMPORTANT: Reply with ONLY a JSON array of strings, no extra text or markdown. L
       return getDefaultMessages();
     }
 
-    const data = await response.json() as any;
     const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
     // Parse JSON array from response

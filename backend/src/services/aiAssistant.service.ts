@@ -1,6 +1,6 @@
 import { prisma } from "../lib/prisma";
 import { sendBroadcastNotification } from "./notification.service";
-import { streamGeminiWithFallback, getGeminiApiKey } from "../lib/gemini";
+import { streamGeminiWithFallback, callGeminiWithFallback, getGeminiApiKey } from "../lib/gemini";
 
 /** In-memory session history per admin (keyed by userId) */
 const chatSessions = new Map<string, Array<{ role: "user" | "model"; parts: { text: string }[] }>>();
@@ -197,30 +197,13 @@ ${context}`;
       return baseContents;
     };
 
-    const genConfig = { temperature: 0.2, maxOutputTokens: 4096 };
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 25000);
-
-    const response = await fetch(getGeminiEndpoint(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: controller.signal as any,
-      body: JSON.stringify({
-        contents: buildContents(userMessage),
-        generationConfig: genConfig
-      })
+    const data = await callGeminiWithFallback({
+      contents: buildContents(userMessage),
+      generationConfig: { temperature: 0.2, maxOutputTokens: 4096 }
     });
 
-    clearTimeout(timeout);
+    if (!data) return fallback;
 
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.warn("[AI Assistant] Gemini API error:", response.status, errBody);
-      return fallback;
-    }
-
-    const data = await response.json() as any;
     const aiText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!aiText) return fallback;
 
@@ -294,8 +277,7 @@ ${context}`;
     }
 
     const response = streamResult.response;
-
-    const reader = response.body.getReader();
+    const reader = response.body!.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
     let fullText = "";
