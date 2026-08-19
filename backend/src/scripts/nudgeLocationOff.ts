@@ -1,35 +1,19 @@
 import { PrismaClient } from "@prisma/client";
 import { createNotification } from "../services/notification.service";
+import { callGeminiWithFallback } from "../lib/gemini";
 
 const prisma = new PrismaClient();
-const GEMINI_API_KEY = () => process.env.GEMINI_API_KEY || "";
-const GEMINI_URL = () =>
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY()}`;
 
 async function askGeminiForNudge(prompt: string, fallbackMessage: string): Promise<string> {
-  if (!GEMINI_API_KEY()) {
-    return fallbackMessage;
-  }
-
   try {
-    const response = await fetch(GEMINI_URL(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 1.0,
-          maxOutputTokens: 256
-        }
-      })
+    const data = await callGeminiWithFallback({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 1.0,
+        maxOutputTokens: 256
+      }
     });
 
-    if (!response.ok) {
-      console.error("[AI Nudge Monitor] Gemini error status:", response.status);
-      return fallbackMessage;
-    }
-
-    const data = await response.json() as any;
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
     return text || fallbackMessage;
   } catch (err) {

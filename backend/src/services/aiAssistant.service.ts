@@ -1,11 +1,6 @@
 import { prisma } from "../lib/prisma";
 import { sendBroadcastNotification } from "./notification.service";
-
-const getGeminiApiKey = () => process.env.GEMINI_API_KEY || "";
-const getGeminiEndpoint = () =>
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${getGeminiApiKey()}`;
-const getGeminiStreamEndpoint = () =>
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:streamGenerateContent?alt=sse&key=${getGeminiApiKey()}`;
+import { streamGeminiWithFallback, getGeminiApiKey } from "../lib/gemini";
 
 /** In-memory session history per admin (keyed by userId) */
 const chatSessions = new Map<string, Array<{ role: "user" | "model"; parts: { text: string }[] }>>();
@@ -287,21 +282,18 @@ ${context}`;
       contents.push({ role: "user", parts: [{ text: userMessage }] });
     }
 
-    const response = await fetch(getGeminiStreamEndpoint(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents,
-        generationConfig: { temperature: 0.2, maxOutputTokens: 4096 }
-      })
+    const streamResult = await streamGeminiWithFallback({
+      contents,
+      generationConfig: { temperature: 0.2, maxOutputTokens: 4096 }
     });
 
-    if (!response.ok || !response.body) {
-      const errBody = await response.text();
-      console.warn("[AI Stream] Gemini error:", response.status, errBody);
+    if (!streamResult || !streamResult.response || !streamResult.response.body) {
+      console.warn("[AI Stream] Gemini models exhausted or stream unavailable");
       yield "Sorry, AI assistant is currently unavailable. Please try again.";
       return;
     }
+
+    const response = streamResult.response;
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();

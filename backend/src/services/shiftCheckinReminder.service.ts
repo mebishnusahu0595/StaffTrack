@@ -10,10 +10,7 @@
 
 import { prisma } from "../lib/prisma";
 import { createNotification } from "./notification.service";
-
-const GEMINI_API_KEY = () => process.env.GEMINI_API_KEY || "";
-const GEMINI_URL = () =>
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY()}`;
+import { callGeminiWithFallback } from "../lib/gemini";
 
 // ---------- Gemini AI message pool generation ----------
 
@@ -33,27 +30,22 @@ IMPORTANT: Reply with ONLY a JSON array of strings, no extra text or markdown. L
 ["message1", "message2", "message3", "message4"]`;
 
   try {
-    const response = await fetch(GEMINI_URL(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { 
-          temperature: 1.0, 
-          maxOutputTokens: 2048,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: "ARRAY",
-            items: {
-              type: "STRING"
-            }
+    const data = await callGeminiWithFallback({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { 
+        temperature: 1.0, 
+        maxOutputTokens: 2048,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "ARRAY",
+          items: {
+            type: "STRING"
           }
         }
-      })
+      }
     });
 
-    if (!response.ok) {
-      console.error("[Shift Reminder] Gemini API error:", response.status, await response.text());
+    if (!data) {
       return getDefaultMessages();
     }
 

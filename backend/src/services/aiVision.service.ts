@@ -1,9 +1,7 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-
-const getGeminiApiKey = () => process.env.GEMINI_API_KEY || "";
-const getGeminiEndpoint = () => `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${getGeminiApiKey()}`;
+import { callGeminiWithFallback, getGeminiApiKey } from "../lib/gemini";
 
 // Timeout for Gemini API calls (25s to handle large image payloads reliably)
 const GEMINI_TIMEOUT_MS = 25_000;
@@ -139,44 +137,9 @@ function parseGeminiJson<T>(rawText: string): T | null {
   }
 }
 
-/** Call Gemini API with retry (1 retry on timeout/5xx) */
+/** Call Gemini API with automatic model fallback sequence */
 async function callGeminiWithRetry(body: object, timeoutMs: number = GEMINI_TIMEOUT_MS): Promise<any> {
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-    try {
-      const response = await fetch(getGeminiEndpoint(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal as any,
-        body: JSON.stringify(body)
-      });
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errBody = await response.text();
-        console.warn(`[AI Vision] Gemini API attempt ${attempt} status ${response.status}:`, errBody.slice(0, 200));
-        if (response.status >= 500 && attempt < 2) {
-          await new Promise(r => setTimeout(r, 1000));
-          continue;
-        }
-        return null;
-      }
-
-      const data = await response.json() as any;
-      return data;
-    } catch (error: any) {
-      clearTimeout(timeoutId);
-      console.warn(`[AI Vision] Gemini API attempt ${attempt} error:`, error?.message || error);
-      if (attempt < 2) {
-        await new Promise(r => setTimeout(r, 1000));
-        continue;
-      }
-      return null;
-    }
-  }
-  return null;
+  return callGeminiWithFallback(body, { timeoutMs });
 }
 
 /**
