@@ -355,32 +355,51 @@ export default function EmployeesPage() {
     const workTimeLabel = workTimeMs > 0 ? formatDurationLabel(workTimeMs) : "0h 0m";
     const breakTimeLabel = breakTimeMs > 0 ? formatDurationLabel(breakTimeMs) : "0h 0m";
 
-    // Helper to extract 1-line details from checklist responses
-    const extractDetailsSnippet = (t: any): string => {
+    // Helper to format full details from checklist responses
+    const formatTaskDetails = (t: any): string => {
       if (t.checklistResponses && Array.isArray(t.checklistResponses) && t.checklistResponses.length > 0) {
-        const parts: string[] = [];
+        let name = "";
+        let contact = "";
+        let village = "";
+        let crop = "";
+        let land = "";
+        let product = "";
+        let extraParts: string[] = [];
+
         for (const item of t.checklistResponses) {
           const val = item.value !== undefined ? String(item.value).trim() : (item.response !== undefined ? String(item.response).trim() : (item.text !== undefined ? String(item.text).trim() : ""));
-          if (val && item.type !== "IMAGE" && item.type !== "VIDEO" && item.type !== "AUDIO") {
-            const title = item.title || item.label || "";
-            if (title.toLowerCase().includes("farmer") || title.toLowerCase().includes("name")) {
-              parts.unshift(`Farmer: ${val}`);
-            } else if (title.toLowerCase().includes("village")) {
-              parts.push(`Village: ${val}`);
-            } else if (title.toLowerCase().includes("crop")) {
-              parts.push(`Crop: ${val}`);
-            } else if (title.toLowerCase().includes("land")) {
-              parts.push(`Land: ${val}`);
-            } else if (title.toLowerCase().includes("contact") || title.toLowerCase().includes("phone")) {
-              parts.push(`Mob: ${val}`);
-            } else if (parts.length < 3) {
-              parts.push(`${title ? title + ': ' : ''}${val}`);
-            }
+          if (!val || item.type === "IMAGE" || item.type === "VIDEO" || item.type === "AUDIO") continue;
+          
+          const title = (item.title || item.label || item.id || "").toLowerCase();
+          if (title.includes("farmer name") || title.includes("dealer name") || title === "name") {
+            name = val;
+          } else if (title.includes("contact") || title.includes("phone") || title.includes("mobile")) {
+            contact = val;
+          } else if (title.includes("village")) {
+            village = val;
+          } else if (title.includes("crop")) {
+            crop = val;
+          } else if (title.includes("farmland") || title.includes("land") || title.includes("acre")) {
+            land = val;
+          } else if (title.includes("product")) {
+            product = val;
+          } else if (!title.includes("remark") && !title.includes("location") && !title.includes("geotag")) {
+            extraParts.push(`${item.title || item.label}: ${val}`);
           }
         }
-        if (parts.length > 0) return parts.slice(0, 3).join(" | ");
+
+        const parts: string[] = [];
+        if (name) parts.push(`<strong style="color: #0f172a;">${name}</strong>`);
+        if (village) parts.push(`📍 ${village}`);
+        if (crop) parts.push(`🌾 ${crop}${land ? ` (${land} Acr)` : ''}`);
+        else if (land) parts.push(`🏡 ${land} Acr`);
+        if (product) parts.push(`📦 ${product}`);
+        if (contact) parts.push(`📞 ${contact}`);
+        if (extraParts.length > 0) parts.push(...extraParts.slice(0, 2));
+
+        if (parts.length > 0) return parts.join(" &bull; ");
       }
-      return t.description ? t.description.slice(0, 45) : "";
+      return t.description || "";
     };
 
     // Helper to get task completion photo thumbnail
@@ -395,30 +414,30 @@ export default function EmployeesPage() {
       return null;
     };
 
-    // Render single task item HTML
-    const renderTaskCard = (t: any) => {
-      const details = extractDetailsSnippet(t);
+    // Render single task item HTML with complete info
+    const renderTaskCard = (t: any, isTwoCol: boolean) => {
+      const details = formatTaskDetails(t);
       const photo = getTaskPhoto(t);
       return `
-        <div style="display: flex; align-items: center; justify-content: space-between; padding: 2.5px 6px; border-radius: 4px; border: 1px solid #e2e8f0; background: #f8fafc; font-size: 9px; line-height: 1.15; box-sizing: border-box; min-height: 28px;">
-          <div style="display: flex; align-items: center; gap: 4px; overflow: hidden; flex: 1; min-width: 0;">
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: ${isTwoCol ? '3px 6px' : '4px 8px'}; border-radius: 6px; border: 1px solid #e2e8f0; background: #f8fafc; font-size: ${isTwoCol ? '9px' : '10px'}; line-height: 1.25; box-sizing: border-box; min-height: 32px;">
+          <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; flex-wrap: wrap;">
             <span style="font-weight: 800; color: #16a34a; white-space: nowrap;">✅ ${t.title}</span>
-            ${details ? `<span style="color: #475569; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">— ${details}</span>` : ""}
-            ${t.completionRemarks ? `<span style="color: #64748b; font-style: italic; font-size: 8px; white-space: nowrap;">("${t.completionRemarks}")</span>` : ""}
+            ${details ? `<span style="color: #334155;">— ${details}</span>` : ""}
+            ${t.completionRemarks ? `<span style="color: #64748b; font-style: italic; font-size: 8.5px;">(${t.completionRemarks})</span>` : ""}
           </div>
-          <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-left: 4px;">
-            <span style="font-size: 8px; font-weight: 800; color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 3px; border-radius: 3px; white-space: nowrap;">+${t.points ?? 10}</span>
-            ${photo ? `<img src="${photo}" style="width: 22px; height: 22px; border-radius: 3px; object-fit: cover; border: 1px solid #cbd5e1;" alt="Img" />` : ""}
+          <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-left: 6px;">
+            <span style="font-size: 8.5px; font-weight: 800; color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 4px; border-radius: 4px; white-space: nowrap;">+${t.points ?? 10} pts</span>
+            ${photo ? `<img src="${photo}" style="width: 28px; height: 28px; border-radius: 4px; object-fit: cover; border: 1px solid #cbd5e1;" alt="Evidence" />` : ""}
           </div>
         </div>
       `;
     };
 
-    // Render 2-column table if many tasks, or 1 column if few
+    // Render 2-column table if many tasks (>8), or clean 1 column list if <= 8
     let tasksGridHtml = "";
     if (completedTasks.length === 0) {
-      tasksGridHtml = `<p style="font-size: 9.5px; color: #94a3b8; font-style: italic; margin: 0; padding: 2px 0;">No completed tasks recorded on this date.</p>`;
-    } else if (completedTasks.length > 5) {
+      tasksGridHtml = `<p style="font-size: 10px; color: #94a3b8; font-style: italic; margin: 0; padding: 4px 0;">No completed tasks recorded on this date.</p>`;
+    } else if (completedTasks.length > 8) {
       // 2 columns side by side
       let rows = "";
       for (let i = 0; i < completedTasks.length; i += 2) {
@@ -426,14 +445,14 @@ export default function EmployeesPage() {
         const t2 = completedTasks[i + 1];
         rows += `
           <tr>
-            <td style="width: 50%; padding: 1.5px 3px 1.5px 0; vertical-align: middle;">${renderTaskCard(t1)}</td>
-            <td style="width: 50%; padding: 1.5px 0 1.5px 3px; vertical-align: middle;">${t2 ? renderTaskCard(t2) : ""}</td>
+            <td style="width: 50%; padding: 2px 3px 2px 0; vertical-align: middle;">${renderTaskCard(t1, true)}</td>
+            <td style="width: 50%; padding: 2px 0 2px 3px; vertical-align: middle;">${t2 ? renderTaskCard(t2, true) : ""}</td>
           </tr>
         `;
       }
       tasksGridHtml = `<table style="width: 100%; border-collapse: collapse; table-layout: fixed;">${rows}</table>`;
     } else {
-      tasksGridHtml = completedTasks.map(t => `<div style="margin-bottom: 3px;">${renderTaskCard(t)}</div>`).join("");
+      tasksGridHtml = completedTasks.map(t => `<div style="margin-bottom: 4px;">${renderTaskCard(t, false)}</div>`).join("");
     }
 
     const htmlContent = `
