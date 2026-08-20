@@ -809,13 +809,6 @@ async function taskAccessWhere(actor: AuthUser, dateStr?: string): Promise<Prism
               gte: start,
               lte: end
             }
-          },
-          {
-            isRepeating: true,
-            OR: [
-              { startDate: null },
-              { startDate: { lte: end } }
-            ]
           }
         ]
       };
