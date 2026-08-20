@@ -355,8 +355,15 @@ export default function EmployeesPage() {
     const workTimeLabel = workTimeMs > 0 ? formatDurationLabel(workTimeMs) : "0h 0m";
     const breakTimeLabel = breakTimeMs > 0 ? formatDurationLabel(breakTimeMs) : "0h 0m";
 
-    // Helper to format full details from checklist responses
+    // Helper to format full details from checklist responses + GPS coordinates
     const formatTaskDetails = (t: any): string => {
+      let locationCoords = "";
+      if (t.completionLat != null && t.completionLng != null) {
+        locationCoords = `${Number(t.completionLat).toFixed(4)}, ${Number(t.completionLng).toFixed(4)}`;
+      } else if (t.lat != null && t.lng != null) {
+        locationCoords = `${Number(t.lat).toFixed(4)}, ${Number(t.lng).toFixed(4)}`;
+      }
+
       if (t.checklistResponses && Array.isArray(t.checklistResponses) && t.checklistResponses.length > 0) {
         let name = "";
         let contact = "";
@@ -371,7 +378,9 @@ export default function EmployeesPage() {
           if (!val || item.type === "IMAGE" || item.type === "VIDEO" || item.type === "AUDIO") continue;
           
           const title = (item.title || item.label || item.id || "").toLowerCase();
-          if (title.includes("farmer name") || title.includes("dealer name") || title === "name") {
+          if (item.type === "GEOTAG" || title.includes("location") || title.includes("geotag")) {
+            if (!locationCoords) locationCoords = val;
+          } else if (title.includes("farmer name") || title.includes("dealer name") || title === "name") {
             name = val;
           } else if (title.includes("contact") || title.includes("phone") || title.includes("mobile")) {
             contact = val;
@@ -383,7 +392,7 @@ export default function EmployeesPage() {
             land = val;
           } else if (title.includes("product")) {
             product = val;
-          } else if (!title.includes("remark") && !title.includes("location") && !title.includes("geotag")) {
+          } else if (!title.includes("remark")) {
             extraParts.push(`${item.title || item.label}: ${val}`);
           }
         }
@@ -395,10 +404,16 @@ export default function EmployeesPage() {
         else if (land) parts.push(`🏡 ${land} Acr`);
         if (product) parts.push(`📦 ${product}`);
         if (contact) parts.push(`📞 ${contact}`);
+        if (locationCoords) parts.push(`🌐 <span style="color: #0284c7; font-weight: 600;">${locationCoords}</span>`);
         if (extraParts.length > 0) parts.push(...extraParts.slice(0, 2));
 
         if (parts.length > 0) return parts.join(" &bull; ");
       }
+
+      if (locationCoords) {
+        return `${t.description ? t.description + ' &bull; ' : ''}🌐 <span style="color: #0284c7; font-weight: 600;">${locationCoords}</span>`;
+      }
+
       return t.description || "";
     };
 
@@ -454,6 +469,9 @@ export default function EmployeesPage() {
     } else {
       tasksGridHtml = completedTasks.map(t => `<div style="margin-bottom: 4px;">${renderTaskCard(t, false)}</div>`).join("");
     }
+
+    const totalDayTasksCount = dayTasks.length > 0 ? dayTasks.length : completedCount;
+    const countBannerText = `${completedCount} / ${totalDayTasksCount} Completed (${totalDayTasksCount > 0 ? Math.round((completedCount / totalDayTasksCount) * 100) : 100}%)`;
 
     const htmlContent = `
 <div style="font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155; padding: 10px 14px; background: #ffffff; box-sizing: border-box; max-width: 820px; margin: 0 auto;">
@@ -558,7 +576,7 @@ export default function EmployeesPage() {
     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 3px; margin-bottom: 4px;">
       <h3 style="font-size: 9.5px; font-weight: 800; color: #1e293b; text-transform: uppercase; margin: 0; letter-spacing: 0.5px;">Tasks Completed Today</h3>
       <span style="font-size: 8.5px; font-weight: 700; color: #166534; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 5px; border-radius: 3px;">
-        ✅ ${completedCount} Tasks Completed
+        ✅ ${countBannerText}
       </span>
     </div>
     
