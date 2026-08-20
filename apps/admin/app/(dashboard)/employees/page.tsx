@@ -305,19 +305,29 @@ export default function EmployeesPage() {
     });
   }, [reportsQuery.data, derDateFilter]);
 
-  const handleDownloadDER = (report: any, employee: any) => {
+  const handleDownloadDER = async (report: any, employee: any) => {
     if (!employee || !report) return;
     const formattedDate = dayjs(report.date).format("DD MMM YYYY");
     const formattedSubmittedAt = dayjs(report.submittedAt).format("DD MMM YYYY hh:mm A");
     const reportDateStr = dayjs(report.date).format("YYYY-MM-DD");
 
-    // Filter tasks for this employee on this day
-    const dayTasks = (tasksQuery.data ?? []).filter((t: any) => 
-      t.assignedToId === employee.id &&
-      dayjs(t.dueDate).format("YYYY-MM-DD") === reportDateStr
-    );
+    // Fetch exact tasks for this date from the API so past and present dates are never empty
+    let dayTasks: any[] = [];
+    try {
+      const fetched = await fetchTasks({ date: reportDateStr });
+      dayTasks = (fetched || []).filter((t: any) => t.assignedToId === employee.id);
+    } catch {
+      dayTasks = (tasksQuery.data ?? []).filter((t: any) => 
+        t.assignedToId === employee.id &&
+        (dayjs(t.dueDate).format("YYYY-MM-DD") === reportDateStr ||
+         (t.completedAt && dayjs(t.completedAt).format("YYYY-MM-DD") === reportDateStr))
+      );
+    }
+
     const completedTasks = dayTasks.filter((t: any) => t.status === "COMPLETED");
     const pendingTasks = dayTasks.filter((t: any) => t.status === "PENDING" || t.status === "IN_PROGRESS");
+    const totalTasksCount = dayTasks.length;
+    const completedCount = completedTasks.length;
 
     // Calculate month-to-date distance
     const startOfMonth = dayjs(report.date).startOf("month");
@@ -339,96 +349,148 @@ export default function EmployeesPage() {
     const workTimeLabel = workTimeMs > 0 ? formatDurationLabel(workTimeMs) : "0h 0m";
     const breakTimeLabel = breakTimeMs > 0 ? formatDurationLabel(breakTimeMs) : "0h 0m";
 
-    // Generate tasks HTML dynamically
-    const completedTasksHtml = completedTasks.length > 0 
-      ? completedTasks.map((t: any) => `
-          <div style="padding: 10px; margin-bottom: 8px; border-radius: 10px; border: 1px solid #e2e8f0; background-color: #f8fafc;">
-            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 4px;">
-              <span style="font-weight: bold; color: #1e293b; font-size: 12px; line-height: 1.2;">✅ ${t.title}</span>
-              <span style="font-size: 10px; font-weight: 800; color: #16a34a; background-color: #f0fdf4; padding: 1px 6px; border-radius: 999px; white-space: nowrap;">${t.points ?? 0} pts</span>
-            </div>
-            ${t.description ? `<p style="font-size: 11px; color: #64748b; margin: 2px 0 0 0; line-height: 1.3;">${t.description}</p>` : ""}
-            ${t.completionRemarks ? `<p style="font-size: 11px; color: #475569; margin: 4px 0 0 0; font-style: italic; line-height: 1.3;">Remarks: ${t.completionRemarks}</p>` : ""}
-          </div>
-        `).join("")
-      : `<p style="font-size: 11px; color: #94a3b8; font-style: italic; margin: 0;">No completed tasks today.</p>`;
+    // Helper to extract 1-line details from checklist responses
+    const extractDetailsSnippet = (t: any): string => {
+      if (t.checklistResponses && Array.isArray(t.checklistResponses) && t.checklistResponses.length > 0) {
+        const parts: string[] = [];
+        for (const item of t.checklistResponses) {
+          const val = item.value !== undefined ? String(item.value).trim() : (item.response !== undefined ? String(item.response).trim() : (item.text !== undefined ? String(item.text).trim() : ""));
+          if (val && item.type !== "IMAGE" && item.type !== "VIDEO" && item.type !== "AUDIO") {
+            const title = item.title || item.label || "";
+            if (title.toLowerCase().includes("farmer") || title.toLowerCase().includes("name")) {
+              parts.unshift(`Farmer: ${val}`);
+            } else if (title.toLowerCase().includes("village")) {
+              parts.push(`Village: ${val}`);
+            } else if (title.toLowerCase().includes("crop")) {
+              parts.push(`Crop: ${val}`);
+            } else if (title.toLowerCase().includes("land")) {
+              parts.push(`Land: ${val}`);
+            } else if (title.toLowerCase().includes("contact") || title.toLowerCase().includes("phone")) {
+              parts.push(`Mob: ${val}`);
+            } else if (parts.length < 3) {
+              parts.push(`${title ? title + ': ' : ''}${val}`);
+            }
+          }
+        }
+        if (parts.length > 0) return parts.slice(0, 3).join(" | ");
+      }
+      return t.description ? t.description.slice(0, 50) : "";
+    };
 
-    const pendingTasksHtml = pendingTasks.length > 0
-      ? pendingTasks.map((t: any) => `
-          <div style="padding: 10px; margin-bottom: 8px; border-radius: 10px; border: 1px solid #e2e8f0; background-color: #f8fafc;">
-            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 4px;">
-              <span style="font-weight: bold; color: #1e293b; font-size: 12px; line-height: 1.2;">⏳ ${t.title}</span>
-              <span style="font-size: 10px; font-weight: 800; color: #d97706; background-color: #fffbeb; padding: 1px 6px; border-radius: 999px; white-space: nowrap;">${t.points ?? 0} pts</span>
+    // Helper to get task completion photo thumbnail
+    const getTaskPhoto = (t: any): string | null => {
+      if (t.completionPhotoUrl) return t.completionPhotoUrl;
+      if (t.checklistResponses && Array.isArray(t.checklistResponses)) {
+        const img = t.checklistResponses.find((item: any) => 
+          item.type === "IMAGE" && (item.fileUrl || item.photoUrl || item.image || item.url)
+        );
+        if (img) return img.fileUrl || img.photoUrl || img.image || img.url;
+      }
+      return null;
+    };
+
+    // Generate 1-line task rows with compact thumbnails
+    const completedTasksHtml = completedTasks.length > 0
+      ? completedTasks.map((t: any) => {
+          const details = extractDetailsSnippet(t);
+          const photo = getTaskPhoto(t);
+          return `
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; margin-bottom: 3px; border-radius: 6px; border: 1px solid #e2e8f0; background: #f8fafc; font-size: 10.5px; line-height: 1.2;">
+              <div style="display: flex; align-items: center; gap: 6px; overflow: hidden; flex: 1; min-width: 0;">
+                <span style="font-weight: 800; color: #16a34a; white-space: nowrap;">✅ ${t.title}</span>
+                ${details ? `<span style="color: #475569; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">— ${details}</span>` : ""}
+                ${t.completionRemarks ? `<span style="color: #64748b; font-style: italic; font-size: 9.5px; white-space: nowrap;">("${t.completionRemarks}")</span>` : ""}
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-left: 8px;">
+                <span style="font-size: 9px; font-weight: 800; color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 4px; border-radius: 4px; white-space: nowrap;">+${t.points ?? 10} pts</span>
+                ${photo ? `<img src="${photo}" style="width: 28px; height: 28px; border-radius: 4px; object-fit: cover; border: 1px solid #cbd5e1;" alt="Evidence" />` : ""}
+              </div>
             </div>
-            ${t.description ? `<p style="font-size: 11px; color: #64748b; margin: 2px 0 0 0; line-height: 1.3;">${t.description}</p>` : ""}
-          </div>
-        `).join("")
-      : `<p style="font-size: 11px; color: #94a3b8; font-style: italic; margin: 0;">No pending tasks today.</p>`;
+          `;
+        }).join("")
+      : `<p style="font-size: 10px; color: #94a3b8; font-style: italic; margin: 0; padding: 2px 0;">No completed tasks on this date.</p>`;
+
+    const pendingSummaryHtml = pendingTasks.length > 0
+      ? `<div style="margin-top: 3px; font-size: 9.5px; color: #b45309; font-weight: 600; background: #fffbeb; border: 1px solid #fef3c7; padding: 2px 6px; border-radius: 4px;">
+           ⏳ Pending (${pendingTasks.length}): ${pendingTasks.map((p: any) => p.title).join(", ")}
+         </div>`
+      : "";
 
     const htmlContent = `
-<div style="font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155; padding: 30px; background: #ffffff; box-sizing: border-box;">
+<div style="font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155; padding: 16px 20px; background: #ffffff; box-sizing: border-box; max-width: 820px; margin: 0 auto;">
   
   <!-- Header Bar -->
-  <div style="height: 6px; background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%); border-radius: 3px; margin-bottom: 25px;"></div>
+  <div style="height: 4px; background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%); border-radius: 2px; margin-bottom: 12px;"></div>
 
   <!-- Main Header Table -->
-  <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
     <tr>
       <td style="vertical-align: top;">
-        <h1 style="font-size: 26px; font-weight: 800; color: #1e293b; margin: 0; letter-spacing: -0.5px;">DAY END REPORT</h1>
-        <p style="font-size: 10px; font-weight: 700; color: #2563eb; margin: 4px 0 0 0; text-transform: uppercase; letter-spacing: 1px;">Vaniki Crop Science Pvt Ltd</p>
+        <h1 style="font-size: 20px; font-weight: 800; color: #1e293b; margin: 0; letter-spacing: -0.5px;">DAY END REPORT</h1>
+        <p style="font-size: 9px; font-weight: 700; color: #2563eb; margin: 2px 0 0 0; text-transform: uppercase; letter-spacing: 0.8px;">Vaniki Crop Science Pvt Ltd</p>
       </td>
       <td style="vertical-align: top; text-align: right;">
-        <h2 style="font-size: 15px; font-weight: 700; color: #0f172a; margin: 0;">${employee.name}</h2>
-        <p style="font-size: 11px; font-weight: 600; color: #64748b; margin: 2px 0 0 0;">${employee.designation || 'Field Representative'}</p>
-        <p style="font-size: 9px; color: #94a3b8; margin: 2px 0 0 0;">${employee.email}</p>
+        <h2 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 0;">${employee.name}</h2>
+        <p style="font-size: 10px; font-weight: 600; color: #64748b; margin: 1px 0 0 0;">${employee.designation || 'Field Representative'} &bull; ${employee.email}</p>
       </td>
     </tr>
   </table>
 
-  <!-- Meta Stats Row -->
-  <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+  <!-- Meta Stats Row (4 Columns Compact) -->
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px;">
     <tr>
-      <td style="width: 25%; padding-right: 8px;">
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; text-align: center; box-sizing: border-box;">
-          <p style="font-size: 8px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 4px 0; letter-spacing: 0.5px;">Report Date</p>
-          <p style="font-size: 12px; font-weight: 800; color: #1e293b; margin: 0;">${formattedDate}</p>
+      <td style="width: 25%; padding-right: 4px;">
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px; text-align: center; box-sizing: border-box;">
+          <p style="font-size: 8px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Report Date</p>
+          <p style="font-size: 11px; font-weight: 800; color: #1e293b; margin: 0;">${formattedDate}</p>
         </div>
       </td>
-      <td style="width: 25%; padding-right: 8px; padding-left: 8px;">
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; text-align: center; box-sizing: border-box;">
-          <p style="font-size: 8px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 4px 0; letter-spacing: 0.5px;">Today Distance</p>
-          <p style="font-size: 12px; font-weight: 800; color: #2563eb; margin: 0;">${report.kmTravelled ?? report.totalKmTravelled ?? 0} KM</p>
+      <td style="width: 25%; padding-right: 4px; padding-left: 4px;">
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px; text-align: center; box-sizing: border-box;">
+          <p style="font-size: 8px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Today Distance</p>
+          <p style="font-size: 11px; font-weight: 800; color: #2563eb; margin: 0;">${report.kmTravelled ?? report.totalKmTravelled ?? 0} KM</p>
         </div>
       </td>
-      <td style="width: 25%; padding-right: 8px; padding-left: 8px;">
-        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 12px; text-align: center; box-sizing: border-box;">
-          <p style="font-size: 8px; font-weight: 700; color: #1e40af; text-transform: uppercase; margin: 0 0 4px 0; letter-spacing: 0.5px;">Month to Date (MTD)</p>
-          <p style="font-size: 12px; font-weight: 800; color: #1d4ed8; margin: 0;">${monthToDateKm} KM</p>
+      <td style="width: 25%; padding-right: 4px; padding-left: 4px;">
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 6px 8px; text-align: center; box-sizing: border-box;">
+          <p style="font-size: 8px; font-weight: 700; color: #1e40af; text-transform: uppercase; margin: 0 0 2px 0;">MTD Distance</p>
+          <p style="font-size: 11px; font-weight: 800; color: #1d4ed8; margin: 0;">${monthToDateKm} KM</p>
         </div>
       </td>
-      <td style="width: 25%; padding-left: 8px;">
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; text-align: center; box-sizing: border-box;">
-          <p style="font-size: 8px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 4px 0; letter-spacing: 0.5px;">Submitted At</p>
-          <p style="font-size: 11px; font-weight: 800; color: #1e293b; margin: 0;">${formattedSubmittedAt}</p>
+      <td style="width: 25%; padding-left: 4px;">
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px; text-align: center; box-sizing: border-box;">
+          <p style="font-size: 8px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Submitted At</p>
+          <p style="font-size: 10px; font-weight: 800; color: #1e293b; margin: 0;">${formattedSubmittedAt}</p>
         </div>
       </td>
     </tr>
   </table>
 
-  <!-- Orders Metrics -->
-  <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+  <!-- Orders & Working Metrics (Grid) -->
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px;">
     <tr>
-      <td style="width: 50%; padding-right: 10px;">
-        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 15px; box-sizing: border-box;">
-          <p style="font-size: 10px; font-weight: 700; color: #166534; text-transform: uppercase; margin: 0; letter-spacing: 0.5px;">Orders Booked</p>
-          <p style="font-size: 22px; font-weight: 800; color: #14532d; margin: 6px 0 0 0;">${report.ordersTaken ?? 0}</p>
+      <td style="width: 25%; padding-right: 4px;">
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 6px 10px; box-sizing: border-box;">
+          <span style="font-size: 8px; font-weight: 700; color: #166534; text-transform: uppercase;">Orders Booked:</span>
+          <span style="font-size: 14px; font-weight: 800; color: #14532d; margin-left: 6px;">${report.ordersTaken ?? 0}</span>
         </div>
       </td>
-      <td style="width: 50%; padding-left: 10px;">
-        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 15px; box-sizing: border-box;">
-          <p style="font-size: 10px; font-weight: 700; color: #991b1b; text-transform: uppercase; margin: 0; letter-spacing: 0.5px;">Orders Cancelled</p>
-          <p style="font-size: 22px; font-weight: 800; color: #7f1d1d; margin: 6px 0 0 0;">${report.ordersCancelled ?? 0}</p>
+      <td style="width: 25%; padding-right: 4px; padding-left: 4px;">
+        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 6px 10px; box-sizing: border-box;">
+          <span style="font-size: 8px; font-weight: 700; color: #991b1b; text-transform: uppercase;">Cancelled:</span>
+          <span style="font-size: 14px; font-weight: 800; color: #7f1d1d; margin-left: 6px;">${report.ordersCancelled ?? 0}</span>
+        </div>
+      </td>
+      <td style="width: 25%; padding-right: 4px; padding-left: 4px;">
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; box-sizing: border-box;">
+          <span style="font-size: 8px; font-weight: 700; color: #475569; text-transform: uppercase;">Work Time:</span>
+          <span style="font-size: 12px; font-weight: 800; color: #166534; margin-left: 6px;">${workTimeLabel}</span>
+        </div>
+      </td>
+      <td style="width: 25%; padding-left: 4px;">
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; box-sizing: border-box;">
+          <span style="font-size: 8px; font-weight: 700; color: #475569; text-transform: uppercase;">Break Time:</span>
+          <span style="font-size: 12px; font-weight: 800; color: #b45309; margin-left: 6px;">${breakTimeLabel}</span>
         </div>
       </td>
     </tr>
@@ -436,104 +498,76 @@ export default function EmployeesPage() {
 
   <!-- Odometer Readings -->
   ${(report.startOdometer !== null && report.startOdometer !== undefined) || (report.endOdometer !== null && report.endOdometer !== undefined) ? `
-  <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom: 25px; box-sizing: border-box;">
-    <h3 style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; margin: 0 0 10px 0; letter-spacing: 0.5px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 6px;">Odometer Readings</h3>
+  <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; margin-bottom: 10px; box-sizing: border-box;">
     <table style="width: 100%; border-collapse: collapse;">
       <tr>
         <td style="width: 50%;">
-          <p style="font-size: 9px; font-weight: 600; color: #64748b; margin: 0 0 2px 0; text-transform: uppercase;">Start Odometer</p>
-          <p style="font-size: 14px; font-weight: 800; color: #1e293b; margin: 0;">${report.startOdometer !== null && report.startOdometer !== undefined ? report.startOdometer + ' km' : '--'}</p>
+          <span style="font-size: 8.5px; font-weight: 700; color: #64748b; text-transform: uppercase;">Start Odometer: </span>
+          <span style="font-size: 12px; font-weight: 800; color: #1e293b;">${report.startOdometer !== null && report.startOdometer !== undefined ? report.startOdometer + ' km' : '--'}</span>
         </td>
         <td style="width: 50%;">
-          <p style="font-size: 9px; font-weight: 600; color: #64748b; margin: 0 0 2px 0; text-transform: uppercase;">End Odometer</p>
-          <p style="font-size: 14px; font-weight: 800; color: #1e293b; margin: 0;">${report.endOdometer !== null && report.endOdometer !== undefined ? report.endOdometer + ' km' : '--'}</p>
+          <span style="font-size: 8.5px; font-weight: 700; color: #64748b; text-transform: uppercase;">End Odometer: </span>
+          <span style="font-size: 12px; font-weight: 800; color: #1e293b;">${report.endOdometer !== null && report.endOdometer !== undefined ? report.endOdometer + ' km' : '--'}</span>
         </td>
       </tr>
     </table>
   </div>
   ` : ''}
 
-  <!-- Attendance & Break Info -->
-  <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom: 25px; box-sizing: border-box;">
-    <h3 style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; margin: 0 0 10px 0; letter-spacing: 0.5px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 6px;">Attendance & Break Info</h3>
-    <table style="width: 100%; border-collapse: collapse;">
-      <tr>
-        <td style="width: 50%;">
-          <p style="font-size: 9px; font-weight: 600; color: #64748b; margin: 0 0 2px 0; text-transform: uppercase;">Total Working Time</p>
-          <p style="font-size: 14px; font-weight: 800; color: #166534; margin: 0;">${workTimeLabel}</p>
-        </td>
-        <td style="width: 50%;">
-          <p style="font-size: 9px; font-weight: 600; color: #64748b; margin: 0 0 2px 0; text-transform: uppercase;">Total Break Time</p>
-          <p style="font-size: 14px; font-weight: 800; color: #b45309; margin: 0;">${breakTimeLabel}</p>
-        </td>
-      </tr>
-    </table>
-  </div>
-
-  <!-- Tasks Breakdown -->
-  <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom: 25px; box-sizing: border-box;">
-    <table style="width: 100%; border-collapse: collapse; border-bottom: 1px dashed #cbd5e1; margin-bottom: 12px; padding-bottom: 8px;">
-      <tr>
-        <td>
-          <h3 style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; margin: 0; letter-spacing: 0.5px;">Tasks Breakdown</h3>
-        </td>
-        <td style="text-align: right;">
-          <span style="font-size: 10px; font-weight: 700; color: #64748b;">Total: ${dayTasks.length} | Completed: ${completedTasks.length} | Pending: ${pendingTasks.length}</span>
-        </td>
-      </tr>
-    </table>
+  <!-- Tasks Breakdown (1-line each + summary counts) -->
+  <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; box-sizing: border-box;">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 4px; margin-bottom: 6px;">
+      <h3 style="font-size: 10.5px; font-weight: 800; color: #1e293b; text-transform: uppercase; margin: 0; letter-spacing: 0.5px;">Tasks Completed & Breakdown</h3>
+      <span style="font-size: 9.5px; font-weight: 700; color: #166534; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 2px 6px; border-radius: 4px;">
+        ${completedCount} / ${totalTasksCount} Completed (${totalTasksCount > 0 ? Math.round((completedCount/totalTasksCount)*100) : 100}%)
+      </span>
+    </div>
     
-    <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
-      <tr>
-        <td style="width: 50%; vertical-align: top; padding-right: 10px;">
-          <h4 style="font-size: 10px; font-weight: 800; color: #166534; text-transform: uppercase; margin: 0 0 8px 0; letter-spacing: 0.5px;">Completed Tasks (${completedTasks.length})</h4>
-          ${completedTasksHtml}
-        </td>
-        <td style="width: 50%; vertical-align: top; padding-left: 10px;">
-          <h4 style="font-size: 10px; font-weight: 800; color: #b45309; text-transform: uppercase; margin: 0 0 8px 0; letter-spacing: 0.5px;">Pending Tasks (${pendingTasks.length})</h4>
-          ${pendingTasksHtml}
-        </td>
-      </tr>
-    </table>
-  </div>
-
-  <!-- Work Summary -->
-  <div style="margin-bottom: 25px; box-sizing: border-box;">
-    <h3 style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 8px 0; letter-spacing: 0.5px;">Work Summary</h3>
-    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; font-size: 12px; line-height: 1.5; color: #334155; box-sizing: border-box;">
-      ${report.visitsSummary || "Field Work Mode"}
+    <div>
+      ${completedTasksHtml}
+      ${pendingSummaryHtml}
     </div>
   </div>
 
-  <!-- Remarks -->
-  ${report.remarks ? `
-  <div style="margin-bottom: 25px; box-sizing: border-box;">
-    <h3 style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 8px 0; letter-spacing: 0.5px;">Additional Remarks</h3>
-    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; font-size: 12px; font-style: italic; line-height: 1.5; color: #64748b; box-sizing: border-box;">
-      ${report.remarks}
-    </div>
-  </div>
-  ` : ''}
+  <!-- Work Summary & Remarks (Side by Side / Compact) -->
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px;">
+    <tr>
+      <td style="width: ${report.remarks ? '50%' : '100%'}; padding-right: ${report.remarks ? '6px' : '0'}; vertical-align: top;">
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; box-sizing: border-box; min-height: 48px;">
+          <h4 style="font-size: 8.5px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Work Summary</h4>
+          <p style="font-size: 10.5px; line-height: 1.3; color: #334155; margin: 0;">${report.visitsSummary || "Field Work Mode"}</p>
+        </div>
+      </td>
+      ${report.remarks ? `
+      <td style="width: 50%; padding-left: 6px; vertical-align: top;">
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; box-sizing: border-box; min-height: 48px;">
+          <h4 style="font-size: 8.5px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Remarks</h4>
+          <p style="font-size: 10.5px; font-style: italic; line-height: 1.3; color: #64748b; margin: 0;">${report.remarks}</p>
+        </div>
+      </td>
+      ` : ''}
+    </tr>
+  </table>
 
-  <!-- Verification Media -->
+  <!-- Verification Media (Compact Thumbnails) -->
   ${report.startOdometerPhotoUrl || report.kmPhotoUrl ? `
-  <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 10px; box-sizing: border-box;">
-    <h3 style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 12px 0; letter-spacing: 0.5px;">Verification Photos</h3>
+  <div style="border-top: 1px solid #e2e8f0; padding-top: 8px; margin-top: 6px; box-sizing: border-box;">
+    <h3 style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 6px 0; letter-spacing: 0.5px;">Verification Photos</h3>
     <table style="width: 100%; border-collapse: collapse;">
       <tr>
         ${report.startOdometerPhotoUrl ? `
-        <td style="width: 50%; padding-right: 10px; text-align: center; vertical-align: top;">
-          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; box-sizing: border-box;">
-            <p style="font-size: 9px; font-weight: 700; color: #64748b; margin: 0 0 8px 0; text-transform: uppercase;">Start Odometer</p>
-            <img src="${report.startOdometerPhotoUrl}" style="max-width: 100%; max-height: 180px; border-radius: 6px; object-fit: contain;" />
+        <td style="width: 50%; padding-right: 6px; text-align: center; vertical-align: top;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px; box-sizing: border-box;">
+            <p style="font-size: 8px; font-weight: 700; color: #64748b; margin: 0 0 4px 0; text-transform: uppercase;">Start Odometer</p>
+            <img src="${report.startOdometerPhotoUrl}" style="max-width: 100%; max-height: 85px; border-radius: 4px; object-fit: contain;" />
           </div>
         </td>
         ` : ''}
         ${report.kmPhotoUrl ? `
-        <td style="width: 50%; padding-left: 10px; text-align: center; vertical-align: top;">
-          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; box-sizing: border-box;">
-            <p style="font-size: 9px; font-weight: 700; color: #64748b; margin: 0 0 8px 0; text-transform: uppercase;">End Odometer</p>
-            <img src="${report.kmPhotoUrl}" style="max-width: 100%; max-height: 180px; border-radius: 6px; object-fit: contain;" />
+        <td style="width: 50%; padding-left: 6px; text-align: center; vertical-align: top;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px; box-sizing: border-box;">
+            <p style="font-size: 8px; font-weight: 700; color: #64748b; margin: 0 0 4px 0; text-transform: uppercase;">End Odometer</p>
+            <img src="${report.kmPhotoUrl}" style="max-width: 100%; max-height: 85px; border-radius: 4px; object-fit: contain;" />
           </div>
         </td>
         ` : ''}
@@ -545,7 +579,7 @@ export default function EmployeesPage() {
     `;
 
     // Open a new popup window and use the browser's native print-to-PDF
-    const printWindow = window.open("", "_blank", "width=900,height=700");
+    const printWindow = window.open("", "_blank", "width=860,height=750");
     if (!printWindow) {
       alert("Popup blocked! Please allow popups for this site to download the DER.");
       return;
@@ -565,17 +599,17 @@ export default function EmployeesPage() {
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .no-print { display: none !important; }
-      @page { margin: 12mm; size: A4; }
+      @page { margin: 8mm 10mm; size: A4 portrait; }
     }
     .print-btn {
       display: block;
-      margin: 16px auto 0;
-      padding: 10px 32px;
+      margin: 12px auto 0;
+      padding: 8px 24px;
       background: #2563eb;
       color: #fff;
       border: none;
-      border-radius: 8px;
-      font-size: 14px;
+      border-radius: 6px;
+      font-size: 13px;
       font-weight: 700;
       cursor: pointer;
       letter-spacing: 0.5px;
@@ -585,7 +619,7 @@ export default function EmployeesPage() {
 </head>
 <body>
 ${htmlContent}
-<div class="no-print" style="text-align:center; padding: 16px 0 24px;">
+<div class="no-print" style="text-align:center; padding: 10px 0 16px;">
   <button class="print-btn" onclick="window.print()">⬇ Save as PDF / Print</button>
 </div>
 <script>
