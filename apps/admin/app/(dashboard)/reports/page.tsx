@@ -302,11 +302,48 @@ export default function ReportsPage() {
                 const todayAtt = attendanceByUserId.get(user.id);
                 const userTasks = tasksByUserId.get(user.id) || [];
                 
-                // Tasks for today
-                const userTodayTasks = userTasks.filter((t: any) => {
+                // Tasks for today (including repeating tasks and completed occurrences)
+                const userTodayRaw = userTasks.filter((t: any) => {
                   const dueStr = t.dueDate ? dayjs(t.dueDate).format("YYYY-MM-DD") : "";
-                  return dueStr === todayDateStr;
+                  const compStr = t.completedAt ? dayjs(t.completedAt).format("YYYY-MM-DD") : "";
+                  const startStr = t.startDate ? dayjs(t.startDate).format("YYYY-MM-DD") : "";
+                  const endStr = t.endDate ? dayjs(t.endDate).format("YYYY-MM-DD") : "";
+
+                  if (dueStr === todayDateStr || compStr === todayDateStr || startStr === todayDateStr) return true;
+                  if (t.isRepeating || t.repeatFrequency) {
+                    const startOk = !startStr || todayDateStr >= startStr;
+                    const endOk = !endStr || todayDateStr <= endStr;
+                    return startOk && endOk;
+                  }
+                  return false;
                 });
+
+                // Deduplicate by repeating series, prioritizing COMPLETED
+                const seriesMap = new Map<string, any>();
+                const nonSeriesTasks: any[] = [];
+                userTodayRaw.forEach((t: any) => {
+                  const seriesKey = t.parentTaskId || (t.isRepeating ? t.id : null);
+                  if (!seriesKey) {
+                    nonSeriesTasks.push(t);
+                  } else {
+                    const existing = seriesMap.get(seriesKey);
+                    if (!existing) {
+                      seriesMap.set(seriesKey, t);
+                    } else {
+                      if (t.status === "COMPLETED" && existing.status !== "COMPLETED") {
+                        seriesMap.set(seriesKey, t);
+                      } else if (existing.status === "COMPLETED" && t.status !== "COMPLETED") {
+                        // Keep completed
+                      } else {
+                        const dueStr = t.dueDate ? dayjs(t.dueDate).format("YYYY-MM-DD") : "";
+                        if (t.parentTaskId || dueStr === todayDateStr) {
+                          seriesMap.set(seriesKey, t);
+                        }
+                      }
+                    }
+                  }
+                });
+                const userTodayTasks = [...nonSeriesTasks, ...Array.from(seriesMap.values())];
                 const completedTodayTasks = userTodayTasks.filter((t: any) => t.status === "COMPLETED");
 
                 // Day KM

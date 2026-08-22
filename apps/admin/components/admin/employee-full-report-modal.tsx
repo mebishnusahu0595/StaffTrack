@@ -219,20 +219,65 @@ export function EmployeeFullReportModal({
     staleTime: 30_000
   });
 
-  // Filter tasks for this employee
+  // Filter tasks for this employee (including both standalone tasks and repeating series occurrences)
   const allEmployeeTasks = useMemo(() => {
     if (!tasksQuery.data || !employee?.id) return [];
     return tasksQuery.data.filter((t: any) => t.assignedToId === employee.id && !t.isSubtask);
   }, [tasksQuery.data, employee?.id]);
 
-  // Filter tasks for the selected date
+  // Filter tasks for the selected date with proper repeating task support and completed task prioritization
   const dayTasks = useMemo(() => {
-    return allEmployeeTasks.filter((t: any) => {
+    const rawMatches = allEmployeeTasks.filter((t: any) => {
       const dueStr = t.dueDate ? dayjs(t.dueDate).format("YYYY-MM-DD") : "";
       const compStr = t.completedAt ? dayjs(t.completedAt).format("YYYY-MM-DD") : "";
       const startStr = t.startDate ? dayjs(t.startDate).format("YYYY-MM-DD") : "";
-      return dueStr === selectedDate || compStr === selectedDate || startStr === selectedDate;
+      const endStr = t.endDate ? dayjs(t.endDate).format("YYYY-MM-DD") : "";
+
+      // 1. Direct match with due date, completion date, or start date
+      if (dueStr === selectedDate || compStr === selectedDate || startStr === selectedDate) {
+        return true;
+      }
+
+      // 2. Active repeating task on selectedDate
+      if (t.isRepeating || t.repeatFrequency) {
+        const startOk = !startStr || selectedDate >= startStr;
+        const endOk = !endStr || selectedDate <= endStr;
+        return startOk && endOk;
+      }
+
+      return false;
     });
+
+    // Deduplicate repeating tasks per series, ALWAYS prioritizing COMPLETED occurrences
+    const seriesMap = new Map<string, any>();
+    const nonSeriesTasks: any[] = [];
+
+    rawMatches.forEach((t: any) => {
+      const seriesKey = t.parentTaskId || (t.isRepeating ? t.id : null);
+      if (!seriesKey) {
+        nonSeriesTasks.push(t);
+      } else {
+        const existing = seriesMap.get(seriesKey);
+        if (!existing) {
+          seriesMap.set(seriesKey, t);
+        } else {
+          // Prioritization:
+          // 1. If 't' is COMPLETED and 'existing' is not COMPLETED, choose 't'
+          if (t.status === "COMPLETED" && existing.status !== "COMPLETED") {
+            seriesMap.set(seriesKey, t);
+          } else if (existing.status === "COMPLETED" && t.status !== "COMPLETED") {
+            // Keep existing completed task
+          } else {
+            const dueStr = t.dueDate ? dayjs(t.dueDate).format("YYYY-MM-DD") : "";
+            if (t.parentTaskId || dueStr === selectedDate) {
+              seriesMap.set(seriesKey, t);
+            }
+          }
+        }
+      }
+    });
+
+    return [...nonSeriesTasks, ...Array.from(seriesMap.values())];
   }, [allEmployeeTasks, selectedDate]);
 
   // Displayed tasks based on active scope (Today's tasks vs All tasks)
