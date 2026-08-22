@@ -337,21 +337,38 @@ export async function checkOut(actor: AuthUser, input: CheckOutInput) {
     orderBy: { checkInTime: "desc" }
   });
 
-  // Fallback for existing mobile clients: If no record with checkOutTime === null exists,
-  // find the latest attendance record for today (or within the last 18 hours)
+  // Fallback for existing mobile clients: If no active record with checkOutTime === null exists,
+  // find the latest attendance record for this user (even if auto-closed or from previous day)
   if (!attendance) {
-    const eighteenHoursAgo = new Date(Date.now() - 18 * 60 * 60 * 1000);
     attendance = await prisma.attendance.findFirst({
       where: {
         userId: actor.id,
-        checkInTime: { gte: eighteenHoursAgo }
+        checkInTime: { not: null }
       },
       orderBy: { checkInTime: "desc" }
     });
   }
 
-  if (!attendance?.checkInTime) {
-    notFound("No active check-in record found. Please punch check-in first.");
+  // If absolutely no attendance record exists at all, create one for today
+  if (!attendance) {
+    const now = new Date();
+    const date = startOfDay(now);
+    return prisma.attendance.create({
+      data: {
+        userId: actor.id,
+        date,
+        checkInTime: now,
+        checkOutTime: now,
+        checkOutLat: input.lat,
+        checkOutLng: input.lng,
+        checkOutPhotoUrl: input.photoUrl,
+        endOdometer: input.endOdometer,
+        endOdometerPhotoUrl: input.endOdometerPhotoUrl,
+        status: AttendanceStatus.PRESENT,
+        checkInApproved: true,
+        isCheckInPending: false
+      }
+    });
   }
 
   const activeBreak = await prisma.break.findFirst({
