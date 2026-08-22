@@ -202,7 +202,7 @@ Return JSON ONLY (no markdown formatting):
       ],
       generationConfig: {
         temperature: 0.0,
-        maxOutputTokens: 256,
+        maxOutputTokens: 1024,
         responseMimeType: "application/json"
       }
     });
@@ -290,7 +290,7 @@ Return ONLY valid JSON (no explanation):
       ],
       generationConfig: {
         temperature: 0.0,
-        maxOutputTokens: 256,
+        maxOutputTokens: 1024,
         responseMimeType: "application/json"
       }
     });

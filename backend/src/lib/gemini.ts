@@ -41,7 +41,7 @@ export async function callGeminiWithFallback(
   }
 
   const models = options.models && options.models.length > 0 ? options.models : GEMINI_FALLBACK_MODELS;
-  const timeoutMs = options.timeoutMs || 25_000;
+  const timeoutMs = options.timeoutMs || 10_000;
 
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
