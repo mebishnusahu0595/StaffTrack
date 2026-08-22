@@ -73,10 +73,13 @@ export function useAttendance(month = dayjs().month() + 1, year = dayjs().year()
       record.status === "PRESENT"
   );
 
-  const todaySessions = attendanceRows.filter((record) =>
-    Boolean(record.checkInTime) &&
-    (record.date.substring(0, 10) === dayjs().format("YYYY-MM-DD") || record.id === activeAttendance?.id)
-  );
+  const todaySessions = attendanceRows.filter((record) => {
+    if (!record.checkInTime) return false;
+    const isToday =
+      dayjs(record.checkInTime).isSame(dayjs(), "day") ||
+      dayjs(record.date).isSame(dayjs(), "day");
+    return isToday || record.id === activeAttendance?.id;
+  });
   
   const todayAttendance = activeAttendance || todaySessions[todaySessions.length - 1];
   const activeBreak = activeAttendance?.breaks?.find((b) => !b.endTime);
