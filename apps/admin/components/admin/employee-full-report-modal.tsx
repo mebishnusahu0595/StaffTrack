@@ -195,12 +195,12 @@ export function EmployeeFullReportModal({
     );
   }, [sanitizedLocationLogs]);
 
-  // 3. Fetch All Tasks for this employee
+  // 3. Fetch Tasks for the selected date
   const tasksQuery = useQuery({
-    queryKey: ["tasks", "employee", employee?.id],
-    queryFn: () => fetchTasks({ date: "all" }),
+    queryKey: ["tasks", "report-modal", employee?.id, selectedDate],
+    queryFn: () => fetchTasks({ date: selectedDate }),
     enabled: !!employee?.id && isOpen,
-    staleTime: 30_000
+    staleTime: 15_000
   });
 
   // 4. Fetch Attendance for this employee
@@ -219,40 +219,21 @@ export function EmployeeFullReportModal({
     staleTime: 30_000
   });
 
-  // Filter tasks for this employee (including both standalone tasks and repeating series occurrences)
+  // Filter tasks for this employee for selectedDate
   const allEmployeeTasks = useMemo(() => {
     if (!tasksQuery.data || !employee?.id) return [];
-    return tasksQuery.data.filter((t: any) => t.assignedToId === employee.id && !t.isSubtask);
+    return tasksQuery.data.filter((t: any) => 
+      (t.assignedToId === employee.id || t.assignedTo?.id === employee.id) && !t.isSubtask
+    );
   }, [tasksQuery.data, employee?.id]);
 
-  // Filter tasks for the selected date with proper repeating task support and completed task prioritization
+  // Filter tasks strictly for the selected date with completed task prioritization
   const dayTasks = useMemo(() => {
-    const rawMatches = allEmployeeTasks.filter((t: any) => {
-      const dueStr = t.dueDate ? dayjs(t.dueDate).format("YYYY-MM-DD") : "";
-      const compStr = t.completedAt ? dayjs(t.completedAt).format("YYYY-MM-DD") : "";
-      const startStr = t.startDate ? dayjs(t.startDate).format("YYYY-MM-DD") : "";
-      const endStr = t.endDate ? dayjs(t.endDate).format("YYYY-MM-DD") : "";
-
-      // 1. Direct match with due date, completion date, or start date
-      if (dueStr === selectedDate || compStr === selectedDate || startStr === selectedDate) {
-        return true;
-      }
-
-      // 2. Active repeating task on selectedDate
-      if (t.isRepeating || t.repeatFrequency) {
-        const startOk = !startStr || selectedDate >= startStr;
-        const endOk = !endStr || selectedDate <= endStr;
-        return startOk && endOk;
-      }
-
-      return false;
-    });
-
     // Deduplicate repeating tasks per series, ALWAYS prioritizing COMPLETED occurrences
     const seriesMap = new Map<string, any>();
     const nonSeriesTasks: any[] = [];
 
-    rawMatches.forEach((t: any) => {
+    allEmployeeTasks.forEach((t: any) => {
       const seriesKey = t.parentTaskId || (t.isRepeating ? t.id : null);
       if (!seriesKey) {
         nonSeriesTasks.push(t);

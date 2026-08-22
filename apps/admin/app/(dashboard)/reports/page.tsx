@@ -72,10 +72,10 @@ export default function ReportsPage() {
     refetchOnWindowFocus: false
   });
 
-  // 4. Fetch Tasks
+  // 4. Fetch Tasks for today
   const tasksQuery = useQuery({
-    queryKey: ["tasks", "reports-overview"],
-    queryFn: () => fetchTasks({ date: "all" }),
+    queryKey: ["tasks", "reports-overview", todayDateStr],
+    queryFn: () => fetchTasks({ date: todayDateStr }),
     staleTime: 30_000,
     refetchOnWindowFocus: false
   });
@@ -101,10 +101,11 @@ export default function ReportsPage() {
   const tasksByUserId = useMemo(() => {
     const map = new Map<string, any[]>();
     (tasksQuery.data || []).forEach((task: any) => {
-      if (task.assignedToId && !task.isSubtask) {
-        const list = map.get(task.assignedToId) || [];
+      const uId = task.assignedToId || task.assignedTo?.id;
+      if (uId && !task.isSubtask) {
+        const list = map.get(uId) || [];
         list.push(task);
-        map.set(task.assignedToId, list);
+        map.set(uId, list);
       }
     });
     return map;
