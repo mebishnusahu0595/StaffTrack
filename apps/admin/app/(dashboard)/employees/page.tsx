@@ -134,7 +134,7 @@ export default function EmployeesPage() {
     const grouped = new Map<string, AttendanceRecord[]>();
 
     for (const record of todayAttendanceQuery.data ?? []) {
-      if (!record.checkInTime) {
+      if (!record.checkInTime || record.status === "ABSENT" || record.checkInApproved === false) {
         continue;
       }
 
@@ -908,7 +908,9 @@ ${htmlContent}
             <tbody>
               {paginatedUsers.map((user) => {
                 const isExpanded = expandedId === user.id;
-                const userSessions = (todayAttendanceQuery.data ?? []).filter(r => r.userId === user.id && r.checkInTime);
+                const userSessions = (todayAttendanceQuery.data ?? []).filter(
+                  r => r.userId === user.id && r.checkInTime && r.status !== "ABSENT" && r.checkInApproved !== false
+                );
                 const latestUserAttendance = userSessions.slice().sort(sortAttendanceByLatestEventDesc)[0];
                 const displayedWorkMode = resolveDisplayedWorkMode(user.workMode, latestUserAttendance);
                 const isPunchedIn = Boolean(latestUserAttendance && latestUserAttendance.checkInTime && !latestUserAttendance.checkOutTime);

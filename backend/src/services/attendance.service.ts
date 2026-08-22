@@ -1459,6 +1459,8 @@ export async function rejectLateCheckIn(actor: AuthUser, id: string) {
       checkInApproved: false,
       checkInApprovedBy: actor.id,
       checkInApprovedAt: new Date(),
+      checkInTime: null,
+      checkOutTime: null,
       status: AttendanceStatus.ABSENT
     }
   });
