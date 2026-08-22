@@ -242,10 +242,21 @@ export async function checkOut(payload: CheckOutPayload): Promise<Attendance> {
 export async function analyzeFaceApi(imageData: string): Promise<any> {
   try {
     // imageData should be a base64 data URL: data:image/jpeg;base64,...
-    const res = await api.post<ApiEnvelope<any>>("/attendance/analyze-face", { image: imageData }, { timeout: 8000 });
+    const res = await api.post<ApiEnvelope<any>>("/attendance/analyze-face", { image: imageData }, { timeout: 20000 });
     return unwrap(res);
   } catch (err: any) {
     console.warn("[Mobile API] analyzeFaceApi offline/fallback:", err?.message || err);
+    // If backend explicitly rejected the face (HTTP 400), propagate the error
+    if (err?.response?.data?.error || err?.response?.data?.message) {
+      const msg = err.response.data.error || err.response.data.message;
+      return {
+        isHumanFace: false,
+        isScreenOrPrintout: false,
+        confidence: 0,
+        warningMessage: msg,
+        networkFallback: false
+      };
+    }
     return {
       isHumanFace: true,
       isScreenOrPrintout: false,
@@ -258,7 +269,7 @@ export async function analyzeFaceApi(imageData: string): Promise<any> {
 
 export async function analyzeOdometerApi(imageData: string): Promise<any> {
   try {
-    const res = await api.post<ApiEnvelope<any>>("/attendance/analyze-odometer", { image: imageData }, { timeout: 8000 });
+    const res = await api.post<ApiEnvelope<any>>("/attendance/analyze-odometer", { image: imageData }, { timeout: 20000 });
     return unwrap(res);
   } catch (err: any) {
     console.warn("[Mobile API] analyzeOdometerApi offline/fallback:", err?.message || err);

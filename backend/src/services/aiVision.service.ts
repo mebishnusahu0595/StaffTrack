@@ -168,10 +168,15 @@ export async function analyzeFacePhoto(imageInput: string): Promise<FaceAiResult
       return { ...cached.result, cached: true };
     }
 
-    const prompt = `Analyze this selfie photo for attendance check-in. Determine:
-1. Is this a real living human face present in front of the camera?
-2. Is this a photo taken off another phone screen, computer monitor, or printout?
-Return ONLY valid JSON (no explanation):
+    const prompt = `You are an AI biometric attendance verification system.
+Carefully inspect this selfie image to prevent attendance fraud:
+1. Is a real, live human face clearly visible in front of the camera?
+   - If the image shows a wall, road, ceiling, floor, vehicle, cloth, hand without face, object, animal, darkness, blur, or no human face, set isHumanFace: false.
+2. Is this a spoof/fake photo taken off another smartphone screen, laptop/monitor screen, or paper photo printout?
+   - If screen borders, moire pattern, pixel grid, glass glare, or printed photo is detected, set isScreenOrPrintout: true and isHumanFace: false.
+3. If a real live human face is clearly visible, set isHumanFace: true and isScreenOrPrintout: false.
+
+Return JSON ONLY (no markdown formatting):
 {"isHumanFace": boolean, "isScreenOrPrintout": boolean, "confidence": number, "warningMessage": string | null}`;
 
     const data = await callGeminiWithRetry({
@@ -185,9 +190,8 @@ Return ONLY valid JSON (no explanation):
       ],
       generationConfig: {
         temperature: 0.0,
-        maxOutputTokens: 1024,
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 }
+        maxOutputTokens: 256,
+        responseMimeType: "application/json"
       }
     });
 
@@ -235,7 +239,7 @@ export async function analyzeOdometerPhoto(imageInput: string): Promise<Odometer
     isScreenOrPrintout: false,
     detectedReading: null,
     confidence: 0.5,
-    warningMessage: "AI verification unavailable (logged for audit)",
+    warningMessage: "AI OCR verification unavailable (logged for audit)",
     networkFallback: true
   };
 
@@ -252,9 +256,16 @@ export async function analyzeOdometerPhoto(imageInput: string): Promise<Odometer
       return { ...cached.result, cached: true };
     }
 
-    const prompt = `Look at this vehicle odometer photo and extract the reading. Return ONLY valid JSON:
-{"isOdometer": boolean, "isBlurry": boolean, "isScreenOrPrintout": boolean, "detectedReading": number or null, "confidence": number 0-1, "warningMessage": string or null}
-Rules: detectedReading must be the KM number shown on the odometer dial (integers only). If you can read the numbers clearly, confidence should be 0.9+.`;
+    const prompt = `Analyze this vehicle dashboard/meter photo. Determine:
+1. Is this a real vehicle odometer display? (isOdometer: boolean)
+2. Is the numerical reading blurry, cut off, or illegible? (isBlurry: boolean)
+3. Is this a photo taken off another phone screen or printout? (isScreenOrPrintout: boolean)
+4. Extract the exact numerical odometer reading in KM as an integer/float (ignore decimals or trip meters, only main total KM odometer). If unreadable, set null. (detectedReading: number | null)
+5. Confidence score between 0.0 and 1.0 (confidence: number)
+6. Optional warning or issue description (warningMessage: string | null)
+
+Return ONLY valid JSON (no explanation):
+{"isOdometer": boolean, "isBlurry": boolean, "isScreenOrPrintout": boolean, "detectedReading": number | null, "confidence": number, "warningMessage": string | null}`;
 
     const data = await callGeminiWithRetry({
       contents: [
@@ -267,9 +278,8 @@ Rules: detectedReading must be the KM number shown on the odometer dial (integer
       ],
       generationConfig: {
         temperature: 0.0,
-        maxOutputTokens: 1024,
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 }
+        maxOutputTokens: 256,
+        responseMimeType: "application/json"
       }
     });
 

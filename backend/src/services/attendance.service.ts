@@ -1,12 +1,13 @@
 import { AttendanceStatus, Prisma, PunchType, UserRole, WorkMode } from "@prisma/client";
 import type { AuthUser } from "../types/auth";
-import { conflict, notFound } from "../lib/errors";
+import { badRequest, conflict, notFound } from "../lib/errors";
 import { monthRange, startOfDay } from "../lib/date";
 import { prisma } from "../lib/prisma";
 import { ensureCanAccessUser, ensureManagerCanUseEmployee, getManagerGroupId } from "./access.service";
 import { createDayEndReport } from "./report.service";
 import * as notificationService from "./notification.service";
 import { getIO, SOCKET_EVENTS } from "../lib/socket";
+import { analyzeFacePhoto } from "./aiVision.service";
 
 interface CheckInInput {
   lat: number;
@@ -112,6 +113,26 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
       status: AttendanceStatus.ON_LEAVE
     }
   });
+
+  // Strict Server-Side AI Face Verification: reject invalid/spoofed/non-human selfie
+  if (input.photoUrl) {
+    try {
+      const faceAi = await analyzeFacePhoto(input.photoUrl);
+      if (!faceAi.isHumanFace) {
+        badRequest(faceAi.warningMessage || "AI Face Verification Failed: No human face detected in selfie photo. Please take a clear selfie of your face.");
+      }
+      if (faceAi.isScreenOrPrintout) {
+        badRequest("AI Face Verification Failed: Photo of another screen or printout detected. Live camera selfie is required.");
+      }
+      input.checkInAiAnalysis = {
+        faceAi,
+        ...(input.checkInAiAnalysis || {})
+      };
+    } catch (err: any) {
+      if (err?.statusCode === 400) throw err;
+      console.warn("[Attendance Service] AI Face verification error during check-in:", err?.message || err);
+    }
+  }
 
   const result = await (async () => {
     if (existingLeaveRecord) {
@@ -339,6 +360,26 @@ export async function checkOut(actor: AuthUser, input: CheckOutInput) {
       where: { id: activeBreak.id },
       data: { endTime: new Date() }
     });
+  }
+
+  // Strict Server-Side AI Face Verification on checkout photo
+  if (input.photoUrl) {
+    try {
+      const faceAi = await analyzeFacePhoto(input.photoUrl);
+      if (!faceAi.isHumanFace) {
+        badRequest(faceAi.warningMessage || "AI Face Verification Failed: No human face detected in selfie photo. Please take a clear selfie of your face.");
+      }
+      if (faceAi.isScreenOrPrintout) {
+        badRequest("AI Face Verification Failed: Photo of another screen or printout detected. Live camera selfie is required.");
+      }
+      input.checkOutAiAnalysis = {
+        faceAi,
+        ...(input.checkOutAiAnalysis || {})
+      };
+    } catch (err: any) {
+      if (err?.statusCode === 400) throw err;
+      console.warn("[Attendance Service] AI Face verification error during checkout:", err?.message || err);
+    }
   }
 
   const updatedAttendance = await prisma.attendance.update({

@@ -27,6 +27,10 @@ export function conflict(message = "Resource already exists"): never {
   throw new AppError(409, message);
 }
 
+export function badRequest(message = "Bad request"): never {
+  throw new AppError(400, message);
+}
+
 export function errorHandler(
   error: unknown,
   _req: Request,
