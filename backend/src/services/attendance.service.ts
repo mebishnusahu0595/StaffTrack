@@ -55,28 +55,21 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
       userId: actor.id,
       checkOutTime: null,
       status: { not: AttendanceStatus.ON_LEAVE }
-    }
+    },
+    orderBy: { checkInTime: "desc" }
   });
 
   if (active) {
-    // If the stale open session is from a PREVIOUS day, auto-close it with an end-of-day timestamp
-    // so it doesn't block today's fresh check-in
-    const activeDate = startOfDay(active.date);
-    if (activeDate.getTime() < date.getTime()) {
-      console.warn(`[Auto-Close] User ${actor.id} has a stale open session from ${active.date.toISOString().slice(0, 10)}, auto-closing it to allow today's check-in.`);
-      const autoCloseTime = new Date(activeDate);
-      autoCloseTime.setHours(18, 30, 0, 0); // auto-close at 6:30 PM of that day
-      await prisma.attendance.update({
-        where: { id: active.id },
-        data: {
-          checkOutTime: autoCloseTime,
-          checkOutLat: active.checkInLat,
-          checkOutLng: active.checkInLng,
-        }
-      });
-    } else {
-      conflict("Already checked in. Please check out first.");
-    }
+    // Gracefully close the active session so the employee is never blocked
+    console.warn(`[Auto-Close] User ${actor.id} has an open session from ${active.date.toISOString().slice(0, 10)}, auto-closing to allow fresh check-in.`);
+    await prisma.attendance.update({
+      where: { id: active.id },
+      data: {
+        checkOutTime: now,
+        checkOutLat: active.checkInLat ?? input.lat,
+        checkOutLng: active.checkInLng ?? input.lng,
+      }
+    });
   }
 
   // Load user shiftStart + workMode to check for lateness and punchType restriction
@@ -336,7 +329,7 @@ function isUniqueConstraintError(error: unknown) {
 }
 
 export async function checkOut(actor: AuthUser, input: CheckOutInput) {
-  const attendance = await prisma.attendance.findFirst({
+  let attendance = await prisma.attendance.findFirst({
     where: {
       userId: actor.id,
       checkOutTime: null
@@ -344,8 +337,21 @@ export async function checkOut(actor: AuthUser, input: CheckOutInput) {
     orderBy: { checkInTime: "desc" }
   });
 
+  // Fallback for existing mobile clients: If no record with checkOutTime === null exists,
+  // find the latest attendance record for today (or within the last 18 hours)
+  if (!attendance) {
+    const eighteenHoursAgo = new Date(Date.now() - 18 * 60 * 60 * 1000);
+    attendance = await prisma.attendance.findFirst({
+      where: {
+        userId: actor.id,
+        checkInTime: { gte: eighteenHoursAgo }
+      },
+      orderBy: { checkInTime: "desc" }
+    });
+  }
+
   if (!attendance?.checkInTime) {
-    notFound("No active check-in record found");
+    notFound("No active check-in record found. Please punch check-in first.");
   }
 
   const activeBreak = await prisma.break.findFirst({
