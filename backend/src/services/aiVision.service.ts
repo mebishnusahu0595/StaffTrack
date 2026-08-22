@@ -87,12 +87,24 @@ async function prepareImagePayload(imageInput: string): Promise<{ base64Data: st
       return { base64Data: "", mimeType };
     }
   } else if (imageInput.startsWith("/") || imageInput.startsWith("uploads/")) {
-    const fullPath = path.isAbsolute(imageInput) ? imageInput : path.join(process.cwd(), imageInput);
-    if (fs.existsSync(fullPath)) {
-      const buffer = fs.readFileSync(fullPath);
+    const relPath = imageInput.replace(/^\//, "");
+    const candidates = [
+      imageInput,
+      path.join(process.cwd(), relPath),
+      path.join(process.cwd(), "uploads", path.basename(imageInput)),
+      path.join("/var/www/stafftrack/backend", relPath),
+      path.join("/var/www/stafftrack/backend/uploads", path.basename(imageInput)),
+      path.join("/var/www/stafftrack/uploads", path.basename(imageInput))
+    ];
+    let foundPath = candidates.find((p) => fs.existsSync(p));
+    if (foundPath) {
+      const buffer = fs.readFileSync(foundPath);
       base64Data = buffer.toString("base64");
-      if (fullPath.endsWith(".png")) mimeType = "image/png";
-      else if (fullPath.endsWith(".webp")) mimeType = "image/webp";
+      if (foundPath.endsWith(".png")) mimeType = "image/png";
+      else if (foundPath.endsWith(".webp")) mimeType = "image/webp";
+      else mimeType = "image/jpeg";
+    } else {
+      console.warn("[AI Vision] Could not find local image file at candidates:", candidates);
     }
   } else {
     // Plain base64 string
