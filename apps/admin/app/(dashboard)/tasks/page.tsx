@@ -499,15 +499,16 @@ export default function TasksPage() {
         filtered = filtered.filter(t => t.status === "COMPLETED" || t.status === "CANCELLED");
         break;
       case "TODAYS":
+        // Strictly show tasks for the selected date (no past overdue leakage)
+        const targetDate = filterDate ? startOfDay(parseISO(filterDate)) : now;
         filtered = filtered.filter(t => {
           const taskDue = new Date(t.dueDate);
           const taskStart = t.startDate ? new Date(t.startDate) : null;
           const taskCompleted = t.completedAt ? new Date(t.completedAt) : null;
           return (
-            isSameDay(taskDue, now) ||
-            (taskStart && isSameDay(taskStart, now)) ||
-            (taskCompleted && isSameDay(taskCompleted, now)) ||
-            (isBefore(taskDue, now) && t.status !== "COMPLETED")
+            isSameDay(taskDue, targetDate) ||
+            (taskStart && isSameDay(taskStart, targetDate)) ||
+            (taskCompleted && isSameDay(taskCompleted, targetDate))
           );
         });
         break;
