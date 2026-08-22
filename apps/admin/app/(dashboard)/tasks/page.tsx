@@ -454,7 +454,7 @@ export default function TasksPage() {
       });
 
       // Deduplicate repeating tasks per series for the selected date view.
-      // Prefer the occurrence whose dueDate matches filterDate so the exact day's occurrence is displayed.
+      // ALWAYS prioritize COMPLETED occurrence over PENDING parent task!
       const seriesMap = new Map<string, any>();
       const nonSeriesTasks: any[] = [];
 
@@ -464,13 +464,21 @@ export default function TasksPage() {
           nonSeriesTasks.push(t);
         } else {
           const existing = seriesMap.get(seriesKey);
-          const taskDueStr = getLocalDateStr(t.dueDate);
           if (!existing) {
             seriesMap.set(seriesKey, t);
           } else {
-            // If current task matches filterDate exactly, prefer it over existing
-            if (taskDueStr === filterDate) {
+            // Prioritization:
+            // 1. If 't' is COMPLETED and 'existing' is not COMPLETED, choose 't'
+            if (t.status === "COMPLETED" && existing.status !== "COMPLETED") {
               seriesMap.set(seriesKey, t);
+            } else if (existing.status === "COMPLETED" && t.status !== "COMPLETED") {
+              // Keep existing COMPLETED task
+            } else {
+              // Both have same completion status: prefer child task or exact due date match
+              const taskDueStr = getLocalDateStr(t.dueDate);
+              if (t.parentTaskId || taskDueStr === filterDate) {
+                seriesMap.set(seriesKey, t);
+              }
             }
           }
         }
@@ -494,9 +502,11 @@ export default function TasksPage() {
         filtered = filtered.filter(t => {
           const taskDue = new Date(t.dueDate);
           const taskStart = t.startDate ? new Date(t.startDate) : null;
+          const taskCompleted = t.completedAt ? new Date(t.completedAt) : null;
           return (
             isSameDay(taskDue, now) ||
             (taskStart && isSameDay(taskStart, now)) ||
+            (taskCompleted && isSameDay(taskCompleted, now)) ||
             (isBefore(taskDue, now) && t.status !== "COMPLETED")
           );
         });
