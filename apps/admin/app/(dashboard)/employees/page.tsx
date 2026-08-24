@@ -269,7 +269,7 @@ export default function EmployeesPage() {
   }, [attendanceQuery.data]);
  
   const [taskStatusFilter, setTaskStatusFilter] = useState<"ALL" | "PENDING" | "COMPLETED">("ALL");
-  const [taskDateFilter, setTaskDateFilter] = useState<string>("");
+  const [taskDateFilter, setTaskDateFilter] = useState<string>(todayDate);
 
   const tasksQuery = useQuery({
     queryKey: ["tasks", expandedId],
@@ -288,30 +288,30 @@ export default function EmployeesPage() {
     return (tasksQuery.data ?? []).filter(t => t.assignedToId === expandedId);
   }, [tasksQuery.data, expandedId]);
 
+  const dateScopedTasks = useMemo(() => {
+    if (!expandedId) return [];
+    if (!taskDateFilter) return employeeTasks;
+    return employeeTasks.filter(t => {
+      const dueMatch = dayjs(t.dueDate).format("YYYY-MM-DD") === taskDateFilter;
+      const startMatch = t.startDate && dayjs(t.startDate).format("YYYY-MM-DD") === taskDateFilter;
+      const endMatch = t.endDate && dayjs(t.endDate).format("YYYY-MM-DD") === taskDateFilter;
+      const completedMatch = t.completedAt && dayjs(t.completedAt).format("YYYY-MM-DD") === taskDateFilter;
+      const updatedMatch = t.updatedAt && dayjs(t.updatedAt).format("YYYY-MM-DD") === taskDateFilter;
+      const createdMatch = t.createdAt && dayjs(t.createdAt).format("YYYY-MM-DD") === taskDateFilter;
+      return dueMatch || startMatch || endMatch || completedMatch || updatedMatch || createdMatch;
+    });
+  }, [employeeTasks, expandedId, taskDateFilter]);
+
   const inlineFilteredTasks = useMemo(() => {
     if (!expandedId) return [];
-    let list = employeeTasks;
-
     if (taskStatusFilter === "PENDING") {
-      list = list.filter(t => t.status === "PENDING" || t.status === "IN_PROGRESS");
-    } else if (taskStatusFilter === "COMPLETED") {
-      list = list.filter(t => t.status === "COMPLETED");
+      return dateScopedTasks.filter(t => t.status === "PENDING" || t.status === "IN_PROGRESS");
     }
-
-    if (taskDateFilter) {
-      list = list.filter(t => {
-        const dueMatch = dayjs(t.dueDate).format("YYYY-MM-DD") === taskDateFilter;
-        const startMatch = t.startDate && dayjs(t.startDate).format("YYYY-MM-DD") === taskDateFilter;
-        const endMatch = t.endDate && dayjs(t.endDate).format("YYYY-MM-DD") === taskDateFilter;
-        const completedMatch = t.completedAt && dayjs(t.completedAt).format("YYYY-MM-DD") === taskDateFilter;
-        const updatedMatch = t.updatedAt && dayjs(t.updatedAt).format("YYYY-MM-DD") === taskDateFilter;
-        const createdMatch = t.createdAt && dayjs(t.createdAt).format("YYYY-MM-DD") === taskDateFilter;
-        return dueMatch || startMatch || endMatch || completedMatch || updatedMatch || createdMatch;
-      });
+    if (taskStatusFilter === "COMPLETED") {
+      return dateScopedTasks.filter(t => t.status === "COMPLETED");
     }
-
-    return list;
-  }, [employeeTasks, taskStatusFilter, taskDateFilter]);
+    return dateScopedTasks;
+  }, [dateScopedTasks, expandedId, taskStatusFilter]);
  
   const employeeReports = useMemo(() => {
     return reportsQuery.data ?? [];
@@ -1386,14 +1386,23 @@ ${htmlContent}
                                                       placeholder="Filter by date"
                                                       className="h-8 text-[11px] font-bold rounded-lg border-slate-200 bg-white shadow-sm w-36"
                                                    />
-                                                   {taskDateFilter && (
+                                                   {taskDateFilter ? (
                                                       <Button
                                                          variant="ghost"
                                                          size="sm"
                                                          onClick={() => setTaskDateFilter("")}
                                                          className="h-8 px-2 text-[10px] font-bold text-slate-500 hover:text-red-600"
                                                       >
-                                                         Clear Date
+                                                         Show All
+                                                      </Button>
+                                                   ) : (
+                                                      <Button
+                                                         variant="ghost"
+                                                         size="sm"
+                                                         onClick={() => setTaskDateFilter(todayDate)}
+                                                         className="h-8 px-2 text-[10px] font-bold text-blue-600 hover:bg-blue-50"
+                                                      >
+                                                         Today
                                                       </Button>
                                                    )}
                                                 </div>
@@ -1409,7 +1418,7 @@ ${htmlContent}
                                                       taskStatusFilter === "ALL" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
                                                    )}
                                                 >
-                                                   All ({employeeTasks.length})
+                                                   All ({dateScopedTasks.length})
                                                 </button>
                                                 <button
                                                    type="button"
@@ -1419,7 +1428,7 @@ ${htmlContent}
                                                       taskStatusFilter === "PENDING" ? "bg-amber-500 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
                                                    )}
                                                 >
-                                                   Pending ({employeeTasks.filter(t => t.status === "PENDING" || t.status === "IN_PROGRESS").length})
+                                                   Pending ({dateScopedTasks.filter(t => t.status === "PENDING" || t.status === "IN_PROGRESS").length})
                                                 </button>
                                                 <button
                                                    type="button"
@@ -1429,7 +1438,7 @@ ${htmlContent}
                                                       taskStatusFilter === "COMPLETED" ? "bg-emerald-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
                                                    )}
                                                 >
-                                                   Completed ({employeeTasks.filter(t => t.status === "COMPLETED").length})
+                                                   Completed ({dateScopedTasks.filter(t => t.status === "COMPLETED").length})
                                                 </button>
                                              </div>
                                           </div>
