@@ -158,11 +158,22 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
   return task;
 }
 
-export async function listTasks(actor: AuthUser, dateStr?: string) {
+export interface ListTasksFilter {
+  dateStr?: string;
+  assignedToId?: string;
+  status?: string;
+  limit?: number;
+}
+
+export async function listTasks(actor: AuthUser, filter?: ListTasksFilter | string) {
+  const options: ListTasksFilter = typeof filter === "string" ? { dateStr: filter } : (filter || {});
+  const where = await taskAccessWhere(actor, options);
+
   const tasks = await prisma.task.findMany({
-    where: await taskAccessWhere(actor, dateStr),
+    where,
     include: taskInclude,
-    orderBy: { createdAt: "desc" }
+    orderBy: { createdAt: "desc" },
+    ...(options.limit ? { take: options.limit } : {})
   });
 
   // Fire-and-forget: check & send task notifications without blocking the response.
@@ -781,11 +792,12 @@ export async function updateTaskStatus(
   return updatedTask;
 }
 
-async function taskAccessWhere(actor: AuthUser, dateStr?: string): Promise<Prisma.TaskWhereInput> {
+async function taskAccessWhere(actor: AuthUser, filter: ListTasksFilter = {}): Promise<Prisma.TaskWhereInput> {
+  const { dateStr, assignedToId, status } = filter;
   let dateFilter: any = {};
 
   if (dateStr && dateStr.toLowerCase() !== "all") {
-    // If a specific date is requested (e.g. "2026-08-11"), filter to that single day in IST
+    // If a specific date is requested (e.g. "2026-08-11"), filter to tasks on that day or pending on that day
     const requestedDate = new Date(dateStr);
     if (!isNaN(requestedDate.getTime())) {
       const start = getStartOfDayIST(requestedDate);
@@ -809,24 +821,53 @@ async function taskAccessWhere(actor: AuthUser, dateStr?: string): Promise<Prism
               gte: start,
               lte: end
             }
+          },
+          {
+            updatedAt: {
+              gte: start,
+              lte: end
+            }
+          },
+          {
+            createdAt: {
+              gte: start,
+              lte: end
+            }
           }
         ]
       };
     }
-  } else if (actor.role === UserRole.EMPLOYEE) {
+  } else if (actor.role === UserRole.EMPLOYEE && !assignedToId) {
     // Default to Today in IST for mobile app employees when no dateStr is specified
     const todayStart = getStartOfDayIST(new Date());
     const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
     dateFilter = {
-      dueDate: {
-        gte: todayStart,
-        lte: todayEnd
-      }
+      OR: [
+        {
+          dueDate: {
+            gte: todayStart,
+            lte: todayEnd
+          }
+        },
+        {
+          status: { in: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS] }
+        }
+      ]
     };
   }
 
+  const baseWhere: Prisma.TaskWhereInput = { ...dateFilter };
+
+  if (status) {
+    baseWhere.status = status as TaskStatus;
+  }
+
+  if (assignedToId) {
+    baseWhere.assignedToId = assignedToId;
+  }
+
   if (actor.role === UserRole.SUPERADMIN) {
-    return dateFilter;
+    return baseWhere;
   }
 
   if (actor.role === UserRole.ADMIN) {
@@ -834,14 +875,29 @@ async function taskAccessWhere(actor: AuthUser, dateStr?: string): Promise<Prism
       assignedTo: {
         companyId: actor.companyId
       },
-      ...dateFilter
+      ...baseWhere
     };
   }
 
-  // Managers and Employees see tasks assigned directly to themselves
+  if (actor.role === UserRole.MANAGER) {
+    const managerGroupId = await getManagerGroupId(actor.id);
+    return {
+      assignedTo: {
+        companyId: actor.companyId,
+        OR: [
+          { id: actor.id },
+          { managerId: actor.id },
+          ...(managerGroupId ? [{ groupId: managerGroupId }] : [])
+        ]
+      },
+      ...baseWhere
+    };
+  }
+
+  // Employees see tasks assigned directly to themselves
   return {
     assignedToId: actor.id,
-    ...dateFilter
+    ...baseWhere
   };
 }
 

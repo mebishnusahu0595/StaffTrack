@@ -17,7 +17,11 @@ export async function createTask(req: Request, res: Response): Promise<void> {
 
 export async function listTasks(req: Request, res: Response): Promise<void> {
   const dateStr = req.query.date as string | undefined;
-  const result = await taskService.listTasks(req.user!, dateStr);
+  const assignedToId = (req.query.assignedToId || req.query.userId) as string | undefined;
+  const status = req.query.status as string | undefined;
+  const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+
+  const result = await taskService.listTasks(req.user!, { dateStr, assignedToId, status, limit });
   sendSuccess(res, result, "Tasks fetched");
 }
 

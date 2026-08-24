@@ -268,9 +268,12 @@ export default function EmployeesPage() {
     }, 0);
   }, [attendanceQuery.data]);
  
+  const [taskStatusFilter, setTaskStatusFilter] = useState<"ALL" | "PENDING" | "COMPLETED">("ALL");
+  const [taskDateFilter, setTaskDateFilter] = useState<string>("");
+
   const tasksQuery = useQuery({
-    queryKey: ["tasks"],
-    queryFn: () => fetchTasks(),
+    queryKey: ["tasks", expandedId],
+    queryFn: () => fetchTasks(expandedId ? { assignedToId: expandedId } : undefined),
     enabled: !!expandedId,
   });
  
@@ -287,11 +290,28 @@ export default function EmployeesPage() {
 
   const inlineFilteredTasks = useMemo(() => {
     if (!expandedId) return [];
-    return (tasksQuery.data ?? []).filter(t => 
-      t.assignedToId === expandedId && 
-      dayjs(t.dueDate).format("YYYY-MM-DD") === selectedMapDate
-    );
-  }, [tasksQuery.data, expandedId, selectedMapDate]);
+    let list = employeeTasks;
+
+    if (taskStatusFilter === "PENDING") {
+      list = list.filter(t => t.status === "PENDING" || t.status === "IN_PROGRESS");
+    } else if (taskStatusFilter === "COMPLETED") {
+      list = list.filter(t => t.status === "COMPLETED");
+    }
+
+    if (taskDateFilter) {
+      list = list.filter(t => {
+        const dueMatch = dayjs(t.dueDate).format("YYYY-MM-DD") === taskDateFilter;
+        const startMatch = t.startDate && dayjs(t.startDate).format("YYYY-MM-DD") === taskDateFilter;
+        const endMatch = t.endDate && dayjs(t.endDate).format("YYYY-MM-DD") === taskDateFilter;
+        const completedMatch = t.completedAt && dayjs(t.completedAt).format("YYYY-MM-DD") === taskDateFilter;
+        const updatedMatch = t.updatedAt && dayjs(t.updatedAt).format("YYYY-MM-DD") === taskDateFilter;
+        const createdMatch = t.createdAt && dayjs(t.createdAt).format("YYYY-MM-DD") === taskDateFilter;
+        return dueMatch || startMatch || endMatch || completedMatch || updatedMatch || createdMatch;
+      });
+    }
+
+    return list;
+  }, [employeeTasks, taskStatusFilter, taskDateFilter]);
  
   const employeeReports = useMemo(() => {
     return reportsQuery.data ?? [];
@@ -1339,136 +1359,213 @@ ${htmlContent}
                                                     </div>
                                                  </div>
                                               </div>
-                                            )}
-                                       </CardContent>
+                                           )}
+                                        </CardContent>
                                     </Card>
                                  </div>
  
                                  {/* Middle: Assigned Tasks List */}
-                                  <div className="col-span-6">
-                                     <Card className="border-none shadow-sm ring-1 ring-slate-200/50 h-full bg-white p-6 flex flex-col justify-between">
-                                        <div>
-                                           <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
-                                              <div className="flex items-center gap-2">
-                                                 <ClipboardList className="h-5 w-5 text-blue-500" />
-                                                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Assigned Tasks</h3>
-                                                 <Badge className="bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-black px-2.5 py-0.5 rounded-lg shadow-sm">
-                                                    {inlineFilteredTasks.length} task{inlineFilteredTasks.length === 1 ? "" : "s"}
-                                                 </Badge>
-                                              </div>
-                                              <Input 
-                                                 type="date" 
-                                                 value={selectedMapDate} 
-                                                 onChange={(e) => setSelectedMapDate(e.target.value)}
-                                                 className="h-8 text-[11px] font-bold rounded-lg border-slate-200 bg-white shadow-sm w-36"
-                                              />
-                                           </div>
-                                           
-                                           <div className="overflow-y-auto pr-1 space-y-3 max-h-[420px]">
-                                              {inlineFilteredTasks.length === 0 ? (
-                                                 <div className="text-center py-16 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                                                    <ClipboardList className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-                                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">No tasks for this date</p>
-                                                    <p className="text-[10px] text-slate-400 mt-1 font-medium">Tasks assigned to {selectedEmployee?.name} on {dayjs(selectedMapDate).format("DD MMM, YYYY")} will appear here.</p>
-                                                 </div>
-                                              ) : (
-                                                 inlineFilteredTasks.map((task) => (
-                                                    <div key={task.id} className="p-4 rounded-2xl bg-white border border-slate-100/80 shadow-sm hover:shadow-md transition-all group text-left">
-                                                       <div className="flex items-start justify-between">
-                                                          <div className="space-y-1">
-                                                             <h4 className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors">{task.title}</h4>
-                                                             {task.description && (
-                                                                <p className="text-xs text-slate-500 font-medium leading-relaxed">{task.description}</p>
-                                                             )}
-                                                          </div>
-                                                          <div className="flex items-center gap-2">
-                                                             {task.points > 0 && (
-                                                                <Badge className="bg-blue-50 text-blue-700 border border-blue-100 font-bold text-[9px] px-1.5 py-0.5 rounded-md">+{task.points} pts</Badge>
-                                                             )}
-                                                             <Badge className={cn(
-                                                                "text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border shadow-sm",
-                                                                task.status === "COMPLETED" ? "bg-emerald-50 text-emerald-600 border-emerald-100" : 
-                                                                task.status === "IN_PROGRESS" ? "bg-blue-50 text-blue-600 border-blue-100" :
-                                                                "bg-amber-50 text-amber-600 border-amber-100"
-                                                             )}>
-                                                                {task.status.replace("_", " ")}
-                                                             </Badge>
-                                                          </div>
-                                                       </div>
+                                 <div className="col-span-6">
+                                    <Card className="border-none shadow-sm ring-1 ring-slate-200/50 h-full bg-white p-6 flex flex-col justify-between">
+                                       <div>
+                                          <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 mb-4">
+                                             <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                   <ClipboardList className="h-5 w-5 text-blue-500" />
+                                                   <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Assigned Tasks</h3>
+                                                   <Badge className="bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-black px-2.5 py-0.5 rounded-lg shadow-sm">
+                                                      {inlineFilteredTasks.length} task{inlineFilteredTasks.length === 1 ? "" : "s"}
+                                                   </Badge>
+                                                </div>
+                                                
+                                                <div className="flex items-center gap-2">
+                                                   <Input 
+                                                      type="date" 
+                                                      value={taskDateFilter} 
+                                                      onChange={(e) => setTaskDateFilter(e.target.value)}
+                                                      placeholder="Filter by date"
+                                                      className="h-8 text-[11px] font-bold rounded-lg border-slate-200 bg-white shadow-sm w-36"
+                                                   />
+                                                   {taskDateFilter && (
+                                                      <Button
+                                                         variant="ghost"
+                                                         size="sm"
+                                                         onClick={() => setTaskDateFilter("")}
+                                                         className="h-8 px-2 text-[10px] font-bold text-slate-500 hover:text-red-600"
+                                                      >
+                                                         Clear Date
+                                                      </Button>
+                                                   )}
+                                                </div>
+                                             </div>
 
-                                                       {/* Task Completion Details Section */}
-                                                       {task.status === "COMPLETED" && (
-                                                          <div className="mt-3 bg-emerald-50/30 border border-emerald-100/50 rounded-xl p-3 text-left space-y-2">
-                                                             <div className="flex items-center justify-between">
-                                                                <span className="text-[9px] font-black text-emerald-700 uppercase tracking-widest">Completion Info</span>
-                                                                {task.endDate && (
-                                                                   <span className="text-[9px] font-bold text-slate-500">
-                                                                      Completed: {dayjs(task.endDate).format("MMM DD, YYYY hh:mm A")}
-                                                                   </span>
-                                                                )}
-                                                             </div>
-                                                             
-                                                             {task.completionRemarks && (
-                                                                <p className="text-xs font-semibold text-slate-700 bg-white border border-slate-100 p-2 rounded-lg leading-relaxed shadow-sm">
-                                                                   {task.completionRemarks}
-                                                                </p>
-                                                             )}
+                                             {/* Status Filter Tabs */}
+                                             <div className="flex items-center gap-1.5 bg-slate-100/70 p-1 rounded-xl w-fit">
+                                                <button
+                                                   type="button"
+                                                   onClick={() => setTaskStatusFilter("ALL")}
+                                                   className={cn(
+                                                      "px-3 py-1 text-[10px] font-extrabold rounded-lg transition-all",
+                                                      taskStatusFilter === "ALL" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                                                   )}
+                                                >
+                                                   All ({employeeTasks.length})
+                                                </button>
+                                                <button
+                                                   type="button"
+                                                   onClick={() => setTaskStatusFilter("PENDING")}
+                                                   className={cn(
+                                                      "px-3 py-1 text-[10px] font-extrabold rounded-lg transition-all",
+                                                      taskStatusFilter === "PENDING" ? "bg-amber-500 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+                                                   )}
+                                                >
+                                                   Pending ({employeeTasks.filter(t => t.status === "PENDING" || t.status === "IN_PROGRESS").length})
+                                                </button>
+                                                <button
+                                                   type="button"
+                                                   onClick={() => setTaskStatusFilter("COMPLETED")}
+                                                   className={cn(
+                                                      "px-3 py-1 text-[10px] font-extrabold rounded-lg transition-all",
+                                                      taskStatusFilter === "COMPLETED" ? "bg-emerald-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+                                                   )}
+                                                >
+                                                   Completed ({employeeTasks.filter(t => t.status === "COMPLETED").length})
+                                                </button>
+                                             </div>
+                                          </div>
+                                          
+                                          <div className="overflow-y-auto pr-1 space-y-3 max-h-[420px]">
+                                             {inlineFilteredTasks.length === 0 ? (
+                                                <div className="text-center py-12 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                                                   <ClipboardList className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+                                                   <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">
+                                                      No {taskStatusFilter !== "ALL" ? taskStatusFilter.toLowerCase() : ""} tasks found {taskDateFilter ? `for ${dayjs(taskDateFilter).format("DD MMM, YYYY")}` : ""}
+                                                   </p>
+                                                   <p className="text-[10px] text-slate-400 mt-1 font-medium">
+                                                      {taskDateFilter 
+                                                         ? "Try clearing the date filter to view all assigned tasks." 
+                                                         : `Tasks assigned to ${selectedEmployee?.name || "this employee"} will appear here.`
+                                                      }
+                                                   </p>
+                                                   {taskDateFilter && (
+                                                      <Button
+                                                         variant="outline"
+                                                         size="sm"
+                                                         onClick={() => setTaskDateFilter("")}
+                                                         className="mt-3 text-[10px] font-bold h-7"
+                                                      >
+                                                         Show All Tasks
+                                                      </Button>
+                                                   )}
+                                                </div>
+                                             ) : (
+                                                inlineFilteredTasks.map((task) => (
+                                                   <div key={task.id} className="p-4 rounded-2xl bg-white border border-slate-100/80 shadow-sm hover:shadow-md transition-all group text-left">
+                                                      <div className="flex items-start justify-between">
+                                                         <div className="space-y-1 flex-1 pr-2">
+                                                            <h4 className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors">{task.title}</h4>
+                                                            {task.description && (
+                                                               <p className="text-xs text-slate-500 font-medium leading-relaxed whitespace-pre-line">{task.description}</p>
+                                                            )}
+                                                         </div>
+                                                         <div className="flex items-center gap-2 flex-shrink-0">
+                                                            {task.points > 0 && (
+                                                               <Badge className="bg-blue-50 text-blue-700 border border-blue-100 font-bold text-[9px] px-1.5 py-0.5 rounded-md">+{task.points} pts</Badge>
+                                                            )}
+                                                            <Badge className={cn(
+                                                               "text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border shadow-sm",
+                                                               task.status === "COMPLETED" ? "bg-emerald-50 text-emerald-600 border-emerald-100" : 
+                                                               task.status === "IN_PROGRESS" ? "bg-blue-50 text-blue-600 border-blue-100" :
+                                                               "bg-amber-50 text-amber-600 border-amber-100"
+                                                            )}>
+                                                               {task.status.replace("_", " ")}
+                                                            </Badge>
+                                                         </div>
+                                                      </div>
 
-                                                             {task.completionPhotoUrl && (
-                                                                <div className="pt-1">
-                                                                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">Attached Photo:</p>
-                                                                   <a 
-                                                                      href={task.completionPhotoUrl} 
-                                                                      target="_blank" 
-                                                                      rel="noopener noreferrer"
-                                                                      className="inline-block relative group/img overflow-hidden rounded-lg border border-slate-200"
-                                                                   >
-                                                                      <img 
-                                                                         src={task.completionPhotoUrl} 
-                                                                         alt="Completion attachment" 
-                                                                         className="max-h-36 max-w-full object-cover transition-transform group-hover/img:scale-105" 
-                                                                      />
-                                                                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
-                                                                         <span className="text-[10px] text-white font-bold uppercase tracking-widest">Click to Zoom</span>
-                                                                      </div>
-                                                                   </a>
-                                                                </div>
-                                                             )}
+                                                      {/* Task Completion Details Section */}
+                                                      {task.status === "COMPLETED" && (
+                                                         <div className="mt-3 bg-emerald-50/30 border border-emerald-100/50 rounded-xl p-3 text-left space-y-2">
+                                                            <div className="flex items-center justify-between">
+                                                               <span className="text-[9px] font-black text-emerald-700 uppercase tracking-widest">Completion Info</span>
+                                                               {(task.completedAt || task.endDate || task.updatedAt) && (
+                                                                  <span className="text-[9px] font-bold text-slate-500">
+                                                                     Completed: {dayjs(task.completedAt || task.endDate || task.updatedAt).format("MMM DD, YYYY hh:mm A")}
+                                                                  </span>
+                                                               )}
+                                                            </div>
+                                                            
+                                                            {task.completionRemarks && (
+                                                               <p className="text-xs font-semibold text-slate-700 bg-white border border-slate-100 p-2 rounded-lg leading-relaxed shadow-sm">
+                                                                  {task.completionRemarks}
+                                                               </p>
+                                                            )}
 
-                                                             {task.checklistResponses && Array.isArray(task.checklistResponses) && task.checklistResponses.length > 0 && (
-                                                                <div className="mt-2 space-y-2 pt-2 border-t border-slate-100/80">
-                                                                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Checklist Answers:</p>
-                                                                   <div className="grid grid-cols-1 gap-2">
-                                                                      {task.checklistResponses.map((res: any, idx: number) => (
-                                                                         <div key={idx} className="bg-white p-2.5 rounded-xl border border-slate-100/80 flex flex-col gap-1 text-left shadow-sm">
-                                                                            <span className="text-[9px] font-black text-slate-400 uppercase leading-none">{res.label || `Question ${idx + 1}`}</span>
-                                                                            <span className="text-xs font-bold text-slate-700">{res.value || "No response"}</span>
-                                                                            {res.photoUrl && (
-                                                                               <a href={res.photoUrl} target="_blank" rel="noopener noreferrer" className="mt-1">
-                                                                                  <img src={res.photoUrl} alt="Checklist response attachment" className="max-h-20 rounded-lg object-cover border border-slate-100" />
-                                                                               </a>
-                                                                            )}
-                                                                         </div>
-                                                                      ))}
-                                                                   </div>
-                                                                </div>
-                                                             )}
-                                                          </div>
-                                                       )}
+                                                            {task.completionPhotoUrl && (
+                                                               <div className="pt-1">
+                                                                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">Attached Photo:</p>
+                                                                  <a 
+                                                                     href={task.completionPhotoUrl} 
+                                                                     target="_blank" 
+                                                                     rel="noopener noreferrer"
+                                                                     className="inline-block relative group/img overflow-hidden rounded-lg border border-slate-200"
+                                                                  >
+                                                                     <img 
+                                                                        src={task.completionPhotoUrl} 
+                                                                        alt="Completion attachment" 
+                                                                        className="max-h-36 max-w-full object-cover transition-transform group-hover/img:scale-105" 
+                                                                     />
+                                                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                                                        <span className="text-[10px] text-white font-bold uppercase tracking-widest">Click to Zoom</span>
+                                                                     </div>
+                                                                  </a>
+                                                               </div>
+                                                            )}
 
-                                                       <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between">
-                                                          <div className="flex items-center gap-1.5 text-slate-400">
-                                                             <Calendar className="h-3.5 w-3.5" />
-                                                             <span className="text-[10px] font-bold uppercase tracking-wider">Due: {dayjs(task.dueDate).format("MMM DD, YYYY hh:mm A")}</span>
-                                                          </div>
-                                                       </div>
-                                                    </div>
-                                                 ))
-                                              )}
-                                           </div>
-                                        </div>
-                                     </Card>
-                                  </div>
+                                                            {task.checklistResponses && Array.isArray(task.checklistResponses) && task.checklistResponses.length > 0 && (
+                                                               <div className="mt-2 space-y-2 pt-2 border-t border-slate-100/80">
+                                                                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Checklist Answers:</p>
+                                                                  <div className="grid grid-cols-1 gap-2">
+                                                                     {task.checklistResponses.map((res: any, idx: number) => (
+                                                                        <div key={idx} className="bg-white p-2.5 rounded-xl border border-slate-100/80 flex flex-col gap-1 text-left shadow-sm">
+                                                                           <span className="text-[9px] font-black text-slate-400 uppercase leading-none">{res.title || res.label || `Question ${idx + 1}`}</span>
+                                                                           <span className="text-xs font-bold text-slate-700">{res.value || res.response || "No response"}</span>
+                                                                           {(res.photoUrl || res.fileUrl) && (
+                                                                              <a href={res.photoUrl || res.fileUrl} target="_blank" rel="noopener noreferrer" className="mt-1">
+                                                                                 <img src={res.photoUrl || res.fileUrl} alt="Checklist attachment" className="max-h-20 rounded-lg object-cover border border-slate-100" />
+                                                                              </a>
+                                                                           )}
+                                                                        </div>
+                                                                     ))}
+                                                                  </div>
+                                                               </div>
+                                                            )}
+                                                         </div>
+                                                      )}
+
+                                                      <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between">
+                                                         <div className="flex items-center gap-1.5 text-slate-400">
+                                                            <Calendar className="h-3.5 w-3.5" />
+                                                            <span className="text-[10px] font-bold uppercase tracking-wider">Due: {dayjs(task.dueDate).format("MMM DD, YYYY hh:mm A")}</span>
+                                                         </div>
+                                                         {task.priority && (
+                                                            <span className={cn(
+                                                               "text-[9px] font-black uppercase px-2 py-0.5 rounded-md",
+                                                               task.priority.toLowerCase() === "high" ? "bg-red-50 text-red-600" :
+                                                               task.priority.toLowerCase() === "medium" ? "bg-amber-50 text-amber-600" :
+                                                               "bg-slate-100 text-slate-600"
+                                                            )}>
+                                                               {task.priority} Priority
+                                                            </span>
+                                                         )}
+                                                      </div>
+                                                   </div>
+                                                ))
+                                             )}
+                                          </div>
+                                       </div>
+                                    </Card>
+                                 </div>
  
                                  {/* Right: Tabbed Activity Hub */}
                                  <div className="col-span-3">
