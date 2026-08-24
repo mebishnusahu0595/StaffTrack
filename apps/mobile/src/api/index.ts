@@ -403,6 +403,13 @@ export async function fetchDaySummary(userId: string, date: string): Promise<any
   );
 }
 
+export async function fetchDerHtml(userId: string, date: string): Promise<string> {
+  const res = await api.get<ApiEnvelope<{ html: string }>>("/reports/der/render-html", {
+    params: { userId, date }
+  });
+  return unwrap(res).html;
+}
+
 export async function fetchMonthlyPerformanceReport(
   userId: string,
   month: number,

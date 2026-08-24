@@ -18,6 +18,14 @@ router.post(
   asyncHandler(reportController.createDayEndReport)
 );
 router.get(
+  "/der/render-html",
+  asyncHandler(reportController.getDayEndReportHtml)
+);
+router.get(
+  "/der/:userId/render-html",
+  asyncHandler(reportController.getDayEndReportHtml)
+);
+router.get(
   "/der",
   asyncHandler(reportController.listDayEndReports)
 );

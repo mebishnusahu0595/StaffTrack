@@ -38,3 +38,11 @@ export async function getMonthlyPerformanceReport(req: Request, res: Response): 
   );
   sendSuccess(res, result, "Monthly performance report fetched");
 }
+
+export async function getDayEndReportHtml(req: Request, res: Response): Promise<void> {
+  const userId = (req.query.userId as string) || req.params.userId || req.user!.id;
+  const dateStr = req.query.date as string;
+  const date = dateStr ? new Date(dateStr) : new Date();
+  const html = await reportService.renderDayEndReportHtml(req.user!, userId, date);
+  sendSuccess(res, { html }, "Day end report HTML rendered");
+}

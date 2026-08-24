@@ -7,7 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import * as ImagePicker from "expo-image-picker";
 
-import { createDayEndReport, fetchDayEndReports, fetchDaySummary, fetchTasks, uploadPhoto, DayEndReport } from "../api";
+import { createDayEndReport, fetchDayEndReports, fetchDaySummary, fetchTasks, fetchDerHtml, uploadPhoto, DayEndReport } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useAttendance } from "../hooks/useAttendance";
 import { API_ORIGIN_URL } from "../config/env";
@@ -462,14 +462,24 @@ export function DayEndReportScreen() {
         workTimeLabel = `${Math.floor(mins / 60)}h ${mins % 60}m`;
       }
 
-      const html = buildAdminEquivalentDerHtml({
-        report: targetReport,
-        user: summary?.user || user,
-        tasks: dayTasks,
-        workTimeLabel,
-        breakTimeLabel: "0h 0m",
-        monthToDateKm: monthToDateKm || targetReport.kmTravelled || 0
-      });
+      // Try fetching server-rendered HTML so any future template update on backend applies instantly without APK update
+      let html = "";
+      try {
+        html = await fetchDerHtml(user?.id || "", reportDateStr);
+      } catch (err) {
+        console.log("[DER] Server HTML fetch skipped or offline, using fallback generator:", err);
+      }
+
+      if (!html) {
+        html = buildAdminEquivalentDerHtml({
+          report: targetReport,
+          user: summary?.user || user,
+          tasks: dayTasks,
+          workTimeLabel,
+          breakTimeLabel: "0h 0m",
+          monthToDateKm: monthToDateKm || targetReport.kmTravelled || 0
+        });
+      }
 
       const { uri } = await Print.printToFileAsync({ html });
       await Sharing.shareAsync(uri, {
@@ -667,14 +677,24 @@ export function DayEndReportScreen() {
         workTimeLabel = `${Math.floor(mins / 60)}h ${mins % 60}m`;
       }
 
-      const htmlContent = buildAdminEquivalentDerHtml({
-        report,
-        user,
-        tasks: dayTasks,
-        workTimeLabel,
-        breakTimeLabel: "0h 0m",
-        monthToDateKm: monthToDateKm || report.kmTravelled || 0
-      });
+      // Try fetching server-rendered HTML so any future template update on backend applies instantly without APK update
+      let htmlContent = "";
+      try {
+        htmlContent = await fetchDerHtml(user?.id || "", reportDateStr);
+      } catch (err) {
+        console.log("[DER] Server HTML fetch skipped or offline, using fallback generator:", err);
+      }
+
+      if (!htmlContent) {
+        htmlContent = buildAdminEquivalentDerHtml({
+          report,
+          user,
+          tasks: dayTasks,
+          workTimeLabel,
+          breakTimeLabel: "0h 0m",
+          monthToDateKm: monthToDateKm || report.kmTravelled || 0
+        });
+      }
 
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
       await Sharing.shareAsync(uri, {

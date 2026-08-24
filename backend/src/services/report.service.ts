@@ -713,3 +713,389 @@ function resolveDayStatus(
   if (rows.some((row) => row.status === "ABSENT")) return "ABSENT";
   return rows[0]?.status ?? "ABSENT";
 }
+
+export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: string, targetDate: Date): Promise<string> {
+  const userId = targetUserId || actor.id;
+  const reportDate = startOfDay(targetDate);
+  const nextDate = new Date(reportDate);
+  nextDate.setDate(nextDate.getDate() + 1);
+
+  const startOfMonth = new Date(reportDate.getFullYear(), reportDate.getMonth(), 1);
+
+  const [user, report, attendance, mtdReports, completedTasks] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      include: { company: true, group: true }
+    }),
+    prisma.dayEndReport.findUnique({
+      where: { userId_date: { userId, date: reportDate } }
+    }),
+    prisma.attendance.findFirst({
+      where: { userId, date: reportDate },
+      include: { breaks: true }
+    }),
+    prisma.dayEndReport.findMany({
+      where: {
+        userId,
+        date: { gte: startOfMonth, lte: reportDate }
+      }
+    }),
+    prisma.task.findMany({
+      where: {
+        assignedToId: userId,
+        status: TaskStatus.COMPLETED,
+        updatedAt: { gte: reportDate, lt: nextDate }
+      }
+    })
+  ]);
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const monthToDateKm = mtdReports.reduce((sum, r) => sum + (r.kmTravelled || 0), 0);
+
+  // Format work time
+  let workTimeLabel = "0h 0m";
+  let breakTimeLabel = "0h 0m";
+  if (attendance?.checkInTime && attendance?.checkOutTime) {
+    const totalMs = new Date(attendance.checkOutTime).getTime() - new Date(attendance.checkInTime).getTime();
+    const breakMs = (attendance.breaks || []).reduce((acc, b) => {
+      if (b.startTime && b.endTime) {
+        return acc + (new Date(b.endTime).getTime() - new Date(b.startTime).getTime());
+      }
+      return acc;
+    }, 0);
+    const netMs = Math.max(0, totalMs - breakMs);
+    const mins = Math.floor(netMs / (1000 * 60));
+    workTimeLabel = `${Math.floor(mins / 60)}h ${mins % 60}m`;
+    const bMins = Math.floor(breakMs / (1000 * 60));
+    breakTimeLabel = `${Math.floor(bMins / 60)}h ${bMins % 60}m`;
+  }
+
+  const calculatedKm = attendance?.endOdometer !== null && attendance?.endOdometer !== undefined && attendance?.startOdometer !== null && attendance?.startOdometer !== undefined
+    ? Math.max(0, attendance.endOdometer - attendance.startOdometer)
+    : 0;
+
+  const currentReport: any = report || {
+    date: reportDate,
+    kmTravelled: calculatedKm,
+    ordersTaken: 0,
+    ordersCancelled: 0,
+    startOdometer: attendance?.startOdometer,
+    endOdometer: attendance?.endOdometer,
+    startOdometerPhotoUrl: attendance?.startOdometerPhotoUrl,
+    kmPhotoUrl: attendance?.endOdometerPhotoUrl,
+    visitsSummary: "Field Work Mode",
+    remarks: "",
+    submittedAt: attendance?.checkOutTime || new Date()
+  };
+
+  const formattedDate = reportDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  const formattedSubmittedAt = new Date(currentReport.submittedAt || new Date()).toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true
+  });
+
+  const completedCount = completedTasks.length;
+  const countBannerText = `${completedCount} Completed`;
+
+  const formatTaskDetails = (t: any): string => {
+    let locationCoords = "";
+    if (t.completionLat != null && t.completionLng != null) {
+      locationCoords = `${Number(t.completionLat).toFixed(4)}, ${Number(t.completionLng).toFixed(4)}`;
+    } else if (t.lat != null && t.lng != null) {
+      locationCoords = `${Number(t.lat).toFixed(4)}, ${Number(t.lng).toFixed(4)}`;
+    }
+
+    if (t.checklistResponses && Array.isArray(t.checklistResponses) && t.checklistResponses.length > 0) {
+      let name = "";
+      let contact = "";
+      let village = "";
+      let crop = "";
+      let land = "";
+      let product = "";
+      const extraParts: string[] = [];
+
+      for (const item of t.checklistResponses) {
+        const val = item.value !== undefined ? String(item.value).trim() : (item.response !== undefined ? String(item.response).trim() : (item.text !== undefined ? String(item.text).trim() : ""));
+        if (!val || item.type === "IMAGE" || item.type === "VIDEO" || item.type === "AUDIO") continue;
+        
+        const title = (item.title || item.label || item.id || "").toLowerCase();
+        if (item.type === "GEOTAG" || title.includes("location") || title.includes("geotag")) {
+          if (!locationCoords) locationCoords = val;
+        } else if (title.includes("farmer name") || title.includes("dealer name") || title === "name") {
+          name = val;
+        } else if (title.includes("contact") || title.includes("phone") || title.includes("mobile")) {
+          contact = val;
+        } else if (title.includes("village")) {
+          village = val;
+        } else if (title.includes("crop")) {
+          crop = val;
+        } else if (title.includes("farmland") || title.includes("land") || title.includes("acre")) {
+          land = val;
+        } else if (title.includes("product")) {
+          product = val;
+        } else if (!title.includes("remark")) {
+          extraParts.push(`${item.title || item.label}: ${val}`);
+        }
+      }
+
+      const parts: string[] = [];
+      if (name) parts.push(`<strong style="color: #0f172a;">${name}</strong>`);
+      if (village) parts.push(`📍 ${village}`);
+      if (crop) parts.push(`🌾 ${crop}${land ? ` (${land} Acr)` : ''}`);
+      else if (land) parts.push(`🏡 ${land} Acr`);
+      if (product) parts.push(`📦 ${product}`);
+      if (contact) parts.push(`📞 ${contact}`);
+      if (locationCoords) parts.push(`🌐 <span style="color: #0284c7; font-weight: 600;">${locationCoords}</span>`);
+      if (extraParts.length > 0) parts.push(...extraParts.slice(0, 2));
+
+      if (parts.length > 0) return parts.join(" &bull; ");
+    }
+
+    if (locationCoords) {
+      return `${t.description ? t.description + ' &bull; ' : ''}🌐 <span style="color: #0284c7; font-weight: 600;">${locationCoords}</span>`;
+    }
+
+    return t.description || "";
+  };
+
+  const getTaskPhoto = (t: any): string | null => {
+    if (t.completionPhotoUrl) return t.completionPhotoUrl;
+    if (t.checklistResponses && Array.isArray(t.checklistResponses)) {
+      const img = t.checklistResponses.find((item: any) => 
+        item.type === "IMAGE" && (item.fileUrl || item.photoUrl || item.image || item.url)
+      );
+      if (img) return img.fileUrl || img.photoUrl || img.image || img.url;
+    }
+    return null;
+  };
+
+  const renderTaskCard = (t: any, isTwoCol: boolean) => {
+    const details = formatTaskDetails(t);
+    const photo = getTaskPhoto(t);
+    return `
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: ${isTwoCol ? '3px 6px' : '4px 8px'}; border-radius: 6px; border: 1px solid #e2e8f0; background: #f8fafc; font-size: ${isTwoCol ? '9px' : '10px'}; line-height: 1.25; box-sizing: border-box; min-height: 32px;">
+        <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; flex-wrap: wrap;">
+          <span style="font-weight: 800; color: #16a34a; white-space: nowrap;">✅ ${t.title}</span>
+          ${details ? `<span style="color: #334155;">— ${details}</span>` : ""}
+          ${t.completionRemarks ? `<span style="color: #64748b; font-style: italic; font-size: 8.5px;">(${t.completionRemarks})</span>` : ""}
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-left: 6px;">
+          <span style="font-size: 8.5px; font-weight: 800; color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 4px; border-radius: 4px; white-space: nowrap;">+${t.points ?? 10} pts</span>
+          ${photo ? `<img src="${photo}" style="width: 28px; height: 28px; border-radius: 4px; object-fit: cover; border: 1px solid #cbd5e1;" alt="Evidence" />` : ""}
+        </div>
+      </div>
+    `;
+  };
+
+  let tasksGridHtml = "";
+  if (completedTasks.length === 0) {
+    tasksGridHtml = `<p style="font-size: 10px; color: #94a3b8; font-style: italic; margin: 0; padding: 4px 0;">No completed tasks recorded on this date.</p>`;
+  } else if (completedTasks.length > 8) {
+    let rows = "";
+    for (let i = 0; i < completedTasks.length; i += 2) {
+      const t1 = completedTasks[i];
+      const t2 = completedTasks[i + 1];
+      rows += `
+        <tr>
+          <td style="width: 50%; padding: 2px 3px 2px 0; vertical-align: middle;">${renderTaskCard(t1, true)}</td>
+          <td style="width: 50%; padding: 2px 0 2px 3px; vertical-align: middle;">${t2 ? renderTaskCard(t2, true) : ""}</td>
+        </tr>
+      `;
+    }
+    tasksGridHtml = `<table style="width: 100%; border-collapse: collapse; table-layout: fixed;">${rows}</table>`;
+  } else {
+    tasksGridHtml = completedTasks.map((t) => `<div style="margin-bottom: 4px;">${renderTaskCard(t, false)}</div>`).join("");
+  }
+
+  const startPhoto = currentReport.startOdometerPhotoUrl;
+  const endPhoto = currentReport.kmPhotoUrl;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Day End Report - ${formattedDate}</title>
+  <style>
+    body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155; padding: 12px 16px; background: #ffffff; margin: 0; }
+    @media print {
+      body { padding: 8px 12px; }
+      @page { margin: 10mm; }
+    }
+  </style>
+</head>
+<body>
+  <div style="max-width: 820px; margin: 0 auto;">
+    <!-- Header Bar -->
+    <div style="height: 4px; background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%); border-radius: 2px; margin-bottom: 10px;"></div>
+
+    <!-- Main Header Table -->
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px;">
+      <tr>
+        <td style="vertical-align: top;">
+          <h1 style="font-size: 18px; font-weight: 800; color: #1e293b; margin: 0; letter-spacing: -0.5px;">DAY END REPORT</h1>
+          <p style="font-size: 9px; font-weight: 700; color: #2563eb; margin: 2px 0 0 0; text-transform: uppercase; letter-spacing: 0.8px;">${user.company?.name || "Vaniki Crop Science Pvt Ltd"}</p>
+        </td>
+        <td style="vertical-align: top; text-align: right;">
+          <h2 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 0;">${user.name}</h2>
+          <p style="font-size: 9.5px; font-weight: 600; color: #64748b; margin: 2px 0 0 0;">${user.designation || 'Field Representative'} &bull; ${user.email}</p>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Meta Stats Row (4 Columns Compact) -->
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
+      <tr>
+        <td style="width: 25%; padding-right: 3px;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 6px; text-align: center; box-sizing: border-box;">
+            <p style="font-size: 7.5px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Report Date</p>
+            <p style="font-size: 11px; font-weight: 800; color: #1e293b; margin: 0;">${formattedDate}</p>
+          </div>
+        </td>
+        <td style="width: 25%; padding-right: 3px; padding-left: 3px;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 6px; text-align: center; box-sizing: border-box;">
+            <p style="font-size: 7.5px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Today Distance</p>
+            <p style="font-size: 11px; font-weight: 800; color: #2563eb; margin: 0;">${currentReport.kmTravelled ?? 0} KM</p>
+          </div>
+        </td>
+        <td style="width: 25%; padding-right: 3px; padding-left: 3px;">
+          <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 5px 6px; text-align: center; box-sizing: border-box;">
+            <p style="font-size: 7.5px; font-weight: 700; color: #1e40af; text-transform: uppercase; margin: 0 0 2px 0;">MTD Distance</p>
+            <p style="font-size: 11px; font-weight: 800; color: #1d4ed8; margin: 0;">${monthToDateKm} KM</p>
+          </div>
+        </td>
+        <td style="width: 25%; padding-left: 3px;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 6px; text-align: center; box-sizing: border-box;">
+            <p style="font-size: 7.5px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Submitted At</p>
+            <p style="font-size: 10px; font-weight: 800; color: #1e293b; margin: 0;">${formattedSubmittedAt}</p>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Orders & Working Metrics (Grid) -->
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
+      <tr>
+        <td style="width: 25%; padding-right: 3px;">
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 5px 8px; box-sizing: border-box;">
+            <span style="font-size: 7.5px; font-weight: 700; color: #166534; text-transform: uppercase;">Orders Booked:</span>
+            <span style="font-size: 12px; font-weight: 800; color: #14532d; margin-left: 4px;">${currentReport.ordersTaken ?? 0}</span>
+          </div>
+        </td>
+        <td style="width: 25%; padding-right: 3px; padding-left: 3px;">
+          <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 5px 8px; box-sizing: border-box;">
+            <span style="font-size: 7.5px; font-weight: 700; color: #991b1b; text-transform: uppercase;">Cancelled:</span>
+            <span style="font-size: 12px; font-weight: 800; color: #7f1d1d; margin-left: 4px;">${currentReport.ordersCancelled ?? 0}</span>
+          </div>
+        </td>
+        <td style="width: 25%; padding-right: 3px; padding-left: 3px;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; box-sizing: border-box;">
+            <span style="font-size: 7.5px; font-weight: 700; color: #475569; text-transform: uppercase;">Work Time:</span>
+            <span style="font-size: 11px; font-weight: 800; color: #166534; margin-left: 4px;">${workTimeLabel}</span>
+          </div>
+        </td>
+        <td style="width: 25%; padding-left: 3px;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; box-sizing: border-box;">
+            <span style="font-size: 7.5px; font-weight: 700; color: #475569; text-transform: uppercase;">Break Time:</span>
+            <span style="font-size: 11px; font-weight: 800; color: #b45309; margin-left: 4px;">${breakTimeLabel}</span>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Odometer Readings -->
+    ${(currentReport.startOdometer !== null && currentReport.startOdometer !== undefined) || (currentReport.endOdometer !== null && currentReport.endOdometer !== undefined) ? `
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; margin-bottom: 8px; box-sizing: border-box;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="width: 50%;">
+            <span style="font-size: 8px; font-weight: 700; color: #64748b; text-transform: uppercase;">Start Odometer: </span>
+            <span style="font-size: 11px; font-weight: 800; color: #1e293b;">${currentReport.startOdometer !== null && currentReport.startOdometer !== undefined ? currentReport.startOdometer + ' km' : '--'}</span>
+          </td>
+          <td style="width: 50%;">
+            <span style="font-size: 8px; font-weight: 700; color: #64748b; text-transform: uppercase;">End Odometer: </span>
+            <span style="font-size: 11px; font-weight: 800; color: #1e293b;">${currentReport.endOdometer !== null && currentReport.endOdometer !== undefined ? currentReport.endOdometer + ' km' : '--'}</span>
+          </td>
+        </tr>
+      </table>
+    </div>
+    ` : ''}
+
+    <!-- Tasks Completed -->
+    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; box-sizing: border-box;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 4px; margin-bottom: 5px;">
+        <h3 style="font-size: 10px; font-weight: 800; color: #1e293b; text-transform: uppercase; margin: 0; letter-spacing: 0.5px;">Tasks Completed Today</h3>
+        <span style="font-size: 9px; font-weight: 700; color: #166534; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 5px; border-radius: 3px;">
+          ✅ ${countBannerText}
+        </span>
+      </div>
+      <div>
+        ${tasksGridHtml}
+      </div>
+    </div>
+
+    <!-- Work Summary & Remarks -->
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
+      <tr>
+        <td style="width: ${currentReport.remarks ? '50%' : '100%'}; padding-right: ${currentReport.remarks ? '4px' : '0'}; vertical-align: top;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; box-sizing: border-box; min-height: 40px;">
+            <h4 style="font-size: 7.5px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Work Summary</h4>
+            <p style="font-size: 9.5px; line-height: 1.3; color: #334155; margin: 0;">${currentReport.visitsSummary || "Field Work Mode"}</p>
+          </div>
+        </td>
+        ${currentReport.remarks ? `
+        <td style="width: 50%; padding-left: 4px; vertical-align: top;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; box-sizing: border-box; min-height: 40px;">
+            <h4 style="font-size: 7.5px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Remarks</h4>
+            <p style="font-size: 9.5px; font-style: italic; line-height: 1.3; color: #64748b; margin: 0;">${currentReport.remarks}</p>
+          </div>
+        </td>
+        ` : ''}
+      </tr>
+    </table>
+
+    <!-- Verification Media -->
+    ${startPhoto || endPhoto ? `
+    <div style="border-top: 1px solid #e2e8f0; padding-top: 6px; margin-top: 4px; box-sizing: border-box;">
+      <h3 style="font-size: 8.5px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 4px 0; letter-spacing: 0.5px;">Verification Photos</h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          ${startPhoto ? `
+          <td style="width: 50%; padding-right: 4px; text-align: center; vertical-align: top;">
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px; box-sizing: border-box;">
+              <p style="font-size: 7.5px; font-weight: 700; color: #64748b; margin: 0 0 2px 0; text-transform: uppercase;">Start Odometer</p>
+              <img src="${startPhoto}" style="max-width: 100%; max-height: 70px; border-radius: 3px; object-fit: contain;" />
+            </div>
+          </td>
+          ` : ''}
+          ${endPhoto ? `
+          <td style="width: 50%; padding-left: 4px; text-align: center; vertical-align: top;">
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px; box-sizing: border-box;">
+              <p style="font-size: 7.5px; font-weight: 700; color: #64748b; margin: 0 0 2px 0; text-transform: uppercase;">End Odometer</p>
+              <img src="${endPhoto}" style="max-width: 100%; max-height: 70px; border-radius: 3px; object-fit: contain;" />
+            </div>
+          </td>
+          ` : ''}
+        </tr>
+      </table>
+    </div>
+    ` : ''}
+
+    <div style="text-align: center; margin-top: 12px; font-size: 8.5px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 6px;">
+      System-generated Document &bull; StaffTrack &copy; ${new Date().getFullYear()} &bull; ${user.company?.name || "Vaniki Crop Science"}
+    </div>
+  </div>
+</body>
+</html>
+  `;
+
+  return html;
+}
