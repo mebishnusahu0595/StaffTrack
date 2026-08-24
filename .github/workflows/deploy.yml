@@ -7,7 +7,7 @@ on:
 
 jobs:
   deploy:
-    name: Deploy to Server (66.116.249.160)
+    name: Deploy to Server (117.254.197.93)
     runs-on: self-hosted
 
     steps:
