@@ -7,10 +7,337 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import * as ImagePicker from "expo-image-picker";
 
-import { createDayEndReport, fetchDayEndReports, fetchDaySummary, uploadPhoto, DayEndReport } from "../api";
+import { createDayEndReport, fetchDayEndReports, fetchDaySummary, fetchTasks, uploadPhoto, DayEndReport } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useAttendance } from "../hooks/useAttendance";
 import { API_ORIGIN_URL } from "../config/env";
+
+function buildAdminEquivalentDerHtml({
+  report,
+  user,
+  tasks = [],
+  workTimeLabel = "0h 0m",
+  breakTimeLabel = "0h 0m",
+  monthToDateKm = 0
+}: {
+  report: any;
+  user: any;
+  tasks?: any[];
+  workTimeLabel?: string;
+  breakTimeLabel?: string;
+  monthToDateKm?: number;
+}) {
+  const formattedDate = dayjs(report.date).format("DD MMM YYYY");
+  const formattedSubmittedAt = dayjs(report.submittedAt || report.createdAt || new Date()).format("DD MMM YYYY hh:mm A");
+  const reportDateStr = dayjs(report.date).format("YYYY-MM-DD");
+
+  // Only get completed tasks for this day
+  const completedTasks = tasks.filter((t: any) =>
+    t.status === "COMPLETED" &&
+    (
+      (t.completedAt && dayjs(t.completedAt).format("YYYY-MM-DD") === reportDateStr) ||
+      dayjs(t.dueDate).format("YYYY-MM-DD") === reportDateStr ||
+      dayjs(t.updatedAt).format("YYYY-MM-DD") === reportDateStr
+    )
+  );
+  const completedCount = completedTasks.length;
+  const totalDayTasksCount = tasks.length > 0 ? tasks.length : completedCount;
+  const countBannerText = `${completedCount} / ${totalDayTasksCount} Completed (${totalDayTasksCount > 0 ? Math.round((completedCount / totalDayTasksCount) * 100) : 100}%)`;
+
+  const formatTaskDetails = (t: any): string => {
+    let locationCoords = "";
+    if (t.completionLat != null && t.completionLng != null) {
+      locationCoords = `${Number(t.completionLat).toFixed(4)}, ${Number(t.completionLng).toFixed(4)}`;
+    } else if (t.lat != null && t.lng != null) {
+      locationCoords = `${Number(t.lat).toFixed(4)}, ${Number(t.lng).toFixed(4)}`;
+    }
+
+    if (t.checklistResponses && Array.isArray(t.checklistResponses) && t.checklistResponses.length > 0) {
+      let name = "";
+      let contact = "";
+      let village = "";
+      let crop = "";
+      let land = "";
+      let product = "";
+      let extraParts: string[] = [];
+
+      for (const item of t.checklistResponses) {
+        const val = item.value !== undefined ? String(item.value).trim() : (item.response !== undefined ? String(item.response).trim() : (item.text !== undefined ? String(item.text).trim() : ""));
+        if (!val || item.type === "IMAGE" || item.type === "VIDEO" || item.type === "AUDIO") continue;
+        
+        const title = (item.title || item.label || item.id || "").toLowerCase();
+        if (item.type === "GEOTAG" || title.includes("location") || title.includes("geotag")) {
+          if (!locationCoords) locationCoords = val;
+        } else if (title.includes("farmer name") || title.includes("dealer name") || title === "name") {
+          name = val;
+        } else if (title.includes("contact") || title.includes("phone") || title.includes("mobile")) {
+          contact = val;
+        } else if (title.includes("village")) {
+          village = val;
+        } else if (title.includes("crop")) {
+          crop = val;
+        } else if (title.includes("farmland") || title.includes("land") || title.includes("acre")) {
+          land = val;
+        } else if (title.includes("product")) {
+          product = val;
+        } else if (!title.includes("remark")) {
+          extraParts.push(`${item.title || item.label}: ${val}`);
+        }
+      }
+
+      const parts: string[] = [];
+      if (name) parts.push(`<strong style="color: #0f172a;">${name}</strong>`);
+      if (village) parts.push(`📍 ${village}`);
+      if (crop) parts.push(`🌾 ${crop}${land ? ` (${land} Acr)` : ''}`);
+      else if (land) parts.push(`🏡 ${land} Acr`);
+      if (product) parts.push(`📦 ${product}`);
+      if (contact) parts.push(`📞 ${contact}`);
+      if (locationCoords) parts.push(`🌐 <span style="color: #0284c7; font-weight: 600;">${locationCoords}</span>`);
+      if (extraParts.length > 0) parts.push(...extraParts.slice(0, 2));
+
+      if (parts.length > 0) return parts.join(" &bull; ");
+    }
+
+    if (locationCoords) {
+      return `${t.description ? t.description + ' &bull; ' : ''}🌐 <span style="color: #0284c7; font-weight: 600;">${locationCoords}</span>`;
+    }
+
+    return t.description || "";
+  };
+
+  const getTaskPhoto = (t: any): string | null => {
+    let rawUrl = t.completionPhotoUrl;
+    if (!rawUrl && t.checklistResponses && Array.isArray(t.checklistResponses)) {
+      const img = t.checklistResponses.find((item: any) => 
+        item.type === "IMAGE" && (item.fileUrl || item.photoUrl || item.image || item.url)
+      );
+      if (img) rawUrl = img.fileUrl || img.photoUrl || img.image || img.url;
+    }
+    if (!rawUrl) return null;
+    return rawUrl.startsWith("http") ? rawUrl : `${API_ORIGIN_URL}${rawUrl}`;
+  };
+
+  const renderTaskCard = (t: any, isTwoCol: boolean) => {
+    const details = formatTaskDetails(t);
+    const photo = getTaskPhoto(t);
+    return `
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: ${isTwoCol ? '3px 6px' : '4px 8px'}; border-radius: 6px; border: 1px solid #e2e8f0; background: #f8fafc; font-size: ${isTwoCol ? '9px' : '10px'}; line-height: 1.25; box-sizing: border-box; min-height: 32px;">
+        <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; flex-wrap: wrap;">
+          <span style="font-weight: 800; color: #16a34a; white-space: nowrap;">✅ ${t.title}</span>
+          ${details ? `<span style="color: #334155;">— ${details}</span>` : ""}
+          ${t.completionRemarks ? `<span style="color: #64748b; font-style: italic; font-size: 8.5px;">(${t.completionRemarks})</span>` : ""}
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-left: 6px;">
+          <span style="font-size: 8.5px; font-weight: 800; color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 4px; border-radius: 4px; white-space: nowrap;">+${t.points ?? 10} pts</span>
+          ${photo ? `<img src="${photo}" style="width: 28px; height: 28px; border-radius: 4px; object-fit: cover; border: 1px solid #cbd5e1;" alt="Evidence" />` : ""}
+        </div>
+      </div>
+    `;
+  };
+
+  let tasksGridHtml = "";
+  if (completedTasks.length === 0) {
+    tasksGridHtml = `<p style="font-size: 10px; color: #94a3b8; font-style: italic; margin: 0; padding: 4px 0;">No completed tasks recorded on this date.</p>`;
+  } else if (completedTasks.length > 8) {
+    let rows = "";
+    for (let i = 0; i < completedTasks.length; i += 2) {
+      const t1 = completedTasks[i];
+      const t2 = completedTasks[i + 1];
+      rows += `
+        <tr>
+          <td style="width: 50%; padding: 2px 3px 2px 0; vertical-align: middle;">${renderTaskCard(t1, true)}</td>
+          <td style="width: 50%; padding: 2px 0 2px 3px; vertical-align: middle;">${t2 ? renderTaskCard(t2, true) : ""}</td>
+        </tr>
+      `;
+    }
+    tasksGridHtml = `<table style="width: 100%; border-collapse: collapse; table-layout: fixed;">${rows}</table>`;
+  } else {
+    tasksGridHtml = completedTasks.map(t => `<div style="margin-bottom: 4px;">${renderTaskCard(t, false)}</div>`).join("");
+  }
+
+  const startPhoto = report.startOdometerPhotoUrl ? (report.startOdometerPhotoUrl.startsWith("http") ? report.startOdometerPhotoUrl : `${API_ORIGIN_URL}${report.startOdometerPhotoUrl}`) : null;
+  const endPhoto = report.kmPhotoUrl ? (report.kmPhotoUrl.startsWith("http") ? report.kmPhotoUrl : `${API_ORIGIN_URL}${report.kmPhotoUrl}`) : null;
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Day End Report - ${formattedDate}</title>
+      <style>
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155; padding: 12px 16px; background: #ffffff; margin: 0; }
+        @media print {
+          body { padding: 8px 12px; }
+          @page { margin: 10mm; }
+        }
+      </style>
+    </head>
+    <body>
+      <div style="max-width: 820px; margin: 0 auto;">
+        <!-- Header Bar -->
+        <div style="height: 4px; background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%); border-radius: 2px; margin-bottom: 10px;"></div>
+
+        <!-- Main Header Table -->
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px;">
+          <tr>
+            <td style="vertical-align: top;">
+              <h1 style="font-size: 18px; font-weight: 800; color: #1e293b; margin: 0; letter-spacing: -0.5px;">DAY END REPORT</h1>
+              <p style="font-size: 9px; font-weight: 700; color: #2563eb; margin: 2px 0 0 0; text-transform: uppercase; letter-spacing: 0.8px;">Vaniki Crop Science Pvt Ltd</p>
+            </td>
+            <td style="vertical-align: top; text-align: right;">
+              <h2 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 0;">${user?.name || "Employee"}</h2>
+              <p style="font-size: 9.5px; font-weight: 600; color: #64748b; margin: 2px 0 0 0;">${user?.designation || 'Field Representative'} &bull; ${user?.email || ""}</p>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Meta Stats Row (4 Columns Compact) -->
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
+          <tr>
+            <td style="width: 25%; padding-right: 3px;">
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 6px; text-align: center; box-sizing: border-box;">
+                <p style="font-size: 7.5px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Report Date</p>
+                <p style="font-size: 11px; font-weight: 800; color: #1e293b; margin: 0;">${formattedDate}</p>
+              </div>
+            </td>
+            <td style="width: 25%; padding-right: 3px; padding-left: 3px;">
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 6px; text-align: center; box-sizing: border-box;">
+                <p style="font-size: 7.5px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Today Distance</p>
+                <p style="font-size: 11px; font-weight: 800; color: #2563eb; margin: 0;">${report.kmTravelled ?? report.totalKmTravelled ?? 0} KM</p>
+              </div>
+            </td>
+            <td style="width: 25%; padding-right: 3px; padding-left: 3px;">
+              <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 5px 6px; text-align: center; box-sizing: border-box;">
+                <p style="font-size: 7.5px; font-weight: 700; color: #1e40af; text-transform: uppercase; margin: 0 0 2px 0;">MTD Distance</p>
+                <p style="font-size: 11px; font-weight: 800; color: #1d4ed8; margin: 0;">${monthToDateKm} KM</p>
+              </div>
+            </td>
+            <td style="width: 25%; padding-left: 3px;">
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 6px; text-align: center; box-sizing: border-box;">
+                <p style="font-size: 7.5px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Submitted At</p>
+                <p style="font-size: 10px; font-weight: 800; color: #1e293b; margin: 0;">${formattedSubmittedAt}</p>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Orders & Working Metrics (Grid) -->
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
+          <tr>
+            <td style="width: 25%; padding-right: 3px;">
+              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 5px 8px; box-sizing: border-box;">
+                <span style="font-size: 7.5px; font-weight: 700; color: #166534; text-transform: uppercase;">Orders Booked:</span>
+                <span style="font-size: 12px; font-weight: 800; color: #14532d; margin-left: 4px;">${report.ordersTaken ?? 0}</span>
+              </div>
+            </td>
+            <td style="width: 25%; padding-right: 3px; padding-left: 3px;">
+              <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 5px 8px; box-sizing: border-box;">
+                <span style="font-size: 7.5px; font-weight: 700; color: #991b1b; text-transform: uppercase;">Cancelled:</span>
+                <span style="font-size: 12px; font-weight: 800; color: #7f1d1d; margin-left: 4px;">${report.ordersCancelled ?? 0}</span>
+              </div>
+            </td>
+            <td style="width: 25%; padding-right: 3px; padding-left: 3px;">
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; box-sizing: border-box;">
+                <span style="font-size: 7.5px; font-weight: 700; color: #475569; text-transform: uppercase;">Work Time:</span>
+                <span style="font-size: 11px; font-weight: 800; color: #166534; margin-left: 4px;">${workTimeLabel}</span>
+              </div>
+            </td>
+            <td style="width: 25%; padding-left: 3px;">
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; box-sizing: border-box;">
+                <span style="font-size: 7.5px; font-weight: 700; color: #475569; text-transform: uppercase;">Break Time:</span>
+                <span style="font-size: 11px; font-weight: 800; color: #b45309; margin-left: 4px;">${breakTimeLabel}</span>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Odometer Readings -->
+        ${(report.startOdometer !== null && report.startOdometer !== undefined) || (report.endOdometer !== null && report.endOdometer !== undefined) ? `
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; margin-bottom: 8px; box-sizing: border-box;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="width: 50%;">
+                <span style="font-size: 8px; font-weight: 700; color: #64748b; text-transform: uppercase;">Start Odometer: </span>
+                <span style="font-size: 11px; font-weight: 800; color: #1e293b;">${report.startOdometer !== null && report.startOdometer !== undefined ? report.startOdometer + ' km' : '--'}</span>
+              </td>
+              <td style="width: 50%;">
+                <span style="font-size: 8px; font-weight: 700; color: #64748b; text-transform: uppercase;">End Odometer: </span>
+                <span style="font-size: 11px; font-weight: 800; color: #1e293b;">${report.endOdometer !== null && report.endOdometer !== undefined ? report.endOdometer + ' km' : '--'}</span>
+              </td>
+            </tr>
+          </table>
+        </div>
+        ` : ''}
+
+        <!-- Tasks Completed -->
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; box-sizing: border-box;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 4px; margin-bottom: 5px;">
+            <h3 style="font-size: 10px; font-weight: 800; color: #1e293b; text-transform: uppercase; margin: 0; letter-spacing: 0.5px;">Tasks Completed Today</h3>
+            <span style="font-size: 9px; font-weight: 700; color: #166534; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 5px; border-radius: 3px;">
+              ✅ ${countBannerText}
+            </span>
+          </div>
+          <div>
+            ${tasksGridHtml}
+          </div>
+        </div>
+
+        <!-- Work Summary & Remarks -->
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
+          <tr>
+            <td style="width: ${report.remarks ? '50%' : '100%'}; padding-right: ${report.remarks ? '4px' : '0'}; vertical-align: top;">
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; box-sizing: border-box; min-height: 40px;">
+                <h4 style="font-size: 7.5px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Work Summary</h4>
+                <p style="font-size: 9.5px; line-height: 1.3; color: #334155; margin: 0;">${report.visitsSummary || "Field Work Mode"}</p>
+              </div>
+            </td>
+            ${report.remarks ? `
+            <td style="width: 50%; padding-left: 4px; vertical-align: top;">
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; box-sizing: border-box; min-height: 40px;">
+                <h4 style="font-size: 7.5px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Remarks</h4>
+                <p style="font-size: 9.5px; font-style: italic; line-height: 1.3; color: #64748b; margin: 0;">${report.remarks}</p>
+              </div>
+            </td>
+            ` : ''}
+          </tr>
+        </table>
+
+        <!-- Verification Media -->
+        ${startPhoto || endPhoto ? `
+        <div style="border-top: 1px solid #e2e8f0; padding-top: 6px; margin-top: 4px; box-sizing: border-box;">
+          <h3 style="font-size: 8.5px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 4px 0; letter-spacing: 0.5px;">Verification Photos</h3>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              ${startPhoto ? `
+              <td style="width: 50%; padding-right: 4px; text-align: center; vertical-align: top;">
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px; box-sizing: border-box;">
+                  <p style="font-size: 7.5px; font-weight: 700; color: #64748b; margin: 0 0 2px 0; text-transform: uppercase;">Start Odometer</p>
+                  <img src="${startPhoto}" style="max-width: 100%; max-height: 70px; border-radius: 3px; object-fit: contain;" />
+                </div>
+              </td>
+              ` : ''}
+              ${endPhoto ? `
+              <td style="width: 50%; padding-left: 4px; text-align: center; vertical-align: top;">
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px; box-sizing: border-box;">
+                  <p style="font-size: 7.5px; font-weight: 700; color: #64748b; margin: 0 0 2px 0; text-transform: uppercase;">End Odometer</p>
+                  <img src="${endPhoto}" style="max-width: 100%; max-height: 70px; border-radius: 3px; object-fit: contain;" />
+                </div>
+              </td>
+              ` : ''}
+            </tr>
+          </table>
+        </div>
+        ` : ''}
+
+        <div style="text-align: center; margin-top: 12px; font-size: 8.5px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 6px;">
+          System-generated Document &bull; StaffTrack &copy; ${dayjs().year()} &bull; Vaniki Crop Science
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
 
 type ReportForm = {
   visitsMeetings: string;
@@ -85,94 +412,71 @@ export function DayEndReportScreen() {
   }
 
   async function handleExportSummaryPDF() {
-    if (!summary) return;
     setIsExporting(true);
     try {
       const isAvailable = await Sharing.isAvailableAsync();
-      const dateStr = dayjs(summary.date).format("DD MMMM YYYY");
-      const att = summary.attendance || {};
-      const tasks = summary.tasks || {};
-      const pts = summary.points || {};
+      if (!isAvailable) {
+        Alert.alert("Sharing not available", "Sharing is not supported on this device.");
+        return;
+      }
 
-      const completedHtml = (tasks.completed || []).map((t: any) => {
-        const responses = Array.isArray(t.checklistResponses) ? t.checklistResponses : [];
-        const qaHtml = responses.map((r: any) => {
-          const val = r.type === "TEXT" || r.type === "DROPDOWN" ? (r.value || "—") : (r.fileUrl ? `[${r.type}]` : "—");
-          return `<tr><td class="q">${r.title || r.type}</td><td>${val}</td></tr>`;
-        }).join("");
-        return `
-          <div class="task">
-            <div class="task-head">
-              <span class="task-title">✅ ${t.title}</span>
-              <span class="task-pts">${t.points ?? 0} pts</span>
-            </div>
-            ${t.description ? `<div class="task-desc">${t.description}</div>` : ""}
-            ${t.completionRemarks ? `<div class="task-remark"><b>Remark:</b> ${t.completionRemarks}</div>` : ""}
-            ${qaHtml ? `<table class="qa">${qaHtml}</table>` : ""}
-          </div>`;
-      }).join("");
+      const reportDateStr = summaryDate;
+      const targetReport = (historyQuery.data ?? []).find(r => dayjs(r.date).format("YYYY-MM-DD") === reportDateStr) || {
+        date: reportDateStr,
+        kmTravelled: summary?.attendance?.kmTravelled || 0,
+        ordersTaken: 0,
+        ordersCancelled: 0,
+        startOdometer: summary?.attendance?.startOdometer,
+        endOdometer: summary?.attendance?.endOdometer,
+        visitsSummary: summary?.attendance ? "Field Work Mode" : "Office Work",
+        remarks: todayReport?.remarks || ""
+      };
 
-      const pendingHtml = (tasks.pending || []).map((t: any) =>
-        `<li>${t.title} <span style="color:#94A3B8">(${t.points ?? 0} pts)</span></li>`
-      ).join("");
+      // Fetch tasks for this date
+      let dayTasks: any[] = [];
+      try {
+        dayTasks = await fetchTasks(reportDateStr);
+      } catch (err) {
+        dayTasks = summary?.tasks?.completed || [];
+      }
 
-      const formsHtml = (summary.forms || []).map((f: any) => {
-        const rows = (f.answers || []).map((a: any) => `<tr><td class="q">${a.question}</td><td>${a.answer}</td></tr>`).join("");
-        return `<div class="task"><div class="task-head"><span class="task-title">📝 ${f.formName}</span></div><table class="qa">${rows}</table></div>`;
-      }).join("");
+      // Calculate month to date distance
+      const startOfMonth = dayjs(reportDateStr).startOf("month");
+      const currentDay = dayjs(reportDateStr);
+      const mtdReports = (historyQuery.data ?? []).filter((r: any) => {
+        const d = dayjs(r.date);
+        return (d.isAfter(startOfMonth) || d.isSame(startOfMonth, "day")) &&
+               (d.isBefore(currentDay) || d.isSame(currentDay, "day"));
+      });
+      const monthToDateKm = mtdReports.reduce((sum: number, r: any) => sum + (r.kmTravelled ?? r.totalKmTravelled ?? 0), 0);
 
-      const html = `
-        <!DOCTYPE html><html><head><meta charset="utf-8"/>
-        <style>
-          body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 24px; color: #1E293B; }
-          h1 { color: #1A365D; font-size: 22px; margin: 0; text-align:center; }
-          .sub { text-align:center; color:#64748B; font-size:12px; margin: 4px 0 18px; }
-          .meta { width:100%; border-collapse:collapse; margin-bottom:16px; }
-          .meta td { padding:7px 10px; border-bottom:1px solid #E2E8F0; font-size:13px; }
-          .meta td.l { font-weight:bold; background:#F8FAFC; width:35%; }
-          .grid { display:flex; gap:10px; margin:16px 0; }
-          .stat { flex:1; background:#EFF6FF; border:1px solid #DBEAFE; border-radius:8px; padding:10px; text-align:center; }
-          .stat .n { font-size:18px; font-weight:800; color:#1D4ED8; }
-          .stat .l { font-size:9px; text-transform:uppercase; color:#64748B; font-weight:700; margin-top:4px; }
-          h3 { color:#0F172A; font-size:14px; border-bottom:2px solid #E2E8F0; padding-bottom:6px; margin-top:24px; }
-          .task { border:1px solid #E2E8F0; border-radius:8px; padding:10px; margin-bottom:10px; }
-          .task-head { display:flex; justify-content:space-between; align-items:center; }
-          .task-title { font-weight:700; font-size:13px; }
-          .task-pts { font-size:11px; font-weight:800; color:#16A34A; }
-          .task-desc { font-size:12px; color:#475569; margin-top:4px; }
-          .task-remark { font-size:12px; color:#475569; margin-top:4px; }
-          .qa { width:100%; border-collapse:collapse; margin-top:8px; }
-          .qa td { padding:5px 8px; border-bottom:1px solid #F1F5F9; font-size:12px; }
-          .qa td.q { font-weight:600; color:#475569; width:45%; }
-          ul { margin:6px 0; padding-left:18px; font-size:12px; }
-          .footer { text-align:center; margin-top:30px; font-size:10px; color:#94A3B8; }
-        </style></head><body>
-          <h1>STAFFTRACK DAY END REPORT</h1>
-          <div class="sub">${dateStr}</div>
-          <table class="meta">
-            <tr><td class="l">Staff</td><td>${summary.user?.name || user?.name || "Employee"}</td></tr>
-            <tr><td class="l">Check-in</td><td>${fmtTime(att.checkInTime)}</td></tr>
-            <tr><td class="l">Check-out</td><td>${fmtTime(att.checkOutTime)}</td></tr>
-            <tr><td class="l">Odometer</td><td>${att.startOdometer ?? "—"} → ${att.endOdometer ?? "—"} (${att.kmTravelled ?? 0} km)</td></tr>
-          </table>
-          <div class="grid">
-            <div class="stat"><div class="n">${tasks.completedCount ?? 0}</div><div class="l">Completed</div></div>
-            <div class="stat"><div class="n">${tasks.pendingCount ?? 0}</div><div class="l">Pending</div></div>
-            <div class="stat"><div class="n">${pts.taskPointsEarned ?? 0}/${pts.taskPointsPossible ?? 0}</div><div class="l">Task Pts</div></div>
-            <div class="stat"><div class="n">${pts.totalPoints ?? 0}</div><div class="l">Total Pts</div></div>
-          </div>
-          ${completedHtml ? `<h3>Completed Tasks</h3>${completedHtml}` : ""}
-          ${pendingHtml ? `<h3>Pending Tasks</h3><ul>${pendingHtml}</ul>` : ""}
-          ${formsHtml ? `<h3>Forms Submitted</h3>${formsHtml}` : ""}
-          <div class="footer">System-generated • StaffTrack &copy; ${dayjs().year()}</div>
-        </body></html>`;
+      // Work & Break time
+      const checkInTime = summary?.attendance?.checkInTime;
+      const checkOutTime = summary?.attendance?.checkOutTime;
+      let workTimeLabel = "0h 0m";
+      if (checkInTime && checkOutTime) {
+        const mins = dayjs(checkOutTime).diff(dayjs(checkInTime), "minute");
+        workTimeLabel = `${Math.floor(mins / 60)}h ${mins % 60}m`;
+      } else if (checkInTime) {
+        const mins = dayjs().diff(dayjs(checkInTime), "minute");
+        workTimeLabel = `${Math.floor(mins / 60)}h ${mins % 60}m`;
+      }
+
+      const html = buildAdminEquivalentDerHtml({
+        report: targetReport,
+        user: summary?.user || user,
+        tasks: dayTasks,
+        workTimeLabel,
+        breakTimeLabel: "0h 0m",
+        monthToDateKm: monthToDateKm || targetReport.kmTravelled || 0
+      });
 
       const { uri } = await Print.printToFileAsync({ html });
-      if (isAvailable) {
-        await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: `Day End Report - ${dateStr}`, UTI: "com.adobe.pdf" });
-      } else {
-        Alert.alert("PDF created", "Saved to: " + uri);
-      }
+      await Sharing.shareAsync(uri, {
+        mimeType: "application/pdf",
+        dialogTitle: `Day End Report - ${dayjs(reportDateStr).format("DD MMM YYYY")}`,
+        UTI: "com.adobe.pdf"
+      });
     } catch (error) {
       Alert.alert("Export failed", "Could not generate the report PDF.");
     } finally {
@@ -333,122 +637,49 @@ export function DayEndReportScreen() {
         return;
       }
 
-      const startPhoto = report.startOdometerPhotoUrl ? (report.startOdometerPhotoUrl.startsWith("http") ? report.startOdometerPhotoUrl : `${API_ORIGIN_URL}${report.startOdometerPhotoUrl}`) : null;
-      const endPhoto = report.kmPhotoUrl ? (report.kmPhotoUrl.startsWith("http") ? report.kmPhotoUrl : `${API_ORIGIN_URL}${report.kmPhotoUrl}`) : null;
+      const reportDateStr = dayjs(report.date).format("YYYY-MM-DD");
 
-      const dateStr = dayjs(report.date).format("DD MMMM YYYY");
-      const userName = user?.name || "Employee";
-      const modeStr = isFieldWorkday ? "Field" : "Office";
-      const visits = report.visitsSummary?.split('|')[0] || report.visitsSummary || "0";
-      const km = report.kmTravelled ?? report.totalKmTravelled ?? 0;
-      const orders = report.ordersTaken ?? 0;
-      const points = report.totalPoints ?? 0;
-
-      let remarksHtml = "";
-      if (report.remarks && report.remarks.trim() && !report.remarks.includes("Auto-generated")) {
-        remarksHtml = `
-          <div class="remarks-box">
-            <div class="remarks-title">REMARKS</div>
-            <div style="font-size: 13px; color: #4A5568; margin-top: 4px; line-height: 1.5;">${report.remarks}</div>
-          </div>
-        `;
+      // Fetch tasks for this date
+      let dayTasks: any[] = [];
+      try {
+        dayTasks = await fetchTasks(reportDateStr);
+      } catch (err) {
+        dayTasks = [];
       }
 
-      let imagesHtml = "";
-      if (isFieldWorkday && (startPhoto || endPhoto)) {
-        imagesHtml = `
-          <div class="images-section">
-            <h3 style="color: #2D3748; border-bottom: 1px solid #E2E8F0; padding-bottom: 5px; font-size: 16px;">Odometer Photos</h3>
-            <div class="images-container">
-        `;
-        if (startPhoto) {
-          const startReadingText = report.startOdometer !== undefined && report.startOdometer !== null ? ` (${report.startOdometer} KM)` : "";
-          imagesHtml += `
-            <div class="img-box">
-              <img src="${startPhoto}" />
-              <div class="lbl">Start Day Odometer${startReadingText}</div>
-            </div>
-          `;
-        }
-        if (endPhoto) {
-          const endReadingText = report.endOdometer !== undefined && report.endOdometer !== null ? ` (${report.endOdometer} KM)` : "";
-          imagesHtml += `
-            <div class="img-box">
-              <img src="${endPhoto}" />
-              <div class="lbl">End Day Odometer${endReadingText}</div>
-            </div>
-          `;
-        }
-        imagesHtml += `
-            </div>
-          </div>
-        `;
+      // Calculate month to date distance
+      const startOfMonth = dayjs(reportDateStr).startOf("month");
+      const currentDay = dayjs(reportDateStr);
+      const mtdReports = (historyQuery.data ?? []).filter((r: any) => {
+        const d = dayjs(r.date);
+        return (d.isAfter(startOfMonth) || d.isSame(startOfMonth, "day")) &&
+               (d.isBefore(currentDay) || d.isSame(currentDay, "day"));
+      });
+      const monthToDateKm = mtdReports.reduce((sum: number, r: any) => sum + (r.kmTravelled ?? r.totalKmTravelled ?? 0), 0);
+
+      // Work & Break time
+      let workTimeLabel = "0h 0m";
+      if (todayAttendance?.checkInTime && todayAttendance?.checkOutTime) {
+        const mins = dayjs(todayAttendance.checkOutTime).diff(dayjs(todayAttendance.checkInTime), "minute");
+        workTimeLabel = `${Math.floor(mins / 60)}h ${mins % 60}m`;
+      } else if (todayAttendance?.checkInTime) {
+        const mins = dayjs().diff(dayjs(todayAttendance.checkInTime), "minute");
+        workTimeLabel = `${Math.floor(mins / 60)}h ${mins % 60}m`;
       }
 
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Day End Report - ${dateStr}</title>
-          <style>
-            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 25px; color: #2D3748; background-color: #FFFFFF; }
-            .header-container { text-align: center; border-bottom: 3px double #CBD5E0; padding-bottom: 15px; margin-bottom: 20px; }
-            h1 { color: #1A365D; margin: 0; font-size: 24px; letter-spacing: 1px; }
-            .subtitle { color: #718096; font-size: 12px; margin-top: 5px; font-weight: 500; }
-            .meta-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-            .meta-table td { padding: 8px 12px; border-bottom: 1px solid #E2E8F0; font-size: 14px; }
-            .meta-table td.label { font-weight: bold; color: #4A5568; width: 30%; background-color: #F7FAFC; }
-            .summary-box { display: flex; justify-content: space-between; background: #EDF2F7; border-radius: 10px; padding: 15px; margin-top: 25px; border: 1px solid #E2E8F0; }
-            .summary-item { text-align: center; flex: 1; }
-            .summary-item:not(:last-child) { border-right: 1px solid #CBD5E0; }
-            .summary-item .num { font-size: 18px; font-weight: 800; color: #1A365D; }
-            .summary-item .lbl { font-size: 10px; color: #718096; text-transform: uppercase; margin-top: 5px; font-weight: bold; }
-            .remarks-box { background: #FFFDF5; border: 1px solid #FEEBC8; border-radius: 8px; padding: 15px; margin-top: 25px; }
-            .remarks-title { font-weight: bold; color: #B7791F; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
-            .images-section { margin-top: 30px; page-break-inside: avoid; }
-            .images-container { display: flex; gap: 20px; justify-content: center; margin-top: 15px; }
-            .img-box { text-align: center; width: 45%; max-width: 300px; display: inline-block; }
-            .img-box img { width: 100%; height: auto; max-height: 250px; object-fit: contain; border-radius: 8px; border: 1px solid #CBD5E0; background-color: #F7FAFC; }
-            .img-box .lbl { font-size: 11px; color: #4A5568; margin-top: 8px; font-weight: bold; text-transform: uppercase; }
-            .footer { text-align: center; margin-top: 50px; font-size: 11px; color: #A0AEC0; border-top: 1px solid #E2E8F0; padding-top: 15px; }
-          </style>
-        </head>
-        <body>
-          <div class="header-container">
-            <h1>STAFFTRACK DAY END REPORT</h1>
-            <div class="subtitle">Generated via StaffTrack Mobile Application</div>
-          </div>
-
-          <table class="meta-table">
-            <tr><td class="label">Date</td><td>${dateStr}</td></tr>
-            <tr><td class="label">Staff Name</td><td>${userName}</td></tr>
-            <tr><td class="label">Work Mode</td><td>${modeStr}</td></tr>
-          </table>
-
-          <div class="summary-box">
-            <div class="summary-item"><div class="num">${visits}</div><div class="lbl">Visits</div></div>
-            <div class="summary-item"><div class="num">${km} KM</div><div class="lbl">Distance</div></div>
-            <div class="summary-item"><div class="num">${orders}</div><div class="lbl">Orders</div></div>
-            <div class="summary-item"><div class="num">${points}</div><div class="lbl">Points</div></div>
-          </div>
-
-          ${remarksHtml}
-
-          ${imagesHtml}
-
-          <div class="footer">
-            This is a system-generated document.<br>
-            StaffTrack &copy; ${dayjs().year()}
-          </div>
-        </body>
-        </html>
-      `;
+      const htmlContent = buildAdminEquivalentDerHtml({
+        report,
+        user,
+        tasks: dayTasks,
+        workTimeLabel,
+        breakTimeLabel: "0h 0m",
+        monthToDateKm: monthToDateKm || report.kmTravelled || 0
+      });
 
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
       await Sharing.shareAsync(uri, {
         mimeType: "application/pdf",
-        dialogTitle: `Share Day End Report - ${dateStr}`,
+        dialogTitle: `Day End Report - ${dayjs(report.date).format("DD MMM YYYY")}`,
         UTI: "com.adobe.pdf"
       });
     } catch (error) {

@@ -219,8 +219,9 @@ export async function logout(refreshToken?: string): Promise<void> {
   await api.post("/auth/logout", { refreshToken: refreshToken ?? "mobile" });
 }
 
-export async function fetchTasks(): Promise<Task[]> {
-  return unwrap(await api.get<ApiEnvelope<Task[]>>("/tasks"));
+export async function fetchTasks(date?: string | unknown): Promise<Task[]> {
+  const params = typeof date === "string" ? { date } : undefined;
+  return unwrap(await api.get<ApiEnvelope<Task[]>>("/tasks", { params }));
 }
 
 export async function updateTaskStatus(
