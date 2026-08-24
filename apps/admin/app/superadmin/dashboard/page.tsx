@@ -17,7 +17,8 @@ import {
   Loader2,
   Receipt,
   Calendar,
-  CheckSquare
+  CheckSquare,
+  MapPin
 } from "lucide-react";
 import {
   superFetchUsers,
@@ -58,6 +59,7 @@ import {
 import { useAuth } from "@/components/auth-provider";
 import { format } from "date-fns";
 import { MediaGalleryTab } from "@/components/superadmin/media-gallery-tab";
+import { LocationsTab } from "@/components/superadmin/locations-tab";
 
 type AttRow = AttendanceRecord & { user: { name: string; email: string } };
 type ManagerLite = { id: string; name: string; role: string };
@@ -486,7 +488,16 @@ export default function SuperDashboardPage() {
               <ImageIcon className="w-4 h-4" />
               Media Gallery
             </TabsTrigger>
+            <TabsTrigger value="locations" className="rounded-lg gap-2 px-6">
+              <MapPin className="w-4 h-4 text-emerald-500" />
+              Live Radar &amp; Locations
+            </TabsTrigger>
           </TabsList>
+
+          {/* LOCATIONS */}
+          <TabsContent value="locations">
+            <LocationsTab />
+          </TabsContent>
 
           {/* GALLERY */}
           <TabsContent value="gallery">

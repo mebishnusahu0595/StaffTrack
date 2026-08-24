@@ -32,5 +32,8 @@ router.delete("/tasks/:id", asyncHandler(superadminController.deleteTask));
 
 router.patch("/travel", asyncHandler(superadminController.updateTravelDistance));
 
+router.get("/locations", asyncHandler(superadminController.getLatestLocations));
+router.get("/locations/:userId", asyncHandler(superadminController.getUserLocationRoute));
+
 export default router;
 

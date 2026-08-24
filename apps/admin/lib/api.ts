@@ -568,6 +568,44 @@ export async function superDeleteTask(id: string) {
   return response.data;
 }
 
+// SuperAdmin Locations
+export interface SuperadminUserLocation {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string | null;
+    role: string;
+    workMode: string;
+    designation: string | null;
+    shiftStart: string | null;
+    shiftEnd: string | null;
+    avatarUrl: string | null;
+    isLocationOn: boolean;
+    company?: { id: string; name: string };
+    group?: { id: string; name: string };
+  };
+  attendance: any | null;
+  latestLocation: {
+    lat: number;
+    lng: number;
+    accuracy?: number;
+    batteryLevel?: number | null;
+    timestamp: string;
+  } | null;
+}
+
+export async function superFetchLocations(): Promise<SuperadminUserLocation[]> {
+  const response = await api.get<{ data: SuperadminUserLocation[] }>("/superadmin/locations");
+  return response.data.data;
+}
+
+export async function superFetchUserLocationRoute(userId: string, date?: string): Promise<any[]> {
+  const params = date ? { date } : undefined;
+  const response = await api.get<{ data: any[] }>(`/superadmin/locations/${userId}`, { params });
+  return response.data.data;
+}
+
 export async function superBulkMarkAttendance(input: any) {
   const response = await api.post("/superadmin/attendance/bulk", input);
   return response.data;

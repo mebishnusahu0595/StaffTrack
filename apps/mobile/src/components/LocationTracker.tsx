@@ -22,7 +22,7 @@ export type WorkHours = {
 const TRACKING_INTERVAL = 20 * 1000;
 
 export const DEFAULT_WORK_HOURS: WorkHours = {
-  startHour: 8,
+  startHour: 7,
   endHour: 19
 };
 
@@ -96,6 +96,11 @@ export function LocationTracker() {
   const isCheckedIn = Boolean(activeAttendance);
   const isCheckedOut = false; // By definition, if activeAttendance exists, it's not checked out
   const isFieldPunch = activeAttendance?.punchType === "FIELD";
+  
+  // Track location during shift hours (07:00 AM to 07:00 PM) for all authenticated employees (office and field),
+  // as well as anytime an employee is checked in
+  const isShiftTime = isWithinWorkHours(new Date(), DEFAULT_WORK_HOURS);
+  const shouldTrackLocation = isAuthenticated && (isCheckedIn || isShiftTime);
 
   useEffect(() => {
     let mounted = true;
@@ -111,7 +116,7 @@ export function LocationTracker() {
           isAlertOpen = false;
         }
 
-        // If location is OFF, and they are checked in and NOT on break, trigger auto break!
+        // If location is OFF, and they are checked in as FIELD and NOT on break, trigger auto break!
         if (!locationIsOn && isCheckedIn && !activeBreak && isFieldPunch) {
           console.log("[LocationTracker] Location turned off during field check-in. Triggering auto-break!");
           try {
@@ -176,8 +181,8 @@ export function LocationTracker() {
         return;
       }
 
-      if (!isAuthenticated || !isCheckedIn || isCheckedOut || !isFieldPunch) {
-        console.log("[LocationTracker] Tracking inactive (Not logged in or not punched in)");
+      if (!shouldTrackLocation) {
+        console.log("[LocationTracker] Tracking inactive (Not logged in or not checked in)");
         await stopBackgroundLocationTracking().catch((error) => {
           console.warn("[LocationTracker] Failed to stop tracking", error);
         });
@@ -284,7 +289,7 @@ export function LocationTracker() {
       if (foregroundInterval) clearInterval(foregroundInterval);
       clearInterval(interval);
     };
-  }, [isAuthenticated, user, isCheckedIn, isCheckedOut, isFieldPunch, activeBreak, startBreak]);
+  }, [isAuthenticated, user, isCheckedIn, isCheckedOut, isFieldPunch, shouldTrackLocation, activeBreak, startBreak]);
 
   return null;
 }
@@ -319,8 +324,8 @@ export async function startBackgroundLocationTracking(user?: any): Promise<boole
       deferredUpdatesInterval: trackingInterval,
       distanceInterval: 0, // No distance gate — send pings on time basis so stationary users aren't falsely marked offline
       foregroundService: {
-        notificationTitle: "StaffTrack is tracking your location",
-        notificationBody: "Live location tracking is active.",
+        notificationTitle: "StaffTrack is running",
+        notificationBody: "Your work session is active.",
         notificationColor: "#1A202C"
       },
       pausesUpdatesAutomatically: false,

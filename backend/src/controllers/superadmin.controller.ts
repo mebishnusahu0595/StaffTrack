@@ -759,4 +759,100 @@ export async function updateTravelDistance(req: Request, res: Response): Promise
   sendSuccess(res, null, "Travel distance updated successfully");
 }
 
+export async function getLatestLocations(req: Request, res: Response): Promise<void> {
+  // 1. Fetch all active employees and managers
+  const users = await prisma.user.findMany({
+    where: {
+      role: { in: [UserRole.EMPLOYEE, UserRole.MANAGER] }
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      role: true,
+      workMode: true,
+      designation: true,
+      shiftStart: true,
+      shiftEnd: true,
+      avatarUrl: true,
+      isLocationOn: true,
+      company: { select: { id: true, name: true } },
+      group: { select: { id: true, name: true } }
+    },
+    orderBy: { name: "asc" }
+  });
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const userIds = users.map((u) => u.id);
+  const [todayAttendances, latestLocationLogs] = await Promise.all([
+    prisma.attendance.findMany({
+      where: {
+        userId: { in: userIds },
+        date: today
+      },
+      include: { breaks: true }
+    }),
+    prisma.locationLog.findMany({
+      where: {
+        userId: { in: userIds },
+        timestamp: { gte: today, lt: tomorrow }
+      },
+      orderBy: { timestamp: "desc" },
+      distinct: ["userId"]
+    })
+  ]);
+
+  const attMap = new Map(todayAttendances.map((a) => [a.userId, a]));
+  const locMap = new Map(latestLocationLogs.map((l) => [l.userId, l]));
+
+  const result = users.map((user) => {
+    const attendance = attMap.get(user.id) || null;
+    const latestLocation = locMap.get(user.id) || null;
+
+    return {
+      user,
+      attendance,
+      latestLocation: latestLocation
+        ? {
+            lat: latestLocation.lat,
+            lng: latestLocation.lng,
+            accuracy: latestLocation.accuracy,
+            batteryLevel: latestLocation.batteryLevel,
+            timestamp: latestLocation.timestamp
+          }
+        : null
+    };
+  });
+
+  sendSuccess(res, result);
+}
+
+export async function getUserLocationRoute(req: Request, res: Response): Promise<void> {
+  const { userId } = req.params;
+  const { date } = req.query;
+
+  const targetDate = date ? new Date(date as string) : new Date();
+  targetDate.setHours(0, 0, 0, 0);
+  const nextDate = new Date(targetDate);
+  nextDate.setDate(nextDate.getDate() + 1);
+
+  const logs = await prisma.locationLog.findMany({
+    where: {
+      userId,
+      timestamp: {
+        gte: targetDate,
+        lt: nextDate
+      }
+    },
+    orderBy: { timestamp: "asc" }
+  });
+
+  sendSuccess(res, logs);
+}
+
 
