@@ -26,7 +26,8 @@ import {
   Activity,
   Layers,
   Sparkles,
-  Search
+  Search,
+  Building2
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -110,24 +111,44 @@ export function EmployeeFullReportModal({
     setSelectedDate(dayjs().format("YYYY-MM-DD"));
   };
 
-  // 1. Fetch Location Logs for Selected Date
+  // 1. Fetch Attendance for this employee
+  const attendanceQuery = useQuery({
+    queryKey: ["attendance", employee?.id],
+    queryFn: () => fetchAttendance(employee.id),
+    enabled: !!employee?.id && isOpen,
+    staleTime: 30_000
+  });
+
+  // Attendance for selected date
+  const dayAttendance = useMemo(() => {
+    if (!attendanceQuery.data) return null;
+    return attendanceQuery.data.find(
+      (a: any) => dayjs(a.date).format("YYYY-MM-DD") === selectedDate
+    );
+  }, [attendanceQuery.data, selectedDate]);
+
+  const isFieldAttendance = dayAttendance?.punchType === "FIELD";
+
+  // 2. Fetch Location Logs for Selected Date (ONLY if employee is checked in on FIELD)
   const locationQuery = useQuery({
     queryKey: ["location", employee?.id, selectedDate],
     queryFn: () => fetchTodayLocation(employee.id, selectedDate),
-    enabled: !!employee?.id && isOpen,
+    enabled: !!employee?.id && isOpen && isFieldAttendance,
     staleTime: 10_000
   });
 
   // Sync query data to local state
   useEffect(() => {
-    if (locationQuery.data) {
+    if (isFieldAttendance && locationQuery.data) {
       setLiveLocationLogs(locationQuery.data as LocationPing[]);
+    } else if (!isFieldAttendance) {
+      setLiveLocationLogs([]);
     }
-  }, [locationQuery.data]);
+  }, [locationQuery.data, isFieldAttendance]);
 
-  // 2. Real-Time WebSocket for ONLY this employee when modal is open
+  // 3. Real-Time WebSocket for ONLY this employee when modal is open and on active FIELD duty
   useEffect(() => {
-    if (!isOpen || !employee?.id) return;
+    if (!isOpen || !employee?.id || !isFieldAttendance) return;
 
     const token = getAccessToken();
     if (!token) return;
@@ -146,8 +167,8 @@ export function EmployeeFullReportModal({
     });
 
     socket.on("location-update", (data: any) => {
-      // ONLY update if event is for this specific employee
-      if (data && data.userId === employee.id) {
+      // ONLY update if event is for this specific employee on field duty
+      if (data && data.userId === employee.id && isFieldAttendance) {
         const rawLat = data.lat !== undefined ? data.lat : data.location?.lat;
         const rawLng = data.lng !== undefined ? data.lng : data.location?.lng;
         const lat = typeof rawLat === "number" ? rawLat : parseFloat(String(rawLat));
@@ -171,11 +192,11 @@ export function EmployeeFullReportModal({
     return () => {
       socket.disconnect();
     };
-  }, [isOpen, employee?.id, employee?.companyId]);
+  }, [isOpen, employee?.id, employee?.companyId, isFieldAttendance]);
 
   // Sanitize all location logs to prevent NaN or undefined errors
   const sanitizedLocationLogs = useMemo(() => {
-    if (!Array.isArray(liveLocationLogs)) return [];
+    if (!isFieldAttendance || !Array.isArray(liveLocationLogs)) return [];
     return liveLocationLogs.filter((l) => {
       if (!l) return false;
       const lat = typeof l.lat === "number" ? l.lat : parseFloat(String(l.lat));
@@ -186,7 +207,7 @@ export function EmployeeFullReportModal({
       lat: typeof l.lat === "number" ? l.lat : parseFloat(String(l.lat)),
       lng: typeof l.lng === "number" ? l.lng : parseFloat(String(l.lng))
     }));
-  }, [liveLocationLogs]);
+  }, [liveLocationLogs, isFieldAttendance]);
 
   // Sort newest ping first (descending) for the timeline list
   const newestFirstLocationLogs = useMemo(() => {
@@ -195,20 +216,12 @@ export function EmployeeFullReportModal({
     );
   }, [sanitizedLocationLogs]);
 
-  // 3. Fetch Tasks for the selected date
+  // 4. Fetch Tasks for the selected date
   const tasksQuery = useQuery({
     queryKey: ["tasks", "report-modal", employee?.id, selectedDate],
     queryFn: () => fetchTasks({ date: selectedDate }),
     enabled: !!employee?.id && isOpen,
     staleTime: 15_000
-  });
-
-  // 4. Fetch Attendance for this employee
-  const attendanceQuery = useQuery({
-    queryKey: ["attendance", employee?.id],
-    queryFn: () => fetchAttendance(employee.id),
-    enabled: !!employee?.id && isOpen,
-    staleTime: 30_000
   });
 
   // 5. Fetch DER Reports for this employee
@@ -273,13 +286,7 @@ export function EmployeeFullReportModal({
       .reduce((sum: number, t: any) => sum + (t.points || 10), 0);
   }, [allEmployeeTasks]);
 
-  // Attendance for selected date
-  const dayAttendance = useMemo(() => {
-    if (!attendanceQuery.data) return null;
-    return attendanceQuery.data.find(
-      (a: any) => dayjs(a.date).format("YYYY-MM-DD") === selectedDate
-    );
-  }, [attendanceQuery.data, selectedDate]);
+
 
   // DER for selected date
   const dayDer = useMemo(() => {
@@ -508,78 +515,111 @@ export function EmployeeFullReportModal({
 
               {/* TAB 1: 🗺️ GPS Location Trail & Live Map */}
               <TabsContent value="gps" className="space-y-4 m-0 focus-visible:outline-none">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Interactive Map (2 Columns) */}
-                  <div className="lg:col-span-2 space-y-3">
-                    <FreeOsmMap
-                      logs={sanitizedLocationLogs}
-                      isLive={Boolean(employee.isLocationOn && selectedDate === dayjs().format("YYYY-MM-DD"))}
-                      employeeName={employee.name}
-                      height="440px"
-                      onRefresh={() => locationQuery.refetch()}
-                    />
+                {dayAttendance?.punchType === "OFFICE" ? (
+                  <div className="p-10 text-center bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-4 max-w-xl mx-auto my-4 shadow-sm">
+                    <div className="h-16 w-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto shadow-inner border border-blue-100">
+                      <Building2 className="h-8 w-8" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-slate-800">Office Attendance Session</h3>
+                      <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                        This staff checked in with <strong>OFFICE</strong> mode on <strong>{dayjs(selectedDate).format("DD MMMM YYYY")}</strong>. Location tracking is disabled for office sessions in the Admin Portal.
+                      </p>
+                    </div>
+                    <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-50/70 border border-blue-100 text-blue-700 text-xs font-bold">
+                      <Clock className="h-3.5 w-3.5" />
+                      <span>
+                        Punch In: {dayAttendance.checkInTime ? dayjs(dayAttendance.checkInTime).format("hh:mm A") : "--"}
+                        {dayAttendance.checkOutTime ? ` • Punch Out: ${dayjs(dayAttendance.checkOutTime).format("hh:mm A")}` : " • Currently Active"}
+                      </span>
+                    </div>
                   </div>
+                ) : !dayAttendance ? (
+                  <div className="p-10 text-center bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3 max-w-xl mx-auto my-4 shadow-sm">
+                    <div className="h-16 w-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto shadow-inner border border-amber-100">
+                      <MapPin className="h-8 w-8" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-slate-800">No Field Check-in Record</h3>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                        Staff was not checked in for field duty on <strong>{dayjs(selectedDate).format("DD MMMM YYYY")}</strong>. In the Admin portal, GPS location maps only display during active field check-in sessions.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Interactive Map (2 Columns) */}
+                    <div className="lg:col-span-2 space-y-3">
+                      <FreeOsmMap
+                        logs={sanitizedLocationLogs}
+                        isLive={Boolean(employee.isLocationOn && selectedDate === dayjs().format("YYYY-MM-DD"))}
+                        employeeName={employee.name}
+                        height="440px"
+                        onRefresh={() => locationQuery.refetch()}
+                      />
+                    </div>
 
-                  {/* Location Pings Stream / Summary (1 Column) */}
-                  <div className="space-y-4">
-                    <Card className="rounded-2xl border-slate-200/80 shadow-sm bg-white overflow-hidden">
-                      <div className="p-4 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Activity className="h-4 w-4 text-blue-600" />
-                          <p className="text-xs font-black uppercase text-slate-800">GPS Ping Timeline</p>
-                        </div>
-                        <Badge variant="secondary" className="font-bold text-[10px]">
-                          {sanitizedLocationLogs.length} Pings
-                        </Badge>
-                      </div>
-
-                      <div className="p-3 max-h-[390px] overflow-y-auto space-y-2">
-                        {sanitizedLocationLogs.length === 0 ? (
-                          <div className="p-8 text-center text-slate-400 space-y-2">
-                            <MapPin className="h-8 w-8 mx-auto opacity-30" />
-                            <p className="text-xs font-bold">No GPS Pings Logged</p>
-                            <p className="text-[11px]">Staff did not transmit location on this day.</p>
+                    {/* Location Pings Stream / Summary (1 Column) */}
+                    <div className="space-y-4">
+                      <Card className="rounded-2xl border-slate-200/80 shadow-sm bg-white overflow-hidden">
+                        <div className="p-4 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Activity className="h-4 w-4 text-blue-600" />
+                            <p className="text-xs font-black uppercase text-slate-800">GPS Ping Timeline</p>
                           </div>
-                        ) : (
-                          newestFirstLocationLogs.map((ping, idx) => (
-                            <div
-                              key={idx}
-                              className="p-2.5 rounded-xl border border-slate-100 hover:border-blue-200 bg-slate-50/50 hover:bg-blue-50/30 transition-all flex items-center justify-between text-xs"
-                            >
-                              <div className="space-y-0.5">
-                                <div className="flex items-center gap-2">
-                                  <Clock className="h-3 w-3 text-slate-400" />
-                                  <span className="font-bold text-slate-800">
-                                    {ping.timestamp ? dayjs(ping.timestamp).format("hh:mm:ss A") : "—"}
-                                  </span>
-                                  {ping.batteryLevel !== undefined && ping.batteryLevel !== null && (
-                                    <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
-                                      🔋 {ping.batteryLevel}%
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-[10px] text-slate-400 font-mono font-bold">
-                                  {Number(ping.lat).toFixed(5)}, {Number(ping.lng).toFixed(5)}
-                                </p>
-                              </div>
+                          <Badge variant="secondary" className="font-bold text-[10px]">
+                            {sanitizedLocationLogs.length} Pings
+                          </Badge>
+                        </div>
 
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 text-[10px] px-2 font-bold text-blue-600"
-                                onClick={() => {
-                                  window.open(`https://www.google.com/maps?q=${ping.lat},${ping.lng}`, "_blank");
-                                }}
-                              >
-                                View <ExternalLink className="h-2.5 w-2.5 ml-0.5" />
-                              </Button>
+                        <div className="p-3 max-h-[390px] overflow-y-auto space-y-2">
+                          {sanitizedLocationLogs.length === 0 ? (
+                            <div className="p-8 text-center text-slate-400 space-y-2">
+                              <MapPin className="h-8 w-8 mx-auto opacity-30" />
+                              <p className="text-xs font-bold">No GPS Pings Logged</p>
+                              <p className="text-[11px]">Staff did not transmit location on this day.</p>
                             </div>
-                          ))
-                        )}
-                      </div>
-                    </Card>
+                          ) : (
+                            newestFirstLocationLogs.map((ping, idx) => (
+                              <div
+                                key={idx}
+                                className="p-2.5 rounded-xl border border-slate-100 hover:border-blue-200 bg-slate-50/50 hover:bg-blue-50/30 transition-all flex items-center justify-between text-xs"
+                              >
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-2">
+                                    <Clock className="h-3 w-3 text-slate-400" />
+                                    <span className="font-bold text-slate-800">
+                                      {ping.timestamp ? dayjs(ping.timestamp).format("hh:mm:ss A") : "—"}
+                                    </span>
+                                    {ping.batteryLevel !== undefined && ping.batteryLevel !== null && (
+                                      <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                                        🔋 {ping.batteryLevel}%
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-slate-400 font-mono font-bold">
+                                    {Number(ping.lat).toFixed(5)}, {Number(ping.lng).toFixed(5)}
+                                  </p>
+                                </div>
+
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 text-[10px] px-2 font-bold text-blue-600"
+                                  onClick={() => {
+                                    window.open(`https://www.google.com/maps?q=${ping.lat},${ping.lng}`, "_blank");
+                                  }}
+                                >
+                                  View <ExternalLink className="h-2.5 w-2.5 ml-0.5" />
+                                </Button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </Card>
+                    </div>
                   </div>
-                </div>
+                )}
               </TabsContent>
 
               {/* TAB 2: 📅 Attendance & Odometer */}
