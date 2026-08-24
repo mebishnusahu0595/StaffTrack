@@ -19,28 +19,11 @@ export async function createLocationLogs(
   input: LocationLogInput[] | { logs: LocationLogInput[] }
 ) {
   const logs = Array.isArray(input) ? input : input.logs;
-
-  // Strict check: Only accept and record location logs if employee is actively checked-in today!
-  const today = startOfDay(new Date());
-  const activeAttendance = await prisma.attendance.findFirst({
-    where: {
-      userId: actor.id,
-      date: { gte: today },
-      checkInTime: { not: null },
-      checkOutTime: null
-    }
-  });
-
-  if (!activeAttendance) {
-    // User is NOT checked in today or already checked out.
-    // Ensure isLocationOn is marked false so admin dashboard doesn't show active location
-    await prisma.user.update({
-      where: { id: actor.id },
-      data: { isLocationOn: false }
-    });
+  if (!logs || logs.length === 0) {
     return { count: 0 };
   }
 
+  // Always record location logs during shift hours / app tracking regardless of check-in status
   const result = await prisma.locationLog.createMany({
     data: logs.map((log) => ({
       userId: actor.id,
@@ -52,25 +35,28 @@ export async function createLocationLogs(
     }))
   });
 
-  if (logs.length > 0) {
-    const latestLog = logs.reduce((latest, current) => {
-      return new Date(current.timestamp) > new Date(latest.timestamp) ? current : latest;
-    });
+  const latestLog = logs.reduce((latest, current) => {
+    return new Date(current.timestamp) > new Date(latest.timestamp) ? current : latest;
+  });
 
-    await updateLocationStatus(actor, {
+  await prisma.user.update({
+    where: { id: actor.id },
+    data: {
       isLocationOn: true,
-      batteryLevel: latestLog.batteryLevel
-    });
+      locationOffAt: null,
+      ...(latestLog.batteryLevel !== undefined ? { batteryLevel: latestLog.batteryLevel } : {})
+    }
+  });
 
-    // Notify listeners that location has updated
-    getIO().to(`company:${actor.companyId}`).emit(SOCKET_EVENTS.LOCATION_UPDATE, {
-      userId: actor.id,
-      lat: latestLog.lat,
-      lng: latestLog.lng,
-      timestamp: latestLog.timestamp,
-      batteryLevel: latestLog.batteryLevel
-    });
-  }
+  // Notify WebSocket listeners (Superadmin Live Radar + Admin Maps)
+  getIO().to(`company:${actor.companyId}`).emit(SOCKET_EVENTS.LOCATION_UPDATE, {
+    userId: actor.id,
+    lat: latestLog.lat,
+    lng: latestLog.lng,
+    accuracy: latestLog.accuracy,
+    timestamp: latestLog.timestamp,
+    batteryLevel: latestLog.batteryLevel
+  });
 
   return {
     count: result.count
@@ -81,24 +67,11 @@ export async function updateLocationStatus(
   actor: AuthUser,
   input: { isLocationOn: boolean; batteryLevel?: number; isStale?: boolean }
 ) {
-  // Only allow isLocationOn = true if the user currently has an active check-in today
-  const today = startOfDay(new Date());
-  const activeAttendance = await prisma.attendance.findFirst({
-    where: {
-      userId: actor.id,
-      date: { gte: today },
-      checkInTime: { not: null },
-      checkOutTime: null
-    }
-  });
-
-  const shouldBeLocationOn = input.isLocationOn && Boolean(activeAttendance);
-
   const user = await prisma.user.update({
     where: { id: actor.id },
     data: {
-      isLocationOn: shouldBeLocationOn,
-      locationOffAt: shouldBeLocationOn ? null : new Date(),
+      isLocationOn: input.isLocationOn,
+      locationOffAt: input.isLocationOn ? null : new Date(),
       ...(input.batteryLevel !== undefined && { batteryLevel: input.batteryLevel })
     }
   });
@@ -227,13 +200,51 @@ export async function getTodayLocationLogs(actor: AuthUser, userId: string, date
   const dayStart = new Date(`${targetDateStr}T00:00:00.000+05:30`);
   const dayEnd = new Date(`${targetDateStr}T23:59:59.999+05:30`);
 
+  // Superadmin sees ALL location pings for the full day without check-in restrictions
+  if (actor.role === UserRole.SUPERADMIN) {
+    return prisma.locationLog.findMany({
+      where: {
+        userId,
+        timestamp: {
+          gte: dayStart,
+          lte: dayEnd
+        }
+      },
+      orderBy: { timestamp: "asc" }
+    });
+  }
+
+  // Admin & Manager (Company level admin dashboard):
+  // 1. Office checkin walo ka location na dikhe (only FIELD punches)
+  // 2. Bas checkin se checkout tak ka hi location dikhe
+  const attendanceSessions = await prisma.attendance.findMany({
+    where: {
+      userId,
+      date: { gte: dayStart, lte: dayEnd },
+      punchType: "FIELD",
+      checkInTime: { not: null }
+    },
+    orderBy: { checkInTime: "asc" }
+  });
+
+  if (attendanceSessions.length === 0) {
+    // Not checked in as FIELD on that date -> Admin cannot see location logs
+    return [];
+  }
+
+  const sessionRanges = attendanceSessions.map((session) => ({
+    timestamp: {
+      gte: new Date(session.checkInTime!),
+      lte: session.checkOutTime
+        ? new Date(session.checkOutTime)
+        : (targetDateStr === new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) ? new Date() : dayEnd)
+    }
+  }));
+
   return prisma.locationLog.findMany({
     where: {
       userId,
-      timestamp: {
-        gte: dayStart,
-        lte: dayEnd
-      }
+      OR: sessionRanges
     },
     orderBy: { timestamp: "asc" }
   });

@@ -245,25 +245,27 @@ export function LocationTracker() {
             const enabled = await Location.hasServicesEnabledAsync();
             const permission = await Location.getForegroundPermissionsAsync();
             if (enabled && permission.status === "granted") {
-              console.log("[LocationTracker] [Mobile Foreground] Fetching position...");
-              const position = await Location.getCurrentPositionAsync({
-                accuracy: Location.Accuracy.High,
-              });
+              let position = await Location.getLastKnownPositionAsync().catch(() => null);
+              if (!position) {
+                position = await Location.getCurrentPositionAsync({
+                  accuracy: Location.Accuracy.Balanced,
+                });
+              }
 
-              const level = await Battery.getBatteryLevelAsync().catch(() => -1);
-              const batteryLevel = level >= 0 ? Math.round(level * 100) : undefined;
+              if (position) {
+                const level = await Battery.getBatteryLevelAsync().catch(() => -1);
+                const batteryLevel = level >= 0 ? Math.round(level * 100) : undefined;
 
-              const logs: LocationPing[] = [{
-                lat: position.coords.latitude,
-                lng: position.coords.longitude,
-                accuracy: position.coords.accuracy ?? 0,
-                timestamp: new Date(position.timestamp).toISOString(),
-                batteryLevel
-              }];
-              console.log("[LocationTracker] [Mobile Foreground] Queuing ping:", logs[0]);
-              // Route through the offline queue so a dropped connection while the
-              // app is open doesn't lose the ping — it syncs when back online.
-              await enqueueLocationLogs(logs);
+                const logs: LocationPing[] = [{
+                  lat: position.coords.latitude,
+                  lng: position.coords.longitude,
+                  accuracy: position.coords.accuracy ?? 0,
+                  timestamp: new Date(position.timestamp).toISOString(),
+                  batteryLevel
+                }];
+                console.log("[LocationTracker] [Mobile Foreground] Queuing ping:", logs[0]);
+                await enqueueLocationLogs(logs);
+              }
             }
           } catch (err) {
             console.warn("[LocationTracker] [Mobile Foreground] Failed to get/send position:", err);
@@ -309,10 +311,10 @@ export async function startBackgroundLocationTracking(user?: any): Promise<boole
       return false;
     }
 
-    const background = await Location.requestBackgroundPermissionsAsync();
+    const background = await Location.requestBackgroundPermissionsAsync().catch(() => ({ status: Location.PermissionStatus.DENIED }));
 
     if (background.status !== Location.PermissionStatus.GRANTED) {
-      console.warn("[LocationTracker] Background location permission denied.");
+      console.warn("[LocationTracker] Background location permission denied or not yet granted. Foreground tracking will operate.");
       return false;
     }
 
@@ -325,7 +327,7 @@ export async function startBackgroundLocationTracking(user?: any): Promise<boole
       distanceInterval: 0, // No distance gate — send pings on time basis so stationary users aren't falsely marked offline
       foregroundService: {
         notificationTitle: "StaffTrack is running",
-        notificationBody: "Your work session is active.",
+        notificationBody: "Location service active.",
         notificationColor: "#1A202C"
       },
       pausesUpdatesAutomatically: false,
@@ -357,7 +359,8 @@ export async function stopBackgroundLocationTracking(): Promise<void> {
 }
 
 export function isWithinWorkHours(date = new Date(), workHours: WorkHours = DEFAULT_WORK_HOURS) {
-  const currentHour = date.getHours() + date.getMinutes() / 60;
+  // Use Indian Standard Time (IST) hours
+  const currentHour = ((date.getUTCHours() + 5) % 24) + (date.getUTCMinutes() + 30) / 60;
 
   if (workHours.startHour <= workHours.endHour) {
     return currentHour >= workHours.startHour && currentHour < workHours.endHour;

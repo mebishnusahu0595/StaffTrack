@@ -783,24 +783,24 @@ export async function getLatestLocations(req: Request, res: Response): Promise<v
     orderBy: { name: "asc" }
   });
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  // Exact Indian Standard Time (IST) day bounds (00:00:00 to 23:59:59.999 IST)
+  const todayISTStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const todayStart = new Date(`${todayISTStr}T00:00:00.000+05:30`);
+  const todayEnd = new Date(`${todayISTStr}T23:59:59.999+05:30`);
 
   const userIds = users.map((u) => u.id);
   const [todayAttendances, latestLocationLogs] = await Promise.all([
     prisma.attendance.findMany({
       where: {
         userId: { in: userIds },
-        date: today
+        date: { gte: todayStart, lte: todayEnd }
       },
       include: { breaks: true }
     }),
     prisma.locationLog.findMany({
       where: {
         userId: { in: userIds },
-        timestamp: { gte: today, lt: tomorrow }
+        timestamp: { gte: todayStart, lte: todayEnd }
       },
       orderBy: { timestamp: "desc" },
       distinct: ["userId"]
@@ -836,17 +836,16 @@ export async function getUserLocationRoute(req: Request, res: Response): Promise
   const { userId } = req.params;
   const { date } = req.query;
 
-  const targetDate = date ? new Date(date as string) : new Date();
-  targetDate.setHours(0, 0, 0, 0);
-  const nextDate = new Date(targetDate);
-  nextDate.setDate(nextDate.getDate() + 1);
+  const targetDateStr = (date as string) || new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const dayStart = new Date(`${targetDateStr}T00:00:00.000+05:30`);
+  const dayEnd = new Date(`${targetDateStr}T23:59:59.999+05:30`);
 
   const logs = await prisma.locationLog.findMany({
     where: {
       userId,
       timestamp: {
-        gte: targetDate,
-        lt: nextDate
+        gte: dayStart,
+        lte: dayEnd
       }
     },
     orderBy: { timestamp: "asc" }
