@@ -359,8 +359,10 @@ export async function stopBackgroundLocationTracking(): Promise<void> {
 }
 
 export function isWithinWorkHours(date = new Date(), workHours: WorkHours = DEFAULT_WORK_HOURS) {
-  // Use Indian Standard Time (IST) hours
-  const currentHour = ((date.getUTCHours() + 5) % 24) + (date.getUTCMinutes() + 30) / 60;
+  // Convert UTC to IST (+330 minutes)
+  const totalUtcMinutes = date.getUTCHours() * 60 + date.getUTCMinutes();
+  const totalIstMinutes = (totalUtcMinutes + 330) % 1440;
+  const currentHour = totalIstMinutes / 60;
 
   if (workHours.startHour <= workHours.endHour) {
     return currentHour >= workHours.startHour && currentHour < workHours.endHour;

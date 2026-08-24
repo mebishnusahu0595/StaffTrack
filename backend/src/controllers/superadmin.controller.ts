@@ -795,12 +795,12 @@ export async function getLatestLocations(req: Request, res: Response): Promise<v
         userId: { in: userIds },
         date: { gte: todayStart, lte: todayEnd }
       },
-      include: { breaks: true }
+      include: { breaks: true },
+      orderBy: { checkInTime: "desc" }
     }),
     prisma.locationLog.findMany({
       where: {
-        userId: { in: userIds },
-        timestamp: { gte: todayStart, lte: todayEnd }
+        userId: { in: userIds }
       },
       orderBy: { timestamp: "desc" },
       distinct: ["userId"]
