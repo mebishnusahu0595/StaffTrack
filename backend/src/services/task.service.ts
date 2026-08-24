@@ -163,21 +163,49 @@ export interface ListTasksFilter {
   assignedToId?: string;
   status?: string;
   limit?: number;
-}
-
-export async function listTasks(actor: AuthUser, filter?: ListTasksFilter | string) {
+}export async function listTasks(actor: AuthUser, filter?: ListTasksFilter | string) {
   const options: ListTasksFilter = typeof filter === "string" ? { dateStr: filter } : (filter || {});
   const where = await taskAccessWhere(actor, options);
 
-  const tasks = await prisma.task.findMany({
+  let tasks = await prisma.task.findMany({
     where,
     include: taskInclude,
     orderBy: { createdAt: "desc" },
     ...(options.limit ? { take: options.limit } : {})
   });
 
-  // Fire-and-forget: check & send task notifications without blocking the response.
-  // All N+1 DB notification lookups are batched into one query per type.
+  // Deduplicate recurring series occurrences for mobile employees so each recurring series only shows one task for today
+  if (actor.role === UserRole.EMPLOYEE && !options.assignedToId && (!options.dateStr || options.dateStr.toLowerCase() !== "all")) {
+    const seriesMap = new Map<string, typeof tasks[0]>();
+    const standaloneTasks: typeof tasks = [];
+
+    for (const t of tasks) {
+      const seriesKey = t.parentTaskId || (t.isRepeating ? t.id : null);
+      if (!seriesKey) {
+        standaloneTasks.push(t);
+      } else {
+        const existing = seriesMap.get(seriesKey);
+        if (!existing) {
+          seriesMap.set(seriesKey, t);
+        } else {
+          // Prioritize completed task over pending, or closest to today
+          if (t.status === TaskStatus.COMPLETED && existing.status !== TaskStatus.COMPLETED) {
+            seriesMap.set(seriesKey, t);
+          } else if (existing.status !== TaskStatus.COMPLETED && t.status !== TaskStatus.COMPLETED) {
+            const tDate = t.dueDate ? new Date(t.dueDate).getTime() : 0;
+            const exDate = existing.dueDate ? new Date(existing.dueDate).getTime() : 0;
+            if (tDate > exDate) {
+              seriesMap.set(seriesKey, t);
+            }
+          }
+        }
+      }
+    }
+
+    tasks = [...standaloneTasks, ...Array.from(seriesMap.values())];
+  }
+
+  // Fire-and-forget: check & send task notifications without blocking the response
   if (actor.role === UserRole.EMPLOYEE) {
     (async () => {
       try {
@@ -198,7 +226,6 @@ export async function listTasks(actor: AuthUser, filter?: ListTasksFilter | stri
           t.startDate < tomorrow
         );
 
-        // Batch fetch all today's notifications for this user in one query
         const todayNotifs = await prisma.notification.findMany({
           where: {
             userId: actor.id,
@@ -247,10 +274,11 @@ export async function listTasks(actor: AuthUser, filter?: ListTasksFilter | stri
 
         const timingInfo = `[Start: ${startStr} @ ${startTimeStr} - ${dueTimeStr}]`;
         t.description = t.description ? `${timingInfo}\n${t.description}` : timingInfo;
+      }
     }
   }
-}
-  // Sort tasks so that PENDING/IN_PROGRESS are at the top, and COMPLETED/CANCELLED/MISSED are at the bottom.
+
+  // Sort tasks so that PENDING/IN_PROGRESS are at the top, and COMPLETED/CANCELLED/MISSED are at the bottom
   const statusPriority: Record<string, number> = {
     PENDING: 1,
     IN_PROGRESS: 1,
@@ -259,17 +287,16 @@ export async function listTasks(actor: AuthUser, filter?: ListTasksFilter | stri
     CANCELLED: 4,
     MISSED: 4
   };
- 
+
   tasks.sort((a, b) => {
     const priorityA = statusPriority[a.status] ?? 2;
     const priorityB = statusPriority[b.status] ?? 2;
     if (priorityA !== priorityB) {
       return priorityA - priorityB;
     }
-    // Maintain secondary sort order by createdAt descending
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
- 
+
   return tasks;
 }
 
@@ -850,9 +877,30 @@ async function taskAccessWhere(actor: AuthUser, filter: ListTasksFilter = {}): P
           }
         },
         {
+          startDate: {
+            gte: todayStart,
+            lte: todayEnd
+          }
+        },
+        {
+          completedAt: {
+            gte: todayStart,
+            lte: todayEnd
+          }
+        },
+        {
+          // Also include overdue pending tasks
+          dueDate: {
+            lt: todayStart
+          },
           status: { in: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS] }
         }
-      ]
+      ],
+      NOT: {
+        dueDate: {
+          gt: todayEnd
+        }
+      }
     };
   }
 
