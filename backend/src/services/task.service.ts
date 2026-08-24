@@ -824,7 +824,7 @@ async function taskAccessWhere(actor: AuthUser, filter: ListTasksFilter = {}): P
   let dateFilter: any = {};
 
   if (dateStr && dateStr.toLowerCase() !== "all") {
-    // If a specific date is requested (e.g. "2026-08-11"), filter to tasks on that day or pending on that day
+    // If a specific date is requested (e.g. "2026-08-24"), filter strictly to tasks on that day
     const requestedDate = new Date(dateStr);
     if (!isNaN(requestedDate.getTime())) {
       const start = getStartOfDayIST(requestedDate);
@@ -848,24 +848,12 @@ async function taskAccessWhere(actor: AuthUser, filter: ListTasksFilter = {}): P
               gte: start,
               lte: end
             }
-          },
-          {
-            updatedAt: {
-              gte: start,
-              lte: end
-            }
-          },
-          {
-            createdAt: {
-              gte: start,
-              lte: end
-            }
           }
         ]
       };
     }
   } else if (actor.role === UserRole.EMPLOYEE && !assignedToId) {
-    // Default to Today in IST for mobile app employees when no dateStr is specified
+    // Default to strictly Today in IST for mobile app employees
     const todayStart = getStartOfDayIST(new Date());
     const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
     dateFilter = {
@@ -887,20 +875,8 @@ async function taskAccessWhere(actor: AuthUser, filter: ListTasksFilter = {}): P
             gte: todayStart,
             lte: todayEnd
           }
-        },
-        {
-          // Also include overdue pending tasks
-          dueDate: {
-            lt: todayStart
-          },
-          status: { in: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS] }
         }
-      ],
-      NOT: {
-        dueDate: {
-          gt: todayEnd
-        }
-      }
+      ]
     };
   }
 
