@@ -804,7 +804,7 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
   const completedCount = completedTasks.length;
   const countBannerText = `${completedCount} Completed`;
 
-  const formatTaskDetails = (t: any): string => {
+  const parseTaskDetails = (t: any) => {
     let locationCoords = "";
     if (t.completionLat != null && t.completionLng != null) {
       locationCoords = `${Number(t.completionLat).toFixed(4)}, ${Number(t.completionLng).toFixed(4)}`;
@@ -812,106 +812,129 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
       locationCoords = `${Number(t.lat).toFixed(4)}, ${Number(t.lng).toFixed(4)}`;
     }
 
-    if (t.checklistResponses && Array.isArray(t.checklistResponses) && t.checklistResponses.length > 0) {
-      let name = "";
-      let contact = "";
-      let village = "";
-      let crop = "";
-      let land = "";
-      let product = "";
-      const extraParts: string[] = [];
+    let personName = "";
+    let contact = "";
+    let village = "";
+    let crop = "";
+    let land = "";
+    let product = "";
+    const extraParts: string[] = [];
 
+    if (t.checklistResponses && Array.isArray(t.checklistResponses) && t.checklistResponses.length > 0) {
       for (const item of t.checklistResponses) {
         const val = item.value !== undefined ? String(item.value).trim() : (item.response !== undefined ? String(item.response).trim() : (item.text !== undefined ? String(item.text).trim() : ""));
         if (!val || item.type === "IMAGE" || item.type === "VIDEO" || item.type === "AUDIO") continue;
-        
+
         const title = (item.title || item.label || item.id || "").toLowerCase();
         if (item.type === "GEOTAG" || title.includes("location") || title.includes("geotag")) {
           if (!locationCoords) locationCoords = val;
-        } else if (title.includes("farmer name") || title.includes("dealer name") || title === "name") {
-          name = val;
-        } else if (title.includes("contact") || title.includes("phone") || title.includes("mobile")) {
+        } else if (title.includes("farmer name") || title.includes("dealer name") || title === "name" || title.includes("person") || title.includes("customer")) {
+          personName = val;
+        } else if (title.includes("contact") || title.includes("phone") || title.includes("mobile") || title.includes("number")) {
           contact = val;
-        } else if (title.includes("village")) {
+        } else if (title.includes("village") || title.includes("place") || title.includes("area") || title.includes("city")) {
           village = val;
         } else if (title.includes("crop")) {
           crop = val;
         } else if (title.includes("farmland") || title.includes("land") || title.includes("acre")) {
           land = val;
-        } else if (title.includes("product")) {
+        } else if (title.includes("product") || title.includes("item")) {
           product = val;
         } else if (!title.includes("remark")) {
-          extraParts.push(`${item.title || item.label}: ${val}`);
+          extraParts.push(val);
         }
       }
-
-      const parts: string[] = [];
-      if (name) parts.push(`<strong style="color: #0f172a;">${name}</strong>`);
-      if (village) parts.push(`📍 ${village}`);
-      if (crop) parts.push(`🌾 ${crop}${land ? ` (${land} Acr)` : ''}`);
-      else if (land) parts.push(`🏡 ${land} Acr`);
-      if (product) parts.push(`📦 ${product}`);
-      if (contact) parts.push(`📞 ${contact}`);
-      if (locationCoords) parts.push(`🌐 <span style="color: #0284c7; font-weight: 600;">${locationCoords}</span>`);
-      if (extraParts.length > 0) parts.push(...extraParts.slice(0, 2));
-
-      if (parts.length > 0) return parts.join(" &bull; ");
     }
 
-    if (locationCoords) {
-      return `${t.description ? t.description + ' &bull; ' : ''}🌐 <span style="color: #0284c7; font-weight: 600;">${locationCoords}</span>`;
+    // Fallback if person name in description
+    if (!personName && t.description && t.description.includes("—")) {
+      const parts = t.description.split("—");
+      if (parts.length > 1) personName = parts[1].trim();
     }
 
-    return t.description || "";
-  };
+    const detailsParts: string[] = [];
+    if (crop) detailsParts.push(`${crop}${land ? ` (${land} Acr)` : ''}`);
+    else if (land) detailsParts.push(`${land} Acr`);
+    if (product) detailsParts.push(product);
+    if (extraParts.length > 0) detailsParts.push(...extraParts.slice(0, 2));
+    const detailsText = detailsParts.length > 0 ? detailsParts.join(" • ") : (t.description || "");
 
-  const getTaskPhoto = (t: any): string | null => {
-    if (t.completionPhotoUrl) return t.completionPhotoUrl;
-    if (t.checklistResponses && Array.isArray(t.checklistResponses)) {
+    let photo: string | null = t.completionPhotoUrl || null;
+    if (!photo && t.checklistResponses && Array.isArray(t.checklistResponses)) {
       const img = t.checklistResponses.find((item: any) => 
         item.type === "IMAGE" && (item.fileUrl || item.photoUrl || item.image || item.url)
       );
-      if (img) return img.fileUrl || img.photoUrl || img.image || img.url;
+      if (img) photo = img.fileUrl || img.photoUrl || img.image || img.url;
     }
-    return null;
-  };
 
-  const renderTaskCard = (t: any, isTwoCol: boolean) => {
-    const details = formatTaskDetails(t);
-    const photo = getTaskPhoto(t);
-    return `
-      <div style="display: flex; align-items: center; justify-content: space-between; padding: ${isTwoCol ? '3px 6px' : '4px 8px'}; border-radius: 6px; border: 1px solid #e2e8f0; background: #f8fafc; font-size: ${isTwoCol ? '9px' : '10px'}; line-height: 1.25; box-sizing: border-box; min-height: 32px;">
-        <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; flex-wrap: wrap;">
-          <span style="font-weight: 800; color: #16a34a; white-space: nowrap;">✅ ${t.title}</span>
-          ${details ? `<span style="color: #334155;">— ${details}</span>` : ""}
-          ${t.completionRemarks ? `<span style="color: #64748b; font-style: italic; font-size: 8.5px;">(${t.completionRemarks})</span>` : ""}
-        </div>
-        <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-left: 6px;">
-          <span style="font-size: 8.5px; font-weight: 800; color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 4px; border-radius: 4px; white-space: nowrap;">+${t.points ?? 10} pts</span>
-          ${photo ? `<img src="${photo}" style="width: 28px; height: 28px; border-radius: 4px; object-fit: cover; border: 1px solid #cbd5e1;" alt="Evidence" />` : ""}
-        </div>
-      </div>
-    `;
+    return {
+      title: t.title || "Task",
+      personName,
+      village,
+      detailsText,
+      contact,
+      coords: locationCoords,
+      points: t.points ?? 10,
+      photoUrl: photo,
+      remarks: t.completionRemarks || ""
+    };
   };
 
   let tasksGridHtml = "";
   if (completedTasks.length === 0) {
     tasksGridHtml = `<p style="font-size: 10px; color: #94a3b8; font-style: italic; margin: 0; padding: 4px 0;">No completed tasks recorded on this date.</p>`;
-  } else if (completedTasks.length > 8) {
-    let rows = "";
-    for (let i = 0; i < completedTasks.length; i += 2) {
-      const t1 = completedTasks[i];
-      const t2 = completedTasks[i + 1];
-      rows += `
-        <tr>
-          <td style="width: 50%; padding: 2px 3px 2px 0; vertical-align: middle;">${renderTaskCard(t1, true)}</td>
-          <td style="width: 50%; padding: 2px 0 2px 3px; vertical-align: middle;">${t2 ? renderTaskCard(t2, true) : ""}</td>
+  } else {
+    const tableRows = completedTasks.map((t, idx) => {
+      const row = parseTaskDetails(t);
+      const isEven = idx % 2 === 0;
+      return `
+        <tr style="background: ${isEven ? '#ffffff' : '#f8fafc'}; border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle;">
+            <div style="font-weight: 800; color: #16a34a; font-size: 8.5px; white-space: nowrap;">
+              ✅ ${row.title}
+            </div>
+            ${row.personName ? `<div style="font-weight: 700; color: #0f172a; font-size: 8px; margin-top: 1px;">— ${row.personName}</div>` : ""}
+          </td>
+          <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #334155; font-size: 8px; font-weight: 600;">
+            ${row.village ? `📍 ${row.village}` : '<span style="color: #cbd5e1;">--</span>'}
+          </td>
+          <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #334155; font-size: 8px;">
+            ${row.detailsText ? row.detailsText : '<span style="color: #cbd5e1;">--</span>'}
+          </td>
+          <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #0f172a; font-size: 8px; font-weight: 700; white-space: nowrap;">
+            ${row.contact ? `📞 ${row.contact}` : '<span style="color: #cbd5e1;">--</span>'}
+          </td>
+          <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #0284c7; font-size: 7.5px; font-weight: 700; white-space: nowrap;">
+            ${row.coords ? `🌐 ${row.coords}` : '<span style="color: #cbd5e1;">--</span>'}
+          </td>
+          <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; text-align: center; white-space: nowrap;">
+            <span style="font-size: 7.5px; font-weight: 800; color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 4px; border-radius: 3px;">+${row.points} pts</span>
+          </td>
+          <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; text-align: center;">
+            ${row.photoUrl ? `<img src="${row.photoUrl}" style="width: 28px; height: 28px; border-radius: 3px; object-fit: cover; border: 1px solid #cbd5e1;" alt="Pic" />` : '<span style="color: #cbd5e1; font-size: 7px;">No pic</span>'}
+          </td>
         </tr>
       `;
-    }
-    tasksGridHtml = `<table style="width: 100%; border-collapse: collapse; table-layout: fixed;">${rows}</table>`;
-  } else {
-    tasksGridHtml = completedTasks.map((t) => `<div style="margin-bottom: 4px;">${renderTaskCard(t, false)}</div>`).join("");
+    }).join("");
+
+    tasksGridHtml = `
+      <table style="width: 100%; border-collapse: collapse; margin-top: 3px; font-size: 8px; table-layout: auto;">
+        <thead>
+          <tr style="background: #f1f5f9; border-bottom: 1.5px solid #cbd5e1; color: #475569; text-transform: uppercase; font-size: 7.5px; font-weight: 800; letter-spacing: 0.3px;">
+            <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Task / Name</th>
+            <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Place / Location</th>
+            <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Details / Crop</th>
+            <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Contact</th>
+            <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Coordinates</th>
+            <th style="padding: 4px 6px; text-align: center; border: 1px solid #e2e8f0;">Points</th>
+            <th style="padding: 4px 6px; text-align: center; border: 1px solid #e2e8f0;">Photo</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+    `;
   }
 
   const startPhoto = currentReport.startOdometerPhotoUrl;
