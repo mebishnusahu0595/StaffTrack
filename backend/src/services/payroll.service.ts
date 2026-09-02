@@ -107,7 +107,9 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
   const savedSlipsMap = new Map(savedSlips.map((s) => [s.userId, s]));
 
   return users.map((user: any) => {
-    const effectiveBaseSalary = user.group?.baseSalary || user.baseSalary || 0;
+    const effectiveBaseSalary = (user.baseSalary != null && user.baseSalary > 0) 
+      ? user.baseSalary 
+      : (user.group?.baseSalary || 0);
     const dailySalary = effectiveBaseSalary / daysInMonth.length;
 
     let totalPayableDays = 0;
