@@ -415,8 +415,10 @@ export default function TasksPage() {
       );
     }
 
-    // Date Filter
-    if (filterDate) {
+    // Date Filter — skipped on the "All Tasks" tab, which is explicitly date-agnostic.
+    // filterDate is never empty (it defaults to today), so without this guard the
+    // ALL tab silently dropped every task not due today, including newly created ones.
+    if (filterDate && activeFilter !== "ALL") {
       const getLocalDateStr = (d: any) => {
         if (!d) return "";
         try {

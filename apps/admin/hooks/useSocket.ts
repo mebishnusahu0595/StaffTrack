@@ -76,8 +76,13 @@ export function useSocket(companyId?: string) {
         queryClient.setQueriesData({ queryKey: ["tasks"] }, []);
       }
 
-      void queryClient.invalidateQueries({ queryKey: ["tasks"], refetchType: "all" });
-      void queryClient.refetchQueries({ queryKey: ["tasks"] });
+      // The cache is already patched above. Only a create can bring rows the event
+      // doesn't carry (pre-generated repeat occurrences), so refetch just for that —
+      // the old invalidate + refetch pair re-pulled the whole task list up to four
+      // times per event.
+      if (type === "create") {
+        void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      }
     });
 
     socket.on("location-update", (data) => {

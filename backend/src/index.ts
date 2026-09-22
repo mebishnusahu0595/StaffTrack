@@ -53,6 +53,12 @@ startScheduler();
 app.use((req, res, next) => {
   const acceptEncoding = req.headers["accept-encoding"] || "";
   
+  // Only JSON API responses are worth compressing. Uploads/static files were
+  // being fully buffered in memory here before being sent through uncompressed.
+  if (!req.url.startsWith("/api")) {
+    return next();
+  }
+
   // Bypass compression for Server-Sent Events (SSE) / stream requests
   if (req.url.includes("stream") || req.headers.accept === "text/event-stream") {
     return next();
@@ -110,12 +116,6 @@ app.use(cors({
   origin: true,
   credentials: true
 }));
-
-// DEBUG LOGGER: See if the phone is reaching the server
-app.use((req, res, next) => {
-  console.log(`[DEBUG] ${req.method} ${req.url} from ${req.ip}`);
-  next();
-});
 
 app.use(express.json({ limit: "10mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "../uploads"), {

@@ -226,6 +226,11 @@ export interface ListTasksFilter {
           t.startDate < tomorrow
         );
 
+        // Nothing to announce -> skip the notification round trips entirely.
+        // This block runs on every mobile task poll, so the early exit is the
+        // difference between 1 and N+1 queries per poll.
+        if (dueToday.length === 0 && startingToday.length === 0) return;
+
         const todayNotifs = await prisma.notification.findMany({
           where: {
             userId: actor.id,
@@ -935,6 +940,11 @@ function fromIST(date: Date): Date {
   return new Date(date.getTime() - IST_OFFSET);
 }
 
+/** yyyy-mm-dd of a UTC instant in IST — used to bucket occurrences per day. */
+function dayKeyIST(date: Date): string {
+  return toIST(date).toISOString().slice(0, 10);
+}
+
 function setISTTime(date: Date, timeSource: Date): Date {
   const dateIST = toIST(date);
   const sourceIST = toIST(timeSource);
@@ -1095,10 +1105,33 @@ async function preGenerateTasksForSeries(baseTask: any, companyId: string, subta
     ? baseTask.dealers.map((d: any) => d.id)
     : [];
 
+  // Everything the loop used to re-query per occurrence is fetched once up front:
+  // a daily series over the 366-day horizon was otherwise ~1100 sequential round
+  // trips (holiday lookup + duplicate check + insert, per day).
+  const holidayDays = new Set<string>();
+  if (baseTask.skipHolidays) {
+    const holidays = await prisma.holiday.findMany({
+      where: {
+        companyId,
+        date: { gte: baseStart, lte: new Date(maxDate.getTime() + 30 * 24 * 60 * 60 * 1000) }
+      },
+      select: { date: true }
+    });
+    for (const h of holidays) holidayDays.add(dayKeyIST(h.date));
+  }
+
+  const existing = await prisma.task.findMany({
+    where: { parentTaskId: baseTask.id, isSubtask: false },
+    select: { dueDate: true }
+  });
+  const existingDays = new Set(existing.map((t) => dayKeyIST(t.dueDate)));
+
+  const pending: { dueDate: Date; startDate: Date | null }[] = [];
+
   let guard = 0;
   while (guard < 400) {
     guard++;
-    const nextDueDate = await calculateNextOccurrence(currentTaskState);
+    const nextDueDate = await calculateNextOccurrence(currentTaskState, baseTask.skipHolidays ? holidayDays : undefined);
     if (nextDueDate.getTime() <= currentTaskState.dueDate.getTime()) {
       console.warn("[Task Service] calculateNextOccurrence did not advance date. Terminating loop to prevent hang.");
       break;
@@ -1107,85 +1140,89 @@ async function preGenerateTasksForSeries(baseTask: any, companyId: string, subta
       break;
     }
 
-    const calculatedStartDate = startDateOffset !== null
-      ? new Date(nextDueDate.getTime() - startDateOffset)
-      : null;
-
-    // Check if an occurrence for this root series task on this day already exists
-    const startOfDayOcc = fromIST(new Date(toIST(nextDueDate).setUTCHours(0, 0, 0, 0)));
-    const endOfDayOcc = fromIST(new Date(toIST(nextDueDate).setUTCHours(23, 59, 59, 999)));
-
-    const existingOccurrence = await prisma.task.findFirst({
-      where: {
-        parentTaskId: baseTask.id,
-        isSubtask: false,
-        dueDate: {
-          gte: startOfDayOcc,
-          lte: endOfDayOcc
-        }
-      }
-    });
-
-    if (!existingOccurrence) {
-      // Create each occurrence individually so we can attach its own subtasks and dealers.
-      const occurrence = await prisma.task.create({
-        data: {
-          title: baseTask.title,
-          description: baseTask.description,
-          assignedToId: baseTask.assignedToId,
-          assignedById: baseTask.assignedById,
-          dueDate: new Date(nextDueDate),
-          startDate: calculatedStartDate,
-          endDate: baseTask.endDate ? new Date(baseTask.endDate) : null,
-          createdAt: baseTask.createdAt ? new Date(baseTask.createdAt) : undefined,
-          lat: baseTask.lat,
-          lng: baseTask.lng,
-          isRepeating: true,
-          repeatFrequency: baseTask.repeatFrequency,
-          repeatDays: baseTask.repeatDays,
-          repeatDates: baseTask.repeatDates,
-          skipHolidays: baseTask.skipHolidays,
-          priority: baseTask.priority,
-          points: baseTask.points === 0 ? 10 : baseTask.points,
-          parentTaskId: baseTask.id,
-          taskType: baseTask.taskType || "NORMAL",
-          projectId: baseTask.projectId || null,
-          validations: baseTask.validations ?? undefined,
-          checklist: baseTask.checklist ?? undefined,
-          geofenceLat: baseTask.geofenceLat,
-          geofenceLng: baseTask.geofenceLng,
-          geofenceRadius: baseTask.geofenceRadius,
-          reminder: baseTask.reminder,
-          attachmentUrl: baseTask.attachmentUrl,
-          attachmentName: baseTask.attachmentName,
-          templateId: baseTask.templateId || null,
-          dealers: dealerIds.length > 0 ? {
-            connect: dealerIds.map(id => ({ id }))
-          } : undefined
-        }
+    const dayKey = dayKeyIST(nextDueDate);
+    if (!existingDays.has(dayKey)) {
+      existingDays.add(dayKey);
+      pending.push({
+        dueDate: new Date(nextDueDate),
+        startDate: startDateOffset !== null ? new Date(nextDueDate.getTime() - startDateOffset) : null
       });
-
-      if (subtasks && subtasks.length > 0) {
-        await createSubtasksForOccurrence(
-          occurrence.id,
-          calculatedStartDate ?? new Date(nextDueDate),
-          new Date(nextDueDate),
-          baseTask.endDate ? new Date(baseTask.endDate) : null,
-          subtasks,
-          { id: baseTask.assignedById } as AuthUser,
-          baseTask.assignedToId,
-          baseTask.title,
-          false, // occurrences always align subtasks to the occurrence date
-          false // don't spam notifications for future occurrences
-        );
-      }
     }
 
     currentTaskState.dueDate = new Date(nextDueDate);
   }
+
+  if (pending.length === 0) return;
+
+  const occurrenceData = (occ: { dueDate: Date; startDate: Date | null }) => ({
+    title: baseTask.title,
+    description: baseTask.description,
+    assignedToId: baseTask.assignedToId,
+    assignedById: baseTask.assignedById,
+    dueDate: occ.dueDate,
+    startDate: occ.startDate,
+    endDate: baseTask.endDate ? new Date(baseTask.endDate) : null,
+    createdAt: baseTask.createdAt ? new Date(baseTask.createdAt) : undefined,
+    lat: baseTask.lat,
+    lng: baseTask.lng,
+    isRepeating: true,
+    repeatFrequency: baseTask.repeatFrequency,
+    repeatDays: baseTask.repeatDays,
+    repeatDates: baseTask.repeatDates,
+    skipHolidays: baseTask.skipHolidays,
+    priority: baseTask.priority,
+    points: baseTask.points === 0 ? 10 : baseTask.points,
+    parentTaskId: baseTask.id,
+    taskType: baseTask.taskType || "NORMAL",
+    projectId: baseTask.projectId || null,
+    validations: baseTask.validations ?? undefined,
+    checklist: baseTask.checklist ?? undefined,
+    geofenceLat: baseTask.geofenceLat,
+    geofenceLng: baseTask.geofenceLng,
+    geofenceRadius: baseTask.geofenceRadius,
+    reminder: baseTask.reminder,
+    attachmentUrl: baseTask.attachmentUrl,
+    attachmentName: baseTask.attachmentName,
+    templateId: baseTask.templateId || null
+  });
+
+  const hasRelations = dealerIds.length > 0 || subtasks.length > 0;
+
+  if (!hasRelations) {
+    // Fast path: one INSERT for the whole series.
+    await prisma.task.createMany({ data: pending.map(occurrenceData) });
+    return;
+  }
+
+  // Occurrences carrying dealers/subtasks still need per-row creates for the
+  // relation writes, but no longer re-query holidays or duplicates per day.
+  for (const occ of pending) {
+    const occurrence = await prisma.task.create({
+      data: {
+        ...occurrenceData(occ),
+        dealers: dealerIds.length > 0 ? { connect: dealerIds.map((id) => ({ id })) } : undefined
+      }
+    });
+
+    if (subtasks.length > 0) {
+      await createSubtasksForOccurrence(
+        occurrence.id,
+        occ.startDate ?? occ.dueDate,
+        occ.dueDate,
+        baseTask.endDate ? new Date(baseTask.endDate) : null,
+        subtasks,
+        { id: baseTask.assignedById } as AuthUser,
+        baseTask.assignedToId,
+        baseTask.title,
+        false, // occurrences always align subtasks to the occurrence date
+        false // don't spam notifications for future occurrences
+      );
+    }
+  }
 }
 
-async function calculateNextOccurrence(task: any) {
+
+async function calculateNextOccurrence(task: any, holidayDays?: Set<string>) {
   const originalIST = toIST(task.dueDate);
   const hours = originalIST.getUTCHours();
   const minutes = originalIST.getUTCMinutes();
@@ -1228,23 +1265,28 @@ async function calculateNextOccurrence(task: any) {
     let iterations = 0;
     while (isHoliday && iterations < 30) {
       dIST.setUTCHours(0, 0, 0, 0);
-      const startOfDay = fromIST(dIST);
-      const endOfDay = new Date(startOfDay.getTime());
-      endOfDay.setUTCHours(23, 59, 59, 999);
 
-      const holiday = await prisma.holiday.findFirst({
-        where: {
-          companyId: task.assignedTo.companyId,
-          date: {
-            gte: startOfDay,
-            lt: endOfDay
-          }
-        }
-      });
-      if (holiday) {
-        dIST.setUTCDate(dIST.getUTCDate() + 1);
+      if (holidayDays) {
+        isHoliday = holidayDays.has(dayKeyIST(fromIST(dIST)));
       } else {
-        isHoliday = false;
+        const startOfDay = fromIST(dIST);
+        const endOfDay = new Date(startOfDay.getTime());
+        endOfDay.setUTCHours(23, 59, 59, 999);
+
+        const holiday = await prisma.holiday.findFirst({
+          where: {
+            companyId: task.assignedTo.companyId,
+            date: {
+              gte: startOfDay,
+              lt: endOfDay
+            }
+          }
+        });
+        isHoliday = Boolean(holiday);
+      }
+
+      if (isHoliday) {
+        dIST.setUTCDate(dIST.getUTCDate() + 1);
       }
       iterations++;
     }

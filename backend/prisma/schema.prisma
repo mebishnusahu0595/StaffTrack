@@ -168,6 +168,11 @@ model Task {
   @@index([assignedById])
   @@index([status])
   @@index([templateId])
+  @@index([parentTaskId])
+  @@index([dueDate])
+  @@index([startDate])
+  @@index([completedAt])
+  @@index([assignedToId, dueDate])
 }
 
 model LocationLog {
