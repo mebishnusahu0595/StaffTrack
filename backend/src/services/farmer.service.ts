@@ -72,6 +72,18 @@ export async function getFarmer(companyId: string, id: string) {
 
 export async function createFarmer(companyId: string, input: FarmerInput) {
   await initFarmersTable();
+  const trimmedName = input.name.trim();
+  const trimmedCity = input.city?.trim() || null;
+
+  // Prevent duplicate farmer in company
+  const existingRows = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT * FROM farmers WHERE company_id = $1 AND LOWER(TRIM(name)) = LOWER($2) AND ($3::text IS NULL OR LOWER(TRIM(city)) = LOWER($3)) LIMIT 1`,
+    companyId, trimmedName, trimmedCity
+  );
+  if (existingRows.length > 0) {
+    return mapFarmerRow(existingRows[0]);
+  }
+
   const id = `farmer_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   const now = new Date();
 
@@ -79,7 +91,7 @@ export async function createFarmer(companyId: string, input: FarmerInput) {
     `INSERT INTO farmers (id, company_id, name, phone, village, address, city, district, state, crop, land_size, notes, assigned_user_id, assigned_user_name, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
     id, companyId,
-    input.name,
+    trimmedName,
     input.phone || null,
     input.village || null,
     input.address || null,

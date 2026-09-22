@@ -525,6 +525,7 @@ export default function FarmersPage() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              if (createMutation.isPending) return;
               createMutation.mutate(formData);
             }}
             className="space-y-4 pt-3"

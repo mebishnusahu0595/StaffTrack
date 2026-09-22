@@ -50,16 +50,32 @@ export async function createDealer(actor: AuthUser, input: CreateDealerInput) {
     throw new Error("Dealer name is required");
   }
 
+  const trimmedName = input.name.trim();
+  const trimmedCity = input.city?.trim() || null;
+
+  // Prevent duplicate dealer in the same company
+  const existing = await prisma.dealer.findFirst({
+    where: {
+      companyId: actor.companyId,
+      name: { equals: trimmedName, mode: "insensitive" },
+      city: trimmedCity ? { equals: trimmedCity, mode: "insensitive" } : undefined
+    }
+  });
+
+  if (existing) {
+    return existing;
+  }
+
   return prisma.dealer.create({
     data: {
-      name: input.name.trim(),
-      phone: input.phone || null,
-      email: input.email || null,
-      address: input.address || null,
-      city: input.city || null,
-      state: input.state || null,
-      pincode: input.pincode || null,
-      gstin: input.gstin || null,
+      name: trimmedName,
+      phone: input.phone?.trim() || null,
+      email: input.email?.trim() || null,
+      address: input.address?.trim() || null,
+      city: trimmedCity,
+      state: input.state?.trim() || null,
+      pincode: input.pincode?.trim() || null,
+      gstin: input.gstin?.trim() || null,
       companyId: actor.companyId,
       assignedUserId: input.assignedUserId || null,
       assignedUserName: input.assignedUserName || null

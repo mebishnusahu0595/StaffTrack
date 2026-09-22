@@ -470,7 +470,11 @@ export default function DealersPage() {
             </DialogClose>
           </DialogHeader>
 
-          <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(formData); }} className="space-y-4 pt-3">
+          <form onSubmit={(e) => { 
+            e.preventDefault(); 
+            if (createMutation.isPending) return;
+            createMutation.mutate(formData); 
+          }} className="space-y-4 pt-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Left Column: Core Details */}
               <div className="space-y-3">
