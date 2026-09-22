@@ -660,6 +660,62 @@ model ProjectProgressLog {
   @@index([changedBy])
 }
 
+model VanikiDealerActivity {
+  id                String   @id
+  companyId         String?  @map("company_id")
+  userId            String?  @map("user_id")
+  staffName         String   @map("staff_name")
+  staffPhone        String?  @map("staff_phone")
+  staffEmail        String?  @map("staff_email")
+  action            String
+  dealerCode        String?  @map("dealer_code")
+  fourDigitId       String?  @map("four_digit_id")
+  dealerName        String   @map("dealer_name")
+  storeName         String?  @map("store_name")
+  dealerPhone       String?  @map("dealer_phone")
+  dealerCity        String?  @map("dealer_city")
+  orderId           String?  @map("order_id")
+  invoiceNumber     String?  @map("invoice_number")
+  totalAmount       Float?   @default(0) @map("total_amount")
+  paidAmount        Float?   @default(0) @map("paid_amount")
+  outstandingAmount Float?   @default(0) @map("outstanding_amount")
+  petis             Int?     @default(0)
+  itemsCount        Int?     @default(0) @map("items_count")
+  paymentMode       String?  @map("payment_mode")
+  proofUrl          String?  @map("proof_url")
+  notes             String?
+  metadata          Json?
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@map("vaniki_dealer_activities")
+  @@index([createdAt(sort: Desc)])
+  @@index([action])
+  @@index([userId])
+}
+
+model Farmer {
+  id               String   @id
+  companyId        String   @map("company_id")
+  name             String
+  phone            String?
+  village          String?
+  address          String?
+  city             String?
+  district         String?
+  state            String?
+  crop             String?
+  landSize         String?  @map("land_size")
+  notes            String?
+  assignedUserId   String?  @map("assigned_user_id")
+  assignedUserName String?  @map("assigned_user_name")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("farmers")
+  @@index([companyId])
+  @@index([name])
+}
+
 enum UserRole {
   SUPERADMIN
   ADMIN
