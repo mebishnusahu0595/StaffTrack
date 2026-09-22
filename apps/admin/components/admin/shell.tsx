@@ -37,6 +37,8 @@ import {
   Clock,
   UploadCloud,
   Store,
+  ShoppingBag,
+  Sprout,
   Image as ImageIcon
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -71,7 +73,9 @@ const navItems: { href: string; label: string; icon: any; roles?: Role[] }[] = [
   { href: "/team", label: "Team Overview", icon: UserCheck },
   { href: "/projects", label: "Project", icon: Folder },
   { href: "/tasks", label: "Tasks", icon: ClipboardList },
+  { href: "/vaniki-orders", label: "Vaniki Dealer Orders", icon: ShoppingBag },
   { href: "/dealers", label: "Dealers", icon: Store },
+  { href: "/farmers", label: "Farmers", icon: Sprout },
   { href: "/issues", label: "Issues", icon: AlertTriangle },
   { href: "/forms", label: "Forms", icon: FileSpreadsheet },
   { href: "/company-files", label: "Uploads", icon: UploadCloud },

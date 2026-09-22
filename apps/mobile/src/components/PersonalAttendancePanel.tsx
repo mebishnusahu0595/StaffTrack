@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Image, Linking, Platform, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Linking, Platform, StyleSheet, TouchableOpacity, View } from "react-native";
 import { Button, Card, Text, TouchableRipple, Icon, Dialog, Portal, TextInput } from "react-native-paper";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
@@ -937,15 +937,29 @@ export function PersonalAttendancePanel({
         <Dialog visible={odoModalVisible} dismissable={false} style={styles.dialog}>
           <Dialog.Title style={{ fontWeight: "800", color: "#24312D" }}>{odoTitle}</Dialog.Title>
           <Dialog.Content style={{ gap: 10 }}>
-            <Text style={{ fontSize: 13, color: "#66736F" }}>Please enter the vehicle odometer reading in KM.</Text>
+            <Text style={{ fontSize: 13, color: "#66736F" }}>
+              {odoDetectedReading !== null 
+                ? "✨ Auto-detected from photo! Verify reading below and tap Submit." 
+                : "Please enter the vehicle odometer reading in KM."}
+            </Text>
             
             {odoDetectedReading !== null ? (
-              <View style={{ backgroundColor: "#F0FDF4", borderColor: "#86EFAC", borderWidth: 1, borderRadius: 8, padding: 10, flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <AppIcon name="magnify-scan" size={20} color="#166534" />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#166534" }}>AI/OCR DETECTED READING</Text>
-                  <Text style={{ fontSize: 14, fontWeight: "800", color: "#14532D", marginTop: 1 }}>{odoDetectedReading} KM</Text>
+              <View style={{ backgroundColor: "#F0FDF4", borderColor: "#86EFAC", borderWidth: 1, borderRadius: 8, padding: 10, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+                  <AppIcon name="magnify-scan" size={20} color="#166534" />
+                  <View>
+                    <Text style={{ fontSize: 11, fontWeight: "700", color: "#166534" }}>AI AUTO-DETECTED</Text>
+                    <Text style={{ fontSize: 15, fontWeight: "800", color: "#14532D", marginTop: 1 }}>{odoDetectedReading} KM</Text>
+                  </View>
                 </View>
+                {odoValue.trim() !== String(odoDetectedReading) ? (
+                  <TouchableOpacity 
+                    onPress={() => setOdoValue(String(odoDetectedReading))}
+                    style={{ backgroundColor: "#166534", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 }}
+                  >
+                    <Text style={{ color: "#FFFFFF", fontSize: 11, fontWeight: "700" }}>Reset to AI</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             ) : null}
 
@@ -968,7 +982,7 @@ export function PersonalAttendancePanel({
 
             {odoDetectedReading !== null && odoValue.trim() !== "" && !isNaN(Number(odoValue)) ? (
               Number(odoValue.trim()) === odoDetectedReading ? (
-                <Text style={{ fontSize: 11, color: "#16A34A", fontWeight: "700" }}>✓ Input matches AI photo reading</Text>
+                <Text style={{ fontSize: 11, color: "#16A34A", fontWeight: "700" }}>✓ Input matches AI photo reading ({odoDetectedReading} KM)</Text>
               ) : (
                 <View style={{ backgroundColor: "#FEF2F2", borderColor: "#FCA5A5", borderWidth: 1, borderRadius: 8, padding: 8 }}>
                   <Text style={{ fontSize: 11, color: "#991B1B", fontWeight: "600" }}>

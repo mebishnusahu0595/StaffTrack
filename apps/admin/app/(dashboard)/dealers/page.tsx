@@ -12,10 +12,25 @@ import {
   MapPin, 
   Building2, 
   Loader2, 
-  X
+  X,
+  Clock,
+  User,
+  CheckCircle2,
+  ExternalLink,
+  Calendar,
+  ShoppingBag,
+  FileText
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchDealers, createDealer, updateDealer, deleteDealer } from "@/lib/api";
+import { 
+  fetchDealers, 
+  createDealer, 
+  updateDealer, 
+  deleteDealer,
+  fetchVanikiActivities,
+  VanikiActivity
+} from "@/lib/api";
+import dayjs from "dayjs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +50,9 @@ export default function DealersPage() {
   // Modals state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [selectedDealer, setSelectedDealer] = useState<any>(null);
+  const [selectedDealerForHistory, setSelectedDealerForHistory] = useState<any>(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -52,6 +69,12 @@ export default function DealersPage() {
   const { data: dealers = [], isLoading } = useQuery({
     queryKey: ["dealers"],
     queryFn: fetchDealers
+  });
+
+  const { data: historyData, isLoading: isLoadingHistory } = useQuery({
+    queryKey: ["dealer-history", selectedDealerForHistory?.name],
+    queryFn: () => fetchVanikiActivities({ search: selectedDealerForHistory?.name }),
+    enabled: !!selectedDealerForHistory && isHistoryOpen
   });
 
   const createMutation = useMutation({
@@ -201,9 +224,16 @@ export default function DealersPage() {
                       {dealer.name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <h3 className="font-extrabold text-slate-800 text-base leading-tight group-hover:text-blue-600 transition-colors">
+                      <button
+                        onClick={() => {
+                          setSelectedDealerForHistory(dealer);
+                          setIsHistoryOpen(true);
+                        }}
+                        className="text-left font-extrabold text-slate-800 text-base leading-tight group-hover:text-blue-600 transition-colors hover:underline"
+                        title="Click to view staff visit history"
+                      >
                         {dealer.name}
-                      </h3>
+                      </button>
                       {dealer.city && (
                         <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1 mt-0.5">
                           <MapPin className="h-3 w-3 text-slate-400" /> {dealer.city}{dealer.state ? `, ${dealer.state}` : ""}
@@ -261,6 +291,21 @@ export default function DealersPage() {
                       </Badge>
                     </div>
                   )}
+                </div>
+
+                {/* Visit History Action */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setSelectedDealerForHistory(dealer);
+                      setIsHistoryOpen(true);
+                    }}
+                    className="h-8 text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg px-2.5 flex items-center gap-1.5"
+                  >
+                    <Clock className="h-3.5 w-3.5" /> Staff Visit History
+                  </Button>
+                  <span className="text-[10px] font-semibold text-slate-400">Click name for logs</span>
                 </div>
               </div>
             </div>
@@ -493,6 +538,157 @@ export default function DealersPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Staff Visit History Dialog */}
+      <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto p-6 rounded-3xl bg-white border-none shadow-2xl">
+          <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                <Store className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg font-bold text-slate-800">
+                  {selectedDealerForHistory?.name || "Dealer"} - Staff Visit History
+                </DialogTitle>
+                <p className="text-xs text-slate-400 font-semibold flex items-center gap-1.5 mt-0.5">
+                  <MapPin className="h-3 w-3 text-slate-400" />
+                  {[selectedDealerForHistory?.city, selectedDealerForHistory?.state].filter(Boolean).join(", ") || "Location"}
+                  {selectedDealerForHistory?.phone && ` • Phone: ${selectedDealerForHistory.phone}`}
+                </p>
+              </div>
+            </div>
+            <DialogClose className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100">
+              <X className="h-4 w-4" />
+            </DialogClose>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-3">
+            {isLoadingHistory ? (
+              <div className="py-12 flex flex-col items-center justify-center space-y-2">
+                <Loader2 className="h-7 w-7 text-blue-600 animate-spin" />
+                <p className="text-xs font-bold text-slate-500">Loading visit logs...</p>
+              </div>
+            ) : !historyData?.activities?.length ? (
+              <div className="bg-slate-50 rounded-2xl p-8 text-center border border-slate-150 space-y-2">
+                <div className="h-12 w-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mx-auto">
+                  <Clock className="h-6 w-6" />
+                </div>
+                <h4 className="text-sm font-bold text-slate-800">No Staff Visits Recorded Yet</h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  No staff member has checked in or placed orders for this dealer yet. Activities appear here automatically when field staff search this dealer or place wholesale orders in the mobile app.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Total Logs: {historyData.activities.length}
+                  </span>
+                  <span className="text-xs font-bold text-emerald-600">
+                    Orders: {historyData.activities.filter((a) => a.action === "ORDER_PLACED").length}
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {historyData.activities.map((act) => (
+                    <div
+                      key={act.id}
+                      className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-3 hover:bg-white hover:shadow-sm transition-all"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="h-9 w-9 rounded-xl bg-blue-600 text-white font-bold text-xs flex items-center justify-center shadow-sm">
+                            {act.staffName?.charAt(0)?.toUpperCase() || "S"}
+                          </div>
+                          <div>
+                            <p className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                              {act.staffName}
+                              {act.staffPhone && (
+                                <span className="text-[11px] font-normal text-slate-400">
+                                  ({act.staffPhone})
+                                </span>
+                              )}
+                            </p>
+                            <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1 mt-0.5">
+                              <Calendar className="h-3 w-3" />
+                              {dayjs(act.createdAt).format("DD MMM YYYY, hh:mm A")}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          {act.action === "ORDER_PLACED" ? (
+                            <Badge className="bg-emerald-500 text-white font-bold text-[10px] px-2 py-0.5">
+                              🛍️ Order Placed
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-bold text-[10px] px-2 py-0.5">
+                              📍 Dealer Visit / Lookup
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      {act.action === "ORDER_PLACED" && (
+                        <div className="bg-white p-3 rounded-xl border border-slate-150 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                          <div>
+                            <span className="text-slate-400 text-[10px] font-bold block">Total Amount</span>
+                            <span className="font-bold text-slate-800">
+                              ₹{(act.totalAmount || 0).toLocaleString("en-IN")}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 text-[10px] font-bold block">Paid Amount</span>
+                            <span className="font-bold text-emerald-600">
+                              ₹{(act.paidAmount || 0).toLocaleString("en-IN")}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 text-[10px] font-bold block">Outstanding</span>
+                            <span className="font-bold text-amber-600">
+                              ₹{(act.outstandingAmount || 0).toLocaleString("en-IN")}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 text-[10px] font-bold block">Petis / Qty</span>
+                            <span className="font-bold text-slate-800">
+                              {act.petis || 0} Petis ({act.itemsCount || 0} items)
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {act.notes && (
+                        <div className="bg-white/80 p-2.5 rounded-xl border border-slate-150 text-xs">
+                          <span className="text-slate-400 text-[10px] font-bold block">Meeting / Order Notes:</span>
+                          <p className="text-slate-700 italic mt-0.5">&quot;{act.notes}&quot;</p>
+                        </div>
+                      )}
+
+                      {/* Attachments / Document Links */}
+                      {(act.proofUrl || act.metadata?.documentUrl) && (
+                        <div className="flex items-center gap-2 pt-1">
+                          <a
+                            href={act.metadata?.documentUrl || act.proofUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                            View Attached Bill / PO / Proof
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

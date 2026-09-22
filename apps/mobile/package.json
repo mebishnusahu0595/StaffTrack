@@ -8,7 +8,9 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "build:apk": "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 NODE_OPTIONS='--max-old-space-size=2048' eas build --platform android --profile production-apk --local",
     "lint": "expo lint",
+
     "test": "jest",
     "test:watch": "jest --watch"
   },

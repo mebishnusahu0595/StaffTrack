@@ -9,7 +9,8 @@ export const checkInBodySchema = z.object({
   punchType: z.nativeEnum(PunchType),
   photoUrl: z.string().optional(),
   startOdometerPhotoUrl: z.string().optional(),
-  startOdometer: z.coerce.number().optional()
+  startOdometer: z.coerce.number().optional(),
+  checkInAiAnalysis: z.any().optional()
 });
 
 export const checkOutBodySchema = z.object({
@@ -17,7 +18,8 @@ export const checkOutBodySchema = z.object({
   lng: z.number().min(-180).max(180),
   photoUrl: z.string().optional(),
   endOdometerPhotoUrl: z.string().optional(),
-  endOdometer: z.coerce.number().optional()
+  endOdometer: z.coerce.number().optional(),
+  checkOutAiAnalysis: z.any().optional()
 });
 
 export const attendanceUserParamSchema = userIdParamSchema;

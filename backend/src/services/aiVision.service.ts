@@ -202,7 +202,7 @@ Return JSON ONLY (no markdown formatting):
       ],
       generationConfig: {
         temperature: 0.0,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 8192,
         responseMimeType: "application/json"
       }
     });
@@ -268,15 +268,19 @@ export async function analyzeOdometerPhoto(imageInput: string): Promise<Odometer
       return { ...cached.result, cached: true };
     }
 
-    const prompt = `Analyze this vehicle dashboard/meter photo. Determine:
+    const prompt = `You are an expert AI vehicle odometer OCR system.
+Analyze this vehicle dashboard/meter photo:
 1. Is this a real vehicle odometer display? (isOdometer: boolean)
 2. Is the numerical reading blurry, cut off, or illegible? (isBlurry: boolean)
 3. Is this a photo taken off another phone screen or printout? (isScreenOrPrintout: boolean)
-4. Extract the exact numerical odometer reading in KM as an integer/float (ignore decimals or trip meters, only main total KM odometer). If unreadable, set null. (detectedReading: number | null)
+4. Extract the exact numerical odometer reading in KM as a number.
+   - For analog/mechanical roll drums: usually 5 or 6 digits. In standard 2-wheelers and vehicles, the rightmost drum is tenths of a kilometer (0.1 KM, often rotating/sub-km or different color). Extract the main total whole kilometers integer reading (e.g. if the meter shows 3 7 2 8 9 and rolling tenth digit, the total KM is 37289).
+   - For digital displays: extract the main total ODO reading in KM (ignore TRIP meters).
+   - If unreadable, set null. (detectedReading: number | null)
 5. Confidence score between 0.0 and 1.0 (confidence: number)
 6. Optional warning or issue description (warningMessage: string | null)
 
-Return ONLY valid JSON (no explanation):
+Return JSON ONLY:
 {"isOdometer": boolean, "isBlurry": boolean, "isScreenOrPrintout": boolean, "detectedReading": number | null, "confidence": number, "warningMessage": string | null}`;
 
     const data = await callGeminiWithRetry({
@@ -290,7 +294,7 @@ Return ONLY valid JSON (no explanation):
       ],
       generationConfig: {
         temperature: 0.0,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 8192,
         responseMimeType: "application/json"
       }
     });
@@ -303,14 +307,22 @@ Return ONLY valid JSON (no explanation):
       return fallbackResult;
     }
 
-    const parsed = parseGeminiJson<OdometerAiResult>(candidateText);
+    const parsed = parseGeminiJson<any>(candidateText);
     if (!parsed) return fallbackResult;
+
+    let reading: number | null = null;
+    if (typeof parsed.detectedReading === "number" && !isNaN(parsed.detectedReading)) {
+      reading = Math.round(parsed.detectedReading);
+    } else if (typeof parsed.detectedReading === "string") {
+      const num = parseFloat(parsed.detectedReading.replace(/[^0-9.]/g, ""));
+      if (!isNaN(num)) reading = Math.round(num);
+    }
 
     const finalResult: OdometerAiResult = {
       isOdometer: Boolean(parsed.isOdometer),
       isBlurry: Boolean(parsed.isBlurry),
       isScreenOrPrintout: Boolean(parsed.isScreenOrPrintout),
-      detectedReading: typeof parsed.detectedReading === "number" ? parsed.detectedReading : null,
+      detectedReading: reading,
       confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.9,
       warningMessage: parsed.warningMessage || (parsed.isBlurry ? "Photo is blurry or unreadable" : !parsed.isOdometer ? "Not a valid vehicle odometer" : parsed.isScreenOrPrintout ? "Photo of phone screen detected" : null),
       networkFallback: false

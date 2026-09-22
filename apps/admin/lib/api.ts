@@ -931,3 +931,221 @@ export async function fetchGalleryMedia(params?: GalleryParams): Promise<Gallery
   const response = await api.get<GalleryResponse>("/gallery", { params });
   return response.data;
 }
+
+// ─── Vaniki Crop Dealer Management & Orders ──────────────────────────────────
+export interface VanikiDealerLookupResponse {
+  dealer: {
+    id: string;
+    fourDigitId: string;
+    dealerCode: string;
+    name: string;
+    cleanName: string;
+    mobile: string;
+    email?: string;
+    storeName?: string;
+    storeLocation?: string;
+    gstNumber?: string;
+    address?: {
+      street?: string;
+      city?: string;
+      state?: string;
+      pincode?: string;
+    };
+  };
+  credit?: {
+    creditLimit: number;
+    totalOutstanding: number;
+    availableCredit: number;
+    totalInvoiced: number;
+    totalPaid: number;
+    unpaidInvoiceCount: number;
+  };
+  ledgerSummary?: {
+    totalInvoiced: number;
+    totalPaid: number;
+    totalOutstanding: number;
+    unpaidInvoiceCount: number;
+  };
+  invoices?: Array<{
+    _id?: string;
+    id?: string;
+    invoiceNumber: string;
+    invoiceDate: string;
+    totalAmount: number;
+    paidAmount?: number;
+    balanceAmount?: number;
+    outstandingAmount?: number;
+    paymentStatus?: string;
+    status?: string;
+    dueDate?: string;
+    items?: Array<{
+      productName: string;
+      qty: number;
+      price: number;
+      total: number;
+    }>;
+  }>;
+  recentRetailOrders?: any[];
+  productRequests?: any[];
+}
+
+export interface VanikiProductVariant {
+  id: string;
+  label: string;
+  price?: number;
+  dealerPrice: number;
+  mrp?: number;
+  stock?: number;
+}
+
+export interface VanikiProduct {
+  id: string;
+  name: string;
+  slug?: string;
+  brand: string;
+  category: string;
+  image: string;
+  petiSize: number;
+  petiUnit: string;
+  packSize: string;
+  mrp: number;
+  dealerPrice: number;
+  petiPrice: number;
+  taxRate?: number;
+  hsnCode?: string;
+  stock: number;
+  variants: VanikiProductVariant[];
+}
+
+export async function lookupVanikiDealer(codeOrMobile: string): Promise<VanikiDealerLookupResponse> {
+  const response = await api.get<{ success: boolean; data: VanikiDealerLookupResponse }>(
+    `/vaniki-dealers/lookup/${encodeURIComponent(codeOrMobile.trim())}`
+  );
+  return response.data.data;
+}
+
+export async function fetchVanikiProducts(): Promise<VanikiProduct[]> {
+  const response = await api.get<{ success: boolean; data: VanikiProduct[] }>(
+    "/vaniki-dealers/products"
+  );
+  return response.data.data;
+}
+
+export async function uploadVanikiPaymentProof(file: File): Promise<{ success: boolean; fileUrl: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await api.post<{ success: boolean; fileUrl: string; url?: string }>(
+    "/vaniki-dealers/upload",
+    formData,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+    }
+  );
+  return {
+    success: response.data.success,
+    fileUrl: response.data.fileUrl || response.data.url || "",
+  };
+}
+
+export async function placeVanikiDealerOrder(dealerCode: string, payload: any): Promise<any> {
+  const response = await api.post<{ success: boolean; data: any }>(
+    `/vaniki-dealers/orders/${encodeURIComponent(dealerCode.trim())}`,
+    payload
+  );
+  return response.data.data;
+}
+
+export interface VanikiActivity {
+  id: string;
+  companyId?: string;
+  userId?: string;
+  staffName: string;
+  staffPhone?: string;
+  staffEmail?: string;
+  action: "DEALER_LOOKUP" | "ORDER_PLACED";
+  dealerCode?: string;
+  fourDigitId?: string;
+  dealerName: string;
+  storeName?: string;
+  dealerPhone?: string;
+  dealerCity?: string;
+  orderId?: string;
+  invoiceNumber?: string;
+  totalAmount: number;
+  paidAmount: number;
+  outstandingAmount: number;
+  petis: number;
+  itemsCount: number;
+  paymentMode?: string;
+  proofUrl?: string;
+  notes?: string;
+  metadata?: any;
+  createdAt: string;
+}
+
+export interface VanikiActivitiesResponse {
+  activities: VanikiActivity[];
+  total: number;
+  stats: {
+    totalOrders: number;
+    totalOrderValue: number;
+    totalPaid: number;
+    totalOutstanding: number;
+    totalLookups: number;
+    activeStaffCount: number;
+    todayActivitiesCount: number;
+  };
+}
+
+export async function fetchVanikiActivities(params?: {
+  action?: string;
+  search?: string;
+  staffId?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<VanikiActivitiesResponse> {
+  const response = await api.get<{ success: boolean; data: VanikiActivitiesResponse }>(
+    "/vaniki-dealers/activities",
+    { params }
+  );
+  return response.data.data;
+}
+
+export interface Farmer {
+  id: string;
+  companyId: string;
+  name: string;
+  phone?: string;
+  village?: string;
+  address?: string;
+  city?: string;
+  district?: string;
+  state?: string;
+  crop?: string;
+  landSize?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function fetchFarmers(): Promise<Farmer[]> {
+  const response = await api.get<{ success: boolean; data: Farmer[] }>("/farmers");
+  return response.data.data;
+}
+
+export async function createFarmer(data: Partial<Farmer>): Promise<Farmer> {
+  const response = await api.post<{ success: boolean; data: Farmer }>("/farmers", data);
+  return response.data.data;
+}
+
+export async function updateFarmer(id: string, data: Partial<Farmer>): Promise<Farmer> {
+  const response = await api.patch<{ success: boolean; data: Farmer }>(`/farmers/${id}`, data);
+  return response.data.data;
+}
+
+export async function deleteFarmer(id: string): Promise<void> {
+  await api.delete(`/farmers/${id}`);
+}
+
+
+

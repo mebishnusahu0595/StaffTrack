@@ -7,7 +7,7 @@ import { ensureCanAccessUser, ensureManagerCanUseEmployee, getManagerGroupId } f
 import { createDayEndReport } from "./report.service";
 import * as notificationService from "./notification.service";
 import { getIO, SOCKET_EVENTS } from "../lib/socket";
-import { analyzeFacePhoto } from "./aiVision.service";
+import { analyzeFacePhoto, analyzeOdometerPhoto } from "./aiVision.service";
 
 interface CheckInInput {
   lat: number;
@@ -118,12 +118,29 @@ export async function checkIn(actor: AuthUser, input: CheckInInput) {
         badRequest("AI Face Verification Failed: Photo of another screen or printout detected. Live camera selfie is required.");
       }
       input.checkInAiAnalysis = {
-        faceAi,
-        ...(input.checkInAiAnalysis || {})
+        ...(input.checkInAiAnalysis || {}),
+        faceAi
       };
     } catch (err: any) {
       if (err?.statusCode === 400) throw err;
       console.warn("[Attendance Service] AI Face verification error during check-in:", err?.message || err);
+    }
+  }
+
+  // Server-Side Odometer AI Analysis
+  if (input.startOdometerPhotoUrl) {
+    try {
+      let odometerAi = input.checkInAiAnalysis?.odometerAi;
+      if (!odometerAi || odometerAi.detectedReading == null) {
+        odometerAi = await analyzeOdometerPhoto(input.startOdometerPhotoUrl);
+      }
+      input.checkInAiAnalysis = {
+        ...(input.checkInAiAnalysis || {}),
+        odometerAi,
+        enteredOdometer: input.startOdometer ?? null
+      };
+    } catch (err: any) {
+      console.warn("[Attendance Service] AI Odometer verification error during check-in:", err?.message || err);
     }
   }
 
@@ -396,12 +413,29 @@ export async function checkOut(actor: AuthUser, input: CheckOutInput) {
         badRequest("AI Face Verification Failed: Photo of another screen or printout detected. Live camera selfie is required.");
       }
       input.checkOutAiAnalysis = {
-        faceAi,
-        ...(input.checkOutAiAnalysis || {})
+        ...(input.checkOutAiAnalysis || {}),
+        faceAi
       };
     } catch (err: any) {
       if (err?.statusCode === 400) throw err;
       console.warn("[Attendance Service] AI Face verification error during checkout:", err?.message || err);
+    }
+  }
+
+  // Server-Side Odometer AI Analysis on checkout photo
+  if (input.endOdometerPhotoUrl) {
+    try {
+      let odometerAi = input.checkOutAiAnalysis?.odometerAi;
+      if (!odometerAi || odometerAi.detectedReading == null) {
+        odometerAi = await analyzeOdometerPhoto(input.endOdometerPhotoUrl);
+      }
+      input.checkOutAiAnalysis = {
+        ...(input.checkOutAiAnalysis || {}),
+        odometerAi,
+        enteredOdometer: input.endOdometer ?? null
+      };
+    } catch (err: any) {
+      console.warn("[Attendance Service] AI Odometer verification error during checkout:", err?.message || err);
     }
   }
 

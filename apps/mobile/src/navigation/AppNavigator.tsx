@@ -28,6 +28,7 @@ import { LeaveRequestScreen } from "../screens/LeaveRequestScreen";
 import { SalarySlipScreen } from "../screens/SalarySlipScreen";
 import { ProjectsScreen } from "../screens/ProjectsScreen";
 import { FilesScreen } from "../screens/FilesScreen";
+import { VanikiDealerOrdersScreen } from "../screens/VanikiDealerOrdersScreen";
 
 // Manager Screens
 import { ManagerHomeScreen } from "../screens/manager/ManagerHomeScreen";
@@ -45,6 +46,7 @@ export type RootStackParamList = {
 
 export type MainDrawerParamList = {
   Home: undefined;
+  VanikiDealerOrders: undefined;
   Files: undefined;
   Projects: undefined;
   Tasks: undefined;
@@ -67,6 +69,7 @@ export type MainDrawerParamList = {
 
 export type ManagerDrawerParamList = {
   ManagerHome: undefined;
+  VanikiDealerOrders: undefined;
   ManagerTeam: undefined;
   ManagerAttendance: undefined;
   Files: undefined;
@@ -216,6 +219,9 @@ function CustomDrawerContent(props: any) {
 }
 
 function MainDrawer() {
+  const { user } = useAuth();
+  const isSalesStaff = !!user?.group?.name?.toLowerCase().includes("sales");
+
   return (
     <Drawer.Navigator
       useLegacyImplementation={false}
@@ -268,6 +274,16 @@ function MainDrawer() {
           drawerIcon: ({ color, size }) => <AppIcon color={color} name="clipboard-list" size={size} /> 
         }} 
       />
+      {isSalesStaff && (
+        <Drawer.Screen 
+          component={VanikiDealerOrdersScreen} 
+          name="VanikiDealerOrders" 
+          options={{ 
+            title: "Vaniki Dealer Orders",
+            drawerIcon: ({ color, size }) => <AppIcon color={color} name="coffee" size={size} /> 
+          }} 
+        />
+      )}
       <Drawer.Screen 
         component={FormsScreen} 
         name="Forms" 
@@ -342,6 +358,9 @@ function MainDrawer() {
 const ManagerDrawerNavigator = createDrawerNavigator<ManagerDrawerParamList>();
 
 function ManagerDrawer() {
+  const { user } = useAuth();
+  const isSalesStaff = !!user?.group?.name?.toLowerCase().includes("sales");
+
   return (
     <ManagerDrawerNavigator.Navigator
       useLegacyImplementation={false}
@@ -460,6 +479,16 @@ function ManagerDrawer() {
           drawerIcon: ({ color, size }) => <AppIcon color={color} name="clipboard-list" size={size} /> 
         }} 
       />
+      {isSalesStaff && (
+        <ManagerDrawerNavigator.Screen 
+          component={VanikiDealerOrdersScreen} 
+          name="VanikiDealerOrders" 
+          options={{ 
+            title: "Vaniki Dealer Orders",
+            drawerIcon: ({ color, size }) => <AppIcon color={color} name="coffee" size={size} /> 
+          }} 
+        />
+      )}
       <ManagerDrawerNavigator.Screen
         component={MonthlyReportScreen}
         name="MonthlyReport"

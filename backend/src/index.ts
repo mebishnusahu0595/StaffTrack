@@ -30,6 +30,8 @@ import dealerRoutes from "./routes/dealer.routes";
 import dailyAllowanceRoutes from "./routes/dailyAllowance.routes";
 import aiAssistantRoutes from "./routes/aiAssistant.routes";
 import galleryRoutes from "./routes/gallery.routes";
+import vanikiDealerRoutes from "./routes/vaniki-dealer.routes";
+import farmerRoutes from "./routes/farmer.routes";
 import path from "path";
 import { initSocket } from "./lib/socket";
 import { corsOrigin } from "./lib/cors";
@@ -149,6 +151,8 @@ app.use("/api/documents", documentRoutes);
 app.use("/api/dealers", dealerRoutes);
 app.use("/api/daily-allowance", dailyAllowanceRoutes);
 app.use("/api/ai", aiAssistantRoutes);
+app.use("/api/vaniki-dealers", vanikiDealerRoutes);
+app.use("/api/farmers", farmerRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({

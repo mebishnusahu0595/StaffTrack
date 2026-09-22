@@ -2,9 +2,44 @@ import type { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { sendSuccess } from "../lib/response";
 
+// Core hardcoded groups that must always exist for every company
+const CORE_GROUPS = [
+  { name: "Sales", baseSalary: 0 },
+  { name: "Field Assistant", baseSalary: 0 },
+];
+
+/**
+ * Ensures the two core groups ("Sales" and "Field Assistant") exist for the given company.
+ * Runs as a fast upsert check on every listGroups call.
+ */
+async function ensureCoreGroups(companyId: string): Promise<void> {
+  const existing = await prisma.group.findMany({
+    where: { companyId },
+    select: { name: true },
+  });
+  const existingNames = new Set(existing.map((g) => g.name.toLowerCase()));
+
+  for (const core of CORE_GROUPS) {
+    if (!existingNames.has(core.name.toLowerCase())) {
+      await prisma.group.create({
+        data: {
+          name: core.name,
+          baseSalary: core.baseSalary,
+          companyId,
+        },
+      });
+    }
+  }
+}
+
 export async function listGroups(req: Request, res: Response) {
+  const companyId = req.user!.companyId;
+
+  // Auto-seed core groups if missing
+  await ensureCoreGroups(companyId);
+
   const groups = await prisma.group.findMany({
-    where: { companyId: req.user!.companyId },
+    where: { companyId },
     include: {
       members: {
         select: {
@@ -73,6 +108,22 @@ export async function updateGroup(req: Request, res: Response) {
 
 export async function deleteGroup(req: Request, res: Response) {
   const { id } = req.params;
+
+  // Prevent deletion of core groups
+  const group = await prisma.group.findUnique({ where: { id } });
+  if (group) {
+    const isCoreGroup = CORE_GROUPS.some(
+      (c) => c.name.toLowerCase() === group.name.toLowerCase()
+    );
+    if (isCoreGroup) {
+      res.status(400).json({
+        success: false,
+        message: `Cannot delete core group "${group.name}". This is a system-required department.`,
+      });
+      return;
+    }
+  }
+
   await prisma.group.delete({
     where: { id, companyId: req.user!.companyId }
   });

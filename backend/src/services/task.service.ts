@@ -171,7 +171,7 @@ export interface ListTasksFilter {
     where,
     include: taskInclude,
     orderBy: { createdAt: "desc" },
-    ...(options.limit ? { take: options.limit } : {})
+    take: options.limit ? options.limit : 3000
   });
 
   // Deduplicate recurring series occurrences for mobile employees so each recurring series only shows one task for today
