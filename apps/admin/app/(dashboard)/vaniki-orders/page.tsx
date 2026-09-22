@@ -784,102 +784,125 @@ export default function VanikiOrdersMonitoringPage() {
 
       {/* ─── Detail Modal (Itemized Order or Lookup Details) ────────────────── */}
       <Dialog open={!!selectedActivity} onOpenChange={(open) => !open && setSelectedActivity(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-card border shadow-2xl">
           {selectedActivity && (
-            <div className="space-y-4">
+            <div className="space-y-5">
               <DialogHeader>
                 <div className="flex items-center gap-2 flex-wrap">
                   {selectedActivity.action === "ORDER_PLACED" ? (
-                    <Badge className="bg-emerald-600 text-white font-semibold text-xs">
+                    <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1 rounded-lg">
                       Wholesale Order Placed
                     </Badge>
                   ) : (
-                    <Badge className="bg-blue-600 text-white font-semibold text-xs">
+                    <Badge className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1 rounded-lg">
                       Dealer Lookup / Shop Visit
                     </Badge>
                   )}
                   {selectedActivity.invoiceNumber && (
-                    <Badge variant="outline" className="font-mono text-xs">
+                    <Badge variant="outline" className="font-mono text-xs font-bold border-emerald-500/40 text-emerald-700 bg-emerald-50/50 dark:bg-emerald-950/30 px-2.5 py-1 rounded-lg">
                       #{selectedActivity.invoiceNumber}
                     </Badge>
                   )}
-                  <span className="text-xs text-muted-foreground ml-auto">
+                  {/* Payment Mode Badge in Header */}
+                  {selectedActivity.action === "ORDER_PLACED" && (
+                    <Badge className="bg-indigo-600/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 font-bold text-xs uppercase px-2.5 py-1 rounded-lg">
+                      💳 {selectedActivity.paymentMode || (selectedActivity.metadata as any)?.paymentMethod || "CASH"}
+                    </Badge>
+                  )}
+                  <span className="text-xs text-muted-foreground ml-auto font-medium">
                     {formatISTDateTime(selectedActivity.createdAt)}
                   </span>
                 </div>
-                <DialogTitle className="text-xl font-bold mt-1 text-foreground">
+                <DialogTitle className="text-2xl font-black mt-2 text-foreground tracking-tight">
                   {selectedActivity.storeName || selectedActivity.dealerName}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Action taken by <strong>{selectedActivity.staffName}</strong> ({selectedActivity.staffPhone || "Staff"})
+                  Order placed / action registered by <strong className="text-foreground">{selectedActivity.staffName}</strong> ({selectedActivity.staffPhone || "Field Staff"})
                 </DialogDescription>
               </DialogHeader>
 
-              {/* Dealer Profile Card */}
-              <div className="p-3 bg-muted/40 rounded-xl border border-border/40 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              {/* Dealer Profile Information */}
+              <div className="p-4 bg-muted/40 rounded-2xl border border-border/50 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                 <div>
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase block">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
                     Dealer 4-Digit ID
                   </span>
-                  <span className="font-mono font-bold text-foreground">
+                  <span className="font-mono font-black text-sm text-foreground">
                     #{selectedActivity.fourDigitId || "N/A"}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase block">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
                     Dealer Code
                   </span>
-                  <span className="font-mono font-semibold text-foreground">
+                  <span className="font-mono font-bold text-sm text-foreground">
                     {selectedActivity.dealerCode || "N/A"}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase block">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
                     Dealer Mobile
                   </span>
-                  <span className="font-mono text-foreground">
+                  <span className="font-mono font-bold text-sm text-foreground">
                     {selectedActivity.dealerPhone || "N/A"}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase block">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
                     City / Location
                   </span>
-                  <span className="text-foreground truncate">
+                  <span className="text-foreground font-semibold text-sm truncate block">
                     {selectedActivity.dealerCity || "N/A"}
                   </span>
                 </div>
               </div>
 
-              {/* Financial Snapshot */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="p-3 bg-secondary/40 rounded-xl border border-border/40">
-                  <span className="text-[10px] uppercase font-semibold text-muted-foreground block">
+              {/* Financial Snapshot with Prominent Payment Method */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3.5 bg-secondary/50 rounded-2xl border border-border/50">
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground block tracking-wider">
                     {selectedActivity.action === "ORDER_PLACED" ? "Grand Total" : "Credit Limit"}
                   </span>
-                  <span className="text-base font-bold font-mono text-foreground">
+                  <span className="text-lg font-black font-mono text-foreground">
                     ₹{selectedActivity.totalAmount.toLocaleString("en-IN")}
                   </span>
                 </div>
-                <div className="p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
-                  <span className="text-[10px] uppercase font-semibold text-emerald-700 dark:text-emerald-300 block">
+                <div className="p-3.5 bg-emerald-500/10 rounded-2xl border border-emerald-500/30">
+                  <span className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300 block tracking-wider">
                     {selectedActivity.action === "ORDER_PLACED" ? "Paid Amount" : "Total Paid"}
                   </span>
-                  <span className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                  <span className="text-lg font-black font-mono text-emerald-600 dark:text-emerald-400">
                     ₹{selectedActivity.paidAmount.toLocaleString("en-IN")}
                   </span>
                 </div>
-                <div className={`p-3 rounded-xl border ${
+                <div className={`p-3.5 rounded-2xl border ${
                   selectedActivity.outstandingAmount > 0
-                    ? "bg-rose-500/10 border-rose-500/20 text-rose-600"
-                    : "bg-muted/40 border-border/40 text-muted-foreground"
+                    ? "bg-rose-500/10 border-rose-500/30 text-rose-600"
+                    : "bg-muted/50 border-border/50 text-muted-foreground"
                 }`}>
-                  <span className="text-[10px] uppercase font-semibold block">
+                  <span className="text-[10px] uppercase font-bold block tracking-wider">
                     {selectedActivity.action === "ORDER_PLACED" ? "Balance Udhaar" : "Current Udhaar"}
                   </span>
-                  <span className="text-base font-bold font-mono">
+                  <span className="text-lg font-black font-mono">
                     ₹{selectedActivity.outstandingAmount.toLocaleString("en-IN")}
                   </span>
+                </div>
+                {/* 4th Column: Prominent Payment Method */}
+                <div className="p-3.5 bg-indigo-500/10 rounded-2xl border border-indigo-500/30">
+                  <span className="text-[10px] uppercase font-bold text-indigo-700 dark:text-indigo-300 block tracking-wider">
+                    Payment Method
+                  </span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <CreditCard className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span className="text-base font-black uppercase text-indigo-700 dark:text-indigo-300 truncate">
+                      {selectedActivity.paymentMode || (selectedActivity.metadata as any)?.paymentMethod || "CASH"}
+                    </span>
+                  </div>
+                  {(selectedActivity.metadata as any)?.utr && (
+                    <span className="text-[10px] font-mono text-indigo-600/80 block truncate mt-0.5">
+                      UTR: {(selectedActivity.metadata as any).utr}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -887,39 +910,39 @@ export default function VanikiOrdersMonitoringPage() {
               {selectedActivity.action === "ORDER_PLACED" && modalItems.length > 0 && (
                 <div className="space-y-2">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <Package className="w-3.5 h-3.5 text-emerald-600" />
+                    <Package className="w-4 h-4 text-emerald-600" />
                     Itemized Ordered Products ({modalItems.length})
                   </h4>
-                  <div className="border border-border/60 rounded-xl overflow-hidden">
+                  <div className="border border-border/60 rounded-2xl overflow-hidden shadow-sm">
                     <table className="w-full text-xs text-left">
-                      <thead className="bg-muted/80 text-muted-foreground font-semibold uppercase text-[10px]">
+                      <thead className="bg-muted/80 text-muted-foreground font-bold uppercase text-[10px]">
                         <tr>
-                          <th className="py-2 px-3">Product</th>
-                          <th className="py-2 px-3 text-center">Peti Qty</th>
-                          <th className="py-2 px-3 text-right">Rate</th>
-                          <th className="py-2 px-3 text-right">Tax</th>
-                          <th className="py-2 px-3 text-right">Total</th>
+                          <th className="py-2.5 px-3.5">Product</th>
+                          <th className="py-2.5 px-3 text-center">Peti Qty</th>
+                          <th className="py-2.5 px-3 text-right">Rate</th>
+                          <th className="py-2.5 px-3 text-right">Tax</th>
+                          <th className="py-2.5 px-3.5 text-right">Total</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/40">
                         {modalItems.map((it: any, idx: number) => (
-                          <tr key={idx} className="hover:bg-muted/30">
-                            <td className="py-2 px-3 font-medium">
+                          <tr key={idx} className="hover:bg-muted/30 transition">
+                            <td className="py-2.5 px-3.5 font-bold">
                               <div>{it.productName}</div>
                               {it.packSize && (
-                                <div className="text-[10px] text-muted-foreground">{it.packSize}</div>
+                                <div className="text-[10px] text-muted-foreground font-normal">{it.packSize}</div>
                               )}
                             </td>
-                            <td className="py-2 px-3 text-center font-mono">
+                            <td className="py-2.5 px-3 text-center font-mono font-bold text-foreground">
                               {it.petiQuantity || it.petiQty || it.qty || 1} Peti
                             </td>
-                            <td className="py-2 px-3 text-right font-mono">
+                            <td className="py-2.5 px-3 text-right font-mono font-medium">
                               ₹{(it.dealerPrice || it.price || 0).toLocaleString("en-IN")}
                             </td>
-                            <td className="py-2 px-3 text-right font-mono text-muted-foreground">
+                            <td className="py-2.5 px-3 text-right font-mono text-muted-foreground">
                               {it.taxRate ? `${it.taxRate}%` : "-"}
                             </td>
-                            <td className="py-2 px-3 text-right font-mono font-bold text-foreground">
+                            <td className="py-2.5 px-3.5 text-right font-mono font-black text-foreground">
                               ₹{(it.total || 0).toLocaleString("en-IN")}
                             </td>
                           </tr>
@@ -930,46 +953,86 @@ export default function VanikiOrdersMonitoringPage() {
                 </div>
               )}
 
-              {/* Deal Notes & Remarks */}
+              {/* Deal Notes & Instructions */}
               {selectedActivity.notes && (
-                <div className="p-3 bg-secondary/40 rounded-xl border border-border/40 space-y-1">
+                <div className="p-3.5 bg-secondary/40 rounded-2xl border border-border/50 space-y-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                     Deal Notes / Instructions:
                   </span>
-                  <p className="text-xs text-foreground whitespace-pre-wrap">
+                  <p className="text-xs text-foreground whitespace-pre-wrap font-medium">
                     {selectedActivity.notes}
                   </p>
                 </div>
               )}
 
-              {/* Payment Proof Slip Thumbnail */}
-              {selectedActivity.proofUrl && (
-                <div className="p-3 bg-muted/30 rounded-xl border border-border/40 space-y-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
-                    Payment Slip / Transfer Proof:
-                  </span>
-                  <a
-                    href={selectedActivity.proofUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-block border border-border/60 rounded-lg overflow-hidden hover:opacity-90 transition"
-                  >
-                    <img
-                      src={selectedActivity.proofUrl}
-                      alt="Payment Slip Proof"
-                      className="max-h-48 rounded-lg object-contain bg-black/5 p-1"
-                    />
-                  </a>
-                </div>
+              {/* Payment Proof / Attached Document Section */}
+              {(selectedActivity.proofUrl || (selectedActivity.metadata as any)?.documentUrl) && (
+                (() => {
+                  const docUrl = selectedActivity.proofUrl || (selectedActivity.metadata as any)?.documentUrl;
+                  const docName = (selectedActivity.metadata as any)?.documentName || "Payment Proof / Attached File";
+                  const isPdf = docUrl?.toLowerCase().includes(".pdf") || docName?.toLowerCase().includes(".pdf");
+
+                  return (
+                    <div className="p-4 bg-muted/30 rounded-2xl border border-border/50 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                          <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                          Attached Document / Payment Slip:
+                        </span>
+                        <a
+                          href={docUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 hover:underline"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" /> Open Document
+                        </a>
+                      </div>
+
+                      {isPdf ? (
+                        <div className="flex items-center gap-3 p-3 bg-card rounded-xl border border-border/60">
+                          <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+                            <FileText className="w-6 h-6" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-foreground truncate">{docName}</p>
+                            <p className="text-[10px] text-muted-foreground">PDF Document</p>
+                          </div>
+                          <a
+                            href={docUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs bg-secondary hover:bg-secondary/80 font-bold px-3 py-1.5 rounded-lg border text-foreground"
+                          >
+                            View PDF
+                          </a>
+                        </div>
+                      ) : (
+                        <a
+                          href={docUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-block border border-border/60 rounded-xl overflow-hidden hover:opacity-95 transition bg-card shadow-sm"
+                        >
+                          <img
+                            src={docUrl}
+                            alt="Payment Slip Proof"
+                            className="max-h-64 rounded-xl object-contain bg-black/5 p-1.5"
+                          />
+                        </a>
+                      )}
+                    </div>
+                  );
+                })()
               )}
 
               {/* Footer Button */}
-              <div className="flex justify-end pt-2">
+              <div className="flex justify-end pt-2 border-t border-border/40">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setSelectedActivity(null)}
-                  className="text-xs"
+                  className="text-xs font-bold px-5 rounded-xl"
                 >
                   Close Details
                 </Button>

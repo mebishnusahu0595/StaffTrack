@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Sprout,
   Plus,
@@ -17,7 +17,9 @@ import {
   Layers,
   FileText,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  User,
+  Check
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -53,7 +55,10 @@ export default function FarmersPage() {
 
   const [selectedFarmer, setSelectedFarmer] = useState<Farmer | null>(null);
 
-  // Form State for Farmer
+  // Staff search state in assign modal
+  const [staffSearchText, setStaffSearchText] = useState("");
+
+  // Form State for Farmer CRUD
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
@@ -64,15 +69,18 @@ export default function FarmersPage() {
     state: "",
     crop: "",
     landSize: "",
-    notes: ""
+    notes: "",
+    assignedUserId: "",
+    assignedUserName: ""
   });
 
   // Form State for Assigning Visit Task
   const [taskForm, setTaskForm] = useState({
     assignedToId: "",
+    assignedToName: "",
     title: "",
     description: "",
-    dueDate: new Date().toISOString().split("T")[0],
+    dueDate: new Date(Date.now() + 86400000).toISOString().split("T")[0],
     priority: "MEDIUM" as "LOW" | "MEDIUM" | "HIGH" | "URGENT"
   });
 
@@ -84,10 +92,10 @@ export default function FarmersPage() {
 
   const { data: usersData } = useQuery({
     queryKey: ["users", "farmer-assignment"],
-    queryFn: () => fetchUsers({ page: 1, pageSize: 100 })
+    queryFn: () => fetchUsers({ pageSize: 100 })
   });
 
-  const staffList = usersData?.items || [];
+  const staffList: any[] = usersData?.items || [];
 
   // Farmer Mutations
   const createMutation = useMutation({
@@ -127,11 +135,37 @@ export default function FarmersPage() {
 
   // Task Assignment Mutation
   const assignTaskMutation = useMutation({
-    mutationFn: createTask,
+    mutationFn: async (payload: {
+      farmerId: string;
+      assignedToId: string;
+      assignedToName: string;
+      title: string;
+      description: string;
+      dueDate: string;
+      priority: string;
+    }) => {
+      // 1. Update farmer with assigned staff
+      await updateFarmer(payload.farmerId, {
+        assignedUserId: payload.assignedToId,
+        assignedUserName: payload.assignedToName
+      });
+
+      // 2. Create the visit task in task manager
+      await createTask({
+        title: payload.title,
+        description: payload.description,
+        assignedToId: payload.assignedToId,
+        dueDate: payload.dueDate,
+        priority: payload.priority,
+        taskType: "FARMER_VISIT"
+      });
+    },
     onSuccess: () => {
-      alert("Farmer visit task successfully assigned to staff!");
+      queryClient.invalidateQueries({ queryKey: ["farmers"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
       setIsAssignTaskOpen(false);
       setSelectedFarmer(null);
+      alert("Farmer visit task successfully assigned to staff member!");
     },
     onError: (err: any) => {
       alert(err?.response?.data?.message || err?.message || "Failed to assign task");
@@ -149,7 +183,9 @@ export default function FarmersPage() {
       state: "",
       crop: "",
       landSize: "",
-      notes: ""
+      notes: "",
+      assignedUserId: "",
+      assignedUserName: ""
     });
   };
 
@@ -165,7 +201,9 @@ export default function FarmersPage() {
       state: farmer.state || "",
       crop: farmer.crop || "",
       landSize: farmer.landSize || "",
-      notes: farmer.notes || ""
+      notes: farmer.notes || "",
+      assignedUserId: farmer.assignedUserId || "",
+      assignedUserName: farmer.assignedUserName || ""
     });
     setIsEditOpen(true);
   };
@@ -177,10 +215,16 @@ export default function FarmersPage() {
 
   const handleOpenAssignTask = (farmer: Farmer) => {
     setSelectedFarmer(farmer);
+    setStaffSearchText("");
+    const defaultStaff = farmer.assignedUserId
+      ? staffList.find((s: any) => s.id === farmer.assignedUserId) || staffList[0]
+      : staffList[0];
+
     setTaskForm({
-      assignedToId: staffList[0]?.id || "",
+      assignedToId: defaultStaff?.id || "",
+      assignedToName: defaultStaff?.name || "",
       title: `Farmer Visit: ${farmer.name} (${farmer.village || farmer.city || "Field"})`,
-      description: `Visit Farmer: ${farmer.name}\nContact: ${farmer.phone || "N/A"}\nVillage/Address: ${farmer.village || farmer.address || "N/A"}\nCrop: ${farmer.crop || "N/A"} | Land: ${farmer.landSize || "N/A"}\nNotes: ${farmer.notes || "Check crop health, product feedback and requirements."}`,
+      description: `Farmer: ${farmer.name}\nContact: ${farmer.phone || "N/A"}\nVillage/Address: ${farmer.village || farmer.address || "N/A"}\nCrop: ${farmer.crop || "N/A"} | Land: ${farmer.landSize || "N/A"}\nNotes: ${farmer.notes || "Inspect crop health, product feedback and provide field assistance."}`,
       dueDate: new Date(Date.now() + 86400000).toISOString().split("T")[0],
       priority: "MEDIUM"
     });
@@ -193,22 +237,37 @@ export default function FarmersPage() {
     }
   };
 
-  const filteredFarmers = farmers.filter((f) => {
-    const q = searchQuery.toLowerCase();
-    return (
-      f.name.toLowerCase().includes(q) ||
-      (f.phone && f.phone.toLowerCase().includes(q)) ||
-      (f.village && f.village.toLowerCase().includes(q)) ||
-      (f.city && f.city.toLowerCase().includes(q)) ||
-      (f.crop && f.crop.toLowerCase().includes(q))
+  const filteredFarmers = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return farmers;
+    return farmers.filter((f) => {
+      return (
+        f.name.toLowerCase().includes(q) ||
+        (f.phone && f.phone.toLowerCase().includes(q)) ||
+        (f.village && f.village.toLowerCase().includes(q)) ||
+        (f.city && f.city.toLowerCase().includes(q)) ||
+        (f.crop && f.crop.toLowerCase().includes(q)) ||
+        (f.assignedUserName && f.assignedUserName.toLowerCase().includes(q))
+      );
+    });
+  }, [farmers, searchQuery]);
+
+  const filteredStaffList = useMemo(() => {
+    const q = staffSearchText.toLowerCase().trim();
+    if (!q) return staffList;
+    return staffList.filter((s: any) => 
+      s.name?.toLowerCase().includes(q) ||
+      s.email?.toLowerCase().includes(q) ||
+      s.phone?.toLowerCase().includes(q) ||
+      s.role?.toLowerCase().includes(q)
     );
-  });
+  }, [staffList, staffSearchText]);
 
   const uniqueVillages = new Set(farmers.map((f) => f.village).filter(Boolean)).size;
   const uniqueCrops = new Set(farmers.map((f) => f.crop).filter(Boolean)).size;
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-12 max-w-7xl mx-auto p-6">
       {/* Header & Stats Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -219,19 +278,27 @@ export default function FarmersPage() {
             Farmers Management
           </h1>
           <p className="text-slate-500 text-xs font-semibold mt-1">
-            Directory of registered farmers, land details, and field visit task assignments
+            Directory of registered farmers, land details, and field officer assignments
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="relative w-64">
+          <div className="relative w-64 md:w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
-              placeholder="Search by name, village, crop..."
+              placeholder="Search farmer, village, crop, staff..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 h-10 rounded-xl bg-white border-slate-200 text-xs font-bold shadow-sm"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
           <Button
@@ -325,19 +392,19 @@ export default function FarmersPage() {
               <div>
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-3">
-                    <div className="h-11 w-11 rounded-xl bg-emerald-50 text-emerald-600 font-black text-lg flex items-center justify-center border border-emerald-100">
+                    <div className="h-11 w-11 rounded-xl bg-emerald-50 text-emerald-600 font-black text-lg flex items-center justify-center border border-emerald-100 shrink-0">
                       {farmer.name.charAt(0).toUpperCase()}
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <button
                         onClick={() => handleOpenDetail(farmer)}
-                        className="text-left font-extrabold text-slate-800 text-base leading-tight group-hover:text-emerald-600 transition-colors hover:underline"
+                        className="text-left font-extrabold text-slate-800 text-base leading-tight group-hover:text-emerald-600 transition-colors hover:underline truncate block"
                       >
                         {farmer.name}
                       </button>
                       {(farmer.village || farmer.city) && (
                         <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1 mt-0.5">
-                          <MapPin className="h-3 w-3 text-emerald-500" />
+                          <MapPin className="h-3 w-3 text-emerald-500 shrink-0" />
                           {farmer.village ? `${farmer.village}` : ""}
                           {farmer.city ? `, ${farmer.city}` : ""}
                           {farmer.district ? ` (${farmer.district})` : ""}
@@ -346,7 +413,7 @@ export default function FarmersPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     <Button
                       variant="ghost"
                       size="icon"
@@ -371,7 +438,7 @@ export default function FarmersPage() {
                 <div className="mt-4 pt-3 border-t border-slate-100 space-y-2 text-xs font-semibold text-slate-600">
                   {farmer.phone && (
                     <div className="flex items-center gap-2">
-                      <Phone className="h-3.5 w-3.5 text-emerald-500" />
+                      <Phone className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                       <a href={`tel:${farmer.phone}`} className="hover:text-emerald-600 font-mono">
                         {farmer.phone}
                       </a>
@@ -403,6 +470,22 @@ export default function FarmersPage() {
                     </p>
                   )}
                 </div>
+
+                {/* Assigned Staff Member Tag */}
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <User className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    {farmer.assignedUserName ? (
+                      <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-lg truncate">
+                        Staff: {farmer.assignedUserName}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-semibold text-slate-400 italic">
+                        Unassigned
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Action Buttons */}
@@ -427,12 +510,12 @@ export default function FarmersPage() {
         </div>
       )}
 
-      {/* ─── Add Farmer Dialog ─── */}
+      {/* ─── Add Farmer Dialog (Wider max-w-3xl, 2 Columns) ─── */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="max-w-md p-6 rounded-3xl bg-white border-none shadow-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl">
           <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
-            <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <Sprout className="h-5 w-5 text-emerald-600" /> Add New Farmer
+            <DialogTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <Sprout className="h-6 w-6 text-emerald-600" /> Add New Farmer
             </DialogTitle>
             <DialogClose className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100">
               <X className="h-4 w-4" />
@@ -444,99 +527,126 @@ export default function FarmersPage() {
               e.preventDefault();
               createMutation.mutate(formData);
             }}
-            className="space-y-3.5 pt-3"
+            className="space-y-4 pt-3"
           >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Left Column */}
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-slate-700">Farmer Name *</Label>
+                  <Input
+                    required
+                    placeholder="e.g. Ramesh Patel"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-slate-700">Mobile Number</Label>
+                  <Input
+                    placeholder="e.g. 9876543210"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-slate-700">Primary Crop</Label>
+                  <Input
+                    placeholder="e.g. Paddy, Wheat, Cotton, Soybean"
+                    value={formData.crop}
+                    onChange={(e) => setFormData({ ...formData, crop: e.target.value })}
+                    className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-slate-700">Land Holding / Acre</Label>
+                  <Input
+                    placeholder="e.g. 5 Acres, 10 Bigha"
+                    value={formData.landSize}
+                    onChange={(e) => setFormData({ ...formData, landSize: e.target.value })}
+                    className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Right Column */}
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-slate-700">Village / Gaon</Label>
+                  <Input
+                    placeholder="e.g. Khairi"
+                    value={formData.village}
+                    onChange={(e) => setFormData({ ...formData, village: e.target.value })}
+                    className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold text-slate-700">City / Tehsil</Label>
+                    <Input
+                      placeholder="e.g. Dhamtari"
+                      value={formData.city}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold text-slate-700">District</Label>
+                    <Input
+                      placeholder="e.g. Raipur"
+                      value={formData.district}
+                      onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                      className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-slate-700">State</Label>
+                  <Input
+                    placeholder="e.g. Chhattisgarh"
+                    value={formData.state}
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                    className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
+                  />
+                </div>
+
+                {/* Primary Staff Assignment */}
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-slate-700">Assign Dedicated Field Staff (Optional)</Label>
+                  <select
+                    value={formData.assignedUserId}
+                    onChange={(e) => {
+                      const sel = staffList.find((s: any) => s.id === e.target.value);
+                      setFormData({
+                        ...formData,
+                        assignedUserId: e.target.value,
+                        assignedUserName: sel?.name || ""
+                      });
+                    }}
+                    className="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 font-medium text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">-- No dedicated staff assigned --</option>
+                    {staffList.map((u: any) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.role || "Staff"}) - {u.phone || u.email || ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-1">
-              <Label className="text-xs font-bold text-slate-600">Farmer Name *</Label>
+              <Label className="text-xs font-bold text-slate-700">Full Address</Label>
               <Input
-                required
-                placeholder="e.g. Ramesh Patel"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-600">Mobile Number</Label>
-                <Input
-                  placeholder="e.g. 9876543210"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-600">Village / Gaon</Label>
-                <Input
-                  placeholder="e.g. Khairi"
-                  value={formData.village}
-                  onChange={(e) => setFormData({ ...formData, village: e.target.value })}
-                  className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-600">Primary Crop</Label>
-                <Input
-                  placeholder="e.g. Paddy, Wheat, Cotton"
-                  value={formData.crop}
-                  onChange={(e) => setFormData({ ...formData, crop: e.target.value })}
-                  className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-600">Land Size</Label>
-                <Input
-                  placeholder="e.g. 5 Acres, 10 Bigha"
-                  value={formData.landSize}
-                  onChange={(e) => setFormData({ ...formData, landSize: e.target.value })}
-                  className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-600">City / Tehsil</Label>
-                <Input
-                  placeholder="City"
-                  value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                  className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-600">District</Label>
-                <Input
-                  placeholder="District"
-                  value={formData.district}
-                  onChange={(e) => setFormData({ ...formData, district: e.target.value })}
-                  className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-600">State</Label>
-                <Input
-                  placeholder="State"
-                  value={formData.state}
-                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                  className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs font-bold text-slate-600">Full Address</Label>
-              <Input
-                placeholder="Landmark, road, or full address"
+                placeholder="House No, Landmark, Village post..."
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                 className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
@@ -544,42 +654,42 @@ export default function FarmersPage() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs font-bold text-slate-600">Notes / Remarks</Label>
+              <Label className="text-xs font-bold text-slate-700">Field Notes / Observations</Label>
               <Input
-                placeholder="Product feedback, special instructions..."
+                placeholder="e.g. Interested in bio-fertilizers, pest issue in crop..."
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
               />
             </div>
 
-            <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
+            <div className="pt-4 flex items-center justify-end gap-2.5 border-t border-slate-100">
               <Button
                 type="button"
                 variant="ghost"
                 onClick={() => setIsCreateOpen(false)}
-                className="rounded-xl text-xs font-bold text-slate-500"
+                className="rounded-xl h-10 text-xs font-bold text-slate-500"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 disabled={createMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold h-10 px-5 shadow-sm"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-6 text-xs font-bold shadow-sm"
               >
-                {createMutation.isPending ? "Saving..." : "Save Farmer"}
+                {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Farmer"}
               </Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* ─── Edit Farmer Dialog ─── */}
+      {/* ─── Edit Farmer Dialog (Wider max-w-3xl, 2 Columns) ─── */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="max-w-md p-6 rounded-3xl bg-white border-none shadow-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl">
           <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
-            <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <Pencil className="h-5 w-5 text-emerald-600" /> Edit Farmer
+            <DialogTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-emerald-600" /> Edit Farmer Profile
             </DialogTitle>
             <DialogClose className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100">
               <X className="h-4 w-4" />
@@ -591,89 +701,116 @@ export default function FarmersPage() {
               e.preventDefault();
               editMutation.mutate(formData);
             }}
-            className="space-y-3.5 pt-3"
+            className="space-y-4 pt-3"
           >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Left Column */}
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-slate-700">Farmer Name *</Label>
+                  <Input
+                    required
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-slate-700">Mobile Number</Label>
+                  <Input
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-slate-700">Primary Crop</Label>
+                  <Input
+                    value={formData.crop}
+                    onChange={(e) => setFormData({ ...formData, crop: e.target.value })}
+                    className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-slate-700">Land Holding</Label>
+                  <Input
+                    value={formData.landSize}
+                    onChange={(e) => setFormData({ ...formData, landSize: e.target.value })}
+                    className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Right Column */}
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-slate-700">Village / Gaon</Label>
+                  <Input
+                    value={formData.village}
+                    onChange={(e) => setFormData({ ...formData, village: e.target.value })}
+                    className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold text-slate-700">City / Tehsil</Label>
+                    <Input
+                      value={formData.city}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold text-slate-700">District</Label>
+                    <Input
+                      value={formData.district}
+                      onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                      className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-slate-700">State</Label>
+                  <Input
+                    value={formData.state}
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                    className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
+                  />
+                </div>
+
+                {/* Primary Staff Assignment */}
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-slate-700">Assign Dedicated Field Staff</Label>
+                  <select
+                    value={formData.assignedUserId}
+                    onChange={(e) => {
+                      const sel = staffList.find((s: any) => s.id === e.target.value);
+                      setFormData({
+                        ...formData,
+                        assignedUserId: e.target.value,
+                        assignedUserName: sel?.name || ""
+                      });
+                    }}
+                    className="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 font-medium text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">-- No dedicated staff assigned --</option>
+                    {staffList.map((u: any) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.role || "Staff"}) - {u.phone || u.email || ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-1">
-              <Label className="text-xs font-bold text-slate-600">Farmer Name *</Label>
-              <Input
-                required
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-600">Mobile Number</Label>
-                <Input
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-600">Village / Gaon</Label>
-                <Input
-                  value={formData.village}
-                  onChange={(e) => setFormData({ ...formData, village: e.target.value })}
-                  className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-600">Primary Crop</Label>
-                <Input
-                  value={formData.crop}
-                  onChange={(e) => setFormData({ ...formData, crop: e.target.value })}
-                  className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-600">Land Size</Label>
-                <Input
-                  value={formData.landSize}
-                  onChange={(e) => setFormData({ ...formData, landSize: e.target.value })}
-                  className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-600">City / Tehsil</Label>
-                <Input
-                  value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                  className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-600">District</Label>
-                <Input
-                  value={formData.district}
-                  onChange={(e) => setFormData({ ...formData, district: e.target.value })}
-                  className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-600">State</Label>
-                <Input
-                  value={formData.state}
-                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                  className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs font-bold text-slate-600">Full Address</Label>
+              <Label className="text-xs font-bold text-slate-700">Full Address</Label>
               <Input
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
@@ -682,7 +819,7 @@ export default function FarmersPage() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs font-bold text-slate-600">Notes / Remarks</Label>
+              <Label className="text-xs font-bold text-slate-700">Notes / Remarks</Label>
               <Input
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -690,33 +827,33 @@ export default function FarmersPage() {
               />
             </div>
 
-            <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
+            <div className="pt-4 flex items-center justify-end gap-2.5 border-t border-slate-100">
               <Button
                 type="button"
                 variant="ghost"
                 onClick={() => setIsEditOpen(false)}
-                className="rounded-xl text-xs font-bold text-slate-500"
+                className="rounded-xl h-10 text-xs font-bold text-slate-500"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 disabled={editMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold h-10 px-5 shadow-sm"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-6 text-xs font-bold shadow-sm"
               >
-                {editMutation.isPending ? "Updating..." : "Update Farmer"}
+                {editMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update Farmer"}
               </Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* ─── Farmer Detail Profile Dialog ─── */}
+      {/* ─── Farmer Detail Profile Dialog (Wider max-w-2xl) ─── */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="max-w-lg p-6 rounded-3xl bg-white border-none shadow-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl">
           <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
-            <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <Sprout className="h-5 w-5 text-emerald-600" /> Farmer Profile
+            <DialogTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <Sprout className="h-6 w-6 text-emerald-600" /> Farmer Profile
             </DialogTitle>
             <DialogClose className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100">
               <X className="h-4 w-4" />
@@ -725,16 +862,16 @@ export default function FarmersPage() {
 
           {selectedFarmer && (
             <div className="space-y-4 pt-3">
-              <div className="flex items-center gap-4 bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
-                <div className="h-14 w-14 rounded-2xl bg-emerald-600 text-white font-black text-2xl flex items-center justify-center shadow-md">
+              <div className="flex items-center gap-4 bg-emerald-50/80 p-4 rounded-2xl border border-emerald-100">
+                <div className="h-14 w-14 rounded-2xl bg-emerald-600 text-white font-black text-2xl flex items-center justify-center shadow-md shrink-0">
                   {selectedFarmer.name.charAt(0).toUpperCase()}
                 </div>
-                <div>
-                  <h2 className="text-xl font-black text-slate-900">{selectedFarmer.name}</h2>
+                <div className="min-w-0">
+                  <h2 className="text-xl font-black text-slate-900 truncate">{selectedFarmer.name}</h2>
                   {selectedFarmer.phone && (
                     <a
                       href={`tel:${selectedFarmer.phone}`}
-                      className="text-emerald-700 font-bold text-sm flex items-center gap-1 mt-0.5"
+                      className="text-emerald-700 font-bold text-xs flex items-center gap-1 mt-0.5"
                     >
                       <Phone className="h-3.5 w-3.5" /> {selectedFarmer.phone}
                     </a>
@@ -744,7 +881,7 @@ export default function FarmersPage() {
 
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 space-y-1">
-                  <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Village</span>
+                  <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Village / Gaon</span>
                   <p className="font-bold text-slate-800 text-sm">{selectedFarmer.village || "Not specified"}</p>
                 </div>
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 space-y-1">
@@ -760,6 +897,19 @@ export default function FarmersPage() {
                   <p className="font-bold text-slate-800 text-sm">
                     {[selectedFarmer.city, selectedFarmer.district, selectedFarmer.state].filter(Boolean).join(", ") || "N/A"}
                   </p>
+                </div>
+              </div>
+
+              {/* Dedicated Assigned Staff */}
+              <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-emerald-600" />
+                  <div>
+                    <span className="text-slate-400 font-bold uppercase text-[10px] block">Assigned Staff Officer</span>
+                    <span className="font-bold text-emerald-800">
+                      {selectedFarmer.assignedUserName || "No officer currently assigned"}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -804,12 +954,12 @@ export default function FarmersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ─── Assign Visit Task Dialog ─── */}
+      {/* ─── Assign Visit Task Dialog (Wider max-w-2xl with Searchable Staff Picker) ─── */}
       <Dialog open={isAssignTaskOpen} onOpenChange={setIsAssignTaskOpen}>
-        <DialogContent className="max-w-md p-6 rounded-3xl bg-white border-none shadow-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl">
           <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
             <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <ClipboardList className="h-5 w-5 text-emerald-600" /> Assign Farmer Visit Task
+              <ClipboardList className="h-5 w-5 text-emerald-600" /> Assign Farmer Visit Task to Staff
             </DialogTitle>
             <DialogClose className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100">
               <X className="h-4 w-4" />
@@ -825,45 +975,100 @@ export default function FarmersPage() {
                   return;
                 }
                 assignTaskMutation.mutate({
+                  farmerId: selectedFarmer.id,
+                  assignedToId: taskForm.assignedToId,
+                  assignedToName: taskForm.assignedToName,
                   title: taskForm.title,
                   description: taskForm.description,
-                  assignedToId: taskForm.assignedToId,
                   dueDate: taskForm.dueDate,
-                  priority: taskForm.priority,
-                  taskType: "FARMER_VISIT"
+                  priority: taskForm.priority
                 });
               }}
-              className="space-y-3.5 pt-3"
+              className="space-y-4 pt-3"
             >
-              <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 flex items-center gap-2.5">
-                <Sprout className="h-5 w-5 text-emerald-600 shrink-0" />
-                <div className="text-xs">
-                  <span className="font-bold text-emerald-900">{selectedFarmer.name}</span>
-                  <span className="text-emerald-700 ml-1.5">
-                    ({selectedFarmer.village || selectedFarmer.city || "Field Area"})
-                  </span>
+              {/* Farmer Snapshot Info */}
+              <div className="bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-100 flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black">
+                  <Sprout className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900">{selectedFarmer.name}</h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {[selectedFarmer.village, selectedFarmer.city, selectedFarmer.district].filter(Boolean).join(", ") || "Field Area"}
+                    {selectedFarmer.phone && ` • ${selectedFarmer.phone}`}
+                    {selectedFarmer.crop && ` • Crop: ${selectedFarmer.crop}`}
+                  </p>
+                </div>
+              </div>
+
+              {/* Searchable Staff Selection */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-700">Search & Select Staff Member *</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    placeholder="Search staff name, role, email or phone..."
+                    value={staffSearchText}
+                    onChange={(e) => setStaffSearchText(e.target.value)}
+                    className="pl-9 h-10 rounded-xl bg-slate-50 border-slate-200 text-xs font-medium"
+                  />
+                  {staffSearchText && (
+                    <button
+                      type="button"
+                      onClick={() => setStaffSearchText("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Staff List Box */}
+                <div className="max-h-44 overflow-y-auto border border-slate-200 rounded-2xl divide-y divide-slate-100 mt-1 bg-white">
+                  {filteredStaffList.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-slate-400">No staff found matching &quot;{staffSearchText}&quot;</div>
+                  ) : (
+                    filteredStaffList.map((s: any) => {
+                      const isSelected = taskForm.assignedToId === s.id;
+                      return (
+                        <div
+                          key={s.id}
+                          onClick={() => {
+                            setTaskForm({
+                              ...taskForm,
+                              assignedToId: s.id,
+                              assignedToName: s.name
+                            });
+                          }}
+                          className={`p-2.5 flex items-center justify-between cursor-pointer transition ${
+                            isSelected ? "bg-emerald-50/80 border-l-4 border-emerald-600" : "hover:bg-slate-50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="h-8 w-8 rounded-lg bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center shrink-0">
+                              {s.name?.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-800 truncate">{s.name}</p>
+                              <p className="text-[10px] text-slate-400 truncate">
+                                {s.role || "Staff"} • {s.phone || s.email || ""}
+                              </p>
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <Badge className="bg-emerald-600 text-white font-bold text-[10px] px-2 py-0.5 rounded-md flex items-center gap-1">
+                              <Check className="h-3 w-3" /> Selected
+                            </Badge>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-600">Assign To Staff Member *</Label>
-                <select
-                  required
-                  value={taskForm.assignedToId}
-                  onChange={(e) => setTaskForm({ ...taskForm, assignedToId: e.target.value })}
-                  className="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 font-bold text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="">-- Select Staff Officer --</option>
-                  {staffList.map((u: any) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.role || "Staff"}) - {u.email || u.phone || ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-600">Task Title *</Label>
+                <Label className="text-xs font-bold text-slate-700">Task Title *</Label>
                 <Input
                   required
                   value={taskForm.title}
@@ -874,7 +1079,7 @@ export default function FarmersPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs font-bold text-slate-600">Due Date *</Label>
+                  <Label className="text-xs font-bold text-slate-700">Visit Due Date *</Label>
                   <Input
                     type="date"
                     required
@@ -885,7 +1090,7 @@ export default function FarmersPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs font-bold text-slate-600">Priority</Label>
+                  <Label className="text-xs font-bold text-slate-700">Priority</Label>
                   <select
                     value={taskForm.priority}
                     onChange={(e) => setTaskForm({ ...taskForm, priority: e.target.value as any })}
@@ -900,9 +1105,9 @@ export default function FarmersPage() {
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-600">Instructions / Description</Label>
+                <Label className="text-xs font-bold text-slate-700">Instructions / Description</Label>
                 <textarea
-                  rows={4}
+                  rows={3}
                   value={taskForm.description}
                   onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
                   className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 font-medium text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
@@ -921,9 +1126,15 @@ export default function FarmersPage() {
                 <Button
                   type="submit"
                   disabled={assignTaskMutation.isPending}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold h-10 px-5 shadow-sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold h-10 px-5 shadow-sm flex items-center gap-1.5"
                 >
-                  {assignTaskMutation.isPending ? "Assigning..." : "Assign Task"}
+                  {assignTaskMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <ClipboardList className="h-4 w-4" /> Assign Staff & Visit Task
+                    </>
+                  )}
                 </Button>
               </div>
             </form>

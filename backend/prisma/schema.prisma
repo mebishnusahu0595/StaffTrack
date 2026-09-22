@@ -610,11 +610,13 @@ model Dealer {
   state     String?
   pincode   String?
   gstin     String?
-  companyId String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  tasks     Task[]   @relation("TaskDealers")
+  companyId        String
+  assignedUserId   String?
+  assignedUserName String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  tasks            Task[]   @relation("TaskDealers")
 
   @@index([companyId])
 }

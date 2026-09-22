@@ -28,6 +28,8 @@ export async function initFarmersTable(): Promise<void> {
     `);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_farmers_company ON farmers(company_id)`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_farmers_name ON farmers(name)`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE farmers ADD COLUMN IF NOT EXISTS assigned_user_id TEXT`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE farmers ADD COLUMN IF NOT EXISTS assigned_user_name TEXT`);
     farmerTableInitialized = true;
   } catch (err) {
     console.error("Failed to ensure farmers table:", err);
@@ -45,6 +47,8 @@ export interface FarmerInput {
   crop?: string;
   landSize?: string;
   notes?: string;
+  assignedUserId?: string;
+  assignedUserName?: string;
 }
 
 export async function listFarmers(companyId: string) {
@@ -72,8 +76,8 @@ export async function createFarmer(companyId: string, input: FarmerInput) {
   const now = new Date();
 
   await prisma.$executeRawUnsafe(
-    `INSERT INTO farmers (id, company_id, name, phone, village, address, city, district, state, crop, land_size, notes, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+    `INSERT INTO farmers (id, company_id, name, phone, village, address, city, district, state, crop, land_size, notes, assigned_user_id, assigned_user_name, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
     id, companyId,
     input.name,
     input.phone || null,
@@ -85,6 +89,8 @@ export async function createFarmer(companyId: string, input: FarmerInput) {
     input.crop || null,
     input.landSize || null,
     input.notes || null,
+    input.assignedUserId || null,
+    input.assignedUserName || null,
     now, now
   );
 
@@ -107,7 +113,9 @@ export async function updateFarmer(companyId: string, id: string, input: Partial
       crop = COALESCE($10, crop),
       land_size = COALESCE($11, land_size),
       notes = COALESCE($12, notes),
-      updated_at = $13
+      assigned_user_id = CASE WHEN $13::text IS NOT NULL THEN $13 ELSE assigned_user_id END,
+      assigned_user_name = CASE WHEN $14::text IS NOT NULL THEN $14 ELSE assigned_user_name END,
+      updated_at = $15
     WHERE id = $1 AND company_id = $2`,
     id, companyId,
     input.name || null,
@@ -120,6 +128,8 @@ export async function updateFarmer(companyId: string, id: string, input: Partial
     input.crop || null,
     input.landSize || null,
     input.notes || null,
+    input.assignedUserId !== undefined ? input.assignedUserId : null,
+    input.assignedUserName !== undefined ? input.assignedUserName : null,
     now
   );
 
@@ -148,6 +158,8 @@ function mapFarmerRow(r: any) {
     crop: r.crop,
     landSize: r.land_size,
     notes: r.notes,
+    assignedUserId: r.assigned_user_id,
+    assignedUserName: r.assigned_user_name,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };

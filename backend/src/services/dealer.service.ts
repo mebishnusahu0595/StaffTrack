@@ -12,6 +12,8 @@ export interface CreateDealerInput {
   state?: string | null;
   pincode?: string | null;
   gstin?: string | null;
+  assignedUserId?: string | null;
+  assignedUserName?: string | null;
 }
 
 export async function listDealers(actor: AuthUser) {
@@ -58,7 +60,9 @@ export async function createDealer(actor: AuthUser, input: CreateDealerInput) {
       state: input.state || null,
       pincode: input.pincode || null,
       gstin: input.gstin || null,
-      companyId: actor.companyId
+      companyId: actor.companyId,
+      assignedUserId: input.assignedUserId || null,
+      assignedUserName: input.assignedUserName || null
     }
   });
 }
@@ -76,7 +80,9 @@ export async function updateDealer(actor: AuthUser, dealerId: string, input: Par
       city: input.city !== undefined ? input.city : undefined,
       state: input.state !== undefined ? input.state : undefined,
       pincode: input.pincode !== undefined ? input.pincode : undefined,
-      gstin: input.gstin !== undefined ? input.gstin : undefined
+      gstin: input.gstin !== undefined ? input.gstin : undefined,
+      assignedUserId: input.assignedUserId !== undefined ? input.assignedUserId : undefined,
+      assignedUserName: input.assignedUserName !== undefined ? input.assignedUserName : undefined
     }
   });
 }

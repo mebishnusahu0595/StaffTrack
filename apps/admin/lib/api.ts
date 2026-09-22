@@ -202,6 +202,7 @@ export async function createTask(input: {
   attachmentUrl?: string | null;
   attachmentName?: string | null;
   taskType?: string;
+  dealerIds?: string[];
 }) {
   const response = await api.post<{ data: Task }>("/tasks", input);
   return response.data.data;
@@ -816,27 +817,35 @@ export async function deleteDocument(id: string) {
 }
 
 // Dealers
-export async function fetchDealers() {
-  const response = await api.get<{ data: any[] }>("/dealers");
-  return response.data.data;
-}
-
-export async function fetchDealer(id: string) {
-  const response = await api.get<{ data: any }>(`/dealers/${id}`);
-  return response.data.data;
-}
-
-export async function createDealer(data: {
+export interface Dealer {
+  id: string;
   name: string;
-  phone?: string;
-  email?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  pincode?: string;
-  gstin?: string;
-}) {
-  const response = await api.post<{ data: any }>("/dealers", data);
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  gstin?: string | null;
+  companyId: string;
+  assignedUserId?: string | null;
+  assignedUserName?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function fetchDealers(): Promise<Dealer[]> {
+  const response = await api.get<{ data: Dealer[] }>("/dealers");
+  return response.data.data;
+}
+
+export async function fetchDealer(id: string): Promise<Dealer> {
+  const response = await api.get<{ data: Dealer }>(`/dealers/${id}`);
+  return response.data.data;
+}
+
+export async function createDealer(data: Partial<Dealer>) {
+  const response = await api.post<{ data: Dealer }>("/dealers", data);
   return response.data.data;
 }
 
@@ -1124,6 +1133,8 @@ export interface Farmer {
   crop?: string;
   landSize?: string;
   notes?: string;
+  assignedUserId?: string;
+  assignedUserName?: string;
   createdAt: string;
   updatedAt: string;
 }
