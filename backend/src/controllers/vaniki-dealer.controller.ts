@@ -19,6 +19,12 @@ export async function getBankDetails(_req: Request, res: Response): Promise<void
   sendSuccess(res, result, "Dynamic bank details & UPI QR fetched successfully");
 }
 
+export async function getGarages(_req: Request, res: Response): Promise<void> {
+  const result = await vanikiDealerService.getGarages();
+  sendSuccess(res, result, "Garages fetched successfully");
+}
+
+
 
 export async function placeDealerOrder(req: Request, res: Response): Promise<void> {
   const { dealerCode } = req.params;
@@ -27,7 +33,14 @@ export async function placeDealerOrder(req: Request, res: Response): Promise<voi
   sendSuccess(res, result, "Dealer order placed successfully", 201);
 }
 
+export async function recordCreditAdjustment(req: Request, res: Response): Promise<void> {
+  const actor = req.user!;
+  const result = await vanikiDealerService.adjustCreditOrRecordPayment(actor, req.body);
+  sendSuccess(res, result, "Credit adjustment recorded successfully");
+}
+
 export async function getVanikiActivities(req: Request, res: Response): Promise<void> {
+
   const { action, search, staffId, limit, offset } = req.query;
   const result = await vanikiDealerService.getVanikiActivities({
     action: action as string,

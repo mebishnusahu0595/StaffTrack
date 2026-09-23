@@ -39,11 +39,13 @@ import {
   Paperclip,
   Download,
   Loader2,
-  Store
+  Store,
+  Sprout
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
-import { fetchTasks, deleteTask, bulkDeleteTasks, deleteAllTasks, deleteUserTasks, updateTask, createTask as apiCreateTask, fetchUsers, createTemplate, fetchProjects, createProject as apiCreateProject, fetchGroups, fetchDealers, createDealer } from "@/lib/api";
+import { fetchTasks, deleteTask, bulkDeleteTasks, deleteAllTasks, deleteUserTasks, updateTask, createTask as apiCreateTask, fetchUsers, createTemplate, fetchProjects, createProject as apiCreateProject, fetchGroups, fetchDealers, createDealer, fetchFarmers, createFarmer } from "@/lib/api";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -487,6 +489,33 @@ export default function TasksPage() {
       });
 
       filtered = [...nonSeriesTasks, ...Array.from(seriesMap.values())];
+    } else if (activeFilter === "ALL") {
+      // In the "ALL" overview tab, deduplicate repeating series so each recurring task
+      // is represented by a single row (preferring the parent/root task or active occurrence)
+      // rather than flooding the screen with 20-30 identical pre-generated future dates!
+      const seriesMap = new Map<string, any>();
+      const nonSeriesTasks: any[] = [];
+
+      filtered.forEach(t => {
+        const seriesKey = t.parentTaskId || (t.isRepeating ? t.id : null);
+        if (!seriesKey) {
+          nonSeriesTasks.push(t);
+        } else {
+          const existing = seriesMap.get(seriesKey);
+          if (!existing) {
+            seriesMap.set(seriesKey, t);
+          } else {
+            // Keep the root parent task or the most relevant occurrence
+            if (t.isRepeating && !t.parentTaskId) {
+              seriesMap.set(seriesKey, t);
+            } else if (t.status === "COMPLETED" && existing.status !== "COMPLETED") {
+              seriesMap.set(seriesKey, t);
+            }
+          }
+        }
+      });
+
+      filtered = [...nonSeriesTasks, ...Array.from(seriesMap.values())];
     }
 
     // Sub Navigation Filters
@@ -495,6 +524,7 @@ export default function TasksPage() {
       case "ALL":
         break;
       case "ACTIVE":
+
         filtered = filtered.filter(t => t.status === "PENDING" || t.status === "IN_PROGRESS");
         break;
       case "INACTIVE":
@@ -2038,6 +2068,155 @@ function DealerSelector({
   );
 }
 
+function FarmerSelector({ 
+  selectedFarmerIds, 
+  onChange 
+}: { 
+  selectedFarmerIds: string[]; 
+  onChange: (ids: string[]) => void; 
+}) {
+  const queryClient = useQueryClient();
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newFarmer, setNewFarmer] = useState({ name: "", phone: "", village: "", crop: "" });
+  const [creating, setCreating] = useState(false);
+
+  const { data: farmers = [], isLoading } = useQuery({
+    queryKey: ["farmers"],
+    queryFn: fetchFarmers
+  });
+
+  const handleAddFarmer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFarmer.name.trim()) return;
+    setCreating(true);
+    try {
+      const created = await createFarmer(newFarmer);
+      queryClient.invalidateQueries({ queryKey: ["farmers"] });
+      onChange([...selectedFarmerIds, created.id]);
+      setNewFarmer({ name: "", phone: "", village: "", crop: "" });
+      setShowAddModal(false);
+    } catch (err: any) {
+      alert("Failed to add farmer: " + (err?.response?.data?.message || err?.message || "Unknown error"));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const toggleFarmer = (farmerId: string) => {
+    if (selectedFarmerIds.includes(farmerId)) {
+      onChange(selectedFarmerIds.filter(id => id !== farmerId));
+    } else {
+      onChange([...selectedFarmerIds, farmerId]);
+    }
+  };
+
+  return (
+    <div className="space-y-2 border border-emerald-100 bg-emerald-50/40 p-4 rounded-2xl">
+      <div className="flex items-center justify-between">
+        <Label className="text-[10px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+          <Sprout className="h-4 w-4 text-emerald-600" /> Select Farmers (Multi-select)
+        </Label>
+        <button
+          type="button"
+          onClick={() => setShowAddModal(!showAddModal)}
+          className="text-[10px] font-black text-emerald-600 hover:text-emerald-700 bg-white border border-emerald-200 px-2.5 py-1 rounded-xl shadow-2xs flex items-center gap-1 transition-all uppercase tracking-wider"
+        >
+          <Plus className="h-3 w-3" /> Add New Farmer
+        </button>
+      </div>
+
+      {isLoading ? (
+        <p className="text-xs text-slate-400 font-medium">Loading farmers...</p>
+      ) : farmers.length === 0 ? (
+        <p className="text-xs text-slate-500 font-medium italic">No farmers registered yet. Click &quot;+ Add New Farmer&quot; to add one.</p>
+      ) : (
+        <div className="flex flex-wrap gap-2 pt-1 max-h-36 overflow-y-auto pr-1">
+          {farmers.map((f: any) => {
+            const isSelected = selectedFarmerIds.includes(f.id);
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => toggleFarmer(f.id)}
+                className={cn(
+                  "px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border",
+                  isSelected
+                    ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                )}
+              >
+                <Sprout className="h-3.5 w-3.5" />
+                <span>{f.name}</span>
+                {f.village && <span className={cn("text-[10px] font-normal opacity-80", isSelected ? "text-emerald-100" : "text-slate-400")}>({f.village})</span>}
+                {isSelected && <Check className="h-3.5 w-3.5 ml-0.5" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {showAddModal && (
+        <div className="p-3.5 bg-white border border-emerald-200 rounded-2xl shadow-lg space-y-3 animate-in fade-in slide-in-from-top-1 mt-2">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <span className="text-xs font-black text-slate-800 flex items-center gap-1">
+              <Plus className="h-3.5 w-3.5 text-emerald-600" /> Quick Add Farmer
+            </span>
+            <button type="button" onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 text-xs font-bold">✕</button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="text"
+              placeholder="Farmer Name *"
+              value={newFarmer.name}
+              onChange={e => setNewFarmer({ ...newFarmer, name: e.target.value })}
+              className="h-9 rounded-xl bg-slate-50 border border-slate-200 px-3 text-xs font-bold text-slate-800 placeholder:text-slate-400"
+            />
+            <input
+              type="text"
+              placeholder="Phone Number"
+              value={newFarmer.phone}
+              onChange={e => setNewFarmer({ ...newFarmer, phone: e.target.value })}
+              className="h-9 rounded-xl bg-slate-50 border border-slate-200 px-3 text-xs font-bold text-slate-800 placeholder:text-slate-400"
+            />
+            <input
+              type="text"
+              placeholder="Village / Gaon"
+              value={newFarmer.village}
+              onChange={e => setNewFarmer({ ...newFarmer, village: e.target.value })}
+              className="h-9 rounded-xl bg-slate-50 border border-slate-200 px-3 text-xs font-bold text-slate-800 placeholder:text-slate-400"
+            />
+            <input
+              type="text"
+              placeholder="Crop (e.g. Wheat, Rice)"
+              value={newFarmer.crop}
+              onChange={e => setNewFarmer({ ...newFarmer, crop: e.target.value })}
+              className="h-9 rounded-xl bg-slate-50 border border-slate-200 px-3 text-xs font-bold text-slate-800 placeholder:text-slate-400"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setShowAddModal(false)}
+              className="h-8 px-3 rounded-xl text-slate-500 text-xs font-bold hover:bg-slate-100"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleAddFarmer}
+              disabled={creating || !newFarmer.name.trim()}
+              className="h-8 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 transition-all shadow-sm"
+            >
+              {creating ? "Saving..." : "Add & Select"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
   const [showDescription, setShowDescription] = useState(false);
   const [showValidations, setShowValidations] = useState(false);
@@ -2104,7 +2283,9 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
     attachmentName: null as string | null,
     taskType: "NORMAL",
     dealerIds: [] as string[],
+    farmerIds: [] as string[],
     validations: [] as string[],
+
     checklist: [] as Array<{
       id: string;
       title: string;
@@ -2408,6 +2589,19 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
                 }))}
               />
             )}
+
+            {/* Farmer Selector (Multi-Select & Add Farmer) */}
+            {data.taskType === "FARMER" && (
+              <FarmerSelector
+                selectedFarmerIds={data.farmerIds || []}
+                onChange={(ids) => setData(prev => ({
+                  ...prev,
+                  farmerIds: ids,
+                  taskType: ids.length > 0 && (prev.taskType === "NORMAL" || !prev.taskType) ? "FARMER" : prev.taskType
+                }))}
+              />
+            )}
+
 
             <div className="space-y-2">
                <Label className="text-[10px] font-black uppercase text-slate-400">Assign User*</Label>
@@ -3214,7 +3408,9 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
     attachmentName: task.attachmentName || null as string | null,
     taskType: task.taskType || "NORMAL",
     dealerIds: (task.dealers || []).map((d: any) => d.id) as string[],
+    farmerIds: (task.farmers || []).map((f: any) => f.id) as string[],
     repeatFrequency: task.repeatFrequency || "NONE",
+
     repeatDays: task.repeatDays ? task.repeatDays.split(',').map((x: string) => parseInt(x)).filter((x: number) => !isNaN(x)) : [] as number[],
     repeatDates: task.repeatDates ? task.repeatDates.split(',').map((x: string) => parseInt(x)).filter((x: number) => !isNaN(x)) : [] as number[],
     skipHolidays: task.skipHolidays || false,
@@ -3515,6 +3711,19 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
                 }))}
               />
             )}
+
+            {/* Farmer Selector (Multi-Select & Add Farmer) */}
+            {data.taskType === "FARMER" && (
+              <FarmerSelector
+                selectedFarmerIds={data.farmerIds || []}
+                onChange={(ids) => setData(prev => ({
+                  ...prev,
+                  farmerIds: ids,
+                  taskType: ids.length > 0 && (prev.taskType === "NORMAL" || !prev.taskType) ? "FARMER" : prev.taskType
+                }))}
+              />
+            )}
+
 
             <div className="space-y-2">
                <Label className="text-[10px] font-black uppercase text-slate-400">Assign User*</Label>

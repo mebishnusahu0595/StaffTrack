@@ -19,11 +19,16 @@ import {
   CheckCircle2,
   AlertCircle,
   User,
-  Check
+  Check,
+  Clock,
+  ExternalLink,
+  Image as ImageIcon,
+  HelpCircle
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   fetchFarmers,
+  fetchFarmerVisits,
   createFarmer,
   updateFarmer,
   deleteFarmer,
@@ -31,6 +36,7 @@ import {
   createTask,
   Farmer
 } from "@/lib/api";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -96,6 +102,13 @@ export default function FarmersPage() {
   });
 
   const staffList: any[] = usersData?.items || [];
+
+  const { data: visitsData, isLoading: isLoadingVisits } = useQuery({
+    queryKey: ["farmer-visits", selectedFarmer?.id],
+    queryFn: () => fetchFarmerVisits(selectedFarmer!.id),
+    enabled: !!selectedFarmer && isDetailOpen
+  });
+
 
   // Farmer Mutations
   const createMutation = useMutation({
@@ -849,12 +862,12 @@ export default function FarmersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ─── Farmer Detail Profile Dialog (Wider max-w-2xl) ─── */}
+      {/* ─── Farmer Detail Profile Dialog (Wider max-w-4xl with Visit Logs & Q/A) ─── */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl">
           <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
             <DialogTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
-              <Sprout className="h-6 w-6 text-emerald-600" /> Farmer Profile
+              <Sprout className="h-6 w-6 text-emerald-600" /> Farmer Profile & Field Visits
             </DialogTitle>
             <DialogClose className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100">
               <X className="h-4 w-4" />
@@ -862,12 +875,12 @@ export default function FarmersPage() {
           </DialogHeader>
 
           {selectedFarmer && (
-            <div className="space-y-4 pt-3">
+            <div className="space-y-5 pt-3">
               <div className="flex items-center gap-4 bg-emerald-50/80 p-4 rounded-2xl border border-emerald-100">
                 <div className="h-14 w-14 rounded-2xl bg-emerald-600 text-white font-black text-2xl flex items-center justify-center shadow-md shrink-0">
                   {selectedFarmer.name.charAt(0).toUpperCase()}
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <h2 className="text-xl font-black text-slate-900 truncate">{selectedFarmer.name}</h2>
                   {selectedFarmer.phone && (
                     <a
@@ -878,33 +891,55 @@ export default function FarmersPage() {
                     </a>
                   )}
                 </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsDetailOpen(false);
+                      handleOpenEdit(selectedFarmer);
+                    }}
+                    className="rounded-xl text-xs font-bold"
+                  >
+                    Edit Profile
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setIsDetailOpen(false);
+                      handleOpenAssignTask(selectedFarmer);
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold px-4 flex items-center gap-1.5 shadow-sm"
+                  >
+                    <ClipboardList className="h-4 w-4" />
+                    Assign Visit Task
+                  </Button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 space-y-1">
                   <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Village / Gaon</span>
-                  <p className="font-bold text-slate-800 text-sm">{selectedFarmer.village || "Not specified"}</p>
+                  <p className="font-bold text-slate-800 text-sm truncate">{selectedFarmer.village || "Not specified"}</p>
                 </div>
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 space-y-1">
                   <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Primary Crop</span>
-                  <p className="font-bold text-emerald-700 text-sm">{selectedFarmer.crop || "Not specified"}</p>
+                  <p className="font-bold text-emerald-700 text-sm truncate">{selectedFarmer.crop || "Not specified"}</p>
                 </div>
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 space-y-1">
                   <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Land Holding</span>
-                  <p className="font-bold text-slate-800 text-sm">{selectedFarmer.landSize || "Not specified"}</p>
+                  <p className="font-bold text-slate-800 text-sm truncate">{selectedFarmer.landSize || "Not specified"}</p>
                 </div>
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 space-y-1">
                   <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Location</span>
-                  <p className="font-bold text-slate-800 text-sm">
+                  <p className="font-bold text-slate-800 text-sm truncate">
                     {[selectedFarmer.city, selectedFarmer.district, selectedFarmer.state].filter(Boolean).join(", ") || "N/A"}
                   </p>
                 </div>
               </div>
 
-              {/* Dedicated Assigned Staff */}
-              <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-emerald-600" />
+              {/* Dedicated Assigned Staff & Address */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100 flex items-center gap-2">
+                  <User className="h-4 w-4 text-emerald-600 shrink-0" />
                   <div>
                     <span className="text-slate-400 font-bold uppercase text-[10px] block">Assigned Staff Officer</span>
                     <span className="font-bold text-emerald-800">
@@ -912,14 +947,13 @@ export default function FarmersPage() {
                     </span>
                   </div>
                 </div>
+                {selectedFarmer.address && (
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-150">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] block">Address Details</span>
+                    <p className="font-semibold text-slate-700 truncate">{selectedFarmer.address}</p>
+                  </div>
+                )}
               </div>
-
-              {selectedFarmer.address && (
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 text-xs">
-                  <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Address Details</span>
-                  <p className="font-semibold text-slate-700 mt-1">{selectedFarmer.address}</p>
-                </div>
-              )}
 
               {selectedFarmer.notes && (
                 <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-xs">
@@ -928,32 +962,172 @@ export default function FarmersPage() {
                 </div>
               )}
 
-              <div className="pt-3 flex items-center justify-between border-t border-slate-100">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsDetailOpen(false);
-                    handleOpenEdit(selectedFarmer);
-                  }}
-                  className="rounded-xl text-xs font-bold"
-                >
-                  Edit Profile
-                </Button>
-                <Button
-                  onClick={() => {
-                    setIsDetailOpen(false);
-                    handleOpenAssignTask(selectedFarmer);
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold px-4 flex items-center gap-1.5 shadow-sm"
-                >
-                  <ClipboardList className="h-4 w-4" />
-                  Assign Visit Task
-                </Button>
+              {/* ─── Field Staff Visits & Question-Answers Section ─── */}
+              <div className="pt-4 border-t border-slate-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                      <Clock className="h-4 w-4 text-emerald-600" /> Staff Visits & Filled Question-Answers
+                    </span>
+                    <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 font-bold text-xs">
+                      {visitsData?.tasks?.length || 0} Visits
+                    </Badge>
+                  </div>
+                </div>
+
+                {isLoadingVisits ? (
+                  <div className="flex flex-col items-center justify-center py-10 gap-2 bg-slate-50 rounded-2xl border border-slate-100">
+                    <Loader2 className="h-6 w-6 text-emerald-600 animate-spin" />
+                    <p className="text-xs font-semibold text-slate-500">Loading visit logs & submitted questions...</p>
+                  </div>
+                ) : !visitsData?.tasks || visitsData.tasks.length === 0 ? (
+                  <div className="text-center py-8 space-y-2 bg-slate-50 rounded-2xl border border-slate-100">
+                    <div className="h-10 w-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                      <ClipboardList className="h-5 w-5" />
+                    </div>
+                    <h4 className="text-xs font-bold text-slate-700">No Staff Visits Recorded Yet</h4>
+                    <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                      When staff visit this farmer and complete tasks with checklist questions & photos, all details will appear here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {visitsData.tasks.map((task: any) => {
+                      const isCompleted = task.status === "COMPLETED";
+                      const staff = task.assignedTo;
+                      const hasResponses = task.checklistResponses && (
+                        Array.isArray(task.checklistResponses) ? task.checklistResponses.length > 0 : Object.keys(task.checklistResponses).length > 0
+                      );
+
+                      let responsesList: any[] = [];
+                      if (Array.isArray(task.checklistResponses)) {
+                        responsesList = task.checklistResponses;
+                      } else if (task.checklistResponses && typeof task.checklistResponses === "object") {
+                        responsesList = Object.entries(task.checklistResponses).map(([key, val]: [string, any]) => ({
+                          id: key,
+                          title: key,
+                          value: typeof val === "object" ? (val.text || val.dropdown || val.value || JSON.stringify(val)) : String(val),
+                          type: val?.image ? "IMAGE" : "TEXT",
+                          fileUrl: val?.image || val?.file?.url
+                        }));
+                      }
+
+                      return (
+                        <div
+                          key={task.id}
+                          className={`p-4 rounded-2xl border transition-all ${
+                            isCompleted ? "bg-emerald-50/30 border-emerald-200" : "bg-slate-50 border-slate-200"
+                          }`}
+                        >
+                          {/* Visit Task Header */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-black text-slate-800 text-sm">{task.title}</h4>
+                                <Badge className={isCompleted ? "bg-emerald-600 text-white font-bold text-[10px]" : "bg-amber-500 text-white font-bold text-[10px]"}>
+                                  {task.status}
+                                </Badge>
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2">
+                                <span>Scheduled: {task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "N/A"}</span>
+                                {task.completedAt && (
+                                  <span className="text-emerald-700 font-bold">
+                                    • Completed: {new Date(task.completedAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+
+                            {/* Staff Member Info */}
+                            {staff && (
+                              <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+                                <div className="h-7 w-7 rounded-full bg-emerald-100 text-emerald-800 font-black text-xs flex items-center justify-center">
+                                  {staff.name?.charAt(0).toUpperCase() || "S"}
+                                </div>
+                                <div className="text-left">
+                                  <span className="text-[11px] font-bold text-slate-800 block leading-tight">{staff.name}</span>
+                                  <span className="text-[9px] font-medium text-slate-400 block">{staff.phone || staff.email || staff.role || "Staff"}</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Completion Photo & Remarks */}
+                          {(task.completionPhotoUrl || task.completionRemarks) && (
+                            <div className="mt-3 p-3 bg-white rounded-xl border border-slate-150 flex flex-col sm:flex-row gap-3 items-start">
+                              {task.completionPhotoUrl && (
+                                <a href={task.completionPhotoUrl} target="_blank" rel="noreferrer" className="shrink-0 group relative">
+                                  <img
+                                    src={task.completionPhotoUrl}
+                                    alt="Visit Proof"
+                                    className="w-24 h-24 object-cover rounded-lg border border-slate-200 group-hover:opacity-90 transition-opacity"
+                                  />
+                                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 rounded-lg transition-opacity">
+                                    <ExternalLink className="h-4 w-4 text-white" />
+                                  </div>
+                                </a>
+                              )}
+                              <div className="flex-1 space-y-1">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Staff Visit Remarks:</span>
+                                <p className="text-xs font-semibold text-slate-700 whitespace-pre-wrap">{task.completionRemarks || "No written remarks."}</p>
+                                {task.completionLat && (
+                                  <a
+                                    href={`https://maps.google.com/?q=${task.completionLat},${task.completionLng}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline pt-1"
+                                  >
+                                    <MapPin className="h-3 w-3" /> Location: {task.completionLat.toFixed(5)}, {task.completionLng.toFixed(5)} (Open Map)
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Submitted Checklist Responses (Q&A) */}
+                          {hasResponses && (
+                            <div className="mt-3 space-y-2">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Submitted Questions & Answers:
+                              </span>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {responsesList.map((item: any, idx: number) => {
+                                  const questionText = item.title || item.question || `Question #${idx + 1}`;
+                                  const ansValue = item.value !== undefined ? item.value : (item.text || item.dropdown || item.response || "");
+                                  const imgUrl = item.fileUrl || item.image || (item.type === "IMAGE" ? item.value : null);
+
+                                  return (
+                                    <div key={idx} className="p-2.5 bg-white rounded-xl border border-slate-200 space-y-1">
+                                      <div className="flex items-start gap-1.5">
+                                        <HelpCircle className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
+                                        <span className="text-xs font-bold text-slate-600 leading-snug">{questionText}</span>
+                                      </div>
+                                      {imgUrl ? (
+                                        <a href={imgUrl} target="_blank" rel="noreferrer" className="block mt-1">
+                                          <img src={imgUrl} alt={questionText} className="w-20 h-20 object-cover rounded-lg border border-slate-200 hover:opacity-90" />
+                                        </a>
+                                      ) : (
+                                        <p className="text-xs font-black text-slate-900 pl-5">
+                                          {ansValue ? String(ansValue) : <span className="text-slate-400 font-normal italic">No response</span>}
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
 
       {/* ─── Assign Visit Task Dialog (Wider max-w-2xl with Searchable Staff Picker) ─── */}
       <Dialog open={isAssignTaskOpen} onOpenChange={setIsAssignTaskOpen}>

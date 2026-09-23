@@ -110,3 +110,55 @@ export async function deleteDealer(actor: AuthUser, dealerId: string) {
     where: { id: dealer.id }
   });
 }
+
+export async function getDealerVisits(actor: AuthUser, dealerId: string) {
+  const dealer = await getDealer(actor, dealerId);
+
+  // 1. Fetch completed or assigned tasks for this dealer
+  const tasks = await prisma.task.findMany({
+    where: {
+      OR: [
+        { dealers: { some: { id: dealer.id } } },
+        { title: { contains: dealer.name, mode: "insensitive" } },
+        { description: { contains: dealer.name, mode: "insensitive" } }
+      ]
+    },
+    include: {
+      assignedTo: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true
+        }
+      }
+    },
+    orderBy: { dueDate: "desc" },
+    take: 50
+  });
+
+  // 2. Fetch dealer activities from vaniki_dealer_activities
+  let activities: any[] = [];
+  try {
+    activities = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT * FROM vaniki_dealer_activities 
+       WHERE LOWER(TRIM(dealer_name)) = LOWER(TRIM($1)) 
+          OR dealer_code = $2 
+          OR (four_digit_id IS NOT NULL AND four_digit_id != '' AND four_digit_id = $3)
+       ORDER BY created_at DESC LIMIT 50`,
+      dealer.name,
+      dealer.phone || "",
+      (dealer.name.match(/\d{4}/) || [""])[0]
+    );
+  } catch (err) {
+    console.error("Error fetching vaniki activities for dealer:", err);
+  }
+
+  return {
+    dealer,
+    tasks,
+    activities
+  };
+}
+

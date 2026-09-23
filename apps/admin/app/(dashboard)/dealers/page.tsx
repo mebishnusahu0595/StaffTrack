@@ -25,19 +25,23 @@ import {
   Check,
   Sparkles,
   CreditCard,
-  Package
+  Package,
+  HelpCircle
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   fetchDealers, 
+  fetchDealerVisits,
   createDealer, 
   updateDealer, 
   deleteDealer,
   fetchVanikiActivities,
   fetchUsers,
   createTask,
+  recordDealerCreditAdjustment,
   type Dealer
 } from "@/lib/api";
+
 import dayjs from "dayjs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,6 +82,7 @@ export default function DealersPage() {
     state: "",
     pincode: "",
     gstin: "",
+    creditLimit: "",
     assignedUserId: "",
     assignedUserName: ""
   });
@@ -105,8 +110,8 @@ export default function DealersPage() {
   const staffList: any[] = usersData?.items || [];
 
   const { data: historyData, isLoading: isLoadingHistory } = useQuery({
-    queryKey: ["dealer-history", selectedDealerForHistory?.name],
-    queryFn: () => fetchVanikiActivities({ search: selectedDealerForHistory?.name }),
+    queryKey: ["dealer-history", selectedDealerForHistory?.id],
+    queryFn: () => fetchDealerVisits(selectedDealerForHistory!.id),
     enabled: !!selectedDealerForHistory && isHistoryOpen
   });
 
@@ -124,9 +129,21 @@ export default function DealersPage() {
   });
 
   const editMutation = useMutation({
-    mutationFn: (data: any) => updateDealer(selectedDealer!.id, data),
+    mutationFn: async (data: any) => {
+      const res = await updateDealer(selectedDealer!.id, data);
+      if (data.creditLimit !== undefined && data.creditLimit !== "") {
+        await recordDealerCreditAdjustment({
+          dealerCode: selectedDealer!.phone || selectedDealer!.name,
+          type: "LIMIT_ADJUST",
+          newLimit: Number(data.creditLimit),
+          notes: `Credit limit updated by Admin on StaffTrack to ₹${Number(data.creditLimit).toLocaleString("en-IN")}`
+        }).catch(err => console.warn("Failed to sync credit limit adjustment:", err));
+      }
+      return res;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dealers"] });
+      queryClient.invalidateQueries({ queryKey: ["dealer-history"] });
       setIsEditOpen(false);
       setSelectedDealer(null);
       resetForm();
@@ -137,6 +154,7 @@ export default function DealersPage() {
   });
 
   const deleteMutation = useMutation({
+
     mutationFn: deleteDealer,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dealers"] });
@@ -195,12 +213,13 @@ export default function DealersPage() {
       state: "",
       pincode: "",
       gstin: "",
+      creditLimit: "",
       assignedUserId: "",
       assignedUserName: ""
     });
   };
 
-  const handleOpenEdit = (dealer: Dealer) => {
+  const handleOpenEdit = (dealer: any) => {
     setSelectedDealer(dealer);
     setFormData({
       name: dealer.name || "",
@@ -211,11 +230,13 @@ export default function DealersPage() {
       state: dealer.state || "",
       pincode: dealer.pincode || "",
       gstin: dealer.gstin || "",
+      creditLimit: dealer.creditLimit !== undefined && dealer.creditLimit !== null ? String(dealer.creditLimit) : "50000",
       assignedUserId: dealer.assignedUserId || "",
       assignedUserName: dealer.assignedUserName || ""
     });
     setIsEditOpen(true);
   };
+
 
   const handleOpenAssignStaff = (dealer: Dealer) => {
     setSelectedDealerForAssign(dealer);
@@ -664,7 +685,22 @@ export default function DealersPage() {
                     className="h-10 rounded-xl bg-slate-50 border-slate-200 font-medium text-xs font-mono"
                   />
                 </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                    <span>Credit Limit (₹)</span>
+                    <span className="text-[10px] text-blue-600 font-bold">Approved Credit</span>
+                  </Label>
+                  <Input 
+                    type="number"
+                    placeholder="e.g. 50000, 100000"
+                    value={formData.creditLimit}
+                    onChange={(e) => setFormData({ ...formData, creditLimit: e.target.value })}
+                    className="h-10 rounded-xl bg-slate-50 border-slate-200 font-bold text-xs text-slate-800"
+                  />
+                </div>
               </div>
+
 
               {/* Right Column */}
               <div className="space-y-3">
@@ -964,123 +1000,337 @@ export default function DealersPage() {
             </DialogClose>
           </DialogHeader>
 
-          <div className="pt-4 space-y-4">
+          <div className="pt-4 space-y-6">
             {isLoadingHistory ? (
+
               <div className="flex flex-col items-center justify-center py-16 gap-3">
                 <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
-                <p className="text-xs font-semibold text-slate-500">Loading visit history...</p>
-              </div>
-            ) : !historyData?.activities || historyData.activities.length === 0 ? (
-              <div className="text-center py-16 space-y-3 bg-slate-50 rounded-2xl border border-slate-100">
-                <div className="h-12 w-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-                  <Clock className="h-6 w-6" />
-                </div>
-                <h4 className="text-sm font-bold text-slate-700">No Staff Visits Recorded Yet</h4>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                  When field staff enter this dealer code in the mobile app or place orders, their visits and timestamps will appear here automatically.
-                </p>
+                <p className="text-xs font-semibold text-slate-500">Loading visit history & activities...</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between px-1">
-                  <span className="text-xs font-bold text-slate-500">
-                    Total Logs Recorded: {historyData.activities.length}
-                  </span>
-                </div>
-
+              <>
+                {/* ─── Part 1: Field Staff Visit Tasks & Checklist Q/A ─── */}
                 <div className="space-y-3">
-                  {historyData.activities.map((activity: any) => {
-                    const isOrder = activity.action === "ORDER_PLACED";
-                    return (
-                      <div
-                        key={activity.id}
-                        className={`p-4 rounded-2xl border transition-all ${
-                          isOrder
-                            ? "bg-emerald-50/40 border-emerald-200/80 hover:border-emerald-300"
-                            : "bg-blue-50/40 border-blue-200/80 hover:border-blue-300"
-                        }`}
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Badge className={isOrder ? "bg-emerald-600 text-white font-bold text-xs" : "bg-blue-600 text-white font-bold text-xs"}>
-                              {isOrder ? "Wholesale Order Placed" : "Shop Visit / Code Lookup"}
-                            </Badge>
-                            {activity.invoiceNumber && (
-                              <Badge variant="outline" className="font-mono text-xs font-bold text-slate-700 bg-white">
-                                #{activity.invoiceNumber}
-                              </Badge>
+                  <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                      <Clock className="h-4 w-4 text-blue-600" /> Field Staff Visit Tasks & Question-Answers
+                    </span>
+                    <Badge variant="outline" className="text-blue-700 bg-blue-50 border-blue-200 font-bold text-xs">
+                      {historyData?.tasks?.length || 0} Visits
+                    </Badge>
+                  </div>
+
+                  {!historyData?.tasks || historyData.tasks.length === 0 ? (
+                    <div className="text-center py-6 bg-slate-50 rounded-2xl border border-slate-100">
+                      <p className="text-xs text-slate-400 font-medium">No field visit tasks recorded yet for this dealer.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {historyData.tasks.map((task: any) => {
+                        const isCompleted = task.status === "COMPLETED";
+                        const staff = task.assignedTo;
+                        const hasResponses = task.checklistResponses && (
+                          Array.isArray(task.checklistResponses) ? task.checklistResponses.length > 0 : Object.keys(task.checklistResponses).length > 0
+                        );
+
+                        let responsesList: any[] = [];
+                        if (Array.isArray(task.checklistResponses)) {
+                          responsesList = task.checklistResponses;
+                        } else if (task.checklistResponses && typeof task.checklistResponses === "object") {
+                          responsesList = Object.entries(task.checklistResponses).map(([key, val]: [string, any]) => ({
+                            id: key,
+                            title: key,
+                            value: typeof val === "object" ? (val.text || val.dropdown || val.value || JSON.stringify(val)) : String(val),
+                            type: val?.image ? "IMAGE" : "TEXT",
+                            fileUrl: val?.image || val?.file?.url
+                          }));
+                        }
+
+                        return (
+                          <div
+                            key={task.id}
+                            className={`p-4 rounded-2xl border transition-all ${
+                              isCompleted ? "bg-blue-50/30 border-blue-200" : "bg-slate-50 border-slate-200"
+                            }`}
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-black text-slate-800 text-sm">{task.title}</h4>
+                                  <Badge className={isCompleted ? "bg-emerald-600 text-white font-bold text-[10px]" : "bg-amber-500 text-white font-bold text-[10px]"}>
+                                    {task.status}
+                                  </Badge>
+                                </div>
+                                <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2">
+                                  <span>Due: {task.dueDate ? dayjs(task.dueDate).format("DD MMM YYYY") : "N/A"}</span>
+                                  {task.completedAt && (
+                                    <span className="text-emerald-700 font-bold">
+                                      • Completed: {dayjs(task.completedAt).format("DD MMM YYYY, hh:mm A")}
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+
+                              {staff && (
+                                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+                                  <div className="h-7 w-7 rounded-full bg-blue-100 text-blue-800 font-black text-xs flex items-center justify-center">
+                                    {staff.name?.charAt(0).toUpperCase() || "S"}
+                                  </div>
+                                  <div className="text-left">
+                                    <span className="text-[11px] font-bold text-slate-800 block leading-tight">{staff.name}</span>
+                                    <span className="text-[9px] font-medium text-slate-400 block">{staff.phone || staff.email || staff.role || "Staff"}</span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Remarks & Photo */}
+                            {(task.completionPhotoUrl || task.completionRemarks) && (
+                              <div className="mt-2.5 p-3 bg-white rounded-xl border border-slate-150 flex flex-col sm:flex-row gap-3 items-start">
+                                {task.completionPhotoUrl && (
+                                  <a href={task.completionPhotoUrl} target="_blank" rel="noreferrer" className="shrink-0 group relative">
+                                    <img
+                                      src={task.completionPhotoUrl}
+                                      alt="Visit Proof"
+                                      className="w-20 h-20 object-cover rounded-lg border border-slate-200 group-hover:opacity-90"
+                                    />
+                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 rounded-lg">
+                                      <ExternalLink className="h-4 w-4 text-white" />
+                                    </div>
+                                  </a>
+                                )}
+                                <div className="flex-1 space-y-1">
+                                  <span className="text-[10px] font-black uppercase text-slate-400">Staff Visit Remarks:</span>
+                                  <p className="text-xs font-semibold text-slate-700 whitespace-pre-wrap">{task.completionRemarks || "No written remarks."}</p>
+                                  {task.completionLat && (
+                                    <a
+                                      href={`https://maps.google.com/?q=${task.completionLat},${task.completionLng}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline pt-0.5"
+                                    >
+                                      <MapPin className="h-3 w-3" /> Location: {task.completionLat.toFixed(5)}, {task.completionLng.toFixed(5)} (Open Map)
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
                             )}
-                            {activity.paymentMode && (
-                              <Badge className="bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold text-[11px]">
-                                💳 {activity.paymentMode}
-                              </Badge>
+
+                            {/* Submitted Checklist Responses (Q&A) */}
+                            {hasResponses && (
+                              <div className="mt-2.5 space-y-1.5">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-blue-800 flex items-center gap-1">
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-blue-600" /> Submitted Questions & Answers:
+                                </span>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                  {responsesList.map((item: any, idx: number) => {
+                                    const questionText = item.title || item.question || `Question #${idx + 1}`;
+                                    const ansValue = item.value !== undefined ? item.value : (item.text || item.dropdown || item.response || "");
+                                    const imgUrl = item.fileUrl || item.image || (item.type === "IMAGE" ? item.value : null);
+
+                                    return (
+                                      <div key={idx} className="p-2.5 bg-white rounded-xl border border-slate-200 space-y-1">
+                                        <div className="flex items-start gap-1.5">
+                                          <HelpCircle className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
+                                          <span className="text-xs font-bold text-slate-600 leading-snug">{questionText}</span>
+                                        </div>
+                                        {imgUrl ? (
+                                          <a href={imgUrl} target="_blank" rel="noreferrer" className="block mt-1">
+                                            <img src={imgUrl} alt={questionText} className="w-16 h-16 object-cover rounded-lg border border-slate-200 hover:opacity-90" />
+                                          </a>
+                                        ) : (
+                                          <p className="text-xs font-black text-slate-900 pl-5">
+                                            {ansValue ? String(ansValue) : <span className="text-slate-400 font-normal italic">No response</span>}
+                                          </p>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
                             )}
                           </div>
-                          <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
-                            <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                            {dayjs(activity.createdAt).format("DD MMM YYYY, hh:mm A")}
-                          </span>
-                        </div>
-
-                        {/* Staff officer info */}
-                        <div className="mt-3 flex items-center gap-2 text-xs text-slate-700">
-                          <div className="h-6 w-6 rounded-full bg-slate-200 font-bold flex items-center justify-center text-[10px]">
-                            {activity.staffName?.charAt(0).toUpperCase() || "S"}
-                          </div>
-                          <span className="font-bold">{activity.staffName}</span>
-                          {activity.staffPhone && (
-                            <span className="text-slate-400">({activity.staffPhone})</span>
-                          )}
-                        </div>
-
-                        {/* Financial snapshot if order placed */}
-                        {isOrder && (
-                          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 border-t border-emerald-100 text-xs">
-                            <div className="bg-white/80 p-2 rounded-xl border border-emerald-100">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase block">Grand Total</span>
-                              <span className="font-black text-slate-800 text-sm">₹{Number(activity.totalAmount || 0).toLocaleString("en-IN")}</span>
-                            </div>
-                            <div className="bg-white/80 p-2 rounded-xl border border-emerald-100">
-                              <span className="text-[10px] font-bold text-emerald-600 uppercase block">Paid Amount</span>
-                              <span className="font-black text-emerald-700 text-sm">₹{Number(activity.paidAmount || 0).toLocaleString("en-IN")}</span>
-                            </div>
-                            <div className="bg-white/80 p-2 rounded-xl border border-emerald-100">
-                              <span className="text-[10px] font-bold text-rose-500 uppercase block">Balance Udhaar</span>
-                              <span className="font-black text-rose-600 text-sm">₹{Number(activity.outstandingAmount || 0).toLocaleString("en-IN")}</span>
-                            </div>
-                            <div className="bg-white/80 p-2 rounded-xl border border-emerald-100">
-                              <span className="text-[10px] font-bold text-indigo-600 uppercase block">Payment Mode</span>
-                              <span className="font-black text-indigo-700 text-xs uppercase">{activity.paymentMode || "CASH"}</span>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Notes */}
-                        {activity.notes && (
-                          <p className="mt-2.5 text-xs text-slate-600 bg-white/70 p-2.5 rounded-xl border border-slate-100">
-                            <strong>Notes:</strong> {activity.notes}
-                          </p>
-                        )}
-
-                        {/* Proof Link if exists */}
-                        {activity.proofUrl && (
-                          <div className="mt-2.5">
-                            <a
-                              href={activity.proofUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 hover:underline"
-                            >
-                              <FileText className="h-3.5 w-3.5" /> View Attached Payment Slip / Document
-                            </a>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              </div>
+
+                {/* ─── Part 2: Credit Transactions, Limit Adjustments & Wholesale Orders ─── */}
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                      <CreditCard className="h-4 w-4 text-emerald-600" /> Credit Transactions, Payments & Order Activities
+                    </span>
+                    <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 font-bold text-xs">
+                      {historyData?.activities?.length || 0} Logs
+                    </Badge>
+                  </div>
+
+                  {!historyData?.activities || historyData.activities.length === 0 ? (
+                    <div className="text-center py-6 bg-slate-50 rounded-2xl border border-slate-100">
+                      <p className="text-xs text-slate-400 font-medium">No order or credit activities recorded yet.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {historyData.activities.map((activity: any) => {
+                        const isCreditPayment = activity.action === "CREDIT_PAYMENT";
+                        const isCreditLimit = activity.action === "CREDIT_LIMIT_ADJUSTED";
+                        const isOrder = activity.action === "ORDER_PLACED";
+
+                        return (
+                          <div
+                            key={activity.id}
+                            className={`p-4 rounded-2xl border transition-all ${
+                              isCreditPayment
+                                ? "bg-amber-50/50 border-amber-200"
+                                : isCreditLimit
+                                ? "bg-purple-50/50 border-purple-200"
+                                : isOrder
+                                ? "bg-emerald-50/40 border-emerald-200/80"
+                                : "bg-blue-50/40 border-blue-200/80"
+                            }`}
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {isCreditPayment && (
+                                  <Badge className="bg-amber-600 text-white font-bold text-xs">
+                                    💰 Credit Due Payment
+                                  </Badge>
+                                )}
+                                {isCreditLimit && (
+                                  <Badge className="bg-purple-600 text-white font-bold text-xs">
+                                    📈 Credit Limit Adjusted
+                                  </Badge>
+                                )}
+                                {isOrder && (
+                                  <Badge className="bg-emerald-600 text-white font-bold text-xs">
+                                    Wholesale Order Placed
+                                  </Badge>
+                                )}
+                                {!isCreditPayment && !isCreditLimit && !isOrder && (
+                                  <Badge className="bg-blue-600 text-white font-bold text-xs">
+                                    Shop Visit / Code Lookup
+                                  </Badge>
+                                )}
+
+                                {activity.paymentMode && (
+                                  <Badge className="bg-white text-slate-800 border border-slate-300 font-black text-xs">
+                                    💳 Mode: {activity.paymentMode}
+                                  </Badge>
+                                )}
+
+                                {activity.invoiceNumber && (
+                                  <Badge variant="outline" className="font-mono text-xs font-bold text-slate-700 bg-white">
+                                    #{activity.invoiceNumber}
+                                  </Badge>
+                                )}
+                              </div>
+                              <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
+                                <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                                {dayjs(activity.createdAt).format("DD MMM YYYY, hh:mm A")}
+                              </span>
+                            </div>
+
+                            {/* Staff member info */}
+                            <div className="mt-2.5 flex items-center gap-2 text-xs text-slate-700">
+                              <div className="h-6 w-6 rounded-full bg-slate-200 font-bold flex items-center justify-center text-[10px]">
+                                {activity.staffName?.charAt(0).toUpperCase() || "S"}
+                              </div>
+                              <span className="font-bold">{activity.staffName}</span>
+                              {activity.staffPhone && (
+                                <span className="text-slate-400">({activity.staffPhone})</span>
+                              )}
+                            </div>
+
+                            {/* Credit Payment Snapshot */}
+                            {isCreditPayment && (
+                              <div className="mt-2.5 grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2.5 border-t border-amber-100 text-xs">
+                                <div className="bg-white p-2.5 rounded-xl border border-amber-200">
+                                  <span className="text-[10px] font-bold text-amber-700 uppercase block">Amount Paid</span>
+                                  <span className="font-black text-emerald-700 text-base">₹{Number(activity.paidAmount || 0).toLocaleString("en-IN")}</span>
+                                </div>
+                                <div className="bg-white p-2.5 rounded-xl border border-amber-200">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Payment Method</span>
+                                  <span className="font-black text-slate-800 text-sm">{activity.paymentMode || "UPI"}</span>
+                                </div>
+                                <div className="bg-white p-2.5 rounded-xl border border-amber-200">
+                                  <span className="text-[10px] font-bold text-rose-500 uppercase block">Remaining Udhaar</span>
+                                  <span className="font-black text-rose-600 text-sm">₹{Number(activity.outstandingAmount || 0).toLocaleString("en-IN")}</span>
+                                </div>
+                                <div className="bg-white p-2.5 rounded-xl border border-amber-200">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase block">UTR / Ref No.</span>
+                                  <span className="font-mono font-bold text-slate-800 text-xs truncate block">{activity.metadata?.utr || "N/A"}</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Credit Limit Adjustment Snapshot */}
+                            {isCreditLimit && (
+                              <div className="mt-2.5 grid grid-cols-2 gap-2 pt-2.5 border-t border-purple-100 text-xs">
+                                <div className="bg-white p-2.5 rounded-xl border border-purple-200">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Previous Limit</span>
+                                  <span className="font-bold text-slate-600 text-sm">₹{Number(activity.metadata?.previousLimit || 0).toLocaleString("en-IN")}</span>
+                                </div>
+                                <div className="bg-white p-2.5 rounded-xl border border-purple-200">
+                                  <span className="text-[10px] font-bold text-purple-700 uppercase block">New Credit Limit</span>
+                                  <span className="font-black text-purple-800 text-base">₹{Number(activity.totalAmount || 0).toLocaleString("en-IN")}</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Wholesale Order Snapshot */}
+                            {isOrder && (
+                              <div className="mt-2.5 grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2.5 border-t border-emerald-100 text-xs">
+                                <div className="bg-white/80 p-2 rounded-xl border border-emerald-100">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Grand Total</span>
+                                  <span className="font-black text-slate-800 text-sm">₹{Number(activity.totalAmount || 0).toLocaleString("en-IN")}</span>
+                                </div>
+                                <div className="bg-white/80 p-2 rounded-xl border border-emerald-100">
+                                  <span className="text-[10px] font-bold text-emerald-600 uppercase block">Paid Amount</span>
+                                  <span className="font-black text-emerald-700 text-sm">₹{Number(activity.paidAmount || 0).toLocaleString("en-IN")}</span>
+                                </div>
+                                <div className="bg-white/80 p-2 rounded-xl border border-emerald-100">
+                                  <span className="text-[10px] font-bold text-rose-500 uppercase block">Balance Udhaar</span>
+                                  <span className="font-black text-rose-600 text-sm">₹{Number(activity.outstandingAmount || 0).toLocaleString("en-IN")}</span>
+                                </div>
+                                <div className="bg-white/80 p-2 rounded-xl border border-emerald-100">
+                                  <span className="text-[10px] font-bold text-indigo-600 uppercase block">Payment Mode</span>
+                                  <span className="font-black text-indigo-700 text-xs uppercase">{activity.paymentMode || "CREDIT"}</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Notes */}
+                            {activity.notes && (
+                              <p className="mt-2 text-xs text-slate-600 bg-white/70 p-2 rounded-xl border border-slate-150">
+                                <strong>Remarks / Notes:</strong> {activity.notes}
+                              </p>
+                            )}
+
+                            {/* Proof Link if exists */}
+                            {activity.proofUrl && (
+                              <div className="mt-2">
+                                <a
+                                  href={activity.proofUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 hover:underline"
+                                >
+                                  <FileText className="h-3.5 w-3.5" /> View Payment Slip / Proof Document
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
+          </div>
+
 
             <div className="pt-3 flex justify-end border-t border-slate-100">
               <Button
@@ -1091,9 +1341,9 @@ export default function DealersPage() {
                 Close History
               </Button>
             </div>
-          </div>
         </DialogContent>
       </Dialog>
     </div>
   );
 }
+

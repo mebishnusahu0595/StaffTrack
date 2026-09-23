@@ -156,6 +156,38 @@ export async function deleteFarmer(companyId: string, id: string) {
   );
 }
 
+export async function getFarmerVisits(companyId: string, id: string) {
+  const farmer = await getFarmer(companyId, id);
+
+  const tasks = await prisma.task.findMany({
+    where: {
+      OR: [
+        { farmers: { some: { id: farmer.id } } },
+        { title: { contains: farmer.name, mode: "insensitive" } },
+        { description: { contains: farmer.name, mode: "insensitive" } }
+      ]
+    },
+    include: {
+      assignedTo: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true
+        }
+      }
+    },
+    orderBy: { dueDate: "desc" },
+    take: 50
+  });
+
+  return {
+    farmer,
+    tasks
+  };
+}
+
 function mapFarmerRow(r: any) {
   return {
     id: r.id,
@@ -176,3 +208,4 @@ function mapFarmerRow(r: any) {
     updatedAt: r.updated_at,
   };
 }
+

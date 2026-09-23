@@ -31,3 +31,10 @@ export async function deleteDealer(req: Request, res: Response): Promise<void> {
   await dealerService.deleteDealer(actor, req.params.id);
   sendSuccess(res, null, "Dealer deleted");
 }
+
+export async function getDealerVisits(req: Request, res: Response): Promise<void> {
+  const actor = req.user!;
+  const data = await dealerService.getDealerVisits(actor, req.params.id);
+  sendSuccess(res, data, "Dealer visits fetched");
+}
+

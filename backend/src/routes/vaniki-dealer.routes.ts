@@ -39,12 +39,19 @@ router.get("/products", vanikiDealerController.getWholesaleProducts);
 // 4. Fetch Dynamic Bank Details & QR Code
 router.get("/bank-details", vanikiDealerController.getBankDetails);
 
+// 4b. Fetch SuperAdmin Garages / Warehouses List
+router.get("/garages", vanikiDealerController.getGarages);
 
-// 4. Place Order for Dealer
+// 5. Place Order for Dealer
+
 router.post("/orders/:dealerCode", vanikiDealerController.placeDealerOrder);
 
-// 5. Upload Payment Proof / Slip
+// 5. Record Credit Due Payment or Limit Adjustment
+router.post("/credit-adjustment", vanikiDealerController.recordCreditAdjustment);
+
+// 6. Upload Payment Proof / Slip
 router.post("/upload", upload.single("file"), (req, res) => {
+
   if (!req.file) {
     return res.status(400).json({ success: false, message: "No file uploaded" });
   }

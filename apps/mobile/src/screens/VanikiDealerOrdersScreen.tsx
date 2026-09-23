@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import {
   View,
   ScrollView,
@@ -9,15 +9,29 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from "react-native";
 import { Text, TextInput, Button, Card, Divider, Badge } from "react-native-paper";
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import { api } from "../api/client";
 import { uploadPhoto, uploadFile } from "../api";
+import { useAuth } from "../auth/AuthContext";
 import { AppIcon } from "../components/AppIcon";
 
+interface ProductVariant {
+  id: string;
+  label?: string;
+  name?: string;
+  packSize?: string;
+  dealerPrice?: number;
+  mrp?: number;
+  stock?: number;
+  petiSize?: number;
+  petiUnit?: string;
+}
 
 interface VanikiProduct {
   id: string;
@@ -32,21 +46,28 @@ interface VanikiProduct {
   dealerPrice: number;
   petiPrice: number;
   stock: number;
-  variants: Array<{
-    id: string;
-    label: string;
-    dealerPrice: number;
-    mrp: number;
-    stock: number;
-  }>;
+  taxRate?: number;
+  variants?: ProductVariant[];
 }
 
 interface CartItem {
+  cartKey: string; // `${productId}_${variantId || 'base'}`
   product: VanikiProduct;
+  variantId?: string;
+  variantLabel?: string;
+  packSize: string;
+  petiSize: number;
+  petiUnit: string;
+  dealerPrice: number; // without GST
+  dealerPriceWithGst: number;
+  mrp: number;
   petiQuantity: number;
+  taxRate: number;
 }
 
 export function VanikiDealerOrdersScreen() {
+  const navigation = useNavigation();
+  const { user } = useAuth();
   const scrollViewRef = useRef<ScrollView>(null);
   const catalogLayoutY = useRef<number>(0);
 
@@ -54,15 +75,38 @@ export function VanikiDealerOrdersScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [dealerData, setDealerData] = useState<any | null>(null);
 
+  // ─── Real-Time Garages State ─────────────────────────────────────────────
+  const [garages, setGarages] = useState<string[]>([
+    "Vaniki garage",
+    "Raipur Central Hub",
+    "Bilaspur Depot",
+  ]);
+  const [selectedGarage, setSelectedGarage] = useState<string>("Vaniki garage");
+  const [isLoadingGarages, setIsLoadingGarages] = useState(false);
+
   const [products, setProducts] = useState<VanikiProduct[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [searchProductQuery, setSearchProductQuery] = useState("");
 
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [paymentMode, setPaymentMode] = useState<"credit" | "cash" | "upi_qr" | "bank_transfer">("credit");
+  // Removed "cash" strictly: only credit, upi_qr, or bank_transfer
+  const [paymentMode, setPaymentMode] = useState<"credit" | "upi_qr" | "bank_transfer">("credit");
   const [paidAmount, setPaidAmount] = useState("");
   const [notes, setNotes] = useState("");
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+
+  // ─── Credit / Udhaar Management Modal State ──────────────────────────────
+  const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
+  const [creditTab, setCreditTab] = useState<"payment" | "limit">("payment");
+  const [payUdhaarAmount, setPayUdhaarAmount] = useState("");
+  const [payUdhaarMode, setPayUdhaarMode] = useState<"UPI" | "NEFT">("UPI");
+  const [payUdhaarUtr, setPayUdhaarUtr] = useState("");
+  const [payUdhaarSlipUrl, setPayUdhaarSlipUrl] = useState<string | null>(null);
+  const [payUdhaarNotes, setPayUdhaarNotes] = useState("");
+  const [isUploadingPaySlip, setIsUploadingPaySlip] = useState(false);
+  const [newCreditLimitInput, setNewCreditLimitInput] = useState("");
+  const [creditLimitNotes, setCreditLimitNotes] = useState("");
+  const [isSubmittingCredit, setIsSubmittingCredit] = useState(false);
 
   const scrollToCheckout = () => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -73,6 +117,38 @@ export function VanikiDealerOrdersScreen() {
       y: Math.max(0, catalogLayoutY.current - 10),
       animated: true,
     });
+  };
+
+  // ─── Session Reset & Auto-Reset on Navigation Blur ────────────────────────
+  const resetSession = useCallback(() => {
+    setDealerData(null);
+    setDealerCodeInput("");
+    setCart([]);
+    setPaidAmount("");
+    setNotes("");
+    setPaymentProofUrl(null);
+    setUtrNumber("");
+    setOrderDocumentUrl(null);
+    setOrderDocumentName(null);
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("blur", () => {
+      // Auto-reset dealer session when leaving screen
+      resetSession();
+    });
+    return unsubscribe;
+  }, [navigation, resetSession]);
+
+  const handleExitDealer = () => {
+    Alert.alert(
+      "Exit Dealer Session?",
+      "Are you sure you want to exit? Your cart items and current session will be cleared.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Exit", style: "destructive", onPress: resetSession },
+      ]
+    );
   };
 
   // ─── Dynamic Bank Details & Payment Proof State ───────────────────────────
@@ -94,8 +170,8 @@ export function VanikiDealerOrdersScreen() {
   const [orderDocumentName, setOrderDocumentName] = useState<string | null>(null);
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
 
-  // Fetch dynamic bank details on mount
-  React.useEffect(() => {
+  // Fetch dynamic bank details & real-time garages on mount
+  useEffect(() => {
     api
       .get("/vaniki-dealers/bank-details")
       .then((res) => {
@@ -104,7 +180,25 @@ export function VanikiDealerOrdersScreen() {
         }
       })
       .catch((err) => console.log("Bank details fetch error:", err));
+
+    loadGarages();
   }, []);
+
+  const loadGarages = async () => {
+    try {
+      setIsLoadingGarages(true);
+      const res = await api.get("/vaniki-dealers/garages");
+      if (res.data?.success && Array.isArray(res.data?.data) && res.data.data.length > 0) {
+        setGarages(res.data.data);
+        // 1st garage auto-selected by default!
+        setSelectedGarage(res.data.data[0]);
+      }
+    } catch (err) {
+      console.log("Garages fetch error:", err);
+    } finally {
+      setIsLoadingGarages(false);
+    }
+  };
 
   const handlePickPaymentSlip = async () => {
     try {
@@ -167,9 +261,15 @@ export function VanikiDealerOrdersScreen() {
       setIsSearching(true);
       const res = await api.get(`/vaniki-dealers/lookup/${encodeURIComponent(code)}`);
       if (res.data?.success && res.data?.data) {
-        setDealerData(res.data.data);
-        if (res.data.data.bankDetails) {
-          setBankDetails(res.data.data.bankDetails);
+        const dData = res.data.data;
+        setDealerData(dData);
+        if (dData.bankDetails) {
+          setBankDetails(dData.bankDetails);
+        }
+        // If dealer lookup returned real-time garages list, update and auto-select 1st
+        if (Array.isArray(dData.garages) && dData.garages.length > 0) {
+          setGarages(dData.garages);
+          setSelectedGarage(dData.garages[0]);
         }
         // Also fetch wholesale products if not already loaded
         if (products.length === 0) {
@@ -186,7 +286,6 @@ export function VanikiDealerOrdersScreen() {
     }
   };
 
-
   const loadProducts = async () => {
     try {
       setIsLoadingProducts(true);
@@ -201,21 +300,47 @@ export function VanikiDealerOrdersScreen() {
     }
   };
 
-  // ─── Cart Operations ───────────────────────────────────────────────────────
-  const addToCart = (product: VanikiProduct) => {
-    const existingIndex = cart.findIndex((c) => c.product.id === product.id);
+  // ─── Cart Operations with Multiple Variant Support ─────────────────────────
+  const addToCart = (product: VanikiProduct, variant?: ProductVariant) => {
+    const variantId = variant?.id;
+    const cartKey = `${product.id}_${variantId || "base"}`;
+    const taxRate = product.taxRate || 18;
+    const basePrice = Number(variant?.dealerPrice ?? product.dealerPrice ?? 0);
+    const priceWithGst = Math.round(basePrice * (1 + taxRate / 100));
+    const petiSize = Number(variant?.petiSize ?? product.petiSize ?? 10);
+    const petiUnit = variant?.petiUnit ?? product.petiUnit ?? "Liter";
+    const packSize = variant?.packSize ?? variant?.label ?? variant?.name ?? product.packSize ?? "Standard";
+    const mrp = Number(variant?.mrp ?? product.mrp ?? 0);
+
+    const existingIndex = cart.findIndex((c) => c.cartKey === cartKey);
     if (existingIndex >= 0) {
       const updated = [...cart];
       updated[existingIndex].petiQuantity += 1;
       setCart(updated);
     } else {
-      setCart([...cart, { product, petiQuantity: 1 }]);
+      setCart([
+        ...cart,
+        {
+          cartKey,
+          product,
+          variantId,
+          variantLabel: variant?.label || variant?.name || variant?.packSize,
+          packSize,
+          petiSize,
+          petiUnit,
+          dealerPrice: basePrice,
+          dealerPriceWithGst: priceWithGst,
+          mrp,
+          petiQuantity: 1,
+          taxRate,
+        },
+      ]);
     }
   };
 
-  const updateCartQty = (productId: string, delta: number) => {
+  const updateCartQtyByKey = (cartKey: string, delta: number) => {
     const updated = [...cart];
-    const index = updated.findIndex((c) => c.product.id === productId);
+    const index = updated.findIndex((c) => c.cartKey === cartKey);
     if (index === -1) return;
 
     const newQty = updated[index].petiQuantity + delta;
@@ -227,20 +352,22 @@ export function VanikiDealerOrdersScreen() {
     setCart(updated);
   };
 
-  // ─── Calculations ──────────────────────────────────────────────────────────
+  // ─── Price Calculations with Excl. GST and + GST ─────────────────────────
   const { subtotal, gstAmount, grandTotal, totalPetis } = useMemo(() => {
     let sub = 0;
+    let grand = 0;
     let petis = 0;
 
     cart.forEach((item) => {
-      const units = item.petiQuantity * (item.product.petiSize || 10);
-      const itemSub = item.product.dealerPrice * units;
-      sub += itemSub;
+      const totalUnits = item.petiQuantity * item.petiSize;
+      const lineBase = item.dealerPrice * totalUnits;
+      const lineWithGst = item.dealerPriceWithGst * totalUnits;
+      sub += lineBase;
+      grand += lineWithGst;
       petis += item.petiQuantity;
     });
 
-    const gst = Math.round(sub * 0.18 * 100) / 100;
-    const grand = Math.round((sub + gst) * 100) / 100;
+    const gst = Math.max(0, grand - sub);
 
     return {
       subtotal: sub,
@@ -253,7 +380,128 @@ export function VanikiDealerOrdersScreen() {
   const effectivePaid = paidAmount === "" ? (paymentMode === "credit" ? 0 : grandTotal) : Number(paidAmount);
   const remainingCredit = Math.max(0, grandTotal - effectivePaid);
 
-  // ─── Submit Order ──────────────────────────────────────────────────────────
+  // ─── Credit Modal Handlers ────────────────────────────────────────────────
+  const openCreditModal = (initialTab: "payment" | "limit" = "payment") => {
+    setCreditTab(initialTab);
+    const outstanding = Number(dealerData?.ledgerSummary?.totalOutstanding || 0);
+    setPayUdhaarAmount(outstanding > 0 ? String(outstanding) : "");
+    setPayUdhaarMode("UPI");
+    setPayUdhaarUtr("");
+    setPayUdhaarSlipUrl(null);
+    setPayUdhaarNotes("");
+    setNewCreditLimitInput(String(dealerData?.credit?.creditLimit ?? ""));
+    setCreditLimitNotes("");
+    setIsCreditModalOpen(true);
+  };
+
+  const handlePickCreditSlip = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Required", "Please allow gallery access.");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets?.[0]) {
+        setIsUploadingPaySlip(true);
+        const url = await uploadPhoto(result.assets[0]);
+        setPayUdhaarSlipUrl(url);
+        Alert.alert("Success", "Payment slip attached!");
+      }
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to upload slip");
+    } finally {
+      setIsUploadingPaySlip(false);
+    }
+  };
+
+  const handleCaptureCreditSlip = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Required", "Please allow camera access.");
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+      if (!result.canceled && result.assets?.[0]) {
+        setIsUploadingPaySlip(true);
+        const url = await uploadPhoto(result.assets[0]);
+        setPayUdhaarSlipUrl(url);
+        Alert.alert("Success", "Payment slip captured!");
+      }
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to capture slip");
+    } finally {
+      setIsUploadingPaySlip(false);
+    }
+  };
+
+  const handleSubmitCreditAction = async () => {
+    if (!dealerData?.dealer) return;
+    const dealerCode = dealerData.dealer.dealerCode || dealerData.dealer.fourDigitId;
+
+    if (creditTab === "payment") {
+      const amountNum = Number(payUdhaarAmount);
+      if (isNaN(amountNum) || amountNum <= 0) {
+        Alert.alert("Invalid Amount", "Please enter a valid payment amount greater than 0.");
+        return;
+      }
+      try {
+        setIsSubmittingCredit(true);
+        const res = await api.post("/vaniki-dealers/credit-adjustment", {
+          dealerCode,
+          type: "PAYMENT",
+          amount: amountNum,
+          paymentMode: payUdhaarMode.toLowerCase(), // "upi" | "neft"
+          utr: payUdhaarUtr.trim() || undefined,
+          proofUrl: payUdhaarSlipUrl || undefined,
+          notes: payUdhaarNotes.trim() || `Payment received via ${payUdhaarMode}`,
+        });
+        if (res.data?.success) {
+          Alert.alert(
+            "Payment Recorded! 🎉",
+            `Payment of ₹${amountNum.toLocaleString("en-IN")} via ${payUdhaarMode} recorded successfully.`
+          );
+          setIsCreditModalOpen(false);
+          handleSearchDealer(dealerCode);
+        }
+      } catch (err: any) {
+        Alert.alert("Payment Error", err.response?.data?.message || err.message || "Failed to record payment");
+      } finally {
+        setIsSubmittingCredit(false);
+      }
+    } else {
+      const limitNum = Number(newCreditLimitInput);
+      if (isNaN(limitNum) || limitNum < 0) {
+        Alert.alert("Invalid Limit", "Please enter a valid credit limit.");
+        return;
+      }
+      try {
+        setIsSubmittingCredit(true);
+        const res = await api.post("/vaniki-dealers/credit-adjustment", {
+          dealerCode,
+          type: "LIMIT_ADJUST",
+          newLimit: limitNum,
+          notes: creditLimitNotes.trim() || `Credit limit updated to ₹${limitNum.toLocaleString("en-IN")}`,
+        });
+        if (res.data?.success) {
+          Alert.alert("Limit Updated! 🎉", `Credit limit updated to ₹${limitNum.toLocaleString("en-IN")}.`);
+          setIsCreditModalOpen(false);
+          handleSearchDealer(dealerCode);
+        }
+      } catch (err: any) {
+        Alert.alert("Update Error", err.response?.data?.message || err.message || "Failed to update credit limit");
+      } finally {
+        setIsSubmittingCredit(false);
+      }
+    }
+  };
+
+  // ─── Submit Order with Selected Garage ────────────────────────────────────
   const handlePlaceOrder = async () => {
     if (!dealerData?.dealer) {
       Alert.alert("Dealer Required", "Please search and select a dealer first.");
@@ -263,19 +511,27 @@ export function VanikiDealerOrdersScreen() {
       Alert.alert("Cart Empty", "Please add at least 1 product to the order.");
       return;
     }
+    if (!selectedGarage) {
+      Alert.alert("Garage Required", "Please select a warehouse/garage before placing the order.");
+      return;
+    }
 
     const payload = {
+      garageName: selectedGarage,
       items: cart.map((item) => ({
         productId: item.product.id,
-        variantId: item.product.variants?.[0]?.id || item.product.id,
-        productName: item.product.name,
+        variantId: item.variantId || item.product.id,
+        productName: item.variantLabel
+          ? `${item.product.name} (${item.variantLabel})`
+          : item.product.name,
         petiQuantity: item.petiQuantity,
-        petiSize: item.product.petiSize || 10,
-        petiUnit: item.product.petiUnit || "Liter",
-        packSize: item.product.packSize,
-        dealerPrice: item.product.dealerPrice,
-        mrp: item.product.mrp,
-        taxRate: 18,
+        petiSize: item.petiSize,
+        petiUnit: item.petiUnit,
+        packSize: item.packSize,
+        dealerPrice: item.dealerPriceWithGst, // + GST price used for final order & cart
+        baseDealerPrice: item.dealerPrice, // without GST price
+        mrp: item.mrp,
+        taxRate: item.taxRate,
       })),
       paymentMode,
       paidAmount: effectivePaid,
@@ -283,7 +539,9 @@ export function VanikiDealerOrdersScreen() {
       paymentProofUrl: paymentProofUrl || undefined,
       screenshots: paymentProofUrl ? [paymentProofUrl] : undefined,
       utr: utrNumber.trim() || undefined,
-      dealDescription: notes.trim() || undefined,
+      dealDescription: notes.trim()
+        ? `${notes.trim()} (Garage: ${selectedGarage})`
+        : `Order delivered to ${selectedGarage}`,
       notes: notes.trim() || undefined,
       documentUrl: orderDocumentUrl || undefined,
       documentName: orderDocumentName || undefined,
@@ -299,7 +557,7 @@ export function VanikiDealerOrdersScreen() {
       if (res.data?.success) {
         Alert.alert(
           "Order Placed Successfully! 🎉",
-          `Order ID: ${res.data.data?.orderId || "Generated"}\nInvoice: ${res.data.data?.invoiceNumber || ""}\nTotal: ₹${grandTotal.toLocaleString("en-IN")}\nRemaining Udhaar: ₹${remainingCredit.toLocaleString("en-IN")}`,
+          `Order ID: ${res.data.data?.orderId || "Generated"}\nGarage: ${selectedGarage}\nInvoice: ${res.data.data?.invoiceNumber || ""}\nTotal: ₹${grandTotal.toLocaleString("en-IN")}\nRemaining Udhaar: ₹${remainingCredit.toLocaleString("en-IN")}`,
           [
             {
               text: "OK",
@@ -388,44 +646,120 @@ export function VanikiDealerOrdersScreen() {
                     🏪 {dealerData.dealer.storeName || "Vaniki Authorized Store"}
                   </Text>
                 </View>
+
+                {/* Exit Dealer Button */}
+                <TouchableOpacity
+                  onPress={handleExitDealer}
+                  style={styles.exitDealerBtn}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="log-out-outline" size={16} color="#DC2626" />
+                  <Text style={styles.exitDealerText}>Exit</Text>
+                </TouchableOpacity>
               </View>
 
               <Text style={styles.contactText}>
                 📞 {dealerData.dealer.mobile} • 📍 {dealerData.dealer.address?.city || "Chhattisgarh"}
               </Text>
 
-              {/* Financial Metrics */}
+              {/* Financial Metrics with Clickable Credit Management */}
               <View style={styles.metricsGrid}>
-                <View style={styles.metricBox}>
-                  <Text style={styles.metricLabel}>Credit Limit</Text>
+                {/* Credit Limit - Tap to Edit */}
+                <TouchableOpacity
+                  style={[styles.metricBox, styles.metricBoxClickable]}
+                  onPress={() => openCreditModal("limit")}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.metricHeaderRow}>
+                    <Text style={styles.metricLabel}>Credit Limit</Text>
+                    <Ionicons name="create-outline" size={12} color="#059669" />
+                  </View>
                   <Text style={styles.metricVal}>
-                    ₹{(dealerData.credit?.creditLimit || 50000).toLocaleString("en-IN")}
+                    ₹{(dealerData.credit?.creditLimit ?? 0).toLocaleString("en-IN")}
                   </Text>
-                </View>
+                  <Text style={styles.metricTapHint}>Tap to edit limit</Text>
+                </TouchableOpacity>
+
                 <View style={styles.metricBox}>
                   <Text style={styles.metricLabel}>Total Invoiced</Text>
                   <Text style={styles.metricVal}>
                     ₹{(dealerData.ledgerSummary?.totalInvoiced || 0).toLocaleString("en-IN")}
                   </Text>
                 </View>
+
                 <View style={styles.metricBox}>
                   <Text style={styles.metricLabel}>Total Paid</Text>
                   <Text style={[styles.metricVal, { color: "#059669" }]}>
                     ₹{(dealerData.ledgerSummary?.totalPaid || 0).toLocaleString("en-IN")}
                   </Text>
                 </View>
-                <View style={[styles.metricBox, { backgroundColor: "#FEF2F2" }]}>
-                  <Text style={[styles.metricLabel, { color: "#DC2626" }]}>Outstanding Udhaar</Text>
+
+                {/* Outstanding Udhaar - Tap to Pay */}
+                <TouchableOpacity
+                  style={[styles.metricBox, styles.metricBoxClickable, { backgroundColor: "#FEF2F2", borderColor: "#FECACA" }]}
+                  onPress={() => openCreditModal("payment")}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.metricHeaderRow}>
+                    <Text style={[styles.metricLabel, { color: "#DC2626" }]}>Outstanding Udhaar</Text>
+                    <Ionicons name="wallet-outline" size={12} color="#DC2626" />
+                  </View>
                   <Text style={[styles.metricVal, { color: "#DC2626" }]}>
                     ₹{(dealerData.ledgerSummary?.totalOutstanding || 0).toLocaleString("en-IN")}
                   </Text>
-                </View>
+                  <Text style={[styles.metricTapHint, { color: "#EF4444" }]}>Tap to pay udhaar</Text>
+                </TouchableOpacity>
               </View>
             </Card.Content>
           </Card>
         )}
 
-        {/* ─── Wholesale Product Catalog ─── */}
+        {/* ─── Real-Time Warehouse / Garage Selector ─── */}
+        {dealerData?.dealer && (
+          <Card style={styles.garageCard}>
+            <Card.Content>
+              <View style={styles.garageHeaderRow}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Ionicons name="business" size={18} color="#059669" />
+                  <Text style={styles.garageTitle}>Select Dispatch Garage / Warehouse</Text>
+                </View>
+                <Badge style={styles.garageBadge}>Real-Time</Badge>
+              </View>
+              <Text style={styles.garageSubtitle}>
+                Orders will be dispatched from this garage. (1st garage is auto-selected)
+              </Text>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.garageChipsContainer}
+              >
+                {garages.map((g) => {
+                  const isSelected = selectedGarage === g;
+                  return (
+                    <TouchableOpacity
+                      key={g}
+                      onPress={() => setSelectedGarage(g)}
+                      style={[styles.garageChip, isSelected && styles.garageChipActive]}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons
+                        name={isSelected ? "checkmark-circle" : "location-outline"}
+                        size={15}
+                        color={isSelected ? "#FFFFFF" : "#059669"}
+                      />
+                      <Text style={[styles.garageChipText, isSelected && styles.garageChipTextActive]}>
+                        {g}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </Card.Content>
+          </Card>
+        )}
+
+        {/* ─── Wholesale Product Catalog (Revealed for Selected Garage) ─── */}
         {dealerData?.dealer && (
           <View
             style={{ marginTop: 16 }}
@@ -433,11 +767,16 @@ export function VanikiDealerOrdersScreen() {
               catalogLayoutY.current = e.nativeEvent.layout.y;
             }}
           >
-            <Text style={styles.sectionHeading}>Wholesale Products Catalog</Text>
+            <View style={styles.catalogHeadingRow}>
+              <Text style={styles.sectionHeading}>Wholesale Products Catalog</Text>
+              <Text style={styles.catalogGarageNotice}>
+                Dispatching to: <Text style={{ fontWeight: "700", color: "#059669" }}>{selectedGarage}</Text>
+              </Text>
+            </View>
 
             <TextInput
               mode="outlined"
-              placeholder="Search wholesale products..."
+              placeholder="Search wholesale products or variants..."
               value={searchProductQuery}
               onChangeText={setSearchProductQuery}
               style={[styles.input, { marginBottom: 12 }]}
@@ -448,63 +787,156 @@ export function VanikiDealerOrdersScreen() {
               <ActivityIndicator size="small" color="#059669" style={{ marginVertical: 20 }} />
             ) : (
               filteredProducts.map((p) => {
-                const inCart = cart.find((c) => c.product.id === p.id);
-                const petiSize = p.petiSize || 10;
-                const petiPrice = Math.round(p.dealerPrice * petiSize);
+                const taxRate = p.taxRate || 18;
+                const hasVariants = Array.isArray(p.variants) && p.variants.length > 0;
 
                 return (
-                  <Card key={p.id} style={[styles.productCard, inCart && styles.productCardActive]}>
-                    <Card.Content style={styles.productRow}>
-                      {p.image ? (
-                        <Image source={{ uri: p.image }} style={styles.productImage} />
-                      ) : (
-                        <View style={[styles.productImage, styles.placeholderImg]}>
-                          <Text style={{ fontSize: 10, color: "#94A3B8" }}>No Img</Text>
-                        </View>
-                      )}
+                  <Card key={p.id} style={styles.productCard}>
+                    <Card.Content>
+                      <View style={styles.productRow}>
+                        {p.image ? (
+                          <Image source={{ uri: p.image }} style={styles.productImage} />
+                        ) : (
+                          <View style={[styles.productImage, styles.placeholderImg]}>
+                            <Text style={{ fontSize: 10, color: "#94A3B8" }}>No Img</Text>
+                          </View>
+                        )}
 
-                      <View style={{ flex: 1, marginLeft: 10 }}>
-                        <Text style={styles.productCategory}>{p.category}</Text>
-                        <Text style={styles.productName}>{p.name}</Text>
-                        <Text style={styles.petiDesc}>
-                          {petiSize} {p.petiUnit}/Box • {p.packSize}
-                        </Text>
-
-                        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 4 }}>
-                          <Text style={styles.dealerPriceText}>₹{p.dealerPrice}/unit</Text>
-                          <Text style={styles.mrpText}>MRP ₹{p.mrp}</Text>
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <Text style={styles.productCategory}>{p.category}</Text>
+                          <Text style={styles.productName}>{p.name}</Text>
+                          <Text style={styles.petiDesc}>
+                            {p.petiSize || 10} {p.petiUnit || "Units"}/Peti • Pack: {p.packSize || "Standard"}
+                          </Text>
                         </View>
-                        <Text style={styles.petiPriceText}>Peti Price: ₹{petiPrice}</Text>
                       </View>
 
-                      {/* Stepper / Add */}
-                      {inCart ? (
-                        <View style={styles.stepperContainer}>
-                          <TouchableOpacity
-                            onPress={() => updateCartQty(p.id, -1)}
-                            style={styles.stepBtn}
-                          >
-                            <Text style={styles.stepBtnText}>-</Text>
-                          </TouchableOpacity>
-                          <Text style={styles.stepVal}>{inCart.petiQuantity} P</Text>
-                          <TouchableOpacity
-                            onPress={() => updateCartQty(p.id, 1)}
-                            style={[styles.stepBtn, { backgroundColor: "#059669" }]}
-                          >
-                            <Text style={[styles.stepBtnText, { color: "#FFF" }]}>+</Text>
-                          </TouchableOpacity>
+                      {/* ─── If Product has multiple variants ─── */}
+                      {hasVariants ? (
+                        <View style={styles.variantsWrapper}>
+                          <Text style={styles.variantsTitle}>Choose Variants / Packs:</Text>
+                          {p.variants!.map((v) => {
+                            const cartKey = `${p.id}_${v.id}`;
+                            const inCart = cart.find((c) => c.cartKey === cartKey);
+                            const vBasePrice = Number(v.dealerPrice ?? p.dealerPrice ?? 0);
+                            const vPriceWithGst = Math.round(vBasePrice * (1 + taxRate / 100));
+                            const vPetiSize = Number(v.petiSize ?? p.petiSize ?? 10);
+                            const vPetiWithGst = Math.round(vPriceWithGst * vPetiSize);
+
+                            return (
+                              <View key={v.id} style={[styles.variantRowBox, inCart && styles.variantRowBoxActive]}>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.variantLabel}>
+                                    📦 {v.label || v.name || v.packSize || "Variant"}
+                                  </Text>
+                                  {/* Without GST vs With GST pricing */}
+                                  <View style={styles.priceComparisonRow}>
+                                    <Text style={styles.priceExclGst}>
+                                      ₹{vBasePrice} <Text style={styles.priceSubText}>(Excl. GST)</Text>
+                                    </Text>
+                                    <Text style={styles.priceDivider}>•</Text>
+                                    <Text style={styles.priceWithGst}>
+                                      ₹{vPriceWithGst} <Text style={styles.priceSubText}>(+18% GST)</Text>
+                                    </Text>
+                                  </View>
+                                  <Text style={styles.petiSummaryText}>
+                                    Peti ({vPetiSize} units): ₹{vPetiWithGst.toLocaleString("en-IN")}{" "}
+                                    <Text style={{ fontSize: 10, color: "#64748B" }}>(incl. GST)</Text>
+                                  </Text>
+                                </View>
+
+                                {/* Stepper or Add button for this variant */}
+                                {inCart ? (
+                                  <View style={styles.stepperContainer}>
+                                    <TouchableOpacity
+                                      onPress={() => updateCartQtyByKey(cartKey, -1)}
+                                      style={styles.stepBtn}
+                                    >
+                                      <Text style={styles.stepBtnText}>-</Text>
+                                    </TouchableOpacity>
+                                    <Text style={styles.stepVal}>{inCart.petiQuantity} P</Text>
+                                    <TouchableOpacity
+                                      onPress={() => updateCartQtyByKey(cartKey, 1)}
+                                      style={[styles.stepBtn, { backgroundColor: "#059669" }]}
+                                    >
+                                      <Text style={[styles.stepBtnText, { color: "#FFF" }]}>+</Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                ) : (
+                                  <Button
+                                    mode="contained"
+                                    compact
+                                    onPress={() => addToCart(p, v)}
+                                    buttonColor="#059669"
+                                    style={{ alignSelf: "center" }}
+                                    labelStyle={{ fontSize: 11 }}
+                                  >
+                                    + Peti
+                                  </Button>
+                                )}
+                              </View>
+                            );
+                          })}
                         </View>
                       ) : (
-                        <Button
-                          mode="contained"
-                          compact
-                          onPress={() => addToCart(p)}
-                          buttonColor="#059669"
-                          style={{ alignSelf: "center" }}
-                          labelStyle={{ fontSize: 11 }}
-                        >
-                          + Peti
-                        </Button>
+                        /* ─── Standard Single Variant Product ─── */
+                        (() => {
+                          const cartKey = `${p.id}_base`;
+                          const inCart = cart.find((c) => c.cartKey === cartKey);
+                          const basePrice = Number(p.dealerPrice || 0);
+                          const priceWithGst = Math.round(basePrice * (1 + taxRate / 100));
+                          const petiSize = Number(p.petiSize || 10);
+                          const petiWithGst = Math.round(priceWithGst * petiSize);
+
+                          return (
+                            <View style={styles.singleProductBottomRow}>
+                              <View style={{ flex: 1 }}>
+                                <View style={styles.priceComparisonRow}>
+                                  <Text style={styles.priceExclGst}>
+                                    ₹{basePrice} <Text style={styles.priceSubText}>(Excl. GST)</Text>
+                                  </Text>
+                                  <Text style={styles.priceDivider}>•</Text>
+                                  <Text style={styles.priceWithGst}>
+                                    ₹{priceWithGst} <Text style={styles.priceSubText}>(+18% GST)</Text>
+                                  </Text>
+                                </View>
+                                <Text style={styles.petiSummaryText}>
+                                  Peti ({petiSize} units): ₹{petiWithGst.toLocaleString("en-IN")}{" "}
+                                  <Text style={{ fontSize: 10, color: "#64748B" }}>(incl. GST)</Text>
+                                </Text>
+                              </View>
+
+                              {inCart ? (
+                                <View style={styles.stepperContainer}>
+                                  <TouchableOpacity
+                                    onPress={() => updateCartQtyByKey(cartKey, -1)}
+                                    style={styles.stepBtn}
+                                  >
+                                    <Text style={styles.stepBtnText}>-</Text>
+                                  </TouchableOpacity>
+                                  <Text style={styles.stepVal}>{inCart.petiQuantity} P</Text>
+                                  <TouchableOpacity
+                                    onPress={() => updateCartQtyByKey(cartKey, 1)}
+                                    style={[styles.stepBtn, { backgroundColor: "#059669" }]}
+                                  >
+                                    <Text style={[styles.stepBtnText, { color: "#FFF" }]}>+</Text>
+                                  </TouchableOpacity>
+                                </View>
+                              ) : (
+                                <Button
+                                  mode="contained"
+                                  compact
+                                  onPress={() => addToCart(p)}
+                                  buttonColor="#059669"
+                                  style={{ alignSelf: "center" }}
+                                  labelStyle={{ fontSize: 11 }}
+                                >
+                                  + Peti
+                                </Button>
+                              )}
+                            </View>
+                          );
+                        })()
                       )}
                     </Card.Content>
                   </Card>
@@ -519,7 +951,12 @@ export function VanikiDealerOrdersScreen() {
           <Card style={styles.cartCard}>
             <Card.Content>
               <View style={styles.cartHeaderRow}>
-                <Text style={styles.cartTitle}>Dealer Order Summary ({totalPetis} Peti)</Text>
+                <View>
+                  <Text style={styles.cartTitle}>Dealer Order Summary ({totalPetis} Peti)</Text>
+                  <Text style={styles.cartGarageSubtitle}>
+                    Dispatch Warehouse: <Text style={{ fontWeight: "700", color: "#059669" }}>{selectedGarage}</Text>
+                  </Text>
+                </View>
                 <TouchableOpacity
                   onPress={scrollToCatalog}
                   style={styles.backToCatalogBtn}
@@ -532,44 +969,57 @@ export function VanikiDealerOrdersScreen() {
               <Divider style={{ marginVertical: 8 }} />
 
               {cart.map((item) => (
-                <View key={item.product.id} style={styles.cartItemRow}>
-                  <Text style={styles.cartItemName} numberOfLines={1}>
-                    {item.petiQuantity}x {item.product.name} ({item.product.packSize})
-                  </Text>
+                <View key={item.cartKey} style={styles.cartItemRow}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={styles.cartItemName} numberOfLines={1}>
+                      {item.petiQuantity}x {item.product.name}
+                    </Text>
+                    <Text style={styles.cartItemVariant}>
+                      {item.variantLabel ? `Variant: ${item.variantLabel} • ` : ""}
+                      {item.packSize} ({item.petiQuantity * item.petiSize} units)
+                    </Text>
+                  </View>
                   <Text style={styles.cartItemPrice}>
-                    ₹{(item.petiQuantity * (item.product.petiSize || 10) * item.product.dealerPrice).toLocaleString("en-IN")}
+                    ₹{(item.petiQuantity * item.petiSize * item.dealerPriceWithGst).toLocaleString("en-IN")}
                   </Text>
                 </View>
               ))}
 
               <Divider style={{ marginVertical: 8 }} />
 
+              {/* Explicit Breakdown: Without GST vs GST vs Grand Total (+GST) */}
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Subtotal:</Text>
+                <Text style={styles.summaryLabel}>Subtotal (Excl. GST):</Text>
                 <Text style={styles.summaryVal}>₹{subtotal.toLocaleString("en-IN")}</Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>GST (18%):</Text>
                 <Text style={styles.summaryVal}>₹{gstAmount.toLocaleString("en-IN")}</Text>
               </View>
-              <View style={[styles.summaryRow, { marginTop: 4 }]}>
-                <Text style={[styles.summaryLabel, { fontWeight: "700", color: "#1E293B" }]}>Grand Total:</Text>
-                <Text style={[styles.summaryVal, { fontWeight: "800", color: "#059669", fontSize: 16 }]}>
+              <View style={[styles.summaryRow, { marginTop: 4, paddingVertical: 4, borderTopWidth: 1, borderTopColor: "#E2E8F0" }]}>
+                <Text style={[styles.summaryLabel, { fontWeight: "700", color: "#1E293B", fontSize: 13 }]}>
+                  Grand Total (+ GST):
+                </Text>
+                <Text style={[styles.summaryVal, { fontWeight: "800", color: "#059669", fontSize: 17 }]}>
                   ₹{grandTotal.toLocaleString("en-IN")}
                 </Text>
               </View>
 
-              {/* Payment Mode Selector */}
-              <Text style={[styles.inputLabel, { marginTop: 12 }]}>Payment Mode</Text>
+              {/* Payment Mode Selector (Strictly NO CASH) */}
+              <Text style={[styles.inputLabel, { marginTop: 12 }]}>Payment Mode (Cash Removed)</Text>
               <View style={styles.paymentModeRow}>
-                {(["credit", "cash", "upi_qr", "bank_transfer"] as const).map((mode) => (
+                {(["credit", "upi_qr", "bank_transfer"] as const).map((mode) => (
                   <TouchableOpacity
                     key={mode}
                     onPress={() => setPaymentMode(mode)}
                     style={[styles.modeChip, paymentMode === mode && styles.modeChipActive]}
                   >
                     <Text style={[styles.modeChipText, paymentMode === mode && styles.modeChipTextActive]}>
-                      {mode === "credit" ? "Credit (Udhaar)" : mode.toUpperCase().replace("_", " ")}
+                      {mode === "credit"
+                        ? "Credit (Udhaar)"
+                        : mode === "upi_qr"
+                        ? "UPI QR"
+                        : "Bank Transfer (NEFT)"}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -666,7 +1116,7 @@ export function VanikiDealerOrdersScreen() {
                 </View>
               )}
 
-              {/* ─── Payment Slip Upload (For UPI / Bank / Cash) ─── */}
+              {/* ─── Payment Slip Upload (For UPI / Bank) ─── */}
               {paymentMode !== "credit" && (
                 <View style={styles.slipUploadContainer}>
                   <Text style={styles.inputLabel}>Payment Proof Slip / Screenshot</Text>
@@ -732,7 +1182,6 @@ export function VanikiDealerOrdersScreen() {
                 style={styles.input}
                 dense
               />
-
 
               <View style={styles.creditNotice}>
                 <Text style={{ fontSize: 12, color: "#64748B" }}>Remaining Udhaar / Credit:</Text>
@@ -904,6 +1353,247 @@ export function VanikiDealerOrdersScreen() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* ─── Credit & Udhaar Management Action Modal ─── */}
+      <Modal
+        visible={isCreditModalOpen}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsCreditModalOpen(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalContentCard}>
+            {/* Modal Header */}
+            <View style={styles.modalHeaderRow}>
+              <View>
+                <Text style={styles.modalTitle}>Credit & Udhaar Management</Text>
+                <Text style={styles.modalSubtitle}>
+                  {dealerData?.dealer?.cleanName || dealerData?.dealer?.name} (
+                  #{dealerData?.dealer?.fourDigitId || dealerData?.dealer?.dealerCode})
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsCreditModalOpen(false)}
+                style={styles.modalCloseBtn}
+              >
+                <Ionicons name="close" size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Current Financial Status Banner */}
+            <View style={styles.modalMetricsBanner}>
+              <View style={styles.modalMetricItem}>
+                <Text style={styles.modalMetricLabel}>Credit Limit</Text>
+                <Text style={styles.modalMetricValue}>
+                  ₹{(dealerData?.credit?.creditLimit ?? 0).toLocaleString("en-IN")}
+                </Text>
+              </View>
+              <View style={styles.modalMetricDivider} />
+              <View style={styles.modalMetricItem}>
+                <Text style={[styles.modalMetricLabel, { color: "#DC2626" }]}>Outstanding Udhaar</Text>
+                <Text style={[styles.modalMetricValue, { color: "#DC2626" }]}>
+                  ₹{(dealerData?.ledgerSummary?.totalOutstanding || 0).toLocaleString("en-IN")}
+                </Text>
+              </View>
+            </View>
+
+            {/* Tabs: Pay Udhaar vs Adjust Credit Limit */}
+            <View style={styles.modalTabRow}>
+              <TouchableOpacity
+                style={[styles.modalTabBtn, creditTab === "payment" && styles.modalTabBtnActive]}
+                onPress={() => setCreditTab("payment")}
+              >
+                <Ionicons
+                  name="cash-outline"
+                  size={15}
+                  color={creditTab === "payment" ? "#FFFFFF" : "#64748B"}
+                />
+                <Text
+                  style={[styles.modalTabBtnText, creditTab === "payment" && styles.modalTabBtnTextActive]}
+                >
+                  Pay Udhaar (Jama)
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalTabBtn, creditTab === "limit" && styles.modalTabBtnActive]}
+                onPress={() => setCreditTab("limit")}
+              >
+                <Ionicons
+                  name="speedometer-outline"
+                  size={15}
+                  color={creditTab === "limit" ? "#FFFFFF" : "#64748B"}
+                />
+                <Text
+                  style={[styles.modalTabBtnText, creditTab === "limit" && styles.modalTabBtnTextActive]}
+                >
+                  Adjust Limit
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+              {creditTab === "payment" ? (
+                /* Tab 1: Pay Udhaar */
+                <View style={{ paddingTop: 8 }}>
+                  <Text style={styles.inputLabel}>Payment Amount (₹) *</Text>
+                  <TextInput
+                    mode="outlined"
+                    placeholder="Enter amount to pay"
+                    value={payUdhaarAmount}
+                    onChangeText={setPayUdhaarAmount}
+                    keyboardType="numeric"
+                    style={styles.input}
+                    dense
+                  />
+
+                  {/* Payment Mode: Strictly UPI or NEFT */}
+                  <Text style={[styles.inputLabel, { marginTop: 10 }]}>Payment Method *</Text>
+                  <View style={styles.creditPaymentModesRow}>
+                    {(["UPI", "NEFT"] as const).map((m) => (
+                      <TouchableOpacity
+                        key={m}
+                        onPress={() => setPayUdhaarMode(m)}
+                        style={[
+                          styles.creditPaymentModeChip,
+                          payUdhaarMode === m && styles.creditPaymentModeChipActive,
+                        ]}
+                      >
+                        <Ionicons
+                          name={m === "UPI" ? "phone-portrait-outline" : "card-outline"}
+                          size={16}
+                          color={payUdhaarMode === m ? "#FFFFFF" : "#334155"}
+                        />
+                        <Text
+                          style={[
+                            styles.creditPaymentModeText,
+                            payUdhaarMode === m && styles.creditPaymentModeTextActive,
+                          ]}
+                        >
+                          {m === "UPI" ? "UPI Payment" : "NEFT / Bank Transfer"}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={[styles.inputLabel, { marginTop: 10 }]}>UTR / Transaction Ref No.</Text>
+                  <TextInput
+                    mode="outlined"
+                    placeholder="e.g. 423984729182"
+                    value={payUdhaarUtr}
+                    onChangeText={setPayUdhaarUtr}
+                    style={styles.input}
+                    dense
+                  />
+
+                  {/* Payment Slip Upload */}
+                  <Text style={[styles.inputLabel, { marginTop: 10 }]}>Payment Slip / Screenshot</Text>
+                  {isUploadingPaySlip ? (
+                    <View style={styles.uploadingBox}>
+                      <ActivityIndicator size="small" color="#059669" />
+                      <Text style={styles.uploadingText}>Uploading slip...</Text>
+                    </View>
+                  ) : payUdhaarSlipUrl ? (
+                    <View style={styles.slipPreviewRow}>
+                      <Image source={{ uri: payUdhaarSlipUrl }} style={styles.slipThumb} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.slipAttachedText}>✓ Slip Attached</Text>
+                        <TouchableOpacity onPress={() => setPayUdhaarSlipUrl(null)}>
+                          <Text style={styles.slipRemoveText}>Remove</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.slipBtnRow}>
+                      <Button
+                        mode="outlined"
+                        onPress={handleCaptureCreditSlip}
+                        icon="camera"
+                        style={styles.slipActionBtn}
+                        labelStyle={{ fontSize: 11 }}
+                      >
+                        Camera
+                      </Button>
+                      <Button
+                        mode="outlined"
+                        onPress={handlePickCreditSlip}
+                        icon="image"
+                        style={styles.slipActionBtn}
+                        labelStyle={{ fontSize: 11 }}
+                      >
+                        Gallery
+                      </Button>
+                    </View>
+                  )}
+
+                  <Text style={[styles.inputLabel, { marginTop: 10 }]}>Notes / Remarks</Text>
+                  <TextInput
+                    mode="outlined"
+                    placeholder="e.g. Cheque clearance / online transfer..."
+                    value={payUdhaarNotes}
+                    onChangeText={setPayUdhaarNotes}
+                    style={styles.input}
+                    dense
+                  />
+
+                  <Button
+                    mode="contained"
+                    onPress={handleSubmitCreditAction}
+                    loading={isSubmittingCredit}
+                    disabled={isSubmittingCredit}
+                    buttonColor="#059669"
+                    style={{ marginTop: 16 }}
+                  >
+                    Submit Udhaar Payment
+                  </Button>
+                </View>
+              ) : (
+                /* Tab 2: Adjust Credit Limit */
+                <View style={{ paddingTop: 8 }}>
+                  <Text style={styles.inputLabel}>New Credit Limit (₹) *</Text>
+                  <TextInput
+                    mode="outlined"
+                    placeholder="e.g. 50000, 100000"
+                    value={newCreditLimitInput}
+                    onChangeText={setNewCreditLimitInput}
+                    keyboardType="numeric"
+                    style={styles.input}
+                    dense
+                  />
+                  <Text style={{ fontSize: 11, color: "#64748B", marginTop: 4 }}>
+                    Current Limit: ₹{(dealerData?.credit?.creditLimit ?? 0).toLocaleString("en-IN")}
+                  </Text>
+
+                  <Text style={[styles.inputLabel, { marginTop: 12 }]}>Reason / Notes</Text>
+                  <TextInput
+                    mode="outlined"
+                    placeholder="e.g. Approved higher limit based on regular turnover..."
+                    value={creditLimitNotes}
+                    onChangeText={setCreditLimitNotes}
+                    style={[styles.input, { minHeight: 60 }]}
+                    multiline
+                    dense
+                  />
+
+                  <Button
+                    mode="contained"
+                    onPress={handleSubmitCreditAction}
+                    loading={isSubmittingCredit}
+                    disabled={isSubmittingCredit}
+                    buttonColor="#059669"
+                    style={{ marginTop: 16 }}
+                  >
+                    Update Credit Limit
+                  </Button>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -1464,6 +2154,315 @@ const styles = StyleSheet.create({
     color: "#DC2626",
     fontWeight: "600",
     marginTop: 2,
+  },
+  // ─── Exit Dealer Button ───
+  exitDealerBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#FEF2F2",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    alignSelf: "flex-start",
+  },
+  exitDealerText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#DC2626",
+  },
+  // ─── Clickable Metric Styles ───
+  metricBoxClickable: {
+    borderStyle: "dashed",
+    borderColor: "#A7F3D0",
+  },
+  metricHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  metricTapHint: {
+    fontSize: 9,
+    color: "#059669",
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  // ─── Garage Selection Styles ───
+  garageCard: {
+    marginTop: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    elevation: 2,
+    borderLeftWidth: 4,
+    borderLeftColor: "#059669",
+  },
+  garageHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  garageTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  garageBadge: {
+    backgroundColor: "#059669",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  garageSubtitle: {
+    fontSize: 11,
+    color: "#64748B",
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  garageChipsContainer: {
+    flexDirection: "row",
+    gap: 8,
+    paddingVertical: 4,
+  },
+  garageChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+  },
+  garageChipActive: {
+    backgroundColor: "#059669",
+    borderColor: "#047857",
+  },
+  garageChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#334155",
+  },
+  garageChipTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
+  // ─── Catalog & Variants ───
+  catalogHeadingRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  catalogGarageNotice: {
+    fontSize: 11,
+    color: "#64748B",
+  },
+  variantsWrapper: {
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+    paddingTop: 8,
+    gap: 8,
+  },
+  variantsTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#475569",
+    textTransform: "uppercase",
+  },
+  variantRowBox: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  variantRowBoxActive: {
+    borderColor: "#059669",
+    backgroundColor: "#F0FDF4",
+  },
+  variantLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  priceComparisonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 3,
+  },
+  priceExclGst: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#475569",
+  },
+  priceWithGst: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#059669",
+  },
+  priceSubText: {
+    fontSize: 9,
+    fontWeight: "500",
+    color: "#64748B",
+  },
+  priceDivider: {
+    fontSize: 10,
+    color: "#94A3B8",
+  },
+  petiSummaryText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#1E293B",
+    marginTop: 2,
+  },
+  singleProductBottomRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+  },
+  cartGarageSubtitle: {
+    fontSize: 11,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  cartItemVariant: {
+    fontSize: 11,
+    color: "#64748B",
+    marginTop: 1,
+  },
+  // ─── Modal Styles ───
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
+    justifyContent: "flex-end",
+  },
+  modalContentCard: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 16,
+    paddingBottom: Platform.OS === "ios" ? 36 : 24,
+    elevation: 8,
+  },
+  modalHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    padding: 4,
+    borderRadius: 20,
+    backgroundColor: "#F1F5F9",
+  },
+  modalMetricsBanner: {
+    flexDirection: "row",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  modalMetricItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+  modalMetricLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748B",
+    textTransform: "uppercase",
+  },
+  modalMetricValue: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0F172A",
+    marginTop: 2,
+  },
+  modalMetricDivider: {
+    width: 1,
+    backgroundColor: "#CBD5E1",
+    marginHorizontal: 8,
+  },
+  modalTabRow: {
+    flexDirection: "row",
+    backgroundColor: "#F1F5F9",
+    borderRadius: 10,
+    padding: 3,
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  modalTabBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  modalTabBtnActive: {
+    backgroundColor: "#059669",
+    elevation: 1,
+  },
+  modalTabBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748B",
+  },
+  modalTabBtnTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
+  creditPaymentModesRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 4,
+  },
+  creditPaymentModeChip: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1.5,
+    borderColor: "#CBD5E1",
+  },
+  creditPaymentModeChipActive: {
+    backgroundColor: "#059669",
+    borderColor: "#047857",
+  },
+  creditPaymentModeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#334155",
+  },
+  creditPaymentModeTextActive: {
+    color: "#FFFFFF",
   },
 });
 

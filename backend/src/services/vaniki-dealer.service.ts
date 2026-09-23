@@ -80,7 +80,7 @@ export interface VanikiActivityInput {
   staffName: string;
   staffPhone?: string;
   staffEmail?: string;
-  action: "DEALER_LOOKUP" | "ORDER_PLACED";
+  action: "DEALER_LOOKUP" | "ORDER_PLACED" | "CREDIT_PAYMENT" | "CREDIT_LIMIT_ADJUSTED";
   dealerCode?: string;
   fourDigitId?: string;
   dealerName: string;
@@ -231,11 +231,26 @@ export async function getBankDetails() {
 
 
 /**
+ * Fetch SuperAdmin configured real-time warehouses/garages list
+ */
+export async function getGarages() {
+  try {
+    return await vanikiFetch("/garages", {
+      method: "GET",
+    });
+  } catch (err) {
+    console.warn("Could not fetch garages from /garages endpoint, returning defaults:", err);
+    return ["Vaniki garage", "Raipur Central Hub", "Bilaspur Depot"];
+  }
+}
+
+/**
  * Place wholesale order for dealer with payment terms & notes
  */
 export async function placeDealerOrder(
   dealerCode: string,
   payload: {
+    garageName?: string;
     items: Array<{
       productId?: string;
       variantId?: string;
@@ -263,6 +278,7 @@ export async function placeDealerOrder(
   },
   actor: AuthUser
 ) {
+
   const cleanCode = dealerCode.trim();
   if (!cleanCode) {
     throw new AppError(400, "Dealer code is required");
@@ -284,8 +300,10 @@ export async function placeDealerOrder(
   const screenshots = payload.screenshots || (payload.paymentProofUrl ? [payload.paymentProofUrl] : []);
 
   const orderBody = {
+    garageName: payload.garageName || undefined,
     items: payload.items,
     paymentMode,
+
     paymentMethod: paymentMode,
     payment: {
       mode: paymentMode,
@@ -352,7 +370,9 @@ export async function placeDealerOrder(
     proofUrl: payload.paymentProofUrl || payload.documentUrl || screenshots[0] || "",
     notes: dealNotes,
     metadata: {
+      garageName: payload.garageName || null,
       items: orderData?.items || payload.items,
+
       invoiceNumber: orderData?.invoiceNumber,
       orderId: orderData?.orderId,
       utr: payload.utr,
@@ -366,9 +386,183 @@ export async function placeDealerOrder(
   return orderRes;
 }
 
+export interface CreditTransactionInput {
+  dealerCode: string;
+  type: "PAYMENT" | "LIMIT_ADJUST";
+  amount?: number;
+  newLimit?: number;
+  paymentMode?: "neft" | "upi";
+  utr?: string;
+  proofUrl?: string;
+  notes?: string;
+}
+
+/**
+ * Record payment of credit due (NEFT / UPI) or adjustment of dealer credit limit
+ */
+export async function adjustCreditOrRecordPayment(actor: AuthUser, payload: CreditTransactionInput) {
+  await initVanikiTable();
+  const cleanCode = (payload.dealerCode || "").trim();
+  if (!cleanCode) {
+    throw new AppError(400, "Dealer code is required");
+  }
+
+  // Look up existing dealer details from Vaniki
+  let dealerInfo: any = {};
+  let currentOutstanding = 0;
+  let currentLimit = 0;
+  try {
+    const res = await vanikiFetch(`/lookup/${encodeURIComponent(cleanCode)}`, { method: "GET" });
+    if (res?.dealer) {
+      dealerInfo = res.dealer;
+      currentOutstanding = Number(res?.ledgerSummary?.totalOutstanding || 0);
+      currentLimit = Number(res?.credit?.creditLimit || 50000);
+    }
+  } catch (err) {
+    console.warn("Could not fetch remote dealer during credit transaction:", err);
+  }
+
+  const staffName = actor.name || "Field Staff";
+  const staffPhone = (actor as any).phone || actor.email || "";
+  const fourDigit = dealerInfo.fourDigitId || dealerInfo.shortCode || cleanCode.replace(/\D/g, "").slice(-4);
+  const dealerName = dealerInfo.cleanName || dealerInfo.name || "Dealer";
+  const storeName = dealerInfo.storeName || "";
+  const dealerPhone = dealerInfo.mobile || "";
+  const dealerCity = dealerInfo.address?.city || dealerInfo.storeLocation || "";
+
+  if (payload.type === "PAYMENT") {
+    const payAmount = Number(payload.amount || 0);
+    if (payAmount <= 0) {
+      throw new AppError(400, "Payment amount must be greater than zero");
+    }
+    const newOutstanding = Math.max(0, currentOutstanding - payAmount);
+    const paymentMode = payload.paymentMode === "neft" ? "NEFT" : "UPI";
+
+    try {
+      await vanikiFetch(`/${encodeURIComponent(cleanCode)}/payments`, {
+        method: "POST",
+        body: JSON.stringify({
+          amount: payAmount,
+          paymentMode,
+          utr: payload.utr || "",
+          proofUrl: payload.proofUrl || "",
+          notes: payload.notes || "",
+          staffId: actor.id,
+          staffName,
+          staffPhone
+        })
+      });
+    } catch (apiErr) {
+      console.warn("Vaniki remote payment API notification note:", apiErr);
+    }
+
+    const activityId = `act_pay_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    await recordActivity({
+      id: activityId,
+      companyId: actor.companyId,
+      userId: actor.id,
+      staffName,
+      staffPhone,
+      staffEmail: actor.email || "",
+      action: "CREDIT_PAYMENT",
+      dealerCode: cleanCode,
+      fourDigitId: fourDigit,
+      dealerName,
+      storeName,
+      dealerPhone,
+      dealerCity,
+      paidAmount: payAmount,
+      outstandingAmount: newOutstanding,
+      paymentMode,
+      proofUrl: payload.proofUrl || "",
+      notes: payload.notes || `Credit due payment received via ${paymentMode}`,
+      metadata: {
+        type: "CREDIT_PAYMENT",
+        paymentMode,
+        utr: payload.utr || "",
+        previousOutstanding: currentOutstanding,
+        newOutstanding,
+        paidAmount: payAmount,
+        staffName,
+        staffPhone,
+        paidAt: new Date().toISOString()
+      }
+    });
+
+    return {
+      success: true,
+      action: "CREDIT_PAYMENT",
+      paidAmount: payAmount,
+      newOutstanding,
+      paymentMode,
+      utr: payload.utr,
+      proofUrl: payload.proofUrl,
+      staffName
+    };
+  } else {
+    // LIMIT_ADJUST
+    const newLimit = Number(payload.newLimit || 0);
+    if (newLimit < 0) {
+      throw new AppError(400, "Credit limit cannot be negative");
+    }
+
+    try {
+      await vanikiFetch(`/${encodeURIComponent(cleanCode)}/credit-limit`, {
+        method: "POST",
+        body: JSON.stringify({
+          creditLimit: newLimit,
+          reason: payload.notes || "",
+          staffId: actor.id,
+          staffName
+        })
+      });
+    } catch (apiErr) {
+      console.warn("Vaniki remote credit limit API notification note:", apiErr);
+    }
+
+    const activityId = `act_lim_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    await recordActivity({
+      id: activityId,
+      companyId: actor.companyId,
+      userId: actor.id,
+      staffName,
+      staffPhone,
+      staffEmail: actor.email || "",
+      action: "CREDIT_LIMIT_ADJUSTED",
+      dealerCode: cleanCode,
+      fourDigitId: fourDigit,
+      dealerName,
+      storeName,
+      dealerPhone,
+      dealerCity,
+      totalAmount: newLimit,
+      outstandingAmount: currentOutstanding,
+      notes: payload.notes || `Credit limit updated to ₹${newLimit}`,
+      metadata: {
+        type: "CREDIT_LIMIT_ADJUSTED",
+        previousLimit: currentLimit,
+        newLimit,
+        reason: payload.notes || "",
+        staffName,
+        staffPhone,
+        updatedAt: new Date().toISOString()
+      }
+    });
+
+    return {
+      success: true,
+      action: "CREDIT_LIMIT_ADJUSTED",
+      previousLimit: currentLimit,
+      newLimit,
+      staffName
+    };
+  }
+}
+
 /**
  * Fetch all staff dealer activities with filtering, pagination and summary KPIs
  */
+
 export async function getVanikiActivities(params: {
   action?: string;
   search?: string;

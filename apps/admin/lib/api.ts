@@ -203,7 +203,9 @@ export async function createTask(input: {
   attachmentName?: string | null;
   taskType?: string;
   dealerIds?: string[];
+  farmerIds?: string[];
 }) {
+
   const response = await api.post<{ data: Task }>("/tasks", input);
   return response.data.data;
 }
@@ -1157,6 +1159,31 @@ export async function updateFarmer(id: string, data: Partial<Farmer>): Promise<F
 export async function deleteFarmer(id: string): Promise<void> {
   await api.delete(`/farmers/${id}`);
 }
+
+export async function fetchDealerVisits(id: string): Promise<{ dealer: Dealer; tasks: any[]; activities: any[] }> {
+  const response = await api.get<{ data: { dealer: Dealer; tasks: any[]; activities: any[] } }>(`/dealers/${id}/visits`);
+  return response.data.data;
+}
+
+export async function fetchFarmerVisits(id: string): Promise<{ farmer: Farmer; tasks: any[] }> {
+  const response = await api.get<{ data: { farmer: Farmer; tasks: any[] } }>(`/farmers/${id}/visits`);
+  return response.data.data;
+}
+
+export async function recordDealerCreditAdjustment(data: {
+  dealerCode: string;
+  type: "PAYMENT" | "LIMIT_ADJUST";
+  amount?: number;
+  newLimit?: number;
+  paymentMode?: "neft" | "upi";
+  utr?: string;
+  proofUrl?: string;
+  notes?: string;
+}) {
+  const response = await api.post<{ data: any }>("/vaniki-dealers/credit-adjustment", data);
+  return response.data.data;
+}
+
 
 
 

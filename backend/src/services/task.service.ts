@@ -40,6 +40,7 @@ interface CreateTaskInput {
   templateId?: string | null;
   taskType?: string;
   dealerIds?: string[];
+  farmerIds?: string[];
 }
 
 export async function createTask(actor: AuthUser, input: CreateTaskInput) {
@@ -112,6 +113,9 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
       taskType: input.taskType || "NORMAL",
       dealers: input.dealerIds && input.dealerIds.length > 0 ? {
         connect: input.dealerIds.map(id => ({ id }))
+      } : undefined,
+      farmers: input.farmerIds && input.farmerIds.length > 0 ? {
+        connect: input.farmerIds.map(id => ({ id }))
       } : undefined
     },
     include: taskInclude
@@ -397,6 +401,9 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
       taskType: input.taskType !== undefined ? input.taskType : undefined,
       dealers: input.dealerIds !== undefined ? {
         set: input.dealerIds.map(id => ({ id }))
+      } : undefined,
+      farmers: input.farmerIds !== undefined ? {
+        set: input.farmerIds.map(id => ({ id }))
       } : undefined
     },
     include: taskInclude
@@ -1100,9 +1107,12 @@ async function preGenerateTasksForSeries(baseTask: any, companyId: string, subta
     assignedTo: { companyId }
   };
 
-  // Extract dealer IDs if available
+  // Extract dealer and farmer IDs if available
   const dealerIds: string[] = baseTask.dealers && Array.isArray(baseTask.dealers)
     ? baseTask.dealers.map((d: any) => d.id)
+    : [];
+  const farmerIds: string[] = baseTask.farmers && Array.isArray(baseTask.farmers)
+    ? baseTask.farmers.map((f: any) => f.id)
     : [];
 
   // Everything the loop used to re-query per occurrence is fetched once up front:
@@ -1186,7 +1196,7 @@ async function preGenerateTasksForSeries(baseTask: any, companyId: string, subta
     templateId: baseTask.templateId || null
   });
 
-  const hasRelations = dealerIds.length > 0 || subtasks.length > 0;
+  const hasRelations = dealerIds.length > 0 || farmerIds.length > 0 || subtasks.length > 0;
 
   if (!hasRelations) {
     // Fast path: one INSERT for the whole series.
@@ -1194,13 +1204,14 @@ async function preGenerateTasksForSeries(baseTask: any, companyId: string, subta
     return;
   }
 
-  // Occurrences carrying dealers/subtasks still need per-row creates for the
+  // Occurrences carrying dealers/farmers/subtasks still need per-row creates for the
   // relation writes, but no longer re-query holidays or duplicates per day.
   for (const occ of pending) {
     const occurrence = await prisma.task.create({
       data: {
         ...occurrenceData(occ),
-        dealers: dealerIds.length > 0 ? { connect: dealerIds.map((id) => ({ id })) } : undefined
+        dealers: dealerIds.length > 0 ? { connect: dealerIds.map((id) => ({ id })) } : undefined,
+        farmers: farmerIds.length > 0 ? { connect: farmerIds.map((id) => ({ id })) } : undefined
       }
     });
 
@@ -1357,7 +1368,8 @@ const taskInclude = {
       title: true
     }
   },
-  dealers: true
+  dealers: true,
+  farmers: true
 } satisfies Prisma.TaskInclude;
 
 export function getStartOfDayIST(date: Date = new Date()): Date {

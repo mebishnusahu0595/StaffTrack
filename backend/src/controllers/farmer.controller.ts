@@ -3,10 +3,12 @@ import { sendSuccess } from "../lib/response";
 import {
   listFarmers,
   getFarmer,
+  getFarmerVisits,
   createFarmer,
   updateFarmer,
   deleteFarmer,
 } from "../services/farmer.service";
+
 
 export async function listFarmersHandler(req: Request, res: Response) {
   const farmers = await listFarmers(req.user!.companyId);
@@ -21,6 +23,18 @@ export async function getFarmerHandler(req: Request, res: Response) {
     res.status(404).json({ success: false, message: "Farmer not found" });
   }
 }
+
+export async function getFarmerVisitsHandler(req: Request, res: Response) {
+  try {
+    const data = await getFarmerVisits(req.user!.companyId, req.params.id);
+    sendSuccess(res, data, "Farmer visits fetched");
+  } catch (err: any) {
+    res.status(404).json({ success: false, message: err?.message || "Farmer not found" });
+  }
+}
+
+
+
 
 export async function createFarmerHandler(req: Request, res: Response) {
   const { name, phone, village, address, city, district, state, crop, landSize, notes } = req.body;
