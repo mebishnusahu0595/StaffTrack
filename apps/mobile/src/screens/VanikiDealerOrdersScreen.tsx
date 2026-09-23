@@ -97,16 +97,16 @@ export function VanikiDealerOrdersScreen() {
 
   // ─── Credit / Udhaar Management Modal State ──────────────────────────────
   const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
-  const [creditTab, setCreditTab] = useState<"payment" | "limit">("payment");
   const [payUdhaarAmount, setPayUdhaarAmount] = useState("");
   const [payUdhaarMode, setPayUdhaarMode] = useState<"UPI" | "NEFT">("UPI");
   const [payUdhaarUtr, setPayUdhaarUtr] = useState("");
   const [payUdhaarSlipUrl, setPayUdhaarSlipUrl] = useState<string | null>(null);
   const [payUdhaarNotes, setPayUdhaarNotes] = useState("");
   const [isUploadingPaySlip, setIsUploadingPaySlip] = useState(false);
-  const [newCreditLimitInput, setNewCreditLimitInput] = useState("");
-  const [creditLimitNotes, setCreditLimitNotes] = useState("");
   const [isSubmittingCredit, setIsSubmittingCredit] = useState(false);
+
+  // ─── Order History Expanded State ────────────────────────────────────────
+  const [isOrderHistoryExpanded, setIsOrderHistoryExpanded] = useState(false);
 
   const scrollToCheckout = () => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -381,16 +381,14 @@ export function VanikiDealerOrdersScreen() {
   const remainingCredit = Math.max(0, grandTotal - effectivePaid);
 
   // ─── Credit Modal Handlers ────────────────────────────────────────────────
-  const openCreditModal = (initialTab: "payment" | "limit" = "payment") => {
-    setCreditTab(initialTab);
+  // ─── Credit / Udhaar Payment Handlers ─────────────────────────────────────
+  const openCreditModal = () => {
     const outstanding = Number(dealerData?.ledgerSummary?.totalOutstanding || 0);
     setPayUdhaarAmount(outstanding > 0 ? String(outstanding) : "");
     setPayUdhaarMode("UPI");
     setPayUdhaarUtr("");
     setPayUdhaarSlipUrl(null);
     setPayUdhaarNotes("");
-    setNewCreditLimitInput(String(dealerData?.credit?.creditLimit ?? ""));
-    setCreditLimitNotes("");
     setIsCreditModalOpen(true);
   };
 
@@ -444,60 +442,45 @@ export function VanikiDealerOrdersScreen() {
     if (!dealerData?.dealer) return;
     const dealerCode = dealerData.dealer.dealerCode || dealerData.dealer.fourDigitId;
 
-    if (creditTab === "payment") {
-      const amountNum = Number(payUdhaarAmount);
-      if (isNaN(amountNum) || amountNum <= 0) {
-        Alert.alert("Invalid Amount", "Please enter a valid payment amount greater than 0.");
-        return;
-      }
-      try {
-        setIsSubmittingCredit(true);
-        const res = await api.post("/vaniki-dealers/credit-adjustment", {
-          dealerCode,
-          type: "PAYMENT",
-          amount: amountNum,
-          paymentMode: payUdhaarMode.toLowerCase(), // "upi" | "neft"
-          utr: payUdhaarUtr.trim() || undefined,
-          proofUrl: payUdhaarSlipUrl || undefined,
-          notes: payUdhaarNotes.trim() || `Payment received via ${payUdhaarMode}`,
-        });
-        if (res.data?.success) {
-          Alert.alert(
-            "Payment Recorded! 🎉",
-            `Payment of ₹${amountNum.toLocaleString("en-IN")} via ${payUdhaarMode} recorded successfully.`
-          );
-          setIsCreditModalOpen(false);
-          handleSearchDealer(dealerCode);
+    const amountNum = Number(payUdhaarAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      Alert.alert("Invalid Amount", "Please enter a valid payment amount greater than 0.");
+      return;
+    }
+
+    const currentDebt = Number(dealerData?.ledgerSummary?.totalOutstanding || 0);
+    const debtCleared = Math.min(currentDebt, amountNum);
+    const extraCredit = Math.max(0, amountNum - debtCleared);
+    const remainingDebt = Math.max(0, currentDebt - debtCleared);
+
+    try {
+      setIsSubmittingCredit(true);
+      const res = await api.post("/vaniki-dealers/credit-adjustment", {
+        dealerCode,
+        type: "PAYMENT",
+        amount: amountNum,
+        paymentMode: payUdhaarMode.toLowerCase(), // "upi" | "neft"
+        utr: payUdhaarUtr.trim() || undefined,
+        proofUrl: payUdhaarSlipUrl || undefined,
+        notes:
+          payUdhaarNotes.trim() ||
+          `Udhaar payment received via ${payUdhaarMode} (Cleared: ₹${debtCleared}${
+            extraCredit > 0 ? `, Advance Added: ₹${extraCredit}` : ""
+          })`,
+      });
+      if (res.data?.success) {
+        let msg = `Payment: ₹${amountNum.toLocaleString("en-IN")} via ${payUdhaarMode}\nDebt Cleared: ₹${debtCleared.toLocaleString("en-IN")}\nRemaining Udhaar: ₹${remainingDebt.toLocaleString("en-IN")}`;
+        if (extraCredit > 0) {
+          msg += `\n⭐ Advance Added to Credit Balance: ₹${extraCredit.toLocaleString("en-IN")}`;
         }
-      } catch (err: any) {
-        Alert.alert("Payment Error", err.response?.data?.message || err.message || "Failed to record payment");
-      } finally {
-        setIsSubmittingCredit(false);
+        Alert.alert("Payment Recorded! 🎉", msg);
+        setIsCreditModalOpen(false);
+        handleSearchDealer(dealerCode);
       }
-    } else {
-      const limitNum = Number(newCreditLimitInput);
-      if (isNaN(limitNum) || limitNum < 0) {
-        Alert.alert("Invalid Limit", "Please enter a valid credit limit.");
-        return;
-      }
-      try {
-        setIsSubmittingCredit(true);
-        const res = await api.post("/vaniki-dealers/credit-adjustment", {
-          dealerCode,
-          type: "LIMIT_ADJUST",
-          newLimit: limitNum,
-          notes: creditLimitNotes.trim() || `Credit limit updated to ₹${limitNum.toLocaleString("en-IN")}`,
-        });
-        if (res.data?.success) {
-          Alert.alert("Limit Updated! 🎉", `Credit limit updated to ₹${limitNum.toLocaleString("en-IN")}.`);
-          setIsCreditModalOpen(false);
-          handleSearchDealer(dealerCode);
-        }
-      } catch (err: any) {
-        Alert.alert("Update Error", err.response?.data?.message || err.message || "Failed to update credit limit");
-      } finally {
-        setIsSubmittingCredit(false);
-      }
+    } catch (err: any) {
+      Alert.alert("Payment Error", err.response?.data?.message || err.message || "Failed to record payment");
+    } finally {
+      setIsSubmittingCredit(false);
     }
   };
 
@@ -662,54 +645,148 @@ export function VanikiDealerOrdersScreen() {
                 📞 {dealerData.dealer.mobile} • 📍 {dealerData.dealer.address?.city || "Chhattisgarh"}
               </Text>
 
-              {/* Financial Metrics with Clickable Credit Management */}
+              {/* Financial Metrics with Live Ledger */}
               <View style={styles.metricsGrid}>
-                {/* Credit Limit - Tap to Edit */}
-                <TouchableOpacity
-                  style={[styles.metricBox, styles.metricBoxClickable]}
-                  onPress={() => openCreditModal("limit")}
-                  activeOpacity={0.7}
-                >
+                {/* Credit Limit - Strictly Managed by Admin */}
+                <View style={styles.metricBox}>
                   <View style={styles.metricHeaderRow}>
                     <Text style={styles.metricLabel}>Credit Limit</Text>
-                    <Ionicons name="create-outline" size={12} color="#059669" />
+                    <Ionicons name="shield-checkmark-outline" size={12} color="#64748B" />
                   </View>
                   <Text style={styles.metricVal}>
                     ₹{(dealerData.credit?.creditLimit ?? 0).toLocaleString("en-IN")}
                   </Text>
-                  <Text style={styles.metricTapHint}>Tap to edit limit</Text>
-                </TouchableOpacity>
-
-                <View style={styles.metricBox}>
-                  <Text style={styles.metricLabel}>Total Invoiced</Text>
-                  <Text style={styles.metricVal}>
-                    ₹{(dealerData.ledgerSummary?.totalInvoiced || 0).toLocaleString("en-IN")}
-                  </Text>
+                  <Text style={[styles.metricTapHint, { color: "#64748B" }]}>Admin Managed</Text>
                 </View>
 
-                <View style={styles.metricBox}>
-                  <Text style={styles.metricLabel}>Total Paid</Text>
-                  <Text style={[styles.metricVal, { color: "#059669" }]}>
-                    ₹{(dealerData.ledgerSummary?.totalPaid || 0).toLocaleString("en-IN")}
+                {/* Credit Balance (Advance Wallet) */}
+                <View style={[styles.metricBox, (dealerData.credit?.creditBalance || 0) > 0 && { backgroundColor: "#ECFDF5", borderColor: "#A7F3D0" }]}>
+                  <View style={styles.metricHeaderRow}>
+                    <Text style={[styles.metricLabel, (dealerData.credit?.creditBalance || 0) > 0 && { color: "#059669" }]}>Credit Balance</Text>
+                    <Ionicons name="wallet" size={12} color={(dealerData.credit?.creditBalance || 0) > 0 ? "#059669" : "#64748B"} />
+                  </View>
+                  <Text style={[styles.metricVal, { color: (dealerData.credit?.creditBalance || 0) > 0 ? "#059669" : "#334155" }]}>
+                    ₹{(dealerData.credit?.creditBalance || 0).toLocaleString("en-IN")}
+                  </Text>
+                  <Text style={[styles.metricTapHint, { color: (dealerData.credit?.creditBalance || 0) > 0 ? "#059669" : "#94A3B8" }]}>
+                    {(dealerData.credit?.creditBalance || 0) > 0 ? "Advance Available" : "₹0 Advance"}
                   </Text>
                 </View>
 
                 {/* Outstanding Udhaar - Tap to Pay */}
                 <TouchableOpacity
                   style={[styles.metricBox, styles.metricBoxClickable, { backgroundColor: "#FEF2F2", borderColor: "#FECACA" }]}
-                  onPress={() => openCreditModal("payment")}
+                  onPress={openCreditModal}
                   activeOpacity={0.7}
                 >
                   <View style={styles.metricHeaderRow}>
                     <Text style={[styles.metricLabel, { color: "#DC2626" }]}>Outstanding Udhaar</Text>
-                    <Ionicons name="wallet-outline" size={12} color="#DC2626" />
+                    <Ionicons name="cash-outline" size={12} color="#DC2626" />
                   </View>
                   <Text style={[styles.metricVal, { color: "#DC2626" }]}>
                     ₹{(dealerData.ledgerSummary?.totalOutstanding || 0).toLocaleString("en-IN")}
                   </Text>
-                  <Text style={[styles.metricTapHint, { color: "#EF4444" }]}>Tap to pay udhaar</Text>
+                  <Text style={[styles.metricTapHint, { color: "#DC2626", fontWeight: "700" }]}>Tap to Pay Udhaar</Text>
                 </TouchableOpacity>
+
+                <View style={styles.metricBox}>
+                  <Text style={styles.metricLabel}>Total Paid</Text>
+                  <Text style={[styles.metricVal, { color: "#059669" }]}>
+                    ₹{(dealerData.ledgerSummary?.totalPaid || 0).toLocaleString("en-IN")}
+                  </Text>
+                  <Text style={[styles.metricTapHint, { color: "#64748B" }]}>
+                    Invoiced: ₹{(dealerData.ledgerSummary?.totalInvoiced || 0).toLocaleString("en-IN")}
+                  </Text>
+                </View>
               </View>
+            </Card.Content>
+          </Card>
+        )}
+
+        {/* ─── Wholesale Order History Section for Field Staff ─── */}
+        {dealerData?.dealer && (
+          <Card style={styles.historyCard}>
+            <Card.Content>
+              <TouchableOpacity
+                onPress={() => setIsOrderHistoryExpanded(!isOrderHistoryExpanded)}
+                style={styles.historyHeaderRow}
+                activeOpacity={0.7}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+                  <Ionicons name="receipt-outline" size={18} color="#0284C7" />
+                  <Text style={styles.historyTitle}>Wholesale Order History</Text>
+                  <Badge style={styles.historyBadge}>
+                    {dealerData.orders?.length || 0}
+                  </Badge>
+                </View>
+                <Ionicons
+                  name={isOrderHistoryExpanded ? "chevron-up" : "chevron-down"}
+                  size={20}
+                  color="#64748B"
+                />
+              </TouchableOpacity>
+
+              {isOrderHistoryExpanded && (
+                <View style={{ marginTop: 10 }}>
+                  <Divider style={{ marginBottom: 10 }} />
+                  {(!dealerData.orders || dealerData.orders.length === 0) ? (
+                    <View style={styles.emptyHistoryBox}>
+                      <Ionicons name="document-text-outline" size={24} color="#94A3B8" />
+                      <Text style={styles.emptyHistoryText}>No past orders recorded yet for this dealer.</Text>
+                    </View>
+                  ) : (
+                    dealerData.orders.map((ord: any) => (
+                      <View key={ord.id || ord.orderId} style={styles.orderHistoryCard}>
+                        <View style={styles.orderHistoryTopRow}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.orderHistoryId}>
+                              {ord.orderId || ord.id}
+                            </Text>
+                            {ord.invoiceNumber ? (
+                              <Text style={styles.orderHistoryInvoice}>
+                                Invoice #{ord.invoiceNumber}
+                              </Text>
+                            ) : null}
+                          </View>
+                          <View style={{ alignItems: "flex-end" }}>
+                            <Text style={styles.orderHistoryAmount}>
+                              ₹{Number(ord.totalAmount || 0).toLocaleString("en-IN")}
+                            </Text>
+                            <Badge
+                              style={[
+                                styles.orderStatusBadge,
+                                Number(ord.outstandingAmount || 0) > 0
+                                  ? { backgroundColor: "#FEE2E2", color: "#DC2626" }
+                                  : { backgroundColor: "#DCFCE7", color: "#15803D" },
+                              ]}
+                            >
+                              {Number(ord.outstandingAmount || 0) > 0
+                                ? `Due: ₹${Number(ord.outstandingAmount).toLocaleString("en-IN")}`
+                                : "Fully Paid"}
+                            </Badge>
+                          </View>
+                        </View>
+
+                        <View style={styles.orderHistoryMetaRow}>
+                          <Text style={styles.orderHistoryMetaText}>
+                            📦 {ord.petis || 0} Petis ({ord.itemsCount || 0} items)
+                          </Text>
+                          <Text style={styles.orderHistoryMetaText}>
+                            🏬 {ord.garageName || "Warehouse"}
+                          </Text>
+                          <Text style={styles.orderHistoryMetaText}>
+                            💳 {(ord.paymentMode || "Credit").toUpperCase()}
+                          </Text>
+                        </View>
+
+                        <Text style={styles.orderHistoryDate}>
+                          🕒 {ord.createdAt ? new Date(ord.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : ""} • By {ord.staffName || "Staff"}
+                        </Text>
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
             </Card.Content>
           </Card>
         )}
@@ -968,22 +1045,55 @@ export function VanikiDealerOrdersScreen() {
               </View>
               <Divider style={{ marginVertical: 8 }} />
 
-              {cart.map((item) => (
-                <View key={item.cartKey} style={styles.cartItemRow}>
-                  <View style={{ flex: 1, marginRight: 8 }}>
-                    <Text style={styles.cartItemName} numberOfLines={1}>
-                      {item.petiQuantity}x {item.product.name}
-                    </Text>
-                    <Text style={styles.cartItemVariant}>
-                      {item.variantLabel ? `Variant: ${item.variantLabel} • ` : ""}
-                      {item.packSize} ({item.petiQuantity * item.petiSize} units)
-                    </Text>
-                  </View>
-                  <Text style={styles.cartItemPrice}>
-                    ₹{(item.petiQuantity * item.petiSize * item.dealerPriceWithGst).toLocaleString("en-IN")}
-                  </Text>
-                </View>
-              ))}
+              <View style={styles.cartScrollWrapper}>
+                <ScrollView
+                  style={styles.cartScrollView}
+                  nestedScrollEnabled={true}
+                  showsVerticalScrollIndicator={true}
+                  persistentScrollbar={true}
+                >
+                  {cart.map((item) => (
+                    <View key={item.cartKey} style={styles.cartItemRow}>
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={styles.cartItemName} numberOfLines={1}>
+                          {item.product.name}
+                        </Text>
+                        <Text style={styles.cartItemVariant}>
+                          {item.variantLabel ? `${item.variantLabel} • ` : ""}
+                          {item.packSize} ({item.petiQuantity * item.petiSize} units)
+                        </Text>
+                        <Text style={styles.cartItemPrice}>
+                          ₹{(item.petiQuantity * item.petiSize * item.dealerPriceWithGst).toLocaleString("en-IN")}
+                        </Text>
+                      </View>
+
+                      {/* + and - stepper in cart summary */}
+                      <View style={styles.cartStepperRow}>
+                        <TouchableOpacity
+                          onPress={() => updateCartQtyByKey(item.cartKey, -1)}
+                          style={styles.cartStepperBtnMinus}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="remove" size={14} color="#DC2626" />
+                        </TouchableOpacity>
+
+                        <View style={styles.cartQtyBadge}>
+                          <Text style={styles.cartQtyText}>{item.petiQuantity}</Text>
+                          <Text style={styles.cartQtyUnit}>Peti</Text>
+                        </View>
+
+                        <TouchableOpacity
+                          onPress={() => updateCartQtyByKey(item.cartKey, 1)}
+                          style={styles.cartStepperBtnPlus}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="add" size={14} color="#059669" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
 
               <Divider style={{ marginVertical: 8 }} />
 
@@ -1369,7 +1479,7 @@ export function VanikiDealerOrdersScreen() {
             {/* Modal Header */}
             <View style={styles.modalHeaderRow}>
               <View>
-                <Text style={styles.modalTitle}>Credit & Udhaar Management</Text>
+                <Text style={styles.modalTitle}>Pay Dealer Udhaar (Jama)</Text>
                 <Text style={styles.modalSubtitle}>
                   {dealerData?.dealer?.cleanName || dealerData?.dealer?.name} (
                   #{dealerData?.dealer?.fourDigitId || dealerData?.dealer?.dealerCode})
@@ -1386,210 +1496,189 @@ export function VanikiDealerOrdersScreen() {
             {/* Current Financial Status Banner */}
             <View style={styles.modalMetricsBanner}>
               <View style={styles.modalMetricItem}>
-                <Text style={styles.modalMetricLabel}>Credit Limit</Text>
-                <Text style={styles.modalMetricValue}>
-                  ₹{(dealerData?.credit?.creditLimit ?? 0).toLocaleString("en-IN")}
-                </Text>
-              </View>
-              <View style={styles.modalMetricDivider} />
-              <View style={styles.modalMetricItem}>
                 <Text style={[styles.modalMetricLabel, { color: "#DC2626" }]}>Outstanding Udhaar</Text>
                 <Text style={[styles.modalMetricValue, { color: "#DC2626" }]}>
                   ₹{(dealerData?.ledgerSummary?.totalOutstanding || 0).toLocaleString("en-IN")}
                 </Text>
               </View>
+              <View style={styles.modalMetricDivider} />
+              <View style={styles.modalMetricItem}>
+                <Text style={[styles.modalMetricLabel, { color: "#059669" }]}>Credit Balance</Text>
+                <Text style={[styles.modalMetricValue, { color: "#059669" }]}>
+                  ₹{(dealerData?.credit?.creditBalance ?? 0).toLocaleString("en-IN")}
+                </Text>
+              </View>
+              <View style={styles.modalMetricDivider} />
+              <View style={styles.modalMetricItem}>
+                <Text style={styles.modalMetricLabel}>Credit Limit</Text>
+                <Text style={styles.modalMetricValue}>
+                  ₹{(dealerData?.credit?.creditLimit ?? 0).toLocaleString("en-IN")}
+                </Text>
+              </View>
             </View>
 
-            {/* Tabs: Pay Udhaar vs Adjust Credit Limit */}
-            <View style={styles.modalTabRow}>
-              <TouchableOpacity
-                style={[styles.modalTabBtn, creditTab === "payment" && styles.modalTabBtnActive]}
-                onPress={() => setCreditTab("payment")}
-              >
-                <Ionicons
-                  name="cash-outline"
-                  size={15}
-                  color={creditTab === "payment" ? "#FFFFFF" : "#64748B"}
+            <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+              <View style={{ paddingTop: 8 }}>
+                <Text style={styles.inputLabel}>Payment Amount (₹) *</Text>
+                <TextInput
+                  mode="outlined"
+                  placeholder="Enter amount to pay"
+                  value={payUdhaarAmount}
+                  onChangeText={setPayUdhaarAmount}
+                  keyboardType="numeric"
+                  style={styles.input}
+                  dense
                 />
-                <Text
-                  style={[styles.modalTabBtnText, creditTab === "payment" && styles.modalTabBtnTextActive]}
-                >
-                  Pay Udhaar (Jama)
-                </Text>
-              </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.modalTabBtn, creditTab === "limit" && styles.modalTabBtnActive]}
-                onPress={() => setCreditTab("limit")}
-              >
-                <Ionicons
-                  name="speedometer-outline"
-                  size={15}
-                  color={creditTab === "limit" ? "#FFFFFF" : "#64748B"}
-                />
-                <Text
-                  style={[styles.modalTabBtnText, creditTab === "limit" && styles.modalTabBtnTextActive]}
-                >
-                  Adjust Limit
-                </Text>
-              </TouchableOpacity>
-            </View>
+                {/* Real-time Allocation Preview */}
+                {(() => {
+                  const entered = Number(payUdhaarAmount) || 0;
+                  const outstanding = Number(dealerData?.ledgerSummary?.totalOutstanding || 0);
+                  const currCredit = Number(dealerData?.credit?.creditBalance || 0);
+                  const debtCleared = Math.min(outstanding, entered);
+                  const remainingDebt = Math.max(0, outstanding - debtCleared);
+                  const extraCredit = Math.max(0, entered - debtCleared);
+                  const newCreditBal = currCredit + extraCredit;
 
-            <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
-              {creditTab === "payment" ? (
-                /* Tab 1: Pay Udhaar */
-                <View style={{ paddingTop: 8 }}>
-                  <Text style={styles.inputLabel}>Payment Amount (₹) *</Text>
-                  <TextInput
-                    mode="outlined"
-                    placeholder="Enter amount to pay"
-                    value={payUdhaarAmount}
-                    onChangeText={setPayUdhaarAmount}
-                    keyboardType="numeric"
-                    style={styles.input}
-                    dense
-                  />
+                  if (entered <= 0) return null;
 
-                  {/* Payment Mode: Strictly UPI or NEFT */}
-                  <Text style={[styles.inputLabel, { marginTop: 10 }]}>Payment Method *</Text>
-                  <View style={styles.creditPaymentModesRow}>
-                    {(["UPI", "NEFT"] as const).map((m) => (
-                      <TouchableOpacity
-                        key={m}
-                        onPress={() => setPayUdhaarMode(m)}
+                  return (
+                    <View style={styles.calculationPreviewBox}>
+                      <Text style={styles.calcPreviewTitle}>Payment Allocation Summary:</Text>
+                      <View style={styles.calcPreviewRow}>
+                        <Text style={styles.calcPreviewLabel}>Debt to be Cleared:</Text>
+                        <Text style={[styles.calcPreviewVal, { color: "#059669" }]}>
+                          ₹{debtCleared.toLocaleString("en-IN")}
+                        </Text>
+                      </View>
+                      <View style={styles.calcPreviewRow}>
+                        <Text style={styles.calcPreviewLabel}>Remaining Outstanding:</Text>
+                        <Text style={[styles.calcPreviewVal, { color: remainingDebt > 0 ? "#DC2626" : "#059669" }]}>
+                          ₹{remainingDebt.toLocaleString("en-IN")}
+                        </Text>
+                      </View>
+                      {extraCredit > 0 && (
+                        <View style={[styles.calcPreviewRow, { borderTopWidth: 1, borderTopColor: "#A7F3D0", paddingTop: 4, marginTop: 4 }]}>
+                          <Text style={[styles.calcPreviewLabel, { color: "#047857", fontWeight: "700" }]}>
+                            ⭐ Extra Added to Credit Balance:
+                          </Text>
+                          <Text style={[styles.calcPreviewVal, { color: "#047857", fontWeight: "800" }]}>
+                            +₹{extraCredit.toLocaleString("en-IN")}
+                          </Text>
+                        </View>
+                      )}
+                      {extraCredit > 0 && (
+                        <View style={styles.calcPreviewRow}>
+                          <Text style={styles.calcPreviewLabel}>New Credit Balance:</Text>
+                          <Text style={[styles.calcPreviewVal, { color: "#047857", fontWeight: "800" }]}>
+                            ₹{newCreditBal.toLocaleString("en-IN")}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })()}
+
+                {/* Payment Mode: Strictly UPI or NEFT */}
+                <Text style={[styles.inputLabel, { marginTop: 10 }]}>Payment Method *</Text>
+                <View style={styles.creditPaymentModesRow}>
+                  {(["UPI", "NEFT"] as const).map((m) => (
+                    <TouchableOpacity
+                      key={m}
+                      onPress={() => setPayUdhaarMode(m)}
+                      style={[
+                        styles.creditPaymentModeChip,
+                        payUdhaarMode === m && styles.creditPaymentModeChipActive,
+                      ]}
+                    >
+                      <Ionicons
+                        name={m === "UPI" ? "phone-portrait-outline" : "card-outline"}
+                        size={16}
+                        color={payUdhaarMode === m ? "#FFFFFF" : "#334155"}
+                      />
+                      <Text
                         style={[
-                          styles.creditPaymentModeChip,
-                          payUdhaarMode === m && styles.creditPaymentModeChipActive,
+                          styles.creditPaymentModeText,
+                          payUdhaarMode === m && styles.creditPaymentModeTextActive,
                         ]}
                       >
-                        <Ionicons
-                          name={m === "UPI" ? "phone-portrait-outline" : "card-outline"}
-                          size={16}
-                          color={payUdhaarMode === m ? "#FFFFFF" : "#334155"}
-                        />
-                        <Text
-                          style={[
-                            styles.creditPaymentModeText,
-                            payUdhaarMode === m && styles.creditPaymentModeTextActive,
-                          ]}
-                        >
-                          {m === "UPI" ? "UPI Payment" : "NEFT / Bank Transfer"}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+                        {m === "UPI" ? "UPI Payment" : "NEFT / Bank Transfer"}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text style={[styles.inputLabel, { marginTop: 10 }]}>UTR / Transaction Ref No.</Text>
+                <TextInput
+                  mode="outlined"
+                  placeholder="e.g. 423984729182"
+                  value={payUdhaarUtr}
+                  onChangeText={setPayUdhaarUtr}
+                  style={styles.input}
+                  dense
+                />
+
+                {/* Payment Slip Upload */}
+                <Text style={[styles.inputLabel, { marginTop: 10 }]}>Payment Slip / Screenshot</Text>
+                {isUploadingPaySlip ? (
+                  <View style={styles.uploadingBox}>
+                    <ActivityIndicator size="small" color="#059669" />
+                    <Text style={styles.uploadingText}>Uploading slip...</Text>
                   </View>
-
-                  <Text style={[styles.inputLabel, { marginTop: 10 }]}>UTR / Transaction Ref No.</Text>
-                  <TextInput
-                    mode="outlined"
-                    placeholder="e.g. 423984729182"
-                    value={payUdhaarUtr}
-                    onChangeText={setPayUdhaarUtr}
-                    style={styles.input}
-                    dense
-                  />
-
-                  {/* Payment Slip Upload */}
-                  <Text style={[styles.inputLabel, { marginTop: 10 }]}>Payment Slip / Screenshot</Text>
-                  {isUploadingPaySlip ? (
-                    <View style={styles.uploadingBox}>
-                      <ActivityIndicator size="small" color="#059669" />
-                      <Text style={styles.uploadingText}>Uploading slip...</Text>
+                ) : payUdhaarSlipUrl ? (
+                  <View style={styles.slipPreviewRow}>
+                    <Image source={{ uri: payUdhaarSlipUrl }} style={styles.slipThumb} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.slipAttachedText}>✓ Slip Attached</Text>
+                      <TouchableOpacity onPress={() => setPayUdhaarSlipUrl(null)}>
+                        <Text style={styles.slipRemoveText}>Remove</Text>
+                      </TouchableOpacity>
                     </View>
-                  ) : payUdhaarSlipUrl ? (
-                    <View style={styles.slipPreviewRow}>
-                      <Image source={{ uri: payUdhaarSlipUrl }} style={styles.slipThumb} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.slipAttachedText}>✓ Slip Attached</Text>
-                        <TouchableOpacity onPress={() => setPayUdhaarSlipUrl(null)}>
-                          <Text style={styles.slipRemoveText}>Remove</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ) : (
-                    <View style={styles.slipBtnRow}>
-                      <Button
-                        mode="outlined"
-                        onPress={handleCaptureCreditSlip}
-                        icon="camera"
-                        style={styles.slipActionBtn}
-                        labelStyle={{ fontSize: 11 }}
-                      >
-                        Camera
-                      </Button>
-                      <Button
-                        mode="outlined"
-                        onPress={handlePickCreditSlip}
-                        icon="image"
-                        style={styles.slipActionBtn}
-                        labelStyle={{ fontSize: 11 }}
-                      >
-                        Gallery
-                      </Button>
-                    </View>
-                  )}
+                  </View>
+                ) : (
+                  <View style={styles.slipBtnRow}>
+                    <Button
+                      mode="outlined"
+                      onPress={handleCaptureCreditSlip}
+                      icon="camera"
+                      style={styles.slipActionBtn}
+                      labelStyle={{ fontSize: 11 }}
+                    >
+                      Camera
+                    </Button>
+                    <Button
+                      mode="outlined"
+                      onPress={handlePickCreditSlip}
+                      icon="image"
+                      style={styles.slipActionBtn}
+                      labelStyle={{ fontSize: 11 }}
+                    >
+                      Gallery
+                    </Button>
+                  </View>
+                )}
 
-                  <Text style={[styles.inputLabel, { marginTop: 10 }]}>Notes / Remarks</Text>
-                  <TextInput
-                    mode="outlined"
-                    placeholder="e.g. Cheque clearance / online transfer..."
-                    value={payUdhaarNotes}
-                    onChangeText={setPayUdhaarNotes}
-                    style={styles.input}
-                    dense
-                  />
+                <Text style={[styles.inputLabel, { marginTop: 10 }]}>Notes / Remarks</Text>
+                <TextInput
+                  mode="outlined"
+                  placeholder="e.g. Cheque clearance / online transfer..."
+                  value={payUdhaarNotes}
+                  onChangeText={setPayUdhaarNotes}
+                  style={styles.input}
+                  dense
+                />
 
-                  <Button
-                    mode="contained"
-                    onPress={handleSubmitCreditAction}
-                    loading={isSubmittingCredit}
-                    disabled={isSubmittingCredit}
-                    buttonColor="#059669"
-                    style={{ marginTop: 16 }}
-                  >
-                    Submit Udhaar Payment
-                  </Button>
-                </View>
-              ) : (
-                /* Tab 2: Adjust Credit Limit */
-                <View style={{ paddingTop: 8 }}>
-                  <Text style={styles.inputLabel}>New Credit Limit (₹) *</Text>
-                  <TextInput
-                    mode="outlined"
-                    placeholder="e.g. 50000, 100000"
-                    value={newCreditLimitInput}
-                    onChangeText={setNewCreditLimitInput}
-                    keyboardType="numeric"
-                    style={styles.input}
-                    dense
-                  />
-                  <Text style={{ fontSize: 11, color: "#64748B", marginTop: 4 }}>
-                    Current Limit: ₹{(dealerData?.credit?.creditLimit ?? 0).toLocaleString("en-IN")}
-                  </Text>
-
-                  <Text style={[styles.inputLabel, { marginTop: 12 }]}>Reason / Notes</Text>
-                  <TextInput
-                    mode="outlined"
-                    placeholder="e.g. Approved higher limit based on regular turnover..."
-                    value={creditLimitNotes}
-                    onChangeText={setCreditLimitNotes}
-                    style={[styles.input, { minHeight: 60 }]}
-                    multiline
-                    dense
-                  />
-
-                  <Button
-                    mode="contained"
-                    onPress={handleSubmitCreditAction}
-                    loading={isSubmittingCredit}
-                    disabled={isSubmittingCredit}
-                    buttonColor="#059669"
-                    style={{ marginTop: 16 }}
-                  >
-                    Update Credit Limit
-                  </Button>
-                </View>
-              )}
+                <Button
+                  mode="contained"
+                  onPress={handleSubmitCreditAction}
+                  loading={isSubmittingCredit}
+                  disabled={isSubmittingCredit}
+                  buttonColor="#059669"
+                  style={{ marginTop: 16 }}
+                >
+                  Submit Udhaar Payment
+                </Button>
+              </View>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -2463,6 +2552,182 @@ const styles = StyleSheet.create({
   },
   creditPaymentModeTextActive: {
     color: "#FFFFFF",
+  },
+  // ─── Cart Scroll & Stepper Styles ───
+  cartScrollWrapper: {
+    maxHeight: 280,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    overflow: "hidden",
+  },
+  cartScrollView: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  cartStepperRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    gap: 4,
+    marginRight: 6,
+  },
+  cartStepperBtnMinus: {
+    width: 24,
+    height: 24,
+    borderRadius: 5,
+    backgroundColor: "#FEE2E2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cartStepperBtnPlus: {
+    width: 24,
+    height: 24,
+    borderRadius: 5,
+    backgroundColor: "#DCFCE7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cartQtyBadge: {
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 32,
+  },
+  cartQtyText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  cartQtyUnit: {
+    fontSize: 9,
+    color: "#64748B",
+    marginTop: -2,
+  },
+  // ─── Order History Section Styles ───
+  historyCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    marginTop: 12,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#E0F2FE",
+  },
+  historyHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  historyTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  historyBadge: {
+    backgroundColor: "#E0F2FE",
+    color: "#0369A1",
+    fontWeight: "800",
+    fontSize: 11,
+  },
+  emptyHistoryBox: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 18,
+    gap: 6,
+  },
+  emptyHistoryText: {
+    fontSize: 12,
+    color: "#94A3B8",
+    fontStyle: "italic",
+  },
+  orderHistoryCard: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  orderHistoryTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  orderHistoryId: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  orderHistoryInvoice: {
+    fontSize: 11,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+    color: "#475569",
+    marginTop: 1,
+  },
+  orderHistoryAmount: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  orderStatusBadge: {
+    fontSize: 10,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+  orderHistoryMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+  },
+  orderHistoryMetaText: {
+    fontSize: 11,
+    color: "#475569",
+    fontWeight: "600",
+  },
+  orderHistoryDate: {
+    fontSize: 10,
+    color: "#64748B",
+    marginTop: 4,
+  },
+  // ─── Payment Allocation Preview Styles ───
+  calculationPreviewBox: {
+    backgroundColor: "#F0FDF4",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#86EFAC",
+    padding: 10,
+    marginTop: 8,
+  },
+  calcPreviewTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#166534",
+    textTransform: "uppercase",
+    marginBottom: 6,
+  },
+  calcPreviewRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 2,
+  },
+  calcPreviewLabel: {
+    fontSize: 12,
+    color: "#334155",
+    fontWeight: "600",
+  },
+  calcPreviewVal: {
+    fontSize: 12,
+    fontWeight: "800",
   },
 });
 

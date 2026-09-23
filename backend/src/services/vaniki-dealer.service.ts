@@ -30,7 +30,7 @@ async function vanikiFetch(path: string, options: RequestInit = {}) {
 let tableInitialized = false;
 
 /**
- * Ensure PostgreSQL vaniki_dealer_activities table & indexes exist
+ * Ensure PostgreSQL vaniki_dealer_activities and vaniki_dealer_ledgers tables exist
  */
 export async function initVanikiTable(): Promise<void> {
   if (tableInitialized) return;
@@ -66,10 +66,151 @@ export async function initVanikiTable(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_vaniki_activities_created_at ON vaniki_dealer_activities(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_vaniki_activities_action ON vaniki_dealer_activities(action);
       CREATE INDEX IF NOT EXISTS idx_vaniki_activities_user ON vaniki_dealer_activities(user_id);
+      CREATE INDEX IF NOT EXISTS idx_vaniki_activities_dealer_code ON vaniki_dealer_activities(dealer_code);
+
+      CREATE TABLE IF NOT EXISTS vaniki_dealer_ledgers (
+        dealer_code TEXT PRIMARY KEY,
+        four_digit_id TEXT,
+        dealer_name TEXT,
+        credit_limit DOUBLE PRECISION DEFAULT 0,
+        credit_balance DOUBLE PRECISION DEFAULT 0,
+        total_outstanding DOUBLE PRECISION DEFAULT 0,
+        total_invoiced DOUBLE PRECISION DEFAULT 0,
+        total_paid DOUBLE PRECISION DEFAULT 0,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_vaniki_dealer_ledgers_four_digit ON vaniki_dealer_ledgers(four_digit_id);
     `);
     tableInitialized = true;
   } catch (err) {
-    console.error("Failed to ensure vaniki_dealer_activities table:", err);
+    console.error("Failed to ensure vaniki tables:", err);
+  }
+}
+
+export interface DealerLedgerRecord {
+  dealerCode: string;
+  fourDigitId: string;
+  dealerName: string;
+  creditLimit: number;
+  creditBalance: number;
+  totalOutstanding: number;
+  totalInvoiced: number;
+  totalPaid: number;
+}
+
+/**
+ * Get or create real-time persistent ledger record for dealer.
+ * By default, credit limit and credit balance start at 0 ("sabka credit 0 kro").
+ */
+export async function getOrCreateDealerLedger(
+  code: string,
+  fourDigitId?: string,
+  name?: string
+): Promise<DealerLedgerRecord> {
+  await initVanikiTable();
+  const cleanCode = (code || "").trim();
+  const fourDigit = fourDigitId || cleanCode.replace(/\D/g, "").slice(-4);
+
+  try {
+    const existing = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT dealer_code, four_digit_id, dealer_name, credit_limit, credit_balance, total_outstanding, total_invoiced, total_paid
+       FROM vaniki_dealer_ledgers
+       WHERE dealer_code = $1 OR (four_digit_id IS NOT NULL AND four_digit_id != '' AND four_digit_id = $2)
+       LIMIT 1`,
+      cleanCode,
+      fourDigit
+    );
+
+    if (existing && existing.length > 0) {
+      const row = existing[0];
+      return {
+        dealerCode: row.dealer_code || cleanCode,
+        fourDigitId: row.four_digit_id || fourDigit,
+        dealerName: row.dealer_name || name || "Dealer",
+        creditLimit: Number(row.credit_limit || 0),
+        creditBalance: Number(row.credit_balance || 0),
+        totalOutstanding: Number(row.total_outstanding || 0),
+        totalInvoiced: Number(row.total_invoiced || 0),
+        totalPaid: Number(row.total_paid || 0),
+      };
+    }
+  } catch (err) {
+    console.error("Error reading vaniki_dealer_ledgers:", err);
+  }
+
+  // Initial default: strictly 0 credit limit & 0 balance
+  const defaultRow: DealerLedgerRecord = {
+    dealerCode: cleanCode,
+    fourDigitId: fourDigit,
+    dealerName: name || "Dealer",
+    creditLimit: 0,
+    creditBalance: 0,
+    totalOutstanding: 0,
+    totalInvoiced: 0,
+    totalPaid: 0,
+  };
+
+  try {
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO vaniki_dealer_ledgers (
+        dealer_code, four_digit_id, dealer_name, credit_limit, credit_balance, total_outstanding, total_invoiced, total_paid, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+      ON CONFLICT (dealer_code) DO NOTHING`,
+      defaultRow.dealerCode,
+      defaultRow.fourDigitId,
+      defaultRow.dealerName,
+      defaultRow.creditLimit,
+      defaultRow.creditBalance,
+      defaultRow.totalOutstanding,
+      defaultRow.totalInvoiced,
+      defaultRow.totalPaid
+    );
+  } catch (err) {
+    console.error("Error creating vaniki_dealer_ledgers initial row:", err);
+  }
+
+  return defaultRow;
+}
+
+/**
+ * Fetch all past orders placed for a dealer
+ */
+export async function getDealerOrderHistory(dealerCode: string, fourDigitId?: string) {
+  await initVanikiTable();
+  const cleanCode = (dealerCode || "").trim();
+  const fourDigit = fourDigitId || cleanCode.replace(/\D/g, "").slice(-4);
+
+  try {
+    const rows = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id, order_id, invoice_number, total_amount, paid_amount, outstanding_amount, petis, items_count, payment_mode, proof_url, notes, metadata, created_at, staff_name
+       FROM vaniki_dealer_activities
+       WHERE action = 'ORDER_PLACED' AND (dealer_code = $1 OR (four_digit_id IS NOT NULL AND four_digit_id != '' AND four_digit_id = $2))
+       ORDER BY created_at DESC
+       LIMIT 30`,
+      cleanCode,
+      fourDigit
+    );
+
+    return rows.map((r: any) => ({
+      id: r.id,
+      orderId: r.order_id || r.id,
+      invoiceNumber: r.invoice_number || "",
+      totalAmount: Number(r.total_amount || 0),
+      paidAmount: Number(r.paid_amount || 0),
+      outstandingAmount: Number(r.outstanding_amount || 0),
+      petis: Number(r.petis || 0),
+      itemsCount: Number(r.items_count || 0),
+      paymentMode: r.payment_mode || "credit",
+      proofUrl: r.proof_url || null,
+      notes: r.notes || "",
+      garageName: r.metadata?.garageName || "Vaniki garage",
+      items: r.metadata?.items || [],
+      staffName: r.staff_name || "Field Staff",
+      createdAt: r.created_at,
+    }));
+  } catch (err) {
+    console.error("Error fetching dealer order history:", err);
+    return [];
   }
 }
 
@@ -158,7 +299,7 @@ export async function recordActivity(data: VanikiActivityInput): Promise<void> {
 }
 
 /**
- * Lookup dealer by 4-digit ID or mobile number & record staff lookup activity
+ * Lookup dealer by 4-digit ID or mobile number & merge with real-time persistent local ledger
  */
 export async function lookupDealer(codeOrMobile: string, actor?: AuthUser) {
   const trimmed = codeOrMobile.trim();
@@ -166,47 +307,78 @@ export async function lookupDealer(codeOrMobile: string, actor?: AuthUser) {
     throw new AppError(400, "Dealer code or mobile number is required");
   }
 
-  const result = await vanikiFetch(`/lookup/${encodeURIComponent(trimmed)}`, {
-    method: "GET",
-  });
-
-  // Automatically record this staff lookup event
-  if (result?.dealer) {
-    const dealer = result.dealer;
-    const credit = result.credit || {};
-    const ledger = result.ledgerSummary || {};
-
-    const fourDigit =
-      dealer.fourDigitId ||
-      dealer.shortCode ||
-      (dealer.dealerCode ? dealer.dealerCode.replace(/\D/g, "").slice(-4) : "");
-
-    recordActivity({
-      companyId: actor?.companyId,
-      userId: actor?.id,
-      staffName: actor?.name || "Field Staff",
-      staffPhone: (actor as any)?.phone || actor?.email || "",
-      staffEmail: actor?.email || "",
-      action: "DEALER_LOOKUP",
-      dealerCode: dealer.dealerCode,
-      fourDigitId: fourDigit,
-      dealerName: dealer.cleanName || dealer.name || "Dealer",
-      storeName: dealer.storeName || "",
-      dealerPhone: dealer.mobile || "",
-      dealerCity: dealer.address?.city || dealer.storeLocation || "",
-      totalAmount: credit.creditLimit || 0,
-      outstandingAmount: ledger.totalOutstanding || 0,
-      metadata: {
-        creditLimit: credit.creditLimit || 0,
-        totalInvoiced: ledger.totalInvoiced || 0,
-        totalPaid: ledger.totalPaid || 0,
-        totalOutstanding: ledger.totalOutstanding || 0,
-        unpaidInvoices: ledger.unpaidInvoiceCount || 0,
-        address: dealer.address,
-        gstNumber: dealer.gstNumber,
-      },
-    }).catch((err) => console.error("Failed to log lookup activity:", err));
+  let result: any = null;
+  try {
+    result = await vanikiFetch(`/lookup/${encodeURIComponent(trimmed)}`, {
+      method: "GET",
+    });
+  } catch (err) {
+    console.warn("Could not lookup remote dealer:", err);
   }
+
+  const dealer = result?.dealer || {
+    dealerCode: trimmed,
+    fourDigitId: trimmed.replace(/\D/g, "").slice(-4),
+    name: "Dealer",
+    cleanName: "Dealer",
+    storeName: "Dealer Store",
+    mobile: trimmed,
+  };
+
+  const cleanCode = dealer.dealerCode || trimmed;
+  const fourDigit =
+    dealer.fourDigitId ||
+    dealer.shortCode ||
+    (cleanCode ? cleanCode.replace(/\D/g, "").slice(-4) : trimmed);
+  const dealerName = dealer.cleanName || dealer.name || "Dealer";
+
+  // Real-time persistent local ledger (strictly 0 default for creditLimit & creditBalance)
+  const ledger = await getOrCreateDealerLedger(cleanCode, fourDigit, dealerName);
+
+  result = result || {};
+  result.dealer = dealer;
+  result.credit = {
+    creditLimit: ledger.creditLimit,
+    creditBalance: ledger.creditBalance,
+  };
+  result.ledgerSummary = {
+    totalInvoiced: ledger.totalInvoiced,
+    totalPaid: ledger.totalPaid,
+    totalOutstanding: ledger.totalOutstanding,
+    creditBalance: ledger.creditBalance,
+    unpaidInvoiceCount: result?.ledgerSummary?.unpaidInvoiceCount || 0,
+  };
+
+  // Fetch complete past order history for this dealer
+  const orderHistory = await getDealerOrderHistory(cleanCode, fourDigit);
+  result.orders = orderHistory;
+
+  // Record this lookup activity
+  recordActivity({
+    companyId: actor?.companyId,
+    userId: actor?.id,
+    staffName: actor?.name || "Field Staff",
+    staffPhone: (actor as any)?.phone || actor?.email || "",
+    staffEmail: actor?.email || "",
+    action: "DEALER_LOOKUP",
+    dealerCode: cleanCode,
+    fourDigitId: fourDigit,
+    dealerName: dealerName,
+    storeName: dealer.storeName || "",
+    dealerPhone: dealer.mobile || "",
+    dealerCity: dealer.address?.city || dealer.storeLocation || "",
+    totalAmount: ledger.creditLimit,
+    outstandingAmount: ledger.totalOutstanding,
+    metadata: {
+      creditLimit: ledger.creditLimit,
+      creditBalance: ledger.creditBalance,
+      totalInvoiced: ledger.totalInvoiced,
+      totalPaid: ledger.totalPaid,
+      totalOutstanding: ledger.totalOutstanding,
+      address: dealer.address,
+      gstNumber: dealer.gstNumber,
+    },
+  }).catch((err) => console.error("Failed to log lookup activity:", err));
 
   return result;
 }
@@ -345,6 +517,46 @@ export async function placeDealerOrder(
   const fourDigit =
     dealerObj.fourDigitId ||
     (dealerObj.dealerCode ? dealerObj.dealerCode.replace(/\D/g, "").slice(-4) : cleanCode.replace(/\D/g, "").slice(-4));
+  const dealerName = dealerObj.cleanName || dealerObj.name || "Dealer";
+
+  // Update persistent local ledger for this order
+  const currentLedger = await getOrCreateDealerLedger(cleanCode, fourDigit, dealerName);
+  const orderTotal = Number(orderData?.totalAmount ?? payload.totalAmount ?? 0);
+  const paidNow = Number(orderData?.paidAmount ?? paidAmount ?? 0);
+  let unpaid = Math.max(0, orderTotal - paidNow);
+
+  // If dealer had credit balance (wallet), automatically offset unpaid amount!
+  let creditUsed = 0;
+  let newCreditBal = currentLedger.creditBalance;
+  if (newCreditBal > 0 && unpaid > 0) {
+    creditUsed = Math.min(newCreditBal, unpaid);
+    newCreditBal -= creditUsed;
+    unpaid -= creditUsed;
+  }
+
+  const newOutstanding = currentLedger.totalOutstanding + unpaid;
+  const newInvoiced = currentLedger.totalInvoiced + orderTotal;
+  const newTotalPaid = currentLedger.totalPaid + paidNow;
+
+  try {
+    await prisma.$executeRawUnsafe(
+      `UPDATE vaniki_dealer_ledgers
+       SET total_outstanding = $1,
+           credit_balance = $2,
+           total_invoiced = $3,
+           total_paid = $4,
+           updated_at = NOW()
+       WHERE dealer_code = $5 OR (four_digit_id IS NOT NULL AND four_digit_id != '' AND four_digit_id = $6)`,
+      newOutstanding,
+      newCreditBal,
+      newInvoiced,
+      newTotalPaid,
+      cleanCode,
+      fourDigit
+    );
+  } catch (err) {
+    console.error("Error updating vaniki_dealer_ledgers on order:", err);
+  }
 
   // Automatically record this staff order placed activity
   recordActivity({
@@ -356,14 +568,14 @@ export async function placeDealerOrder(
     action: "ORDER_PLACED",
     dealerCode: dealerObj.dealerCode || cleanCode,
     fourDigitId: fourDigit,
-    dealerName: dealerObj.cleanName || dealerObj.name || "Dealer",
+    dealerName,
     storeName: dealerObj.storeName || "",
     dealerPhone: dealerObj.mobile || "",
     orderId: orderData?.orderId || "",
     invoiceNumber: orderData?.invoiceNumber || "",
-    totalAmount: Number(orderData?.totalAmount ?? payload.totalAmount ?? 0),
-    paidAmount: Number(orderData?.paidAmount ?? paidAmount),
-    outstandingAmount: Number(orderData?.outstandingAmount ?? Math.max(0, (payload.totalAmount || 0) - paidAmount)),
+    totalAmount: orderTotal,
+    paidAmount: paidNow,
+    outstandingAmount: newOutstanding,
     petis: totalPetis,
     itemsCount: (payload.items || []).length,
     paymentMode,
@@ -372,10 +584,11 @@ export async function placeDealerOrder(
     metadata: {
       garageName: payload.garageName || null,
       items: orderData?.items || payload.items,
-
       invoiceNumber: orderData?.invoiceNumber,
       orderId: orderData?.orderId,
       utr: payload.utr,
+      creditUsed,
+      creditBalanceRemaining: newCreditBal,
       paymentStatus: orderData?.paymentStatus,
       placedAt: orderData?.placedAt || new Date().toISOString(),
       documentUrl: payload.documentUrl || null,
@@ -409,14 +622,10 @@ export async function adjustCreditOrRecordPayment(actor: AuthUser, payload: Cred
 
   // Look up existing dealer details from Vaniki
   let dealerInfo: any = {};
-  let currentOutstanding = 0;
-  let currentLimit = 0;
   try {
     const res = await vanikiFetch(`/lookup/${encodeURIComponent(cleanCode)}`, { method: "GET" });
     if (res?.dealer) {
       dealerInfo = res.dealer;
-      currentOutstanding = Number(res?.ledgerSummary?.totalOutstanding || 0);
-      currentLimit = Number(res?.credit?.creditLimit || 50000);
     }
   } catch (err) {
     console.warn("Could not fetch remote dealer during credit transaction:", err);
@@ -430,14 +639,44 @@ export async function adjustCreditOrRecordPayment(actor: AuthUser, payload: Cred
   const dealerPhone = dealerInfo.mobile || "";
   const dealerCity = dealerInfo.address?.city || dealerInfo.storeLocation || "";
 
+  // Get current real-time local ledger (default credit is strictly 0)
+  const currentLedger = await getOrCreateDealerLedger(cleanCode, fourDigit, dealerName);
+
   if (payload.type === "PAYMENT") {
     const payAmount = Number(payload.amount || 0);
     if (payAmount <= 0) {
       throw new AppError(400, "Payment amount must be greater than zero");
     }
-    const newOutstanding = Math.max(0, currentOutstanding - payAmount);
+
+    // Exact user requirement:
+    // "like usne 8k ka smaan liya .. then 5k paid .. then 3k remaining.. next time agar vo 5k diya .. toh 3k ka debt hat jayega .. and 2k credit mein add ho jayega !!"
+    const debtToClear = Math.min(currentLedger.totalOutstanding, payAmount);
+    const extraPaid = payAmount - debtToClear;
+    const newOutstanding = Math.max(0, currentLedger.totalOutstanding - debtToClear);
+    const newCreditBalance = currentLedger.creditBalance + extraPaid;
+    const newTotalPaid = currentLedger.totalPaid + payAmount;
     const paymentMode = payload.paymentMode === "neft" ? "NEFT" : "UPI";
 
+    // Update persistent local ledger table
+    try {
+      await prisma.$executeRawUnsafe(
+        `UPDATE vaniki_dealer_ledgers
+         SET total_outstanding = $1,
+             credit_balance = $2,
+             total_paid = $3,
+             updated_at = NOW()
+         WHERE dealer_code = $4 OR (four_digit_id IS NOT NULL AND four_digit_id != '' AND four_digit_id = $5)`,
+        newOutstanding,
+        newCreditBalance,
+        newTotalPaid,
+        cleanCode,
+        fourDigit
+      );
+    } catch (err) {
+      console.error("Error updating vaniki_dealer_ledgers on payment:", err);
+    }
+
+    // Optional remote notification
     try {
       await vanikiFetch(`/${encodeURIComponent(cleanCode)}/payments`, {
         method: "POST",
@@ -449,8 +688,8 @@ export async function adjustCreditOrRecordPayment(actor: AuthUser, payload: Cred
           notes: payload.notes || "",
           staffId: actor.id,
           staffName,
-          staffPhone
-        })
+          staffPhone,
+        }),
       });
     } catch (apiErr) {
       console.warn("Vaniki remote payment API notification note:", apiErr);
@@ -475,35 +714,61 @@ export async function adjustCreditOrRecordPayment(actor: AuthUser, payload: Cred
       outstandingAmount: newOutstanding,
       paymentMode,
       proofUrl: payload.proofUrl || "",
-      notes: payload.notes || `Credit due payment received via ${paymentMode}`,
+      notes:
+        payload.notes ||
+        `Udhaar payment of ₹${payAmount} received via ${paymentMode} (${
+          debtToClear > 0 ? "Debt cleared: ₹" + debtToClear : ""
+        }${extraPaid > 0 ? ", Added to credit: ₹" + extraPaid : ""})`,
       metadata: {
         type: "CREDIT_PAYMENT",
         paymentMode,
         utr: payload.utr || "",
-        previousOutstanding: currentOutstanding,
+        previousOutstanding: currentLedger.totalOutstanding,
+        debtCleared: debtToClear,
+        extraCreditAdded: extraPaid,
         newOutstanding,
+        newCreditBalance,
         paidAmount: payAmount,
         staffName,
         staffPhone,
-        paidAt: new Date().toISOString()
-      }
+        paidAt: new Date().toISOString(),
+      },
     });
 
     return {
       success: true,
       action: "CREDIT_PAYMENT",
       paidAmount: payAmount,
+      debtCleared: debtToClear,
+      extraCreditAdded: extraPaid,
       newOutstanding,
+      newCreditBalance,
+      totalPaid: newTotalPaid,
       paymentMode,
       utr: payload.utr,
       proofUrl: payload.proofUrl,
-      staffName
+      staffName,
     };
   } else {
-    // LIMIT_ADJUST
-    const newLimit = Number(payload.newLimit || 0);
+    // LIMIT_ADJUST (Admin only - updates credit limit, default was 0)
+    const newLimit = Number(payload.newLimit ?? 0);
     if (newLimit < 0) {
       throw new AppError(400, "Credit limit cannot be negative");
+    }
+
+    // Update persistent local ledger table
+    try {
+      await prisma.$executeRawUnsafe(
+        `UPDATE vaniki_dealer_ledgers
+         SET credit_limit = $1,
+             updated_at = NOW()
+         WHERE dealer_code = $2 OR (four_digit_id IS NOT NULL AND four_digit_id != '' AND four_digit_id = $3)`,
+        newLimit,
+        cleanCode,
+        fourDigit
+      );
+    } catch (err) {
+      console.error("Error updating vaniki_dealer_ledgers on limit adjust:", err);
     }
 
     try {
@@ -513,8 +778,8 @@ export async function adjustCreditOrRecordPayment(actor: AuthUser, payload: Cred
           creditLimit: newLimit,
           reason: payload.notes || "",
           staffId: actor.id,
-          staffName
-        })
+          staffName,
+        }),
       });
     } catch (apiErr) {
       console.warn("Vaniki remote credit limit API notification note:", apiErr);
@@ -536,25 +801,26 @@ export async function adjustCreditOrRecordPayment(actor: AuthUser, payload: Cred
       dealerPhone,
       dealerCity,
       totalAmount: newLimit,
-      outstandingAmount: currentOutstanding,
+      outstandingAmount: currentLedger.totalOutstanding,
       notes: payload.notes || `Credit limit updated to ₹${newLimit}`,
       metadata: {
         type: "CREDIT_LIMIT_ADJUSTED",
-        previousLimit: currentLimit,
+        previousLimit: currentLedger.creditLimit,
         newLimit,
         reason: payload.notes || "",
         staffName,
         staffPhone,
-        updatedAt: new Date().toISOString()
-      }
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     return {
       success: true,
       action: "CREDIT_LIMIT_ADJUSTED",
-      previousLimit: currentLimit,
+      previousLimit: currentLedger.creditLimit,
       newLimit,
-      staffName
+      dealerCode: cleanCode,
+      staffName,
     };
   }
 }

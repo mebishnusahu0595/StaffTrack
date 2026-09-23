@@ -36,6 +36,7 @@ import {
   updateDealer, 
   deleteDealer,
   fetchVanikiActivities,
+
   fetchUsers,
   createTask,
   recordDealerCreditAdjustment,
@@ -117,7 +118,20 @@ export default function DealersPage() {
 
   // Mutations
   const createMutation = useMutation({
-    mutationFn: createDealer,
+    mutationFn: async (data: any) => {
+      const res = await createDealer(data);
+      if (data.creditLimit !== undefined && data.creditLimit !== "") {
+        const fourDigitMatch = data.name.match(/\b\d{4}\b/);
+        const dealerCode = fourDigitMatch ? fourDigitMatch[0] : (data.phone || data.name);
+        await recordDealerCreditAdjustment({
+          dealerCode,
+          type: "LIMIT_ADJUST",
+          newLimit: Number(data.creditLimit || 0),
+          notes: `Initial credit limit set by Admin to ₹${Number(data.creditLimit || 0).toLocaleString("en-IN")}`
+        }).catch(err => console.warn("Failed to sync credit limit adjustment on create:", err));
+      }
+      return res;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dealers"] });
       setIsCreateOpen(false);
@@ -132,11 +146,13 @@ export default function DealersPage() {
     mutationFn: async (data: any) => {
       const res = await updateDealer(selectedDealer!.id, data);
       if (data.creditLimit !== undefined && data.creditLimit !== "") {
+        const fourDigitMatch = (selectedDealer!.name || "").match(/\b\d{4}\b/);
+        const dealerCode = fourDigitMatch ? fourDigitMatch[0] : (selectedDealer!.phone || selectedDealer!.name);
         await recordDealerCreditAdjustment({
-          dealerCode: selectedDealer!.phone || selectedDealer!.name,
+          dealerCode,
           type: "LIMIT_ADJUST",
-          newLimit: Number(data.creditLimit),
-          notes: `Credit limit updated by Admin on StaffTrack to ₹${Number(data.creditLimit).toLocaleString("en-IN")}`
+          newLimit: Number(data.creditLimit || 0),
+          notes: `Credit limit updated by Admin on StaffTrack to ₹${Number(data.creditLimit || 0).toLocaleString("en-IN")}`
         }).catch(err => console.warn("Failed to sync credit limit adjustment:", err));
       }
       return res;
@@ -213,7 +229,7 @@ export default function DealersPage() {
       state: "",
       pincode: "",
       gstin: "",
-      creditLimit: "",
+      creditLimit: "0",
       assignedUserId: "",
       assignedUserName: ""
     });
@@ -230,7 +246,7 @@ export default function DealersPage() {
       state: dealer.state || "",
       pincode: dealer.pincode || "",
       gstin: dealer.gstin || "",
-      creditLimit: dealer.creditLimit !== undefined && dealer.creditLimit !== null ? String(dealer.creditLimit) : "50000",
+      creditLimit: dealer.creditLimit !== undefined && dealer.creditLimit !== null ? String(dealer.creditLimit) : "0",
       assignedUserId: dealer.assignedUserId || "",
       assignedUserName: dealer.assignedUserName || ""
     });
@@ -1009,6 +1025,53 @@ export default function DealersPage() {
               </div>
             ) : (
               <>
+                {/* ─── Part 0: Real-Time Financial Ledger Summary ─── */}
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                      <CreditCard className="h-4 w-4 text-emerald-600" /> Real-Time Financial Ledger
+                    </span>
+                    <Badge className="bg-emerald-600 text-white font-bold text-[10px]">
+                      Live PostgreSQL Ledger
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-white p-3 rounded-xl border border-slate-200/60">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase">Credit Limit</span>
+                      <p className="text-base font-black text-slate-800 mt-0.5">
+                        ₹{(historyData?.ledger?.creditLimit || 0).toLocaleString("en-IN")}
+                      </p>
+                      <span className="text-[9px] text-slate-400 font-semibold">Admin Managed</span>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-xl border border-emerald-200/80 bg-emerald-50/30">
+                      <span className="text-[10px] font-bold text-emerald-700 uppercase">Credit Balance</span>
+                      <p className="text-base font-black text-emerald-700 mt-0.5">
+                        ₹{(historyData?.ledger?.creditBalance || 0).toLocaleString("en-IN")}
+                      </p>
+                      <span className="text-[9px] text-emerald-600 font-semibold">Wallet / Advance</span>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-xl border border-rose-200/80 bg-rose-50/30">
+                      <span className="text-[10px] font-bold text-rose-700 uppercase">Outstanding Udhaar</span>
+                      <p className="text-base font-black text-rose-700 mt-0.5">
+                        ₹{(historyData?.ledger?.totalOutstanding || 0).toLocaleString("en-IN")}
+                      </p>
+                      <span className="text-[9px] text-rose-600 font-semibold">Due to Clear</span>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-xl border border-slate-200/60">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase">Total Paid</span>
+                      <p className="text-base font-black text-emerald-600 mt-0.5">
+                        ₹{(historyData?.ledger?.totalPaid || 0).toLocaleString("en-IN")}
+                      </p>
+                      <span className="text-[9px] text-slate-400 font-semibold">
+                        Invoiced: ₹{(historyData?.ledger?.totalInvoiced || 0).toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
                 {/* ─── Part 1: Field Staff Visit Tasks & Checklist Q/A ─── */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between pb-1 border-b border-slate-100">

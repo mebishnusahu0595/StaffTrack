@@ -140,6 +140,7 @@ export async function getDealerVisits(actor: AuthUser, dealerId: string) {
 
   // 2. Fetch dealer activities from vaniki_dealer_activities
   let activities: any[] = [];
+  const fourDigit = (dealer.name.match(/\d{4}/) || [""])[0];
   try {
     activities = await prisma.$queryRawUnsafe<any[]>(
       `SELECT * FROM vaniki_dealer_activities 
@@ -148,17 +149,27 @@ export async function getDealerVisits(actor: AuthUser, dealerId: string) {
           OR (four_digit_id IS NOT NULL AND four_digit_id != '' AND four_digit_id = $3)
        ORDER BY created_at DESC LIMIT 50`,
       dealer.name,
-      dealer.phone || "",
-      (dealer.name.match(/\d{4}/) || [""])[0]
+      dealer.phone || dealer.name,
+      fourDigit
     );
   } catch (err) {
-    console.error("Error fetching vaniki activities for dealer:", err);
+    console.error("Error fetching activities in dealer visits:", err);
+  }
+
+  // 3. Fetch persistent local ledger
+  let ledger = null;
+  try {
+    const { getOrCreateDealerLedger } = await import("./vaniki-dealer.service");
+    ledger = await getOrCreateDealerLedger(dealer.phone || dealer.name, fourDigit, dealer.name);
+  } catch (err) {
+    console.error("Error fetching ledger in dealer visits:", err);
   }
 
   return {
     dealer,
     tasks,
-    activities
+    activities,
+    ledger
   };
 }
 

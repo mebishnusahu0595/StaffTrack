@@ -1160,8 +1160,8 @@ export async function deleteFarmer(id: string): Promise<void> {
   await api.delete(`/farmers/${id}`);
 }
 
-export async function fetchDealerVisits(id: string): Promise<{ dealer: Dealer; tasks: any[]; activities: any[] }> {
-  const response = await api.get<{ data: { dealer: Dealer; tasks: any[]; activities: any[] } }>(`/dealers/${id}/visits`);
+export async function fetchDealerVisits(id: string): Promise<{ dealer: Dealer; tasks: any[]; activities: any[]; ledger?: any }> {
+  const response = await api.get<{ data: { dealer: Dealer; tasks: any[]; activities: any[]; ledger?: any } }>(`/dealers/${id}/visits`);
   return response.data.data;
 }
 
