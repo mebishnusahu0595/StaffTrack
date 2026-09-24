@@ -62,12 +62,10 @@ export async function initVanikiTable(): Promise<void> {
         notes TEXT,
         metadata JSONB,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS idx_vaniki_activities_created_at ON vaniki_dealer_activities(created_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_vaniki_activities_action ON vaniki_dealer_activities(action);
-      CREATE INDEX IF NOT EXISTS idx_vaniki_activities_user ON vaniki_dealer_activities(user_id);
-      CREATE INDEX IF NOT EXISTS idx_vaniki_activities_dealer_code ON vaniki_dealer_activities(dealer_code);
+      )
+    `);
 
+    await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS vaniki_dealer_ledgers (
         dealer_code TEXT PRIMARY KEY,
         four_digit_id TEXT,
@@ -78,9 +76,15 @@ export async function initVanikiTable(): Promise<void> {
         total_invoiced DOUBLE PRECISION DEFAULT 0,
         total_paid DOUBLE PRECISION DEFAULT 0,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS idx_vaniki_dealer_ledgers_four_digit ON vaniki_dealer_ledgers(four_digit_id);
+      )
     `);
+
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_vaniki_activities_created_at ON vaniki_dealer_activities(created_at DESC)`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_vaniki_activities_action ON vaniki_dealer_activities(action)`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_vaniki_activities_user ON vaniki_dealer_activities(user_id)`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_vaniki_activities_dealer_code ON vaniki_dealer_activities(dealer_code)`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_vaniki_dealer_ledgers_four_digit ON vaniki_dealer_ledgers(four_digit_id)`);
+
     tableInitialized = true;
   } catch (err) {
     console.error("Failed to ensure vaniki tables:", err);
@@ -100,12 +104,18 @@ export interface DealerLedgerRecord {
 
 /**
  * Get or create real-time persistent ledger record for dealer.
- * By default, credit limit and credit balance start at 0 ("sabka credit 0 kro").
+ * If no local override exists, populates from remote SuperAdmin defaults.
  */
 export async function getOrCreateDealerLedger(
   code: string,
   fourDigitId?: string,
-  name?: string
+  name?: string,
+  remoteDefaults?: {
+    creditLimit?: number;
+    totalOutstanding?: number;
+    totalInvoiced?: number;
+    totalPaid?: number;
+  }
 ): Promise<DealerLedgerRecord> {
   await initVanikiTable();
   const cleanCode = (code || "").trim();
@@ -123,31 +133,60 @@ export async function getOrCreateDealerLedger(
 
     if (existing && existing.length > 0) {
       const row = existing[0];
+      let limit = Number(row.credit_limit || 0);
+      let outstanding = Number(row.total_outstanding || 0);
+      let invoiced = Number(row.total_invoiced || 0);
+      let paid = Number(row.total_paid || 0);
+
+      // If local record had 0 limit but SuperAdmin has configured limit, sync SuperAdmin limit!
+      if (limit === 0 && (remoteDefaults?.creditLimit || 0) > 0) {
+        limit = Number(remoteDefaults?.creditLimit || 0);
+        await prisma.$executeRawUnsafe(
+          `UPDATE vaniki_dealer_ledgers SET credit_limit = $1, updated_at = NOW() WHERE dealer_code = $2`,
+          limit,
+          row.dealer_code
+        ).catch(() => {});
+      }
+
+      // If local record has 0 outstanding/invoiced but remote has actual invoice debt, sync remote outstanding!
+      if (outstanding === 0 && (remoteDefaults?.totalOutstanding || 0) > 0 && paid === 0) {
+        outstanding = Number(remoteDefaults?.totalOutstanding || 0);
+        invoiced = Number(remoteDefaults?.totalInvoiced || 0);
+        paid = Number(remoteDefaults?.totalPaid || 0);
+        await prisma.$executeRawUnsafe(
+          `UPDATE vaniki_dealer_ledgers SET total_outstanding = $1, total_invoiced = $2, total_paid = $3, updated_at = NOW() WHERE dealer_code = $4`,
+          outstanding,
+          invoiced,
+          paid,
+          row.dealer_code
+        ).catch(() => {});
+      }
+
       return {
         dealerCode: row.dealer_code || cleanCode,
         fourDigitId: row.four_digit_id || fourDigit,
         dealerName: row.dealer_name || name || "Dealer",
-        creditLimit: Number(row.credit_limit || 0),
+        creditLimit: limit,
         creditBalance: Number(row.credit_balance || 0),
-        totalOutstanding: Number(row.total_outstanding || 0),
-        totalInvoiced: Number(row.total_invoiced || 0),
-        totalPaid: Number(row.total_paid || 0),
+        totalOutstanding: outstanding,
+        totalInvoiced: invoiced,
+        totalPaid: paid,
       };
     }
   } catch (err) {
     console.error("Error reading vaniki_dealer_ledgers:", err);
   }
 
-  // Initial default: strictly 0 credit limit & 0 balance
+  // Initial row: inherit SuperAdmin configured values (or 0 if none)
   const defaultRow: DealerLedgerRecord = {
     dealerCode: cleanCode,
     fourDigitId: fourDigit,
     dealerName: name || "Dealer",
-    creditLimit: 0,
+    creditLimit: Number(remoteDefaults?.creditLimit ?? 0),
     creditBalance: 0,
-    totalOutstanding: 0,
-    totalInvoiced: 0,
-    totalPaid: 0,
+    totalOutstanding: Number(remoteDefaults?.totalOutstanding ?? 0),
+    totalInvoiced: Number(remoteDefaults?.totalInvoiced ?? 0),
+    totalPaid: Number(remoteDefaults?.totalPaid ?? 0),
   };
 
   try {
@@ -332,21 +371,35 @@ export async function lookupDealer(codeOrMobile: string, actor?: AuthUser) {
     (cleanCode ? cleanCode.replace(/\D/g, "").slice(-4) : trimmed);
   const dealerName = dealer.cleanName || dealer.name || "Dealer";
 
-  // Real-time persistent local ledger (strictly 0 default for creditLimit & creditBalance)
-  const ledger = await getOrCreateDealerLedger(cleanCode, fourDigit, dealerName);
+  // Extract SuperAdmin configured values if present
+  const remoteDefaults = {
+    creditLimit: Number(result?.credit?.creditLimit ?? 0),
+    totalOutstanding: Number(result?.credit?.totalOutstanding ?? result?.ledgerSummary?.totalOutstanding ?? 0),
+    totalInvoiced: Number(result?.credit?.totalInvoiced ?? result?.ledgerSummary?.totalInvoiced ?? 0),
+    totalPaid: Number(result?.credit?.totalPaid ?? result?.ledgerSummary?.totalPaid ?? 0),
+  };
+
+  // Real-time persistent local ledger (inherits SuperAdmin defaults if not locally overridden)
+  const ledger = await getOrCreateDealerLedger(cleanCode, fourDigit, dealerName, remoteDefaults);
 
   result = result || {};
   result.dealer = dealer;
   result.credit = {
     creditLimit: ledger.creditLimit,
     creditBalance: ledger.creditBalance,
+    totalOutstanding: ledger.totalOutstanding,
+    availableCredit: Math.max(0, ledger.creditLimit - ledger.totalOutstanding),
+    totalInvoiced: ledger.totalInvoiced,
+    totalPaid: ledger.totalPaid,
+    unpaidInvoiceCount: result?.credit?.unpaidInvoiceCount ?? result?.ledgerSummary?.unpaidInvoiceCount ?? 0,
   };
   result.ledgerSummary = {
     totalInvoiced: ledger.totalInvoiced,
     totalPaid: ledger.totalPaid,
     totalOutstanding: ledger.totalOutstanding,
     creditBalance: ledger.creditBalance,
-    unpaidInvoiceCount: result?.ledgerSummary?.unpaidInvoiceCount || 0,
+    availableCredit: Math.max(0, ledger.creditLimit - ledger.totalOutstanding),
+    unpaidInvoiceCount: result?.credit?.unpaidInvoiceCount ?? result?.ledgerSummary?.unpaidInvoiceCount ?? 0,
   };
 
   // Fetch complete past order history for this dealer
@@ -755,6 +808,9 @@ export async function adjustCreditOrRecordPayment(actor: AuthUser, payload: Cred
     if (newLimit < 0) {
       throw new AppError(400, "Credit limit cannot be negative");
     }
+
+    // Ensure ledger exists first
+    await getOrCreateDealerLedger(cleanCode, fourDigit, dealerName, { creditLimit: newLimit });
 
     // Update persistent local ledger table
     try {

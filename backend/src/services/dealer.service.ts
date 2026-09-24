@@ -17,16 +17,37 @@ export interface CreateDealerInput {
 }
 
 export async function listDealers(actor: AuthUser) {
-  if (actor.role === UserRole.SUPERADMIN) {
-    return prisma.dealer.findMany({
-      orderBy: { createdAt: "desc" }
-    });
-  }
-
-  return prisma.dealer.findMany({
-    where: { companyId: actor.companyId },
+  const dealers = await prisma.dealer.findMany({
+    where: actor.role === UserRole.SUPERADMIN ? undefined : { companyId: actor.companyId },
     orderBy: { name: "asc" }
   });
+
+  try {
+    const ledgers = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT dealer_code, four_digit_id, dealer_name, credit_limit, credit_balance, total_outstanding, total_invoiced, total_paid
+       FROM vaniki_dealer_ledgers`
+    );
+
+    return dealers.map((d) => {
+      const fourDigit = (d.name.match(/\d{4}/) || [""])[0];
+      const match = ledgers.find(
+        (l) =>
+          (l.dealer_code && (l.dealer_code === d.phone || l.dealer_code === d.name)) ||
+          (fourDigit && l.four_digit_id === fourDigit)
+      );
+
+      return {
+        ...d,
+        creditLimit: match ? Number(match.credit_limit || 0) : 0,
+        creditBalance: match ? Number(match.credit_balance || 0) : 0,
+        totalOutstanding: match ? Number(match.total_outstanding || 0) : 0,
+        totalInvoiced: match ? Number(match.total_invoiced || 0) : 0,
+        totalPaid: match ? Number(match.total_paid || 0) : 0,
+      };
+    });
+  } catch (err) {
+    return dealers;
+  }
 }
 
 export async function getDealer(actor: AuthUser, dealerId: string) {
