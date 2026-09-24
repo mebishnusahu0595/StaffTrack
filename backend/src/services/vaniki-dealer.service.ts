@@ -383,7 +383,6 @@ export async function lookupDealer(codeOrMobile: string, actor?: AuthUser) {
   const ledger = await getOrCreateDealerLedger(cleanCode, fourDigit, dealerName, remoteDefaults);
 
   result = result || {};
-  result.dealer = dealer;
   result.credit = {
     creditLimit: ledger.creditLimit,
     creditBalance: ledger.creditBalance,
@@ -393,6 +392,8 @@ export async function lookupDealer(codeOrMobile: string, actor?: AuthUser) {
     totalPaid: ledger.totalPaid,
     unpaidInvoiceCount: result?.credit?.unpaidInvoiceCount ?? result?.ledgerSummary?.unpaidInvoiceCount ?? 0,
   };
+  dealer.credit = result.credit;
+  result.dealer = dealer;
   result.ledgerSummary = {
     totalInvoiced: ledger.totalInvoiced,
     totalPaid: ledger.totalPaid,
