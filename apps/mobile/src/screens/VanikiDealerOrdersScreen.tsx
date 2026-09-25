@@ -87,6 +87,45 @@ export function VanikiDealerOrdersScreen() {
   const [products, setProducts] = useState<VanikiProduct[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [searchProductQuery, setSearchProductQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Record<string, boolean>>({});
+
+  const toggleOrderExpand = (orderId: string) => {
+    setExpandedOrderIds((prev) => ({ ...prev, [orderId]: !prev[orderId] }));
+  };
+
+  // Dynamic discovered categories from products list
+  const availableCategories = useMemo(() => {
+    const cats = Array.from(
+      new Set(
+        products
+          .map((p) => p.category?.trim())
+          .filter((c): c is string => Boolean(c && c.length > 0))
+      )
+    );
+    return ["ALL", ...cats];
+  }, [products]);
+
+  // Product counts per category
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { ALL: products.length };
+    products.forEach((p) => {
+      const cat = p.category?.trim() || "Other";
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return counts;
+  }, [products]);
+
+  const getCategoryIcon = (cat: string) => {
+    const lower = cat.toLowerCase();
+    if (lower === "all") return "apps";
+    if (lower.includes("insect")) return "bug";
+    if (lower.includes("herb")) return "leaf";
+    if (lower.includes("bio") || lower.includes("pesticide")) return "flask";
+    if (lower.includes("fungi")) return "shield-checkmark";
+    if (lower.includes("growth") || lower.includes("tonic")) return "trending-up";
+    return "pricetag";
+  };
 
   const [cart, setCart] = useState<CartItem[]>([]);
   // Removed "cash" strictly: only credit, upi_qr, or bank_transfer
@@ -124,6 +163,8 @@ export function VanikiDealerOrdersScreen() {
     setDealerData(null);
     setDealerCodeInput("");
     setCart([]);
+    setSelectedCategory("ALL");
+    setSearchProductQuery("");
     setPaidAmount("");
     setNotes("");
     setPaymentProofUrl(null);
@@ -565,12 +606,28 @@ export function VanikiDealerOrdersScreen() {
     }
   };
 
-  const filteredProducts = products.filter((p) =>
-    searchProductQuery
-      ? p.name.toLowerCase().includes(searchProductQuery.toLowerCase()) ||
-        p.category?.toLowerCase().includes(searchProductQuery.toLowerCase())
-      : true
-  );
+  const filteredProducts = useMemo(() => {
+    const query = searchProductQuery.trim().toLowerCase();
+    return products.filter((p) => {
+      const pCat = p.category?.trim() || "";
+      const matchesCat =
+        selectedCategory === "ALL" ||
+        pCat.toLowerCase() === selectedCategory.trim().toLowerCase();
+
+      if (!matchesCat) return false;
+      if (!query) return true;
+
+      const inName = p.name?.toLowerCase().includes(query);
+      const inCat = pCat.toLowerCase().includes(query);
+      const inVariants =
+        Array.isArray(p.variants) &&
+        p.variants.some((v) =>
+          (v.label || v.name || v.packSize || "").toLowerCase().includes(query)
+        );
+
+      return inName || inCat || inVariants;
+    });
+  }, [products, selectedCategory, searchProductQuery]);
 
   return (
     <KeyboardAvoidingView
@@ -782,6 +839,49 @@ export function VanikiDealerOrdersScreen() {
                         <Text style={styles.orderHistoryDate}>
                           🕒 {ord.createdAt ? new Date(ord.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : ""} • By {ord.staffName || "Staff"}
                         </Text>
+
+                        {/* Order Items Inspection Accordion */}
+                        {Array.isArray(ord.items) && ord.items.length > 0 && (
+                          <View style={styles.orderHistoryItemsWrapper}>
+                            <TouchableOpacity
+                              onPress={() => toggleOrderExpand(ord.id || ord.orderId)}
+                              style={styles.orderItemsToggleBtn}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={styles.orderItemsToggleText}>
+                                {expandedOrderIds[ord.id || ord.orderId]
+                                  ? "Hide Ordered Items"
+                                  : `View Ordered Items (${ord.items.length})`}
+                              </Text>
+                              <Ionicons
+                                name={expandedOrderIds[ord.id || ord.orderId] ? "chevron-up" : "chevron-down"}
+                                size={14}
+                                color="#0284C7"
+                              />
+                            </TouchableOpacity>
+
+                            {expandedOrderIds[ord.id || ord.orderId] && (
+                              <View style={styles.orderItemsListContainer}>
+                                {ord.items.map((it: any, itIdx: number) => (
+                                  <View key={itIdx} style={styles.orderItemDetailRow}>
+                                    <View style={{ flex: 1, marginRight: 8 }}>
+                                      <Text style={styles.orderItemDetailName} numberOfLines={1}>
+                                        {it.productName || it.name || "Product"}
+                                      </Text>
+                                      <Text style={styles.orderItemDetailSub}>
+                                        {it.packSize ? `Pack: ${it.packSize} • ` : ""}
+                                        {it.petiQty ? `${it.petiQty} Peti ` : ""}({it.qty || 1} units)
+                                      </Text>
+                                    </View>
+                                    <Text style={styles.orderItemDetailPrice}>
+                                      ₹{Number(it.total || (it.price * (it.qty || 1)) || 0).toLocaleString("en-IN")}
+                                    </Text>
+                                  </View>
+                                ))}
+                              </View>
+                            )}
+                          </View>
+                        )}
                       </View>
                     ))
                   )}
@@ -856,20 +956,134 @@ export function VanikiDealerOrdersScreen() {
               placeholder="Search wholesale products or variants..."
               value={searchProductQuery}
               onChangeText={setSearchProductQuery}
-              style={[styles.input, { marginBottom: 12 }]}
+              style={[styles.input, { marginBottom: 10 }]}
               dense
+              right={
+                searchProductQuery ? (
+                  <TextInput.Icon icon="close-circle" onPress={() => setSearchProductQuery("")} />
+                ) : (
+                  <TextInput.Icon icon="magnify" />
+                )
+              }
             />
+
+            {/* ─── Category Filter Chips Bar ─── */}
+            <View style={styles.categoryFilterContainer}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.categoryChipsScroll}
+              >
+                {availableCategories.map((cat) => {
+                  const isSelected = selectedCategory === cat;
+                  const count = categoryCounts[cat] ?? 0;
+                  const iconName = getCategoryIcon(cat);
+
+                  return (
+                    <TouchableOpacity
+                      key={cat}
+                      onPress={() => setSelectedCategory(cat)}
+                      style={[
+                        styles.categoryChip,
+                        isSelected && styles.categoryChipActive,
+                      ]}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons
+                        name={iconName as any}
+                        size={15}
+                        color={isSelected ? "#FFFFFF" : "#059669"}
+                      />
+                      <Text
+                        style={[
+                          styles.categoryChipText,
+                          isSelected && styles.categoryChipTextActive,
+                        ]}
+                      >
+                        {cat}
+                      </Text>
+                      <View
+                        style={[
+                          styles.categoryCountBadge,
+                          isSelected && styles.categoryCountBadgeActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.categoryCountText,
+                            isSelected && styles.categoryCountTextActive,
+                          ]}
+                        >
+                          {count}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            {/* Category Filter Result Status Bar */}
+            <View style={styles.categoryStatusBar}>
+              <Text style={styles.categoryStatusText}>
+                Showing <Text style={{ fontWeight: "700", color: "#059669" }}>{filteredProducts.length}</Text> of {products.length} products
+                {selectedCategory !== "ALL" ? ` in ${selectedCategory}` : ""}
+              </Text>
+              {(selectedCategory !== "ALL" || searchProductQuery) && (
+                <TouchableOpacity
+                  onPress={() => {
+                    setSelectedCategory("ALL");
+                    setSearchProductQuery("");
+                  }}
+                >
+                  <Text style={styles.categoryResetLink}>Reset Filters</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             {isLoadingProducts ? (
               <ActivityIndicator size="small" color="#059669" style={{ marginVertical: 20 }} />
+            ) : filteredProducts.length === 0 ? (
+              <View style={styles.emptyProductsBox}>
+                <Ionicons name="cube-outline" size={36} color="#94A3B8" />
+                <Text style={styles.emptyProductsTitle}>No products found</Text>
+                <Text style={styles.emptyProductsSub}>
+                  {searchProductQuery
+                    ? `No matching items for "${searchProductQuery}" in ${selectedCategory}`
+                    : `No products available in ${selectedCategory}`}
+                </Text>
+                {(searchProductQuery || selectedCategory !== "ALL") && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSearchProductQuery("");
+                      setSelectedCategory("ALL");
+                    }}
+                    style={styles.clearFilterBtn}
+                  >
+                    <Text style={styles.clearFilterBtnText}>Show All Products</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             ) : (
               filteredProducts.map((p) => {
                 const taxRate = p.taxRate || 18;
                 const hasVariants = Array.isArray(p.variants) && p.variants.length > 0;
+                const inCartProductPetis = cart
+                  .filter((c) => c.product.id === p.id)
+                  .reduce((sum, c) => sum + c.petiQuantity, 0);
 
                 return (
                   <Card key={p.id} style={styles.productCard}>
                     <Card.Content>
+                      {inCartProductPetis > 0 && (
+                        <View style={styles.productInCartBadge}>
+                          <Ionicons name="checkmark-circle" size={13} color="#15803D" />
+                          <Text style={styles.productInCartBadgeText}>
+                            {inCartProductPetis} {inCartProductPetis === 1 ? "Peti" : "Petis"} in Cart
+                          </Text>
+                        </View>
+                      )}
+
                       <View style={styles.productRow}>
                         {p.image ? (
                           <Image source={{ uri: p.image }} style={styles.productImage} />
@@ -2728,6 +2942,174 @@ const styles = StyleSheet.create({
   calcPreviewVal: {
     fontSize: 12,
     fontWeight: "800",
+  },
+  // ─── Category Filter Styles ───
+  categoryFilterContainer: {
+    marginBottom: 8,
+  },
+  categoryChipsScroll: {
+    gap: 8,
+    paddingVertical: 2,
+  },
+  categoryChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6,
+  },
+  categoryChipActive: {
+    backgroundColor: "#059669",
+    borderColor: "#059669",
+  },
+  categoryChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#334155",
+  },
+  categoryChipTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
+  categoryCountBadge: {
+    backgroundColor: "#E2E8F0",
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  categoryCountBadgeActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.25)",
+  },
+  categoryCountText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#475569",
+  },
+  categoryCountTextActive: {
+    color: "#FFFFFF",
+  },
+  categoryStatusBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  categoryStatusText: {
+    fontSize: 11,
+    color: "#64748B",
+  },
+  categoryResetLink: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#059669",
+  },
+  // ─── Product Card Badge ───
+  productInCartBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    gap: 4,
+    marginBottom: 8,
+  },
+  productInCartBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#15803D",
+  },
+  emptyProductsBox: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 36,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    marginTop: 8,
+  },
+  emptyProductsTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1E293B",
+    marginTop: 8,
+  },
+  emptyProductsSub: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+    textAlign: "center",
+    paddingHorizontal: 20,
+  },
+  clearFilterBtn: {
+    marginTop: 12,
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  clearFilterBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#059669",
+  },
+  // ─── Order History Item Details ───
+  orderHistoryItemsWrapper: {
+    marginTop: 8,
+  },
+  orderItemsToggleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F0F9FF",
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  orderItemsToggleText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#0284C7",
+  },
+  orderItemsListContainer: {
+    backgroundColor: "#F8FAFC",
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: "#BAE6FD",
+    padding: 8,
+  },
+  orderItemDetailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 4,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#E2E8F0",
+  },
+  orderItemDetailName: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#1E293B",
+  },
+  orderItemDetailSub: {
+    fontSize: 10,
+    color: "#64748B",
+  },
+  orderItemDetailPrice: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#0F172A",
   },
 });
 
