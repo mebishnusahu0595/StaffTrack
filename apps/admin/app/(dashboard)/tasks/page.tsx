@@ -202,12 +202,12 @@ export default function TasksPage() {
   });
 
   const handleDeleteSingleTask = (task: any) => {
-    const isTodayTab = activeFilter === "TODAYS";
-    const msg = isTodayTab
-      ? "Delete today's task occurrence only? (Future repeats will remain)"
-      : "Delete this entire task and all repeating series permanently?";
+    const isRepeating = Boolean(task.isRepeating || task.parentTaskId || task.repeatFrequency);
+    const msg = isRepeating
+      ? "Are you sure you want to permanently delete this task and ALL its repeating occurrences (past, today & future)?"
+      : "Are you sure you want to permanently delete this task?";
     if (!confirm(msg)) return;
-    deleteMutation.mutate({ id: task.id, deleteAllSeries: !isTodayTab });
+    deleteMutation.mutate({ id: task.id, deleteAllSeries: true });
   };
 
   const deleteAllMutation = useMutation({
@@ -654,13 +654,10 @@ export default function TasksPage() {
 
   const handleBulkDelete = () => {
     if (selectedTaskIds.length === 0) return;
-    const isTodayTab = activeFilter === "TODAYS";
-    const msg = isTodayTab
-      ? `Delete today's occurrence for the ${selectedTaskIds.length} selected task(s)? (Future repeats will remain)`
-      : `Are you sure you want to permanently delete the ${selectedTaskIds.length} selected task(s) and all their repeating series?`;
+    const msg = `Are you sure you want to permanently delete the ${selectedTaskIds.length} selected task(s) and all their repeating series (past, today & future)?`;
     const confirmDelete = confirm(msg);
     if (!confirmDelete) return;
-    bulkDeleteMutation.mutate({ ids: selectedTaskIds, deleteAllSeries: !isTodayTab });
+    bulkDeleteMutation.mutate({ ids: selectedTaskIds, deleteAllSeries: true });
   };
 
   // Calendar cells calculation helper
@@ -1153,9 +1150,21 @@ export default function TasksPage() {
                                   <span className="text-xs font-black text-slate-800">👤 {group.user.name}</span>
                                   <span className="text-[10px] bg-slate-200/60 text-slate-600 px-2 py-0.5 rounded-full font-bold">Total: {group.tasks.length}</span>
                                 </div>
-                                <div className="flex gap-2">
+                                <div className="flex items-center gap-2">
                                   <span className="text-[9px] bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full font-black uppercase">Done: {completed}</span>
                                   <span className="text-[9px] bg-amber-50 text-amber-700 px-2.5 py-0.5 rounded-full font-black uppercase">Pending: {pending}</span>
+                                  <button
+                                    onClick={() => {
+                                      if (confirm(`Delete ALL tasks and repeating series for ${group.user.name}? This will remove all their past, today, and future tasks permanently.`)) {
+                                        deleteUserTasksMutation.mutate(userId);
+                                      }
+                                    }}
+                                    disabled={deleteUserTasksMutation.isPending}
+                                    className="ml-2 text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 transition-colors flex items-center gap-1 cursor-pointer"
+                                    title={`Delete all tasks of ${group.user.name}`}
+                                  >
+                                    <Trash2 className="h-3 w-3" /> Delete All Tasks
+                                  </button>
                                 </div>
                               </div>
                             </td>

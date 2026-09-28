@@ -557,9 +557,21 @@ export async function deleteTask(actor: AuthUser, taskId: string, deleteAllSerie
 
   // If this task has a series or is a repeating parent and deleteAllSeries is true, clean up all series occurrences
   if (deleteAllSeries) {
-    const parentId = task.parentTaskId || (task.isRepeating ? task.id : null);
+    let parentId = task.parentTaskId;
+
+    if (!parentId) {
+      // Check if this task is the root/anchor of a series
+      const hasChildren = await prisma.task.findFirst({
+        where: { parentTaskId: task.id },
+        select: { id: true }
+      });
+      if (hasChildren || task.isRepeating || task.repeatFrequency) {
+        parentId = task.id;
+      }
+    }
+
     if (parentId) {
-      await prisma.task.deleteMany({
+      const deleteResult = await prisma.task.deleteMany({
         where: {
           OR: [
             { parentTaskId: parentId },
@@ -568,7 +580,23 @@ export async function deleteTask(actor: AuthUser, taskId: string, deleteAllSerie
           ]
         }
       });
-      return { id: taskId };
+      return { id: taskId, count: deleteResult.count };
+    }
+
+    // Comprehensive series cleanup fallback: If repeating by frequency/flag for this user
+    if ((task.isRepeating || task.repeatFrequency) && task.assignedToId) {
+      const deleteResult = await prisma.task.deleteMany({
+        where: {
+          assignedToId: task.assignedToId,
+          title: task.title,
+          OR: [
+            { isRepeating: true },
+            { repeatFrequency: { not: null } },
+            { parentTaskId: { not: null } }
+          ]
+        }
+      });
+      return { id: taskId, count: deleteResult.count };
     }
   }
 
@@ -627,6 +655,17 @@ export async function bulkDeleteTasks(actor: AuthUser, taskIds: string[], delete
       allowedTasks.map(t => t.parentTaskId || (t.isRepeating ? t.id : null)).filter(Boolean) as string[]
     ));
 
+    // Also include any task id that has children in the database
+    const childTasks = await prisma.task.findMany({
+      where: { parentTaskId: { in: allowedIds } },
+      select: { parentTaskId: true }
+    });
+    childTasks.forEach(c => {
+      if (c.parentTaskId && !parentIds.includes(c.parentTaskId)) {
+        parentIds.push(c.parentTaskId);
+      }
+    });
+
     const deleteConditions: Prisma.TaskWhereInput[] = [
       { id: { in: allowedIds } }
     ];
@@ -635,6 +674,17 @@ export async function bulkDeleteTasks(actor: AuthUser, taskIds: string[], delete
       deleteConditions.push({ parentTaskId: { in: parentIds } });
       deleteConditions.push({ id: { in: parentIds } });
     }
+
+    // Also clean up matching repeating series for these users & titles
+    allowedTasks.forEach(t => {
+      if ((t.isRepeating || t.repeatFrequency) && t.assignedToId && t.title) {
+        deleteConditions.push({
+          assignedToId: t.assignedToId,
+          title: t.title,
+          isRepeating: true
+        });
+      }
+    });
 
     const result = await prisma.task.deleteMany({
       where: {
