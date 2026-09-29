@@ -1782,20 +1782,42 @@ export default function TasksPage() {
       </div>
 
       {/* Viewing Task Details Modal */}
-      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-        <ViewTaskDetailsDialog 
-          task={activeViewingTask} 
-          onEdit={() => {
-            setEditingTask(activeViewingTask);
-            setIsEditOpen(true);
-          }}
-        />
+      <Dialog 
+        open={isDetailsOpen} 
+        onOpenChange={(open) => {
+          setIsDetailsOpen(open);
+          if (!open) {
+            setViewingTask(null);
+          }
+        }}
+      >
+        {activeViewingTask && isDetailsOpen && (
+          <ViewTaskDetailsDialog 
+            key={activeViewingTask.id}
+            task={activeViewingTask} 
+            onEdit={() => {
+              const target = activeViewingTask;
+              setIsDetailsOpen(false);
+              setEditingTask(target);
+              setIsEditOpen(true);
+            }}
+          />
+        )}
       </Dialog>
 
       {/* Editing Task Dialog Modal */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        {editingTask && (
+      <Dialog 
+        open={isEditOpen} 
+        onOpenChange={(open) => {
+          setIsEditOpen(open);
+          if (!open) {
+            setEditingTask(null);
+          }
+        }}
+      >
+        {editingTask && isEditOpen && (
           <EditTaskDialog 
+            key={editingTask.id}
             task={editingTask}
             users={(users as any).items ?? []}
             onSubmit={(data: any) => editMutation.mutate(data)}
@@ -3450,6 +3472,54 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
       reminder: string;
     }>
   });
+
+  // Keep all form states and values in sync whenever task prop changes or a new task is loaded
+  useEffect(() => {
+    if (!task) return;
+    setShowDescription(!!task.description);
+    setShowValidations(Boolean(task.validations && task.validations.length > 0));
+    setShowRepeat(Boolean(task.repeatFrequency && task.repeatFrequency !== "NONE"));
+    setShowReminder(!!task.reminder);
+    setShowChecklist(Boolean(task.checklist && task.checklist.length > 0));
+    setShowSubtasks(Boolean(task.subtasks && task.subtasks.length > 0));
+    setShowAdvanced(false);
+    setShowPoints(Boolean(task.points !== undefined && task.points !== null && task.points > 0));
+    setShowGeofence(!!task.geofenceLat);
+    setIsUploadingFile(false);
+    setFileUploadProgress(0);
+    setFileError("");
+
+    setData({
+      id: task.id,
+      title: task.title || "",
+      description: task.description || "",
+      assignedToId: task.assignedToId || "",
+      dueDate: task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : format(addDays(new Date(), 1), 'yyyy-MM-dd'),
+      startDate: task.startDate ? format(new Date(task.startDate), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+      startTime: task.startDate ? format(new Date(task.startDate), 'HH:mm') : '09:00',
+      endDate: task.endDate ? format(new Date(task.endDate), 'yyyy-MM-dd') : task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : format(addDays(new Date(), 1), 'yyyy-MM-dd'),
+      endTime: task.endDate ? format(new Date(task.endDate), 'HH:mm') : task.dueDate ? format(new Date(task.dueDate), 'HH:mm') : '18:00',
+      priority: task.priority || "Medium",
+      points: task.points || 10,
+      status: task.status || "PENDING",
+      attachmentUrl: task.attachmentUrl || null,
+      attachmentName: task.attachmentName || null,
+      taskType: task.taskType || "NORMAL",
+      dealerIds: (task.dealers || []).map((d: any) => d.id),
+      farmerIds: (task.farmers || []).map((f: any) => f.id),
+      repeatFrequency: task.repeatFrequency || "NONE",
+      repeatDays: task.repeatDays ? task.repeatDays.split(',').map((x: string) => parseInt(x)).filter((x: number) => !isNaN(x)) : [],
+      repeatDates: task.repeatDates ? task.repeatDates.split(',').map((x: string) => parseInt(x)).filter((x: number) => !isNaN(x)) : [],
+      skipHolidays: task.skipHolidays || false,
+      validations: task.validations || [],
+      checklist: (task.checklist || []),
+      geofenceLat: task.geofenceLat !== null && task.geofenceLat !== undefined ? String(task.geofenceLat) : "",
+      geofenceLng: task.geofenceLng !== null && task.geofenceLng !== undefined ? String(task.geofenceLng) : "",
+      geofenceRadius: task.geofenceRadius !== null && task.geofenceRadius !== undefined ? String(task.geofenceRadius) : "",
+      reminder: task.reminder !== null && task.reminder !== undefined ? String(task.reminder) : "",
+      subtasks: (task.subtasks || [])
+    });
+  }, [task]);
 
   const handleTaskTypeChange = (type: string) => {
     if (type === "DEALER") {
