@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma";
 import { sendBroadcastNotification } from "./notification.service";
 import { streamGeminiWithFallback, callGeminiWithFallback, getGeminiApiKey } from "../lib/gemini";
+import { startOfDay } from "../lib/date";
 
 /** In-memory session history per admin (keyed by userId) */
 const chatSessions = new Map<string, Array<{ role: "user" | "model"; parts: { text: string }[] }>>();
@@ -183,6 +184,25 @@ If the user asks you to send a notification, message, or reminder to a specific 
    NOTE: You MUST use the Database ID (UUID/CUID e.g. cl...) for the userId parameter, NOT the name, and NOT the 3-digit Employee Code!
 5. Confirm in your response text that you have sent the notification to the unique match.
 
+HOLIDAY ACTIONS:
+If the user asks you to mark a holiday, create a holiday, declare a holiday, or set a day off for staff:
+1. Extract the date (e.g. "2 October", "tomorrow", "15 Oct 2026") and the holiday name.
+2. The scope can be "ALL" (for all staff) or a specific user's Database ID.
+3. At the VERY END of your response, on a new line, add:
+   [MARK_HOLIDAY date="{YYYY-MM-DD}" name="{holiday name}" scope="ALL"]
+   OR for a specific user:
+   [MARK_HOLIDAY date="{YYYY-MM-DD}" name="{holiday name}" scope="{database_id}"]
+4. Use today's year (${new Date().getFullYear()}) if the user doesn't specify a year.
+5. Always confirm in your response that you are marking the holiday and sending notifications.
+6. If the user says to send a holiday notification without marking, use BULK_NOTIFY instead.
+
+BULK NOTIFICATION ACTIONS:
+If the user asks you to send a notification, message, or reminder to ALL staff or MULTIPLE staff at once (not a specific individual):
+1. At the VERY END of your response, on a new line, add:
+   [BULK_NOTIFY title="{title}" message="{message}" scope="ALL"]
+2. This sends a push notification to every staff member in the company.
+3. Confirm in your response text how many staff members will receive it.
+
 ${context}`;
 
     const buildContents = (msg: string) => {
@@ -254,6 +274,25 @@ If the user asks you to send a notification, message, or reminder to a specific 
    NOTE: You MUST use the Database ID (UUID/CUID e.g. cl...) for the userId parameter, NOT the name, and NOT the 3-digit Employee Code!
 5. Confirm in your response text that you have sent the notification to the unique match.
 
+HOLIDAY ACTIONS:
+If the user asks you to mark a holiday, create a holiday, declare a holiday, or set a day off for staff:
+1. Extract the date (e.g. "2 October", "tomorrow", "15 Oct 2026") and the holiday name.
+2. The scope can be "ALL" (for all staff) or a specific user's Database ID.
+3. At the VERY END of your response, on a new line, add:
+   [MARK_HOLIDAY date="{YYYY-MM-DD}" name="{holiday name}" scope="ALL"]
+   OR for a specific user:
+   [MARK_HOLIDAY date="{YYYY-MM-DD}" name="{holiday name}" scope="{database_id}"]
+4. Use today's year (${new Date().getFullYear()}) if the user doesn't specify a year.
+5. Always confirm in your response that you are marking the holiday and sending notifications.
+6. If the user says to send a holiday notification without marking, use BULK_NOTIFY instead.
+
+BULK NOTIFICATION ACTIONS:
+If the user asks you to send a notification, message, or reminder to ALL staff or MULTIPLE staff at once (not a specific individual):
+1. At the VERY END of your response, on a new line, add:
+   [BULK_NOTIFY title="{title}" message="{message}" scope="ALL"]
+2. This sends a push notification to every staff member in the company.
+3. Confirm in your response text how many staff members will receive it.
+
 ${context}`;
 
     const contents: Array<{ role: "user" | "model"; parts: { text: string }[] }> = [
@@ -313,18 +352,114 @@ ${context}`;
       actions.push({ userId: match[1], title: match[2], message: match[3] });
     }
 
+    // Parse [MARK_HOLIDAY ...] actions
+    const holidayRegex = /\[MARK_HOLIDAY date="([^"]+)" name="([^"]+)" scope="([^"]+)"\]/g;
+    const holidayActions: Array<{ date: string; name: string; scope: string }> = [];
+    let hMatch;
+    while ((hMatch = holidayRegex.exec(fullText)) !== null) {
+      holidayActions.push({ date: hMatch[1], name: hMatch[2], scope: hMatch[3] });
+    }
+
+    // Parse [BULK_NOTIFY ...] actions
+    const bulkNotifyRegex = /\[BULK_NOTIFY title="([^"]+)" message="([^"]+)" scope="([^"]+)"\]/g;
+    const bulkNotifyActions: Array<{ title: string; message: string; scope: string }> = [];
+    let bMatch;
+    while ((bMatch = bulkNotifyRegex.exec(fullText)) !== null) {
+      bulkNotifyActions.push({ title: bMatch[1], message: bMatch[2], scope: bMatch[3] });
+    }
+
     // Execute notification actions
+    let actionResultPayload: any = null;
+
     if (actions.length > 0) {
       const results = await Promise.allSettled(
         actions.map(a => sendBroadcastNotification(adminId, { userIds: [a.userId], title: a.title, message: a.message }))
       );
       const sent = results.filter(r => r.status === "fulfilled").length;
-      // Yield special action-result event (JSON prefixed so frontend can detect it)
-      yield `__ACTION_RESULT__${JSON.stringify({ sent, actions })}`;
+      actionResultPayload = { type: "notification", sent, actions };
     }
 
-    // Save cleaned response (strip action markers) to session history
-    const cleanedText = fullText.replace(actionRegex, "").trim();
+    // Execute holiday actions
+    if (holidayActions.length > 0) {
+      let totalHolidaysCreated = 0;
+      let totalNotified = 0;
+      for (const ha of holidayActions) {
+        const holidayDate = startOfDay(new Date(ha.date));
+        if (ha.scope === "ALL") {
+          // Get all staff user IDs
+          const allStaff = await prisma.user.findMany({
+            where: { companyId, role: { in: ["EMPLOYEE", "MANAGER"] } },
+            select: { id: true }
+          });
+          const userIds = allStaff.map(u => u.id);
+          // Create holidays for all staff
+          for (const uid of userIds) {
+            const existing = await prisma.holiday.findFirst({
+              where: { date: holidayDate, name: ha.name, companyId, userId: uid }
+            });
+            if (!existing) {
+              await prisma.holiday.create({
+                data: { date: holidayDate, name: ha.name, type: "HOLIDAY", companyId, userId: uid }
+              });
+              totalHolidaysCreated++;
+            }
+          }
+          // Send bulk notification
+          const notifResult = await sendBroadcastNotification(adminId, {
+            allSelected: true,
+            title: `🎉 Holiday: ${ha.name}`,
+            message: `${ha.name} on ${holidayDate.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}. Enjoy your day off!`
+          });
+          totalNotified = notifResult.count || 0;
+        } else {
+          // Single user holiday
+          const existing = await prisma.holiday.findFirst({
+            where: { date: holidayDate, name: ha.name, companyId, userId: ha.scope }
+          });
+          if (!existing) {
+            await prisma.holiday.create({
+              data: { date: holidayDate, name: ha.name, type: "HOLIDAY", companyId, userId: ha.scope }
+            });
+            totalHolidaysCreated++;
+          }
+          await sendBroadcastNotification(adminId, {
+            userIds: [ha.scope],
+            title: `🎉 Holiday: ${ha.name}`,
+            message: `${ha.name} on ${holidayDate.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}. Enjoy your day off!`
+          });
+          totalNotified = 1;
+        }
+      }
+      actionResultPayload = { type: "holiday", holidaysCreated: totalHolidaysCreated, notified: totalNotified, holidays: holidayActions };
+    }
+
+    // Execute bulk notify actions
+    if (bulkNotifyActions.length > 0) {
+      let totalNotified = 0;
+      for (const bn of bulkNotifyActions) {
+        if (bn.scope === "ALL") {
+          const result = await sendBroadcastNotification(adminId, {
+            allSelected: true,
+            title: bn.title,
+            message: bn.message
+          });
+          totalNotified += result.count || 0;
+        }
+      }
+      actionResultPayload = { type: "bulk_notify", notified: totalNotified, actions: bulkNotifyActions };
+    }
+
+    // Yield special action-result event if any action was executed
+    if (actionResultPayload) {
+      yield `__ACTION_RESULT__${JSON.stringify(actionResultPayload)}`;
+    }
+
+    // Save cleaned response (strip all action markers) to session history
+    const cleanedText = fullText
+      .replace(actionRegex, "")
+      .replace(holidayRegex, "")
+      .replace(bulkNotifyRegex, "")
+      .trim();
     if (cleanedText) {
       history.push({ role: "user", parts: [{ text: userMessage }] });
       history.push({ role: "model", parts: [{ text: cleanedText }] });

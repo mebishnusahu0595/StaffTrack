@@ -39,6 +39,8 @@ const QUICK_QUESTIONS = [
   { icon: Clock, label: "Who hasn't checked in today?", color: "text-purple-500" },
   { icon: Zap, label: "Suggest salary deductions this month", color: "text-emerald-500" },
   { icon: Bell, label: "Generate attendance warning message", color: "text-indigo-500" },
+  { icon: BellRing, label: "Send holiday notification to all staff", color: "text-pink-500" },
+  { icon: CheckSquare, label: "Mark 2nd Oct as holiday for all", color: "text-teal-500" },
 ];
 
 // ─── Notification type config ──────────────────────────────────────────────────
@@ -222,16 +224,22 @@ export default function AiAssistantPage() {
       setMessages(prev => prev.map(m => {
         if (m.id === aiId) {
           let updatedContent = m.content;
-          if (actionResult && actionResult.sent > 0) {
-            updatedContent += `\n\n⚡ Action Successful: Sent push notification alert to ${actionResult.actions.length} staff member(s).`;
+          if (actionResult) {
+            if (actionResult.type === "holiday") {
+              updatedContent += `\n\n🎉 Holiday Action Successful: Created ${actionResult.holidaysCreated} holiday record(s) and sent push notifications to ${actionResult.notified} staff member(s).`;
+            } else if (actionResult.type === "bulk_notify") {
+              updatedContent += `\n\n📢 Bulk Notification Sent: Push notifications delivered to ${actionResult.notified} staff member(s).`;
+            } else if (actionResult.sent > 0) {
+              updatedContent += `\n\n⚡ Action Successful: Sent push notification alert to ${actionResult.actions?.length || actionResult.sent} staff member(s).`;
+            }
           }
           return { ...m, isStreaming: false, content: updatedContent };
         }
         return m;
       }));
 
-      // Force notification panel refetch if notification sent
-      if (actionResult && actionResult.sent > 0) {
+      // Force notification panel refetch if any action was taken
+      if (actionResult) {
         refetchNotifs();
       }
     } catch {
