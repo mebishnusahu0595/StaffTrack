@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
+import dayjs from "dayjs";
 import { api } from "../api/client";
 import { uploadPhoto, uploadFile } from "../api";
 import { useAuth } from "../auth/AuthContext";
@@ -144,8 +145,54 @@ export function VanikiDealerOrdersScreen() {
   const [isUploadingPaySlip, setIsUploadingPaySlip] = useState(false);
   const [isSubmittingCredit, setIsSubmittingCredit] = useState(false);
 
-  // ─── Order History Expanded State ────────────────────────────────────────
-  const [isOrderHistoryExpanded, setIsOrderHistoryExpanded] = useState(false);
+  // ─── Order History Dedicated Modal & Filter State ─────────────────────────
+  const [isOrderHistoryModalOpen, setIsOrderHistoryModalOpen] = useState(false);
+  const [historyDateFilter, setHistoryDateFilter] = useState<"TODAY" | "YESTERDAY" | "THIS_WEEK" | "THIS_MONTH" | "ALL">("TODAY");
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<"ALL" | "DUE" | "PAID">("ALL");
+  const [historySearchQuery, setHistorySearchQuery] = useState("");
+
+  const filteredOrderHistory = useMemo(() => {
+    const rawOrders: any[] = dealerData?.orders || [];
+    if (!Array.isArray(rawOrders)) return [];
+
+    return rawOrders.filter((ord: any) => {
+      // 1. Date filter
+      if (ord.createdAt) {
+        const ordDate = dayjs(ord.createdAt);
+        if (historyDateFilter === "TODAY") {
+          if (!ordDate.isSame(dayjs(), "day")) return false;
+        } else if (historyDateFilter === "YESTERDAY") {
+          if (!ordDate.isSame(dayjs().subtract(1, "day"), "day")) return false;
+        } else if (historyDateFilter === "THIS_WEEK") {
+          if (!ordDate.isAfter(dayjs().startOf("week"))) return false;
+        } else if (historyDateFilter === "THIS_MONTH") {
+          if (!ordDate.isSame(dayjs(), "month")) return false;
+        }
+      }
+
+      // 2. Status filter
+      const outstanding = Number(ord.outstandingAmount || 0);
+      if (historyStatusFilter === "DUE" && outstanding <= 0) return false;
+      if (historyStatusFilter === "PAID" && outstanding > 0) return false;
+
+      // 3. Search query
+      if (historySearchQuery.trim()) {
+        const q = historySearchQuery.toLowerCase().trim();
+        const orderIdMatch = (ord.orderId || ord.id || "").toLowerCase().includes(q);
+        const invoiceMatch = (ord.invoiceNumber || "").toLowerCase().includes(q);
+        const staffMatch = (ord.staffName || "").toLowerCase().includes(q);
+        const garageMatch = (ord.garageName || "").toLowerCase().includes(q);
+        const itemMatch = Array.isArray(ord.items) && ord.items.some((it: any) =>
+          (it.productName || it.name || "").toLowerCase().includes(q)
+        );
+        if (!orderIdMatch && !invoiceMatch && !staffMatch && !garageMatch && !itemMatch) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [dealerData?.orders, historyDateFilter, historyStatusFilter, historySearchQuery]);
 
   const scrollToCheckout = () => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -760,135 +807,34 @@ export function VanikiDealerOrdersScreen() {
           </Card>
         )}
 
-        {/* ─── Wholesale Order History Section for Field Staff ─── */}
+        {/* ─── Dedicated Wholesale Order History Trigger Card ─── */}
         {dealerData?.dealer && (
-          <Card style={styles.historyCard}>
-            <Card.Content>
-              <TouchableOpacity
-                onPress={() => setIsOrderHistoryExpanded(!isOrderHistoryExpanded)}
-                style={styles.historyHeaderRow}
-                activeOpacity={0.7}
-              >
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
-                  <Ionicons name="receipt-outline" size={18} color="#0284C7" />
-                  <Text style={styles.historyTitle}>Wholesale Order History</Text>
-                  <Badge style={styles.historyBadge}>
+          <TouchableOpacity
+            style={styles.historyTriggerCard}
+            onPress={() => setIsOrderHistoryModalOpen(true)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.historyTriggerLeft}>
+              <View style={styles.historyTriggerIconBox}>
+                <Ionicons name="receipt" size={20} color="#0284C7" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Text style={styles.historyTriggerTitle}>Wholesale Order History</Text>
+                  <Badge style={styles.historyCountBadge}>
                     {dealerData.orders?.length || 0}
                   </Badge>
                 </View>
-                <Ionicons
-                  name={isOrderHistoryExpanded ? "chevron-up" : "chevron-down"}
-                  size={20}
-                  color="#64748B"
-                />
-              </TouchableOpacity>
-
-              {isOrderHistoryExpanded && (
-                <View style={{ marginTop: 10 }}>
-                  <Divider style={{ marginBottom: 10 }} />
-                  {(!dealerData.orders || dealerData.orders.length === 0) ? (
-                    <View style={styles.emptyHistoryBox}>
-                      <Ionicons name="document-text-outline" size={24} color="#94A3B8" />
-                      <Text style={styles.emptyHistoryText}>No past orders recorded yet for this dealer.</Text>
-                    </View>
-                  ) : (
-                    dealerData.orders.map((ord: any) => (
-                      <View key={ord.id || ord.orderId} style={styles.orderHistoryCard}>
-                        <View style={styles.orderHistoryTopRow}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.orderHistoryId}>
-                              {ord.orderId || ord.id}
-                            </Text>
-                            {ord.invoiceNumber ? (
-                              <Text style={styles.orderHistoryInvoice}>
-                                Invoice #{ord.invoiceNumber}
-                              </Text>
-                            ) : null}
-                          </View>
-                          <View style={{ alignItems: "flex-end" }}>
-                            <Text style={styles.orderHistoryAmount}>
-                              ₹{Number(ord.totalAmount || 0).toLocaleString("en-IN")}
-                            </Text>
-                            <Badge
-                              style={[
-                                styles.orderStatusBadge,
-                                Number(ord.outstandingAmount || 0) > 0
-                                  ? { backgroundColor: "#FEE2E2", color: "#DC2626" }
-                                  : { backgroundColor: "#DCFCE7", color: "#15803D" },
-                              ]}
-                            >
-                              {Number(ord.outstandingAmount || 0) > 0
-                                ? `Due: ₹${Number(ord.outstandingAmount).toLocaleString("en-IN")}`
-                                : "Fully Paid"}
-                            </Badge>
-                          </View>
-                        </View>
-
-                        <View style={styles.orderHistoryMetaRow}>
-                          <Text style={styles.orderHistoryMetaText}>
-                            📦 {ord.petis || 0} Petis ({ord.itemsCount || 0} items)
-                          </Text>
-                          <Text style={styles.orderHistoryMetaText}>
-                            🏬 {ord.garageName || "Warehouse"}
-                          </Text>
-                          <Text style={styles.orderHistoryMetaText}>
-                            💳 {(ord.paymentMode || "Credit").toUpperCase()}
-                          </Text>
-                        </View>
-
-                        <Text style={styles.orderHistoryDate}>
-                          🕒 {ord.createdAt ? new Date(ord.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : ""} • By {ord.staffName || "Staff"}
-                        </Text>
-
-                        {/* Order Items Inspection Accordion */}
-                        {Array.isArray(ord.items) && ord.items.length > 0 && (
-                          <View style={styles.orderHistoryItemsWrapper}>
-                            <TouchableOpacity
-                              onPress={() => toggleOrderExpand(ord.id || ord.orderId)}
-                              style={styles.orderItemsToggleBtn}
-                              activeOpacity={0.7}
-                            >
-                              <Text style={styles.orderItemsToggleText}>
-                                {expandedOrderIds[ord.id || ord.orderId]
-                                  ? "Hide Ordered Items"
-                                  : `View Ordered Items (${ord.items.length})`}
-                              </Text>
-                              <Ionicons
-                                name={expandedOrderIds[ord.id || ord.orderId] ? "chevron-up" : "chevron-down"}
-                                size={14}
-                                color="#0284C7"
-                              />
-                            </TouchableOpacity>
-
-                            {expandedOrderIds[ord.id || ord.orderId] && (
-                              <View style={styles.orderItemsListContainer}>
-                                {ord.items.map((it: any, itIdx: number) => (
-                                  <View key={itIdx} style={styles.orderItemDetailRow}>
-                                    <View style={{ flex: 1, marginRight: 8 }}>
-                                      <Text style={styles.orderItemDetailName} numberOfLines={1}>
-                                        {it.productName || it.name || "Product"}
-                                      </Text>
-                                      <Text style={styles.orderItemDetailSub}>
-                                        {it.packSize ? `Pack: ${it.packSize} • ` : ""}
-                                        {it.petiQty ? `${it.petiQty} Peti ` : ""}({it.qty || 1} units)
-                                      </Text>
-                                    </View>
-                                    <Text style={styles.orderItemDetailPrice}>
-                                      ₹{Number(it.total || (it.price * (it.qty || 1)) || 0).toLocaleString("en-IN")}
-                                    </Text>
-                                  </View>
-                                ))}
-                              </View>
-                            )}
-                          </View>
-                        )}
-                      </View>
-                    ))
-                  )}
-                </View>
-              )}
-            </Card.Content>
-          </Card>
+                <Text style={styles.historyTriggerSubtitle}>
+                  View past invoices, Today's orders & date filters in full view
+                </Text>
+              </View>
+            </View>
+            <View style={styles.historyTriggerRight}>
+              <Text style={styles.historyTriggerOpenText}>Open</Text>
+              <Ionicons name="chevron-forward" size={16} color="#0284C7" />
+            </View>
+          </TouchableOpacity>
         )}
 
         {/* ─── Real-Time Warehouse / Garage Selector ─── */}
@@ -1896,6 +1842,248 @@ export function VanikiDealerOrdersScreen() {
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ─── Dedicated Full-Screen Wholesale Order History Modal ─── */}
+      <Modal
+        visible={isOrderHistoryModalOpen}
+        animationType="slide"
+        onRequestClose={() => setIsOrderHistoryModalOpen(false)}
+      >
+        <View style={styles.historyModalContainer}>
+          {/* Header Bar */}
+          <View style={styles.historyModalHeader}>
+            <TouchableOpacity
+              onPress={() => setIsOrderHistoryModalOpen(false)}
+              style={styles.historyModalBackBtn}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-back" size={24} color="#0F172A" />
+            </TouchableOpacity>
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={styles.historyModalTitle}>Order History</Text>
+              <Text style={styles.historyModalSubtitle} numberOfLines={1}>
+                {dealerData?.dealer?.cleanName || dealerData?.dealer?.name || "Dealer"} • {dealerData?.dealer?.city || "Wholesale"}
+              </Text>
+            </View>
+            <View style={styles.historyTotalBadge}>
+              <Text style={styles.historyTotalBadgeText}>
+                {filteredOrderHistory.length} / {dealerData?.orders?.length || 0}
+              </Text>
+            </View>
+          </View>
+
+          {/* Quick Date Filters Bar */}
+          <View style={styles.dateFilterContainer}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.dateFilterScroll}
+            >
+              {[
+                { key: "TODAY", label: "📅 Today" },
+                { key: "YESTERDAY", label: "Yesterday" },
+                { key: "THIS_WEEK", label: "This Week" },
+                { key: "THIS_MONTH", label: "This Month" },
+                { key: "ALL", label: "All Time" }
+              ].map((tab) => {
+                const isActive = historyDateFilter === tab.key;
+                return (
+                  <TouchableOpacity
+                    key={tab.key}
+                    onPress={() => setHistoryDateFilter(tab.key as any)}
+                    style={[styles.dateFilterPill, isActive && styles.dateFilterPillActive]}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.dateFilterText, isActive && styles.dateFilterTextActive]}>
+                      {tab.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {/* Search & Status Filters */}
+          <View style={styles.searchAndStatusWrapper}>
+            <View style={styles.historySearchBox}>
+              <Ionicons name="search" size={16} color="#64748B" />
+              <TextInput
+                placeholder="Search by Invoice #, Order ID, item..."
+                value={historySearchQuery}
+                onChangeText={setHistorySearchQuery}
+                style={styles.historySearchInput}
+                dense
+                underlineColor="transparent"
+                activeUnderlineColor="transparent"
+              />
+              {historySearchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setHistorySearchQuery("")}>
+                  <Ionicons name="close-circle" size={16} color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.statusPillsRow}>
+              {[
+                { key: "ALL", label: "All" },
+                { key: "DUE", label: "⚠️ Due / Udhaar" },
+                { key: "PAID", label: "✅ Fully Paid" }
+              ].map((st) => {
+                const isActive = historyStatusFilter === st.key;
+                return (
+                  <TouchableOpacity
+                    key={st.key}
+                    onPress={() => setHistoryStatusFilter(st.key as any)}
+                    style={[styles.statusPill, isActive && styles.statusPillActive]}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.statusPillText, isActive && styles.statusPillTextActive]}>
+                      {st.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Orders Scroll List */}
+          <ScrollView contentContainerStyle={styles.historyOrdersListScroll}>
+            {filteredOrderHistory.length === 0 ? (
+              <View style={styles.historyEmptyStateBox}>
+                <Ionicons name="calendar-outline" size={48} color="#94A3B8" />
+                <Text style={styles.historyEmptyTitle}>No orders found</Text>
+                <Text style={styles.historyEmptySub}>
+                  {historyDateFilter === "TODAY"
+                    ? "No orders were placed today for this dealer."
+                    : "No orders match the selected filters."}
+                </Text>
+                {historyDateFilter !== "ALL" && (
+                  <Button
+                    mode="contained"
+                    onPress={() => {
+                      setHistoryDateFilter("ALL");
+                      setHistoryStatusFilter("ALL");
+                      setHistorySearchQuery("");
+                    }}
+                    buttonColor="#0284C7"
+                    style={{ marginTop: 14, borderRadius: 12 }}
+                  >
+                    View All Orders
+                  </Button>
+                )}
+              </View>
+            ) : (
+              filteredOrderHistory.map((ord: any) => {
+                const isDue = Number(ord.outstandingAmount || 0) > 0;
+                const isExpanded = expandedOrderIds[ord.id || ord.orderId];
+                const formattedDate = ord.createdAt
+                  ? dayjs(ord.createdAt).format("DD MMM YYYY, hh:mm A")
+                  : "";
+                const isToday = ord.createdAt && dayjs(ord.createdAt).isSame(dayjs(), "day");
+
+                return (
+                  <Card key={ord.id || ord.orderId} style={styles.richOrderCard}>
+                    <Card.Content>
+                      {/* Top: ID, Invoice & Amount */}
+                      <View style={styles.richOrderTopRow}>
+                        <View style={{ flex: 1 }}>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <Text style={styles.richOrderId}>
+                              {ord.orderId || ord.id}
+                            </Text>
+                            {isToday && (
+                              <View style={styles.todayTag}>
+                                <Text style={styles.todayTagText}>TODAY</Text>
+                              </View>
+                            )}
+                          </View>
+                          {ord.invoiceNumber ? (
+                            <Text style={styles.richOrderInvoice}>
+                              Invoice #{ord.invoiceNumber}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <View style={{ alignItems: "flex-end" }}>
+                          <Text style={styles.richOrderAmount}>
+                            ₹{Number(ord.totalAmount || 0).toLocaleString("en-IN")}
+                          </Text>
+                          <View style={[styles.richStatusBadge, isDue ? styles.richStatusDue : styles.richStatusPaid]}>
+                            <Text style={[styles.richStatusText, isDue ? styles.richStatusDueText : styles.richStatusPaidText]}>
+                              {isDue ? `Due: ₹${Number(ord.outstandingAmount).toLocaleString("en-IN")}` : "Fully Paid"}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      {/* Date & Staff */}
+                      <View style={styles.richOrderDateRow}>
+                        <Ionicons name="time-outline" size={13} color="#64748B" />
+                        <Text style={styles.richOrderDateText}>
+                          {formattedDate} • By {ord.staffName || "Staff"}
+                        </Text>
+                      </View>
+
+                      {/* Warehouse & Petis meta */}
+                      <View style={styles.richOrderMetaBar}>
+                        <Text style={styles.richOrderMetaPill}>
+                          📦 {ord.petis || 0} Petis ({ord.itemsCount || 0} items)
+                        </Text>
+                        <Text style={styles.richOrderMetaPill}>
+                          🏬 {ord.garageName || "Warehouse"}
+                        </Text>
+                        <Text style={styles.richOrderMetaPill}>
+                          💳 {(ord.paymentMode || "Credit").toUpperCase()}
+                        </Text>
+                      </View>
+
+                      {/* Items Accordion */}
+                      {Array.isArray(ord.items) && ord.items.length > 0 && (
+                        <View style={styles.richOrderItemsWrapper}>
+                          <TouchableOpacity
+                            onPress={() => toggleOrderExpand(ord.id || ord.orderId)}
+                            style={styles.richOrderItemsToggle}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.richOrderItemsToggleText}>
+                              {isExpanded ? "Hide Ordered Items" : `View Ordered Items (${ord.items.length})`}
+                            </Text>
+                            <Ionicons
+                              name={isExpanded ? "chevron-up" : "chevron-down"}
+                              size={14}
+                              color="#0284C7"
+                            />
+                          </TouchableOpacity>
+
+                          {isExpanded && (
+                            <View style={styles.richOrderItemsList}>
+                              {ord.items.map((it: any, idx: number) => (
+                                <View key={idx} style={styles.richOrderItemRow}>
+                                  <View style={{ flex: 1, marginRight: 8 }}>
+                                    <Text style={styles.richOrderItemName} numberOfLines={1}>
+                                      {it.productName || it.name || "Product"}
+                                    </Text>
+                                    <Text style={styles.richOrderItemSub}>
+                                      {it.packSize ? `Pack: ${it.packSize} • ` : ""}
+                                      {it.petiQty ? `${it.petiQty} Peti ` : ""}({it.qty || 1} units)
+                                    </Text>
+                                  </View>
+                                  <Text style={styles.richOrderItemPrice}>
+                                    ₹{Number(it.total || (it.price * (it.qty || 1)) || 0).toLocaleString("en-IN")}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          )}
+                        </View>
+                      )}
+                    </Card.Content>
+                  </Card>
+                );
+              })
+            )}
+          </ScrollView>
+        </View>
       </Modal>
     </KeyboardAvoidingView>
   );
@@ -3109,6 +3297,373 @@ const styles = StyleSheet.create({
   orderItemDetailPrice: {
     fontSize: 11,
     fontWeight: "700",
+    color: "#0F172A",
+  },
+
+  // ─── Dedicated Wholesale Order History Trigger Card Styles ───
+  historyTriggerCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F0F9FF",
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  historyTriggerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  historyTriggerIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: "#E0F2FE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  historyTriggerTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#0369A1",
+  },
+  historyCountBadge: {
+    backgroundColor: "#0284C7",
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  historyTriggerSubtitle: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#64748B",
+    marginTop: 2,
+  },
+  historyTriggerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+  },
+  historyTriggerOpenText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#0284C7",
+  },
+
+  // ─── Dedicated Order History Modal Styles ───
+  historyModalContainer: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+  },
+  historyModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    paddingTop: Platform.OS === "ios" ? 54 : 16,
+    paddingBottom: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+    elevation: 2,
+  },
+  historyModalBackBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  historyModalTitle: {
+    fontSize: 17,
+    fontWeight: "900",
+    color: "#0F172A",
+  },
+  historyModalSubtitle: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#64748B",
+    marginTop: 1,
+  },
+  historyTotalBadge: {
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  historyTotalBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#1D4ED8",
+  },
+
+  // ─── Filter Bars ───
+  dateFilterContainer: {
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+    paddingVertical: 8,
+  },
+  dateFilterScroll: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  dateFilterPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  dateFilterPillActive: {
+    backgroundColor: "#0284C7",
+    borderColor: "#0284C7",
+  },
+  dateFilterText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748B",
+  },
+  dateFilterTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+  },
+
+  searchAndStatusWrapper: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+    gap: 8,
+  },
+  historySearchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    height: 38,
+  },
+  historySearchInput: {
+    flex: 1,
+    backgroundColor: "transparent",
+    fontSize: 12,
+    paddingHorizontal: 6,
+    height: 36,
+  },
+  statusPillsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  statusPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  statusPillActive: {
+    backgroundColor: "#0F172A",
+    borderColor: "#0F172A",
+  },
+  statusPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748B",
+  },
+  statusPillTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+  },
+
+  // ─── Orders List & Cards ───
+  historyOrdersListScroll: {
+    padding: 16,
+    paddingBottom: 40,
+    gap: 12,
+  },
+  historyEmptyStateBox: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+    paddingHorizontal: 24,
+  },
+  historyEmptyTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#334155",
+    marginTop: 12,
+  },
+  historyEmptySub: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#94A3B8",
+    textAlign: "center",
+    marginTop: 4,
+  },
+
+  richOrderCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  richOrderTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  richOrderId: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#0F172A",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+  },
+  todayTag: {
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#86EFAC",
+  },
+  todayTagText: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: "#15803D",
+  },
+  richOrderInvoice: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#0284C7",
+    marginTop: 2,
+  },
+  richOrderAmount: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0F172A",
+  },
+  richStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginTop: 3,
+  },
+  richStatusDue: {
+    backgroundColor: "#FEE2E2",
+  },
+  richStatusPaid: {
+    backgroundColor: "#DCFCE7",
+  },
+  richStatusText: {
+    fontSize: 9,
+    fontWeight: "800",
+  },
+  richStatusDueText: {
+    color: "#DC2626",
+  },
+  richStatusPaidText: {
+    color: "#15803D",
+  },
+
+  richOrderDateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+  },
+  richOrderDateText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#64748B",
+  },
+
+  richOrderMetaBar: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+  },
+  richOrderMetaPill: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#334155",
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+
+  richOrderItemsWrapper: {
+    marginTop: 8,
+  },
+  richOrderItemsToggle: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#F0F9FF",
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  richOrderItemsToggleText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#0284C7",
+  },
+  richOrderItemsList: {
+    backgroundColor: "#F8FAFC",
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: "#BAE6FD",
+    padding: 8,
+  },
+  richOrderItemRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 4,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#E2E8F0",
+  },
+  richOrderItemName: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#1E293B",
+  },
+  richOrderItemSub: {
+    fontSize: 9,
+    color: "#64748B",
+  },
+  richOrderItemPrice: {
+    fontSize: 11,
+    fontWeight: "800",
     color: "#0F172A",
   },
 });

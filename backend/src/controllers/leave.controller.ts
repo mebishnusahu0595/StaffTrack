@@ -26,6 +26,21 @@ export async function listLeaveRequests(req: Request, res: Response) {
   sendSuccess(res, result, "Leave requests fetched");
 }
 
+export async function getYearlyLeaveSummary(req: Request, res: Response) {
+  const isEmployee = req.user!.role === "EMPLOYEE";
+  const targetUserId = (!isEmployee && req.query.userId) ? String(req.query.userId) : req.user!.id;
+  const year = req.query.year ? Number(req.query.year) : new Date().getFullYear();
+
+  const result = await leaveService.getYearlyLeaveSummary(targetUserId, req.user!.companyId, year);
+  sendSuccess(res, result, "Yearly leave summary fetched");
+}
+
+export async function getCompanyYearlyLeaveSummaries(req: Request, res: Response) {
+  const year = req.query.year ? Number(req.query.year) : new Date().getFullYear();
+  const result = await leaveService.getCompanyYearlyLeaveSummaries(req.user!.companyId, year);
+  sendSuccess(res, result, "Company yearly leave summaries fetched");
+}
+
 export async function updateLeaveStatus(req: Request, res: Response) {
   const { status } = req.body;
   if (!["APPROVED", "REJECTED"].includes(status)) {

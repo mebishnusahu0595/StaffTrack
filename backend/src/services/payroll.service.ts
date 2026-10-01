@@ -110,13 +110,12 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
     const effectiveBaseSalary = (user.baseSalary != null && user.baseSalary > 0) 
       ? user.baseSalary 
       : (user.group?.baseSalary || 0);
-    const dailySalary = effectiveBaseSalary / daysInMonth.length;
+    // Standard daily rate = Base Salary / 30
+    const dailySalary = effectiveBaseSalary / 30;
 
-    let totalPayableDays = 0;
     let presentDays = 0;
     let absentDays = 0;
-    let unpaidLeaveDays = 0;
-    let paidLeaveDays = 0;
+    let totalLeaveDays = 0;
     let holidayDays = 0;
     let halfDays = 0;
     let monthlyPoints = 0;
@@ -137,14 +136,17 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
       if (applicableHoliday) {
         if (applicableHoliday.type === "HOLIDAY") {
           holidayDays++;
-          totalPayableDays++;
           payable = true;
           status = "HOLIDAY";
         } else {
-          paidLeaveDays++;
-          totalPayableDays++;
-          payable = true;
-          status = "PAID_LEAVE";
+          totalLeaveDays++;
+          if (totalLeaveDays <= 2) {
+            payable = true;
+            status = "PAID_LEAVE";
+          } else {
+            payable = false;
+            status = "LWP";
+          }
         }
       } else if (attendance) {
         if (attendance.status === "PRESENT" && attendance.checkInApproved === false) {
@@ -152,17 +154,21 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
           status = "PENDING";
         } else if (attendance.status === "PRESENT") {
           presentDays++;
-          totalPayableDays++;
           payable = true;
           status = "PRESENT";
         } else if (attendance.status === "HALF_DAY") {
           halfDays++;
-          totalPayableDays += 0.5;
           payable = true;
           status = "HALF_DAY";
         } else if (attendance.status === "ON_LEAVE") {
-          unpaidLeaveDays++;
-          status = "ON_LEAVE";
+          totalLeaveDays++;
+          if (totalLeaveDays <= 2) {
+            payable = true;
+            status = "PAID_LEAVE";
+          } else {
+            payable = false;
+            status = "LWP";
+          }
         }
       } else if (day.getDay() === 0) { // Only Sunday is a weekend
         status = "WEEKEND";
@@ -187,6 +193,17 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
       };
     });
 
+    const paidLeaveDays = Math.min(2, totalLeaveDays);
+    const unpaidLeaveDays = Math.max(0, totalLeaveDays - 2);
+
+    // Standard working days is 25 days per formula requirement
+    const standardWorkingDays = 25;
+    // Total deductions = absent days + excess leaves beyond 2 (LWP) + half-days (0.5)
+    const totalDeductionDays = absentDays + unpaidLeaveDays + (halfDays * 0.5);
+    const deductionAmount = Math.round(totalDeductionDays * dailySalary);
+    const netSalary = Math.max(0, Math.round(effectiveBaseSalary - deductionAmount));
+    const totalPayableDays = Math.max(0, Number((standardWorkingDays - totalDeductionDays).toFixed(1)));
+
     const odometerKm = user.attendances.reduce((sum: number, att: any) => {
       if (att.startOdometer !== null && att.endOdometer !== null && att.endOdometer >= att.startOdometer) {
         return sum + (att.endOdometer - att.startOdometer);
@@ -201,8 +218,6 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
 
     const approvedExpensesTotal = expensesByUser.get(user.id) ?? 0;
     const dailyAllowanceTotal = dailyAllowancesByUser.get(user.id) ?? 0;
-    const netSalary = Math.round(totalPayableDays * dailySalary);
-    const deductionAmount = Math.max(0, effectiveBaseSalary - netSalary);
     const totalPayout = netSalary + approvedExpensesTotal + travelAllowance + dailyAllowanceTotal;
 
     const result: any = {
@@ -213,7 +228,7 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
       joiningDate: user.joiningDate || null,
       departmentName: user.group?.name || null,
       baseSalary: effectiveBaseSalary,
-      totalDays: daysInMonth.length,
+      totalDays: standardWorkingDays,
       presentDays,
       halfDays,
       absentDays,
@@ -268,9 +283,9 @@ export async function calculateSalaryMatrix(companyId: string, month: number, ye
   const reports = await calculateMonthlyPayroll(companyId, month, year, ratePerKm);
 
   return reports.map((report: any) => {
-    const totalDays = report.totalDays;
-    const workingDays = Math.max(1, totalDays - report.holidayDays);
-    const dailyWage = report.baseSalary / workingDays;
+    const totalDays = 25; // Standard working days
+    const workingDays = 25;
+    const dailyWage = Math.round(report.baseSalary / 30);
 
     return {
       userId: report.userId,

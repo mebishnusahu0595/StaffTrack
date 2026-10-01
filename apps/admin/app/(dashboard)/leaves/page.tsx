@@ -27,7 +27,9 @@ import {
   UserPlus2,
   ListFilter,
   X,
-  Trash
+  Trash,
+  AlertTriangle,
+  Info
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
@@ -40,7 +42,8 @@ import {
   fetchEmployees,
   updateLeaveType,
   deleteLeaveType,
-  submitLeaveRequest
+  submitLeaveRequest,
+  fetchCompanyYearlyLeaveSummaries
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -237,12 +240,20 @@ export default function LeaveManagementPage() {
     queryFn: fetchHolidays
   });
 
+  const yearlySummariesQuery = useQuery({
+    queryKey: ["company-yearly-leaves"],
+    queryFn: () => fetchCompanyYearlyLeaveSummaries()
+  });
+
+  const [showYearlyBreakdown, setShowYearlyBreakdown] = useState(true);
+
   // Mutations
   const updateLeaveStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string, status: "APPROVED" | "REJECTED" }) => 
       updateLeaveStatus(id, status),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["leaves"] });
+      void queryClient.invalidateQueries({ queryKey: ["company-yearly-leaves"] });
     }
   });
 
@@ -387,6 +398,105 @@ export default function LeaveManagementPage() {
         </Button>
       </div>
 
+      {/* ==================== ANNUAL LEAVE QUOTA & POLICY ==================== */}
+      <div className="bg-white rounded-[32px] p-6 border border-slate-200/60 shadow-sm space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+              <CalendarDays className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                Annual Leave Quota & Policy ({new Date().getFullYear()})
+                <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200/60 font-bold text-[10px]">
+                  20 Yearly Leaves
+                </Badge>
+              </h2>
+              <p className="text-xs text-slate-500 font-medium">
+                2 paid leaves per month • Any excess is marked as Leave Without Pay (LWP) and deducted at Base Salary / 30
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowYearlyBreakdown(!showYearlyBreakdown)}
+            className="rounded-xl font-bold text-xs gap-2 border-slate-200"
+          >
+            <Sliders className="h-3.5 w-3.5 text-slate-500" />
+            {showYearlyBreakdown ? "Hide Staff Balances" : "View Staff Balances"}
+          </Button>
+        </div>
+
+        {/* Policy Stat Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100/60">
+            <p className="text-[10px] font-black uppercase tracking-wider text-blue-600">Annual Quota</p>
+            <p className="text-2xl font-black text-slate-900 mt-1">20 <span className="text-xs font-bold text-slate-500">Days / Staff</span></p>
+            <p className="text-[11px] text-slate-500 font-medium mt-1">Total allowed calendar year leaves (Jan – Dec)</p>
+          </div>
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/50 border border-emerald-100/60">
+            <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600">Monthly Paid Cap</p>
+            <p className="text-2xl font-black text-slate-900 mt-1">2 <span className="text-xs font-bold text-slate-500">Paid Days / Month</span></p>
+            <p className="text-[11px] text-slate-500 font-medium mt-1">1st & 2nd leaves in a month are payable</p>
+          </div>
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-rose-50 to-orange-50/50 border border-rose-100/60">
+            <p className="text-[10px] font-black uppercase tracking-wider text-rose-600">LWP Deduction Rule</p>
+            <p className="text-2xl font-black text-slate-900 mt-1">Base / 30 <span className="text-xs font-bold text-slate-500">Per Day</span></p>
+            <p className="text-[11px] text-slate-500 font-medium mt-1">Leaves &gt; 2 in a month cut daily rate directly</p>
+          </div>
+        </div>
+
+        {/* Staff Balances Breakdown Table */}
+        {showYearlyBreakdown && (
+          <div className="overflow-x-auto border border-slate-100 rounded-2xl">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  <th className="py-3 px-4 font-black uppercase text-[10px] text-slate-400">Staff Member</th>
+                  <th className="py-3 px-4 font-black uppercase text-[10px] text-slate-400 text-center">Annual Quota</th>
+                  <th className="py-3 px-4 font-black uppercase text-[10px] text-slate-400 text-center">Used (Year)</th>
+                  <th className="py-3 px-4 font-black uppercase text-[10px] text-slate-400 text-center">Available Remaining</th>
+                  <th className="py-3 px-4 font-black uppercase text-[10px] text-slate-400 text-center">This Month Used</th>
+                  <th className="py-3 px-4 font-black uppercase text-[10px] text-slate-400 text-center">Warning Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {(yearlySummariesQuery.data || []).map((summary: any) => (
+                  <tr key={summary.userId} className="hover:bg-slate-50/50">
+                    <td className="py-3 px-4 font-bold text-slate-900">
+                      {summary.userName}
+                      <span className="block text-[10px] text-slate-400 font-normal">{summary.designation}</span>
+                    </td>
+                    <td className="py-3 px-4 text-center font-bold text-slate-600">{summary.yearlyQuota}</td>
+                    <td className="py-3 px-4 text-center font-bold text-amber-600">{summary.usedYearly}</td>
+                    <td className="py-3 px-4 text-center font-bold text-emerald-600">
+                      <span className="bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/50">
+                        {summary.availableYearly} Days
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-center font-bold text-slate-700">
+                      {summary.usedThisMonth} / 2
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      {summary.exceedsMonthlyLimit ? (
+                        <Badge className="bg-rose-50 text-rose-700 border-rose-200 text-[10px] font-bold">
+                          ⚠️ Exceeded ({summary.monthlyLwpUsed} LWP)
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold">
+                          Within Limit
+                        </Badge>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* ==================== LEAVE REQUESTS ==================== */}
       <div className="space-y-8 animate-in fade-in duration-300">
         <div className="flex flex-col md:flex-row gap-6 items-center justify-between bg-white p-6 rounded-[32px] border border-slate-200/60 shadow-sm">
@@ -436,7 +546,9 @@ export default function LeaveManagementPage() {
                 </div>
             </div>
           ) : (
-            filteredLeaves.map((leave: any) => (
+            filteredLeaves.map((leave: any) => {
+              const userSummary = (yearlySummariesQuery.data || []).find((s: any) => s.userId === leave.userId);
+              return (
               <Card key={leave.id} className="rounded-[32px] border-none shadow-sm ring-1 ring-slate-200/60 hover:ring-blue-400 transition-all duration-300 group bg-white overflow-hidden text-left">
                  <CardHeader className="p-6 border-b border-slate-50">
                     <div className="flex justify-between items-start">
@@ -462,7 +574,23 @@ export default function LeaveManagementPage() {
                        </Badge>
                     </div>
                  </CardHeader>
-                 <CardContent className="p-6 space-y-6">
+                 <CardContent className="p-6 space-y-5">
+                    {/* Annual & Monthly Quota Pill */}
+                    {userSummary && (
+                      <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                        <div className="flex items-center justify-between text-[11px] font-bold">
+                          <span className="text-slate-500">Annual Available: <strong className="text-emerald-700">{userSummary.availableYearly} / 20</strong></span>
+                          <span className="text-slate-500">Month: <strong className={userSummary.exceedsMonthlyLimit ? "text-rose-600 font-black" : "text-slate-700"}>{userSummary.usedThisMonth} / 2</strong></span>
+                        </div>
+                        {userSummary.exceedsMonthlyLimit && (
+                          <div className="flex items-center gap-1.5 text-[10px] text-amber-800 font-extrabold bg-amber-50 px-2 py-1 rounded-lg border border-amber-200/60 mt-1">
+                            <AlertTriangle className="h-3 w-3 text-amber-600 flex-shrink-0" />
+                            <span>Exceeded 2 paid leaves this month (LWP applied)</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-2 gap-4">
                        <div className="p-3 rounded-2xl bg-slate-50/50 border border-slate-100">
                           <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Start Date</p>
@@ -516,7 +644,8 @@ export default function LeaveManagementPage() {
                     )}
                  </CardContent>
               </Card>
-            ))
+            );
+          })
           )}
         </div>
       </div>

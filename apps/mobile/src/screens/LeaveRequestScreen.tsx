@@ -7,7 +7,7 @@ import { Button, Card, Dialog, FAB, Portal, TextInput } from "react-native-paper
 const { Alert, ScrollView, StyleSheet, View } = RN;
 import DateTimePicker from "@react-native-community/datetimepicker";
 
-import { submitLeaveRequest, fetchMyLeaves } from "../api";
+import { submitLeaveRequest, fetchMyLeaves, fetchYearlyLeaveSummary } from "../api";
 import { appIconSource } from "../components/AppIcon";
 
 export function LeaveRequestScreen() {
@@ -24,13 +24,23 @@ export function LeaveRequestScreen() {
     queryFn: fetchMyLeaves
   });
 
+  const summaryQuery = useQuery({
+    queryKey: ["my-yearly-leave-summary"],
+    queryFn: () => fetchYearlyLeaveSummary()
+  });
+
   const mutation = useMutation({
     mutationFn: submitLeaveRequest,
-    onSuccess: () => {
+    onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: ["my-leaves"] });
+      queryClient.invalidateQueries({ queryKey: ["my-yearly-leave-summary"] });
       setIsDialogVisible(false);
       setReason("");
-      Alert.alert("Success", "Leave request submitted for approval.");
+      if (res?.warning) {
+        Alert.alert("Leave Submitted", `Request submitted successfully.\n\n⚠️ ${res.warning}`);
+      } else {
+        Alert.alert("Success", "Leave request submitted for approval.");
+      }
     },
     onError: (error) => {
       Alert.alert("Error", error instanceof Error ? error.message : "Failed to submit request");
@@ -38,6 +48,7 @@ export function LeaveRequestScreen() {
   });
 
   const leaves = leavesQuery.data ?? [];
+  const summary = summaryQuery.data;
 
   function handleSubmit() {
     if (!reason.trim()) {
@@ -62,6 +73,54 @@ export function LeaveRequestScreen() {
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
+        
+        {/* ─── Annual Leave Quota Summary Card ─── */}
+        <Card style={styles.summaryCard}>
+          <Card.Content>
+            <View style={styles.summaryHeader}>
+              <RN.Text style={styles.summaryTitle}>Annual Leave Balance ({summary?.year || new Date().getFullYear()})</RN.Text>
+              <View style={styles.quotaPill}>
+                <RN.Text style={styles.quotaPillText}>Total: {summary?.yearlyQuota || 20} Days</RN.Text>
+              </View>
+            </View>
+
+            <View style={styles.statsRow}>
+              <View style={styles.statBox}>
+                <RN.Text style={styles.statNumber}>{summary?.availableYearly ?? 20}</RN.Text>
+                <RN.Text style={styles.statLabel}>Available</RN.Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statBox}>
+                <RN.Text style={[styles.statNumber, { color: "#D97706" }]}>{summary?.usedYearly ?? 0}</RN.Text>
+                <RN.Text style={styles.statLabel}>Used (Year)</RN.Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statBox}>
+                <RN.Text style={[styles.statNumber, { color: summary?.exceedsMonthlyLimit ? "#DC2626" : "#2563EB" }]}>
+                  {summary?.usedThisMonth ?? 0} / 2
+                </RN.Text>
+                <RN.Text style={styles.statLabel}>This Month</RN.Text>
+              </View>
+            </View>
+
+            {/* Monthly Policy / Warning Banner */}
+            {summary?.exceedsMonthlyLimit ? (
+              <View style={styles.warningBanner}>
+                <RN.Text style={styles.warningTitle}>⚠️ Leave Warning: LWP Applied</RN.Text>
+                <RN.Text style={styles.warningText}>
+                  You have already used your 2 paid leaves this month. Additional leaves are Leave Without Pay (LWP) and ₹{summary.perDaySalary || 733}/day will be deducted from your base salary.
+                </RN.Text>
+              </View>
+            ) : (
+              <View style={styles.infoBanner}>
+                <RN.Text style={styles.infoText}>
+                  ℹ️ Policy: 2 days of leave per month are payable. Leaves beyond 2 become LWP (deducts Base Salary / 30).
+                </RN.Text>
+              </View>
+            )}
+          </Card.Content>
+        </Card>
+
         <RN.Text style={styles.sectionTitle}>My Leave Requests</RN.Text>
         
         {leavesQuery.isLoading ? (
@@ -94,6 +153,15 @@ export function LeaveRequestScreen() {
         <Dialog visible={isDialogVisible} onDismiss={() => setIsDialogVisible(false)} style={styles.dialog}>
           <Dialog.Title>Apply for Leave</Dialog.Title>
           <Dialog.Content>
+            {summary?.exceedsMonthlyLimit && (
+              <View style={[styles.warningBanner, { marginBottom: 12 }]}>
+                <RN.Text style={styles.warningTitle}>⚠️ Leave Without Pay (LWP)</RN.Text>
+                <RN.Text style={styles.warningText}>
+                  You have used your 2 paid leaves for this month. This leave will deduct pay at ₹{summary.perDaySalary || 733}/day.
+                </RN.Text>
+              </View>
+            )}
+
             {/* Today quick-select */}
             <View style={styles.quickSelectRow}>
               <Button
@@ -287,5 +355,104 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: "white",
     marginTop: 4
+  },
+  summaryCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    marginBottom: 16,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#E2E8F0"
+  },
+  summaryHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14
+  },
+  summaryTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0F172A",
+    flex: 1
+  },
+  quotaPill: {
+    backgroundColor: "#EFF6FF",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#DBEAFE"
+  },
+  quotaPillText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#2563EB"
+  },
+  statsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F8FAFC",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#F1F5F9"
+  },
+  statBox: {
+    alignItems: "center",
+    flex: 1
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#059669"
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748B",
+    marginTop: 2,
+    textTransform: "uppercase"
+  },
+  statDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: "#E2E8F0"
+  },
+  warningBanner: {
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    borderRadius: 14,
+    padding: 10,
+    marginTop: 12
+  },
+  warningTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#DC2626",
+    marginBottom: 2
+  },
+  warningText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#991B1B",
+    lineHeight: 16
+  },
+  infoBanner: {
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    borderRadius: 14,
+    padding: 10,
+    marginTop: 12
+  },
+  infoText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#166534",
+    lineHeight: 16
   }
 });

@@ -7,6 +7,8 @@ const router = Router();
 router.use(auth);
 
 router.get("/", leaveController.listLeaveRequests);
+router.get("/yearly-summary", leaveController.getYearlyLeaveSummary);
+router.get("/yearly-summaries", leaveController.getCompanyYearlyLeaveSummaries);
 router.post("/", leaveController.createLeaveRequest);
 router.patch("/:id/status", leaveController.updateLeaveStatus);
 

@@ -644,7 +644,25 @@ export type LeaveRequest = {
   reason: string;
   status: LeaveStatus;
   createdAt: string;
+  warning?: string | null;
 };
+
+export interface YearlyLeaveSummary {
+  userId: string;
+  userName: string;
+  designation: string;
+  year: number;
+  yearlyQuota: number;
+  usedYearly: number;
+  availableYearly: number;
+  monthlyPaidLimit: number;
+  monthlyPaidUsed: number;
+  monthlyLwpUsed: number;
+  usedThisMonth: number;
+  exceedsMonthlyLimit: boolean;
+  perDaySalary: number;
+  warning: string | null;
+}
 
 export async function submitLeaveRequest(payload: { startDate: string; endDate: string; reason: string }): Promise<LeaveRequest> {
   return unwrap(await api.post<ApiEnvelope<LeaveRequest>>("/leaves", payload));
@@ -652,6 +670,10 @@ export async function submitLeaveRequest(payload: { startDate: string; endDate: 
 
 export async function fetchMyLeaves(): Promise<LeaveRequest[]> {
   return unwrap(await api.get<ApiEnvelope<LeaveRequest[]>>("/leaves"));
+}
+
+export async function fetchYearlyLeaveSummary(year?: number): Promise<YearlyLeaveSummary> {
+  return unwrap(await api.get<ApiEnvelope<YearlyLeaveSummary>>("/leaves/yearly-summary", { params: { year } }));
 }
 
 export async function fetchMusterReport(month: number, year: number): Promise<any> {

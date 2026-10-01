@@ -632,6 +632,16 @@ export async function submitLeaveRequest(data: { startDate: string; endDate: str
   return response.data.data;
 }
 
+export async function fetchCompanyYearlyLeaveSummaries(year?: number) {
+  const response = await api.get<{ data: any[] }>("/leaves/yearly-summaries", { params: { year } });
+  return response.data.data;
+}
+
+export async function fetchYearlyLeaveSummary(userId?: string, year?: number) {
+  const response = await api.get<{ data: any }>("/leaves/yearly-summary", { params: { userId, year } });
+  return response.data.data;
+}
+
 // Muster Report
 export async function fetchMusterReport(params: { month: number; year: number }) {
   const response = await api.get<{ data: any }>("/payroll/muster", { params });

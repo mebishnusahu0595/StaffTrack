@@ -351,8 +351,11 @@ export async function getMonthlyPerformanceReport(actor: AuthUser, userId: strin
   const baseSalary = (user.baseSalary != null && user.baseSalary > 0) 
     ? user.baseSalary 
     : (user.group?.baseSalary || 0);
-  const dailyRate = baseSalary / daysInMonth;
-  const deductions = ((absentDays + onLeave) * dailyRate) + (halfDays * 0.5 * dailyRate);
+  // Standard daily rate = Base Salary / 30
+  const dailyRate = baseSalary / 30;
+  // 2 days of leave are payable (paid leave), excess leaves beyond 2 are LWP
+  const excessLeaves = Math.max(0, onLeave - 2);
+  const deductions = Math.round(((absentDays + excessLeaves) * dailyRate) + (halfDays * 0.5 * dailyRate));
   const finalSalary = Math.max(0, baseSalary - deductions);
 
   // Task rollup for the month.

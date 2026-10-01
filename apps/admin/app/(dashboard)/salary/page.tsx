@@ -266,13 +266,15 @@ export default function SalaryMatrixPage() {
                       ₹{Number(emp.baseSalary || 0).toLocaleString()}
                     </td>
                     <td className="py-4 px-6 text-xs font-black text-slate-700">
-                      {emp.payableDays} <span className="text-[10px] font-normal text-slate-400">/ {emp.totalDays}</span>
+                      {emp.payableDays} <span className="text-[10px] font-normal text-slate-400">/ {emp.totalDays || 25}</span>
                     </td>
                     <td className="py-4 px-6 text-center">
                       <div className="flex items-center justify-center gap-2 text-[10px] font-black uppercase">
                         <Badge className="bg-rose-50 text-rose-700 hover:bg-rose-50 border border-rose-200/50 rounded-md font-bold px-1.5 py-0.5">Abs: {emp.absentDays}</Badge>
                         <Badge className="bg-blue-50 text-blue-700 hover:bg-blue-50 border border-blue-200/50 rounded-md font-bold px-1.5 py-0.5">Hol: {emp.holidayDays}</Badge>
-                        <Badge className="bg-indigo-50 text-indigo-700 hover:bg-indigo-50 border border-indigo-200/50 rounded-md font-bold px-1.5 py-0.5">Lvs: {emp.paidLeaveDays}</Badge>
+                        <Badge className="bg-indigo-50 text-indigo-700 hover:bg-indigo-50 border border-indigo-200/50 rounded-md font-bold px-1.5 py-0.5">
+                          Lvs: {emp.paidLeaveDays}{emp.unpaidLeaveDays > 0 ? ` (+${emp.unpaidLeaveDays} LWP)` : ''}
+                        </Badge>
                       </div>
                     </td>
                     <td className="py-4 px-6 text-center text-xs font-bold text-slate-600 font-mono">
