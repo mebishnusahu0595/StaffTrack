@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../lib/prisma";
 import type { AuthUser } from "../types/auth";
-
-const prisma = new PrismaClient();
 
 export class LeaveSetupService {
   async getLeaveTypes(user: AuthUser) {

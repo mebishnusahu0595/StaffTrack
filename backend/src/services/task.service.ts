@@ -209,59 +209,6 @@ export interface ListTasksFilter {
     tasks = [...standaloneTasks, ...Array.from(seriesMap.values())];
   }
 
-  // Fire-and-forget: check & send task notifications without blocking the response
-  if (actor.role === UserRole.EMPLOYEE) {
-    (async () => {
-      try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-
-        const dueToday = tasks.filter(t => 
-          t.status === TaskStatus.PENDING && 
-          t.dueDate >= today && 
-          t.dueDate < tomorrow
-        );
-        const startingToday = tasks.filter(t => 
-          t.status === TaskStatus.PENDING && 
-          t.startDate && 
-          t.startDate >= today && 
-          t.startDate < tomorrow
-        );
-
-        // Nothing to announce -> skip the notification round trips entirely.
-        // This block runs on every mobile task poll, so the early exit is the
-        // difference between 1 and N+1 queries per poll.
-        if (dueToday.length === 0 && startingToday.length === 0) return;
-
-        const todayNotifs = await prisma.notification.findMany({
-          where: {
-            userId: actor.id,
-            type: { in: ["TASK_DUE_TODAY", "TASK_STARTED_TODAY"] },
-            createdAt: { gte: today }
-          },
-          select: { type: true, message: true }
-        });
-        const notifSet = new Set(todayNotifs.map(n => `${n.type}||${n.message}`));
-
-        for (const task of dueToday) {
-          const msg = `Your task "${task.title}" is due today. Please complete it.`;
-          if (!notifSet.has(`TASK_DUE_TODAY||${msg}`)) {
-            await notificationService.createNotification(actor.id, "Task Due Today", msg, "TASK_DUE_TODAY");
-          }
-        }
-        for (const task of startingToday) {
-          const msg = `Your task "${task.title}" has started today. Please complete it.`;
-          if (!notifSet.has(`TASK_STARTED_TODAY||${msg}`)) {
-            await notificationService.createNotification(actor.id, "New Task Started", msg, "TASK_STARTED_TODAY");
-          }
-        }
-      } catch (err) {
-        console.error("[listTasks] background notification check failed:", err);
-      }
-    })();
-  }
 
   if (actor.role === UserRole.EMPLOYEE) {
     for (const t of tasks) {

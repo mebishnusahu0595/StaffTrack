@@ -14,6 +14,8 @@ interface LocationLogInput {
   batteryLevel?: number;
 }
 
+const userStatusUpdateCache = new Map<string, { time: number; battery?: number }>();
+
 export async function createLocationLogs(
   actor: AuthUser,
   input: LocationLogInput[] | { logs: LocationLogInput[] }
@@ -39,14 +41,24 @@ export async function createLocationLogs(
     return new Date(current.timestamp) > new Date(latest.timestamp) ? current : latest;
   });
 
-  await prisma.user.update({
-    where: { id: actor.id },
-    data: {
-      isLocationOn: true,
-      locationOffAt: null,
-      ...(latestLog.batteryLevel !== undefined ? { batteryLevel: latestLog.batteryLevel } : {})
-    }
-  });
+  const lastUpdate = userStatusUpdateCache.get(actor.id);
+  const now = Date.now();
+  const shouldUpdateUser =
+    !lastUpdate ||
+    now - lastUpdate.time > 60 * 1000 ||
+    (latestLog.batteryLevel !== undefined && Math.abs((latestLog.batteryLevel || 0) - (lastUpdate.battery || 0)) >= 5);
+
+  if (shouldUpdateUser) {
+    userStatusUpdateCache.set(actor.id, { time: now, battery: latestLog.batteryLevel });
+    await prisma.user.update({
+      where: { id: actor.id },
+      data: {
+        isLocationOn: true,
+        locationOffAt: null,
+        ...(latestLog.batteryLevel !== undefined ? { batteryLevel: latestLog.batteryLevel } : {})
+      }
+    }).catch((err) => console.warn("[LocationService] Failed to update user status:", err));
+  }
 
   // Notify WebSocket listeners (Superadmin Live Radar + Admin Maps)
   getIO().to(`company:${actor.companyId}`).emit(SOCKET_EVENTS.LOCATION_UPDATE, {

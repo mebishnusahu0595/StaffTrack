@@ -1,5 +1,5 @@
-import { PrismaClient, LeaveStatus, UserRole, Prisma } from "@prisma/client";
-const prisma = new PrismaClient();
+import { LeaveStatus, UserRole, Prisma } from "@prisma/client";
+import { prisma } from "../lib/prisma";
 import type { AuthUser } from "../types/auth";
 import * as notificationService from "./notification.service";
 
