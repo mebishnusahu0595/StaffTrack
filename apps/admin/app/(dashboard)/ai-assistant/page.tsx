@@ -57,7 +57,13 @@ const NOTIF_CONFIG: Record<string, { label: string; icon: any; color: string; bg
 // ─── Plain text message renderer (no ** markdown) ─────────────────────────────
 
 function PlainMessage({ content, isStreaming }: { content: string; isStreaming?: boolean }) {
-  const lines = content.split("\n");
+  // Strip action tags before rendering
+  const cleaned = content
+    .replace(/\[SEND_NOTIFICATION[^\]]*\]/g, "")
+    .replace(/\[MARK_HOLIDAY[^\]]*\]/g, "")
+    .replace(/\[BULK_NOTIFY[^\]]*\]/g, "")
+    .trim();
+  const lines = cleaned.split("\n");
   return (
     <div className="space-y-1 text-sm leading-relaxed">
       {lines.map((line, i) => {
@@ -226,7 +232,8 @@ export default function AiAssistantPage() {
           let updatedContent = m.content;
           if (actionResult) {
             if (actionResult.type === "holiday") {
-              updatedContent += `\n\n🎉 Holiday Action Successful: Created ${actionResult.holidaysCreated} holiday record(s) and sent push notifications to ${actionResult.notified} staff member(s).`;
+              const dateInfo = actionResult.holidays?.[0]?.date || "";
+              updatedContent += `\n\n🎉 Holiday Marked! Created ${actionResult.holidaysCreated} holiday record(s). Push notifications will be sent automatically on ${dateInfo} morning.`;
             } else if (actionResult.type === "bulk_notify") {
               updatedContent += `\n\n📢 Bulk Notification Sent: Push notifications delivered to ${actionResult.notified} staff member(s).`;
             } else if (actionResult.sent > 0) {

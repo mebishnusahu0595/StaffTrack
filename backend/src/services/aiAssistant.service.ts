@@ -193,8 +193,27 @@ If the user asks you to mark a holiday, create a holiday, declare a holiday, or 
    OR for a specific user:
    [MARK_HOLIDAY date="{YYYY-MM-DD}" name="{holiday name}" scope="{database_id}"]
 4. Use today's year (${new Date().getFullYear()}) if the user doesn't specify a year.
-5. Always confirm in your response that you are marking the holiday and sending notifications.
-6. If the user says to send a holiday notification without marking, use BULK_NOTIFY instead.
+5. Confirm that the holiday is marked. Notifications will be sent AUTOMATICALLY on the morning of the holiday date (not immediately).
+6. Do NOT use action tags like [MARK_HOLIDAY] in your visible response text — only add them at the very end as hidden metadata.
+
+COMMON INDIAN HOLIDAYS (use these names when the user mentions them):
+• 26 Jan — Republic Day
+• 14 Feb — Basant Panchami
+• Mar — Holi (check lunar calendar)
+• 14 Apr — Ambedkar Jayanti
+• 1 May — May Day / Labour Day
+• 15 Aug — Independence Day
+• Aug/Sep — Raksha Bandhan, Janmashtami (lunar)
+• 2 Oct — Gandhi Jayanti
+• Oct — Dussehra / Vijayadashami (lunar)
+• Oct/Nov — Diwali, Bhai Dooj (lunar)
+• 14 Nov — Children's Day
+• 25 Dec — Christmas
+• 1 Jan — New Year's Day
+• Eid-ul-Fitr, Eid-ul-Adha, Muharram (Islamic calendar)
+• Guru Nanak Jayanti (Nov, lunar)
+• Chhath Puja (Oct/Nov, lunar)
+• Makar Sankranti / Pongal — 14 Jan
 
 BULK NOTIFICATION ACTIONS:
 If the user asks you to send a notification, message, or reminder to ALL staff or MULTIPLE staff at once (not a specific individual):
@@ -283,8 +302,27 @@ If the user asks you to mark a holiday, create a holiday, declare a holiday, or 
    OR for a specific user:
    [MARK_HOLIDAY date="{YYYY-MM-DD}" name="{holiday name}" scope="{database_id}"]
 4. Use today's year (${new Date().getFullYear()}) if the user doesn't specify a year.
-5. Always confirm in your response that you are marking the holiday and sending notifications.
-6. If the user says to send a holiday notification without marking, use BULK_NOTIFY instead.
+5. Confirm that the holiday is marked. Notifications will be sent AUTOMATICALLY on the morning of the holiday date (not immediately).
+6. Do NOT use action tags like [MARK_HOLIDAY] in your visible response text — only add them at the very end as hidden metadata.
+
+COMMON INDIAN HOLIDAYS (use these names when the user mentions them):
+• 26 Jan — Republic Day
+• 14 Feb — Basant Panchami
+• Mar — Holi (check lunar calendar)
+• 14 Apr — Ambedkar Jayanti
+• 1 May — May Day / Labour Day
+• 15 Aug — Independence Day
+• Aug/Sep — Raksha Bandhan, Janmashtami (lunar)
+• 2 Oct — Gandhi Jayanti
+• Oct — Dussehra / Vijayadashami (lunar)
+• Oct/Nov — Diwali, Bhai Dooj (lunar)
+• 14 Nov — Children's Day
+• 25 Dec — Christmas
+• 1 Jan — New Year's Day
+• Eid-ul-Fitr, Eid-ul-Adha, Muharram (Islamic calendar)
+• Guru Nanak Jayanti (Nov, lunar)
+• Chhath Puja (Oct/Nov, lunar)
+• Makar Sankranti / Pongal — 14 Jan
 
 BULK NOTIFICATION ACTIONS:
 If the user asks you to send a notification, message, or reminder to ALL staff or MULTIPLE staff at once (not a specific individual):
@@ -379,20 +417,17 @@ ${context}`;
       actionResultPayload = { type: "notification", sent, actions };
     }
 
-    // Execute holiday actions
+    // Execute holiday actions (only create DB records — notifications sent on the day by scheduler)
     if (holidayActions.length > 0) {
       let totalHolidaysCreated = 0;
-      let totalNotified = 0;
       for (const ha of holidayActions) {
         const holidayDate = startOfDay(new Date(ha.date));
         if (ha.scope === "ALL") {
-          // Get all staff user IDs
           const allStaff = await prisma.user.findMany({
             where: { companyId, role: { in: ["EMPLOYEE", "MANAGER"] } },
             select: { id: true }
           });
           const userIds = allStaff.map(u => u.id);
-          // Create holidays for all staff
           for (const uid of userIds) {
             const existing = await prisma.holiday.findFirst({
               where: { date: holidayDate, name: ha.name, companyId, userId: uid }
@@ -404,15 +439,7 @@ ${context}`;
               totalHolidaysCreated++;
             }
           }
-          // Send bulk notification
-          const notifResult = await sendBroadcastNotification(adminId, {
-            allSelected: true,
-            title: `🎉 Holiday: ${ha.name}`,
-            message: `${ha.name} on ${holidayDate.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}. Enjoy your day off!`
-          });
-          totalNotified = notifResult.count || 0;
         } else {
-          // Single user holiday
           const existing = await prisma.holiday.findFirst({
             where: { date: holidayDate, name: ha.name, companyId, userId: ha.scope }
           });
@@ -422,15 +449,9 @@ ${context}`;
             });
             totalHolidaysCreated++;
           }
-          await sendBroadcastNotification(adminId, {
-            userIds: [ha.scope],
-            title: `🎉 Holiday: ${ha.name}`,
-            message: `${ha.name} on ${holidayDate.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}. Enjoy your day off!`
-          });
-          totalNotified = 1;
         }
       }
-      actionResultPayload = { type: "holiday", holidaysCreated: totalHolidaysCreated, notified: totalNotified, holidays: holidayActions };
+      actionResultPayload = { type: "holiday", holidaysCreated: totalHolidaysCreated, holidays: holidayActions };
     }
 
     // Execute bulk notify actions

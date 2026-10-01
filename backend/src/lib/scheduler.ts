@@ -5,6 +5,7 @@ import { cleanupOldImages } from "../services/imageCleanup.service";
 import { runAiLateCheckinMonitor } from "../services/aiLateCheckinMonitor.service";
 import { runShiftCheckinReminder } from "../services/shiftCheckinReminder.service";
 import { runAiNudgeMonitor } from "../services/aiNudgeMonitor.service";
+import { sendTodayHolidayNotifications } from "../services/holidayNotifier.service";
 
 export function startScheduler() {
   // 1. Immediately clean up any old stuck sessions from previous days on startup
@@ -116,5 +117,42 @@ export function startScheduler() {
       console.error("[Scheduler] Error in AI nudge monitor:", error);
     }
   }, 60 * 60 * 1000);
+
+  // 7. Holiday Notification — runs daily at 7:30 AM IST
+  function scheduleHolidayNotifier() {
+    const now = new Date();
+    const indiaOffset = 5.5 * 60 * 60 * 1000;
+    const indiaTime = new Date(now.getTime() + indiaOffset);
+
+    // Target 7:30 AM IST today or tomorrow
+    const target = new Date(
+      indiaTime.getFullYear(),
+      indiaTime.getMonth(),
+      indiaTime.getDate(),
+      7, 30, 0, 0
+    );
+
+    // If already past 7:30 AM IST today, schedule for tomorrow
+    if (indiaTime >= target) {
+      target.setDate(target.getDate() + 1);
+    }
+
+    const nextRunUtc = new Date(target.getTime() - indiaOffset);
+    const msUntilRun = nextRunUtc.getTime() - now.getTime();
+    console.log(`[Scheduler] Holiday notifier scheduled in ${(msUntilRun / 1000 / 60).toFixed(1)} minutes (7:30 AM IST)`);
+
+    setTimeout(async () => {
+      try {
+        await sendTodayHolidayNotifications();
+        console.log("[Scheduler] Holiday notifications sent.");
+      } catch (error) {
+        console.error("[Scheduler] Error in holiday notifier:", error);
+      }
+      // Reschedule for next day
+      scheduleHolidayNotifier();
+    }, msUntilRun);
+  }
+
+  scheduleHolidayNotifier();
 }
 
