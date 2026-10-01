@@ -4,6 +4,22 @@ import path from "path";
 import jwt from "jsonwebtoken";
 
 export async function createNotification(userId: string, title: string, message: string, type: string) {
+  // Dedup: Skip if same notification (userId + title + type) was sent within last 30 minutes
+  const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
+  const recent = await prisma.notification.findFirst({
+    where: {
+      userId,
+      title,
+      type,
+      createdAt: { gte: thirtyMinAgo }
+    },
+    orderBy: { createdAt: "desc" }
+  });
+
+  if (recent) {
+    return recent; // Already sent recently, skip duplicate
+  }
+
   const notification = await prisma.notification.create({
     data: {
       userId,
@@ -222,8 +238,27 @@ export async function sendBroadcastNotification(senderId: string, input: {
     return { success: false, message: "No target users found" };
   }
 
-  // Create notifications in database
-  const notificationsData = targetUserIds.map(userId => ({
+  // Dedup: Filter out users who already received this exact broadcast in last 30 minutes
+  const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
+  const recentlyNotified = await prisma.notification.findMany({
+    where: {
+      userId: { in: targetUserIds },
+      title,
+      type: "BROADCAST",
+      createdAt: { gte: thirtyMinAgo }
+    },
+    select: { userId: true }
+  });
+  const alreadyNotifiedIds = new Set(recentlyNotified.map(n => n.userId));
+  const newTargetIds = targetUserIds.filter(id => !alreadyNotifiedIds.has(id));
+
+  if (newTargetIds.length === 0) {
+    console.log(`[Broadcast] Skipped duplicate broadcast "${title}" — all ${targetUserIds.length} users already notified recently.`);
+    return { success: true, count: 0, skipped: targetUserIds.length };
+  }
+
+  // Create notifications in database only for new targets
+  const notificationsData = newTargetIds.map(userId => ({
     userId,
     title,
     message,
@@ -237,7 +272,7 @@ export async function sendBroadcastNotification(senderId: string, input: {
   // Fetch users with tokens to send push notification
   const usersWithTokens = await prisma.user.findMany({
     where: {
-      id: { in: targetUserIds },
+      id: { in: newTargetIds },
       expoPushToken: { not: null }
     },
     select: { id: true, expoPushToken: true }
@@ -256,5 +291,5 @@ export async function sendBroadcastNotification(senderId: string, input: {
 
   await Promise.all(pushPromises);
 
-  return { success: true, count: targetUserIds.length };
+  return { success: true, count: newTargetIds.length, skipped: alreadyNotifiedIds.size };
 }
