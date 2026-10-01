@@ -266,7 +266,7 @@ export default function SalaryMatrixPage() {
                       ₹{Number(emp.baseSalary || 0).toLocaleString()}
                     </td>
                     <td className="py-4 px-6 text-xs font-black text-slate-700">
-                      {emp.payableDays} <span className="text-[10px] font-normal text-slate-400">/ {emp.totalDays || 25}</span>
+                      {emp.payableDays} <span className="text-[10px] font-normal text-slate-400">/ {emp.totalDays || (selectedMonth.daysInMonth() >= 31 ? 26 : (selectedMonth.daysInMonth() === 30 ? 25 : selectedMonth.daysInMonth() - 5))}</span>
                     </td>
                     <td className="py-4 px-6 text-center">
                       <div className="flex items-center justify-center gap-2 text-[10px] font-black uppercase">

@@ -448,7 +448,7 @@ function PayrollDetailModal({ report, month, onCustomize }: { report: any, month
               <tr>
                 <td>Unpaid Absences</td>
                 <td style="text-align: right; color: #ef4444;">${report.absentDays} Days</td>
-                <td style="text-align: right; color: #ef4444;">- ₹${(report.absentDays * (report.baseSalary / report.totalDays)).toFixed(2)}</td>
+                <td style="text-align: right; color: #ef4444;">- ₹${(report.absentDays * (report.baseSalary / 30)).toFixed(2)}</td>
               </tr>
               <tr style="font-weight: 700; border-top: 2px solid #e2e8f0;">
                 <td>Basic Salary</td>
@@ -509,7 +509,7 @@ function PayrollDetailModal({ report, month, onCustomize }: { report: any, month
                 </div>
                 <div>
                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Daily Wage Rate</p>
-                   <p className="text-xl font-black text-emerald-400">₹{(report.baseSalary / report.totalDays).toFixed(2)}</p>
+                   <p className="text-xl font-black text-emerald-400">₹{(report.baseSalary / 30).toFixed(2)}</p>
                 </div>
              </div>
           </div>

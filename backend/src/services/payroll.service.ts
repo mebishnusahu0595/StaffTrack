@@ -196,13 +196,35 @@ export async function calculateMonthlyPayroll(companyId: string, month: number, 
     const paidLeaveDays = Math.min(2, totalLeaveDays);
     const unpaidLeaveDays = Math.max(0, totalLeaveDays - 2);
 
-    // Standard working days is 25 days per formula requirement
-    const standardWorkingDays = 25;
+    // Standard working days: 31-day month = 26 days, 30-day month = 25 days, Feb (28/29) = 23/24 days
+    const daysInMonthCount = daysInMonth.length;
+    const standardWorkingDays = daysInMonthCount >= 31 
+      ? 26 
+      : (daysInMonthCount === 30 ? 25 : daysInMonthCount - 5);
+
     // Total deductions = absent days + excess leaves beyond 2 (LWP) + half-days (0.5)
     const totalDeductionDays = absentDays + unpaidLeaveDays + (halfDays * 0.5);
     const deductionAmount = Math.round(totalDeductionDays * dailySalary);
-    const netSalary = Math.max(0, Math.round(effectiveBaseSalary - deductionAmount));
-    const totalPayableDays = Math.max(0, Number((standardWorkingDays - totalDeductionDays).toFixed(1)));
+
+    // Earned payable days so far (present + half-day 0.5 + holiday + paid leave)
+    const totalPayableDays = Math.min(
+      standardWorkingDays, 
+      Number((presentDays + (halfDays * 0.5) + holidayDays + paidLeaveDays).toFixed(1))
+    );
+
+    // If viewing a completed month (or if all working days worked), calculate net = Base - Deductions
+    // If during an ongoing month, employee has earned totalPayableDays * dailySalary (capped at Base - Deductions)
+    const isPastMonth = (year < today.getFullYear()) || (year === today.getFullYear() && month < (today.getMonth() + 1));
+    
+    let netSalary = 0;
+    if (isPastMonth || totalPayableDays >= standardWorkingDays) {
+      netSalary = Math.max(0, Math.round(effectiveBaseSalary - deductionAmount));
+    } else {
+      // Ongoing month: live accrued salary = totalPayableDays * dailySalary (capped at base - deductions)
+      const accruedSalary = Math.round(totalPayableDays * dailySalary);
+      const maxPossible = Math.max(0, Math.round(effectiveBaseSalary - deductionAmount));
+      netSalary = Math.min(accruedSalary, maxPossible);
+    }
 
     const odometerKm = user.attendances.reduce((sum: number, att: any) => {
       if (att.startOdometer !== null && att.endOdometer !== null && att.endOdometer >= att.startOdometer) {
@@ -283,8 +305,8 @@ export async function calculateSalaryMatrix(companyId: string, month: number, ye
   const reports = await calculateMonthlyPayroll(companyId, month, year, ratePerKm);
 
   return reports.map((report: any) => {
-    const totalDays = 25; // Standard working days
-    const workingDays = 25;
+    const totalDays = report.totalDays;
+    const workingDays = report.totalDays;
     const dailyWage = Math.round(report.baseSalary / 30);
 
     return {
