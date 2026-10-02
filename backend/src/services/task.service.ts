@@ -752,6 +752,13 @@ export async function updateTaskStatus(
   if (status === TaskStatus.COMPLETED) {
     data.points = 10;
     data.completedAt = new Date();
+    if (!task.startDate) {
+      data.startDate = task.createdAt || new Date();
+    }
+  } else if (status === TaskStatus.IN_PROGRESS) {
+    if (!task.startDate) {
+      data.startDate = new Date();
+    }
   } else {
     data.points = 0;
     data.completedAt = null;
@@ -760,10 +767,24 @@ export async function updateTaskStatus(
   if (status === TaskStatus.COMPLETED && completionData) {
     data.completionPhotoUrl = completionData.photoUrl;
     data.completionRemarks = completionData.remarks;
-    data.completionLat = completionData.lat;
-    data.completionLng = completionData.lng;
+    if (completionData.lat != null) data.completionLat = completionData.lat;
+    if (completionData.lng != null) data.completionLng = completionData.lng;
     if (completionData.checklistResponses !== undefined) {
       data.checklistResponses = completionData.checklistResponses;
+    }
+
+    // Fallback: extract lat/lng from GEOTAG checklist item if completionLat/completionLng are still null
+    if ((data.completionLat == null || data.completionLng == null) && Array.isArray(data.checklistResponses)) {
+      const geo = (data.checklistResponses as any[]).find(
+        (r: any) => (r.type === "GEOTAG" || r.id === "geotag" || (r.title && String(r.title).toLowerCase().includes("geotag"))) && r.value
+      );
+      if (geo && typeof geo.value === "string" && geo.value.includes(",")) {
+        const [cLat, cLng] = geo.value.split(",").map((s: string) => parseFloat(s.trim()));
+        if (!isNaN(cLat) && !isNaN(cLng)) {
+          data.completionLat = cLat;
+          data.completionLng = cLng;
+        }
+      }
     }
   }
 

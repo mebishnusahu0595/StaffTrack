@@ -1,7 +1,7 @@
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { useState, useEffect, useMemo } from "react";
-import { Alert, ScrollView, StyleSheet, View, TouchableOpacity, Share, Image, ActivityIndicator } from "react-native";
+import { Alert, ScrollView, StyleSheet, View, TouchableOpacity, Share, Image, ActivityIndicator, Linking } from "react-native";
 import { Button, Card, HelperText, List, Text, TextInput, IconButton } from "react-native-paper";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
@@ -169,6 +169,11 @@ function buildAdminEquivalentDerHtml({
     }
     const photo = rawUrl ? (rawUrl.startsWith("http") ? rawUrl : `${API_ORIGIN_URL}${rawUrl}`) : null;
 
+    const startTimeFormatted = t.startDate ? dayjs(t.startDate).format("hh:mm A") : "--";
+    const completedTimeFormatted = t.completedAt 
+      ? dayjs(t.completedAt).format("hh:mm A") 
+      : (t.updatedAt ? dayjs(t.updatedAt).format("hh:mm A") : "--");
+
     return {
       title: t.title || "Task",
       personName,
@@ -176,6 +181,8 @@ function buildAdminEquivalentDerHtml({
       detailsText,
       contact,
       coords: locationCoords,
+      startTime: startTimeFormatted,
+      completedTime: completedTimeFormatted,
       points: t.points ?? 10,
       photoUrl: photo,
       remarks: t.completionRemarks || ""
@@ -206,8 +213,12 @@ function buildAdminEquivalentDerHtml({
           <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #0f172a; font-size: 8px; font-weight: 700; white-space: nowrap;">
             ${row.contact ? `📞 ${row.contact}` : '<span style="color: #cbd5e1;">--</span>'}
           </td>
+          <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; white-space: nowrap; font-size: 7.5px;">
+            <div style="color: #475569; font-weight: 600;">▶ ${row.startTime}</div>
+            <div style="color: #16a34a; font-weight: 800; margin-top: 1px;">✔ ${row.completedTime}</div>
+          </td>
           <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #0284c7; font-size: 7.5px; font-weight: 700; white-space: nowrap;">
-            ${row.coords ? `🌐 ${row.coords}` : '<span style="color: #cbd5e1;">--</span>'}
+            ${row.coords ? `<a href="https://maps.google.com/?q=${row.coords}" target="_blank" style="color: #0284c7; text-decoration: underline;">🌐 ${row.coords}</a>` : '<span style="color: #cbd5e1;">--</span>'}
           </td>
           <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; text-align: center; white-space: nowrap;">
             <span style="font-size: 7.5px; font-weight: 800; color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 4px; border-radius: 3px;">+${row.points} pts</span>
@@ -227,6 +238,7 @@ function buildAdminEquivalentDerHtml({
             <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Place / Location</th>
             <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Details / Crop</th>
             <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Contact</th>
+            <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Time (Start - Done)</th>
             <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Coordinates</th>
             <th style="padding: 4px 6px; text-align: center; border: 1px solid #e2e8f0;">Points</th>
             <th style="padding: 4px 6px; text-align: center; border: 1px solid #e2e8f0;">Photo</th>
@@ -893,10 +905,38 @@ export function DayEndReportScreen() {
                   <Text style={styles.summarySectionTitle}>COMPLETED TASKS</Text>
                   {(summary.tasks.completed as any[]).map((t) => (
                     <View key={t.id} style={styles.summaryTaskCard}>
-                      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                        <Text style={{ fontWeight: "700", color: "#0F172A", flex: 1 }}>✅ {t.title}</Text>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                        <Text style={{ fontWeight: "700", color: "#0F172A", flex: 1, fontSize: 13 }}>✅ {t.title}</Text>
                         <Text style={{ fontWeight: "800", color: "#16A34A", fontSize: 12 }}>{t.points ?? 0} pts</Text>
                       </View>
+
+                      {/* Task Timing: Start & Complete Time */}
+                      <View style={{ flexDirection: "row", gap: 12, marginTop: 5, backgroundColor: "#F8FAFC", paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: "#E2E8F0" }}>
+                        <Text style={{ fontSize: 11, color: "#475569" }}>
+                          <Text style={{ fontWeight: "700", color: "#334155" }}>Start: </Text>
+                          {t.startDate ? fmtTime(t.startDate) : "—"}
+                        </Text>
+                        <Text style={{ fontSize: 11, color: "#16A34A" }}>
+                          <Text style={{ fontWeight: "700", color: "#334155" }}>Done: </Text>
+                          {t.completedAt ? fmtTime(t.completedAt) : (t.updatedAt ? fmtTime(t.updatedAt) : "—")}
+                        </Text>
+                      </View>
+
+                      {/* Completion Location & Coordinates */}
+                      {(t.completionLat != null && t.completionLng != null) && (
+                        <TouchableOpacity 
+                          onPress={() => Linking.openURL(`https://maps.google.com/?q=${t.completionLat},${t.completionLng}`)}
+                          style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 5 }}
+                        >
+                          <Text style={{ fontSize: 11, color: "#0284C7", fontWeight: "700" }}>
+                            📍 {Number(t.completionLat).toFixed(4)}, {Number(t.completionLng).toFixed(4)}
+                          </Text>
+                          <Text style={{ fontSize: 10, color: "#0284C7", textDecorationLine: "underline" }}>
+                            (Open Map)
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+
                       {t.completionRemarks ? <Text style={{ fontSize: 12, color: "#475569", marginTop: 4 }}>{t.completionRemarks}</Text> : null}
                       {Array.isArray(t.checklistResponses) && t.checklistResponses.map((r: any, i: number) => (
                         <View key={i} style={{ flexDirection: "row", marginTop: 4 }}>

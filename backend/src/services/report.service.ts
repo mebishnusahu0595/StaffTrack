@@ -478,6 +478,10 @@ export async function getDaySummary(actor: AuthUser, userId: string, date: Date)
         description: true,
         priority: true,
         points: true,
+        startDate: true,
+        completedAt: true,
+        completionLat: true,
+        completionLng: true,
         completionRemarks: true,
         completionPhotoUrl: true,
         checklist: true,
@@ -864,13 +868,22 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
     if (extraParts.length > 0) detailsParts.push(...extraParts.slice(0, 2));
     const detailsText = detailsParts.length > 0 ? detailsParts.join(" • ") : (t.description || "");
 
-    let photo: string | null = t.completionPhotoUrl || null;
-    if (!photo && t.checklistResponses && Array.isArray(t.checklistResponses)) {
+    let rawUrl = t.completionPhotoUrl;
+    if (!rawUrl && t.checklistResponses && Array.isArray(t.checklistResponses)) {
       const img = t.checklistResponses.find((item: any) => 
         item.type === "IMAGE" && (item.fileUrl || item.photoUrl || item.image || item.url)
       );
-      if (img) photo = img.fileUrl || img.photoUrl || img.image || img.url;
+      if (img) rawUrl = img.fileUrl || img.photoUrl || img.image || img.url;
     }
+
+    const startTimeFormatted = t.startDate 
+      ? new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" }).format(new Date(t.startDate))
+      : "--";
+    const completedTimeFormatted = t.completedAt
+      ? new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" }).format(new Date(t.completedAt))
+      : (t.updatedAt 
+          ? new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" }).format(new Date(t.updatedAt))
+          : "--");
 
     return {
       title: t.title || "Task",
@@ -879,8 +892,10 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
       detailsText,
       contact,
       coords: locationCoords,
+      startTime: startTimeFormatted,
+      completedTime: completedTimeFormatted,
       points: t.points ?? 10,
-      photoUrl: photo,
+      photoUrl: rawUrl,
       remarks: t.completionRemarks || ""
     };
   };
@@ -909,8 +924,12 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
           <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #0f172a; font-size: 8px; font-weight: 700; white-space: nowrap;">
             ${row.contact ? `📞 ${row.contact}` : '<span style="color: #cbd5e1;">--</span>'}
           </td>
+          <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; white-space: nowrap; font-size: 7.5px;">
+            <div style="color: #475569; font-weight: 600;">▶ ${row.startTime}</div>
+            <div style="color: #16a34a; font-weight: 800; margin-top: 1px;">✔ ${row.completedTime}</div>
+          </td>
           <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #0284c7; font-size: 7.5px; font-weight: 700; white-space: nowrap;">
-            ${row.coords ? `🌐 ${row.coords}` : '<span style="color: #cbd5e1;">--</span>'}
+            ${row.coords ? `<a href="https://maps.google.com/?q=${row.coords}" target="_blank" style="color: #0284c7; text-decoration: underline;">🌐 ${row.coords}</a>` : '<span style="color: #cbd5e1;">--</span>'}
           </td>
           <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; text-align: center; white-space: nowrap;">
             <span style="font-size: 7.5px; font-weight: 800; color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 4px; border-radius: 3px;">+${row.points} pts</span>
@@ -930,6 +949,7 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
             <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Place / Location</th>
             <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Details / Crop</th>
             <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Contact</th>
+            <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Time (Start - Done)</th>
             <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Coordinates</th>
             <th style="padding: 4px 6px; text-align: center; border: 1px solid #e2e8f0;">Points</th>
             <th style="padding: 4px 6px; text-align: center; border: 1px solid #e2e8f0;">Photo</th>

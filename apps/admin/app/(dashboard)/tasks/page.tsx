@@ -1112,8 +1112,9 @@ export default function TasksPage() {
                   <th className="py-4 px-4 text-center">Status</th>
                   <th className="py-4 px-4 text-center">Points</th>
                   <th className="py-4 px-4 text-center">Priority</th>
-                  <th className="py-4 px-4">Created on</th>
-                  <th className="py-4 px-4 min-w-[120px]">Due Date</th>
+                  <th className="py-4 px-4 min-w-[130px]">Start Time</th>
+                  <th className="py-4 px-4 min-w-[130px]">Complete Time</th>
+                  <th className="py-4 px-4 min-w-[110px]">Due Date</th>
                   <th className="py-4 px-6 text-right">Actions</th>
                 </tr>
               </thead>
@@ -1121,7 +1122,7 @@ export default function TasksPage() {
                 {isLoading ? (
                   Array(5).fill(0).map((_, i) => (
                     <tr key={i} className="animate-pulse">
-                      <td colSpan={9} className="p-8"><div className="h-10 bg-slate-100 rounded-xl" /></td>
+                      <td colSpan={10} className="p-8"><div className="h-10 bg-slate-100 rounded-xl" /></td>
                     </tr>
                   ))
                                 ) : (() => {
@@ -1144,7 +1145,7 @@ export default function TasksPage() {
                       return (
                         <React.Fragment key={userId}>
                           <tr className="bg-slate-50/70 hover:bg-slate-100/50 transition-colors">
-                            <td colSpan={9} className="py-2.5 px-6">
+                            <td colSpan={10} className="py-2.5 px-6">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-black text-slate-800">👤 {group.user.name}</span>
@@ -1265,10 +1266,36 @@ export default function TasksPage() {
                                    </Badge>
                                  )}
                               </td>
-                              <td className="py-2 px-4">
-                                <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.parentTask?.createdAt || task.startDate || task.createdAt), 'dd-MM-yyyy')}</span>
+                              <td className="py-2 px-4 whitespace-nowrap">
+                                {task.startDate ? (
+                                  <span className="text-[11px] font-bold text-slate-700">{format(new Date(task.startDate), 'dd MMM, hh:mm a')}</span>
+                                ) : (
+                                  <span className="text-[10px] text-slate-300 font-medium">—</span>
+                                )}
                               </td>
-                              <td className="py-2 px-4">
+                              <td className="py-2 px-4 whitespace-nowrap">
+                                {task.completedAt ? (
+                                  <div className="flex flex-col">
+                                    <span className="text-[11px] font-bold text-emerald-700">{format(new Date(task.completedAt), 'dd MMM, hh:mm a')}</span>
+                                    {task.completionLat != null && task.completionLng != null && (
+                                      <a
+                                        href={`https://maps.google.com/?q=${task.completionLat},${task.completionLng}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-0.5 text-[9px] font-bold text-blue-600 hover:underline mt-0.5"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <MapPin className="h-2.5 w-2.5" /> Map Pin
+                                      </a>
+                                    )}
+                                  </div>
+                                ) : (task.status === "COMPLETED" && task.updatedAt ? (
+                                  <span className="text-[11px] font-bold text-emerald-700">{format(new Date(task.updatedAt), 'dd MMM, hh:mm a')}</span>
+                                ) : (
+                                  <span className="text-[10px] text-slate-300 font-medium">—</span>
+                                ))}
+                              </td>
+                              <td className="py-2 px-4 whitespace-nowrap">
                                 <span className="text-[10px] font-bold text-slate-600">{format(new Date(task.endDate || task.parentTask?.endDate || task.dueDate), 'dd-MM-yyyy')}</span>
                               </td>
                               <td className="py-2 px-6 text-right">
@@ -1397,10 +1424,36 @@ export default function TasksPage() {
                            {task.priority || "Medium"}
                         </Badge>
                       </td>
-                      <td className="py-2 px-4">
-                        <span className="text-[10px] font-bold text-slate-400">{format(new Date(task.parentTask?.createdAt || task.startDate || task.createdAt), 'dd-MM-yyyy')}</span>
+                      <td className="py-2 px-4 whitespace-nowrap">
+                        {task.startDate ? (
+                          <span className="text-[11px] font-bold text-slate-700">{format(new Date(task.startDate), 'dd MMM, hh:mm a')}</span>
+                        ) : (
+                          <span className="text-[10px] text-slate-300 font-medium">—</span>
+                        )}
                       </td>
-                      <td className="py-2 px-4">
+                      <td className="py-2 px-4 whitespace-nowrap">
+                        {task.completedAt ? (
+                          <div className="flex flex-col">
+                            <span className="text-[11px] font-bold text-emerald-700">{format(new Date(task.completedAt), 'dd MMM, hh:mm a')}</span>
+                            {task.completionLat != null && task.completionLng != null && (
+                              <a
+                                href={`https://maps.google.com/?q=${task.completionLat},${task.completionLng}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-0.5 text-[9px] font-bold text-blue-600 hover:underline mt-0.5"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MapPin className="h-2.5 w-2.5" /> Map Pin
+                              </a>
+                            )}
+                          </div>
+                        ) : (task.status === "COMPLETED" && task.updatedAt ? (
+                          <span className="text-[11px] font-bold text-emerald-700">{format(new Date(task.updatedAt), 'dd MMM, hh:mm a')}</span>
+                        ) : (
+                          <span className="text-[10px] text-slate-300 font-medium">—</span>
+                        ))}
+                      </td>
+                      <td className="py-2 px-4 whitespace-nowrap">
                         <span className="text-[10px] font-bold text-slate-600">{format(new Date(task.endDate || task.parentTask?.endDate || task.dueDate), 'dd-MM-yyyy')}</span>
                       </td>
                       <td className="py-2 px-6 text-right">
@@ -1584,6 +1637,33 @@ export default function TasksPage() {
                             </span>
                           </div>
                         </div>
+
+                        {/* Timings & Map Pin */}
+                        {(task.startDate || task.completedAt || (task.completionLat != null && task.completionLng != null)) && (
+                          <div className="flex flex-col gap-0.5 pt-1 text-[9px] border-t border-slate-50">
+                            {task.startDate && (
+                              <span className="text-slate-500 font-bold">
+                                ▶ Start: {format(new Date(task.startDate), 'hh:mm a')}
+                              </span>
+                            )}
+                            {task.completedAt && (
+                              <span className="text-emerald-600 font-bold">
+                                ✔ Done: {format(new Date(task.completedAt), 'hh:mm a')}
+                              </span>
+                            )}
+                            {task.completionLat != null && task.completionLng != null && (
+                              <a
+                                href={`https://maps.google.com/?q=${task.completionLat},${task.completionLng}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-0.5 text-blue-600 font-bold hover:underline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MapPin className="h-2.5 w-2.5" /> Map Pin
+                              </a>
+                            )}
+                          </div>
+                        )}
 
                         {/* Due Date & Move Controls */}
                         <div className="flex items-center justify-between pt-1">
@@ -4577,16 +4657,56 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                )}
             </div>
 
-            {task.status === "COMPLETED" && (
+            {/* Task Timeline & Completion Details */}
+            {(task.startDate || task.completedAt || task.completionRemarks || (task.completionLat != null && task.completionLng != null)) && (
                <div className="space-y-2 pt-4 border-t border-slate-100">
-                  <Label className="text-[10px] font-black uppercase text-blue-600">Completion Details</Label>
-                  <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50 space-y-2">
-                     <p className="text-xs text-slate-600 font-medium">
-                       Completed at: <span className="font-bold text-slate-800">{task.completedAt ? format(new Date(task.completedAt), 'dd MMM yyyy, hh:mm a') : (task.updatedAt ? format(new Date(task.updatedAt), 'dd MMM yyyy, hh:mm a') : "—")}</span>
-                     </p>
-                     <p className="text-sm font-bold text-slate-800 pt-1 border-t border-blue-200/50">
-                        {task.completionRemarks || "No remarks provided."}
-                     </p>
+                  <Label className="text-[10px] font-black uppercase text-blue-600">Task Timeline & Location</Label>
+                  <div className="bg-blue-50/40 p-4 rounded-2xl border border-blue-100/60 space-y-3">
+                     <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-0.5">
+                           <span className="text-[10px] font-black uppercase text-slate-400 block">Start Time</span>
+                           <span className="text-xs font-bold text-slate-800">
+                              {task.startDate ? format(new Date(task.startDate), 'dd MMM yyyy, hh:mm a') : "Not recorded"}
+                           </span>
+                        </div>
+                        <div className="space-y-0.5">
+                           <span className="text-[10px] font-black uppercase text-slate-400 block">Complete Time</span>
+                           <span className="text-xs font-bold text-emerald-700">
+                              {task.completedAt 
+                                 ? format(new Date(task.completedAt), 'dd MMM yyyy, hh:mm a') 
+                                 : (task.status === "COMPLETED" && task.updatedAt ? format(new Date(task.updatedAt), 'dd MMM yyyy, hh:mm a') : "In Progress / Pending")}
+                           </span>
+                        </div>
+                     </div>
+
+                     {(task.completionLat != null && task.completionLng != null) && (
+                        <div className="pt-2.5 border-t border-blue-100/70 flex items-center justify-between gap-2 flex-wrap">
+                           <div>
+                              <span className="text-[10px] font-black uppercase text-slate-400 block">Completion Coordinates</span>
+                              <span className="text-xs font-bold text-slate-700">
+                                 🌐 {Number(task.completionLat).toFixed(5)}, {Number(task.completionLng).toFixed(5)}
+                              </span>
+                           </div>
+                           <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-[10px] font-bold text-blue-600 border-blue-200 bg-white hover:bg-blue-50 rounded-lg gap-1 shrink-0"
+                              onClick={() => window.open(`https://maps.google.com/?q=${task.completionLat},${task.completionLng}`, '_blank')}
+                           >
+                              <MapPin className="h-3 w-3 text-blue-600" /> Open in Google Maps
+                           </Button>
+                        </div>
+                     )}
+
+                     {task.completionRemarks && (
+                        <div className="pt-2 border-t border-blue-100/70">
+                           <span className="text-[10px] font-black uppercase text-slate-400 block">Remarks</span>
+                           <p className="text-xs font-bold text-slate-800 mt-0.5">
+                              {task.completionRemarks}
+                           </p>
+                        </div>
+                     )}
                   </div>
                </div>
             )}

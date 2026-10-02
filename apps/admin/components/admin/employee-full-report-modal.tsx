@@ -820,6 +820,38 @@ export function EmployeeFullReportModal({
                             {task.description && (
                               <p className="text-xs text-slate-500 line-clamp-2">{task.description}</p>
                             )}
+
+                            {/* Timings & Location */}
+                            {(task.startDate || task.completedAt || (task.completionLat != null && task.completionLng != null)) && (
+                              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex flex-col gap-1 text-[10px]">
+                                {task.startDate && (
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-bold text-slate-400">Start Time:</span>
+                                    <span className="font-bold text-slate-700">{dayjs(task.startDate).format("hh:mm A, DD MMM")}</span>
+                                  </div>
+                                )}
+                                {task.completedAt && (
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-bold text-slate-400">Complete Time:</span>
+                                    <span className="font-bold text-emerald-600">{dayjs(task.completedAt).format("hh:mm A, DD MMM")}</span>
+                                  </div>
+                                )}
+                                {task.completionLat != null && task.completionLng != null && (
+                                  <div className="flex items-center justify-between pt-1 border-t border-slate-200/50">
+                                    <span className="font-bold text-slate-400">Coordinates:</span>
+                                    <a
+                                      href={`https://maps.google.com/?q=${task.completionLat},${task.completionLng}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="font-bold text-blue-600 hover:underline flex items-center gap-0.5"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <MapPin className="h-2.5 w-2.5" /> {Number(task.completionLat).toFixed(4)}, {Number(task.completionLng).toFixed(4)}
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
@@ -913,14 +945,36 @@ export function EmployeeFullReportModal({
                 <DialogTitle className="text-base font-black text-slate-900">
                   {inspectingTask.title}
                 </DialogTitle>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Completed on: {inspectingTask.completedAt ? dayjs(inspectingTask.completedAt).format("DD MMM YYYY, hh:mm A") : "—"}
-                </p>
+                <div className="flex items-center gap-3 mt-1 flex-wrap text-xs text-slate-500">
+                  <span>Start: <strong className="text-slate-800">{inspectingTask.startDate ? dayjs(inspectingTask.startDate).format("DD MMM YYYY, hh:mm A") : "—"}</strong></span>
+                  <span>•</span>
+                  <span>Completed: <strong className="text-emerald-700">{inspectingTask.completedAt ? dayjs(inspectingTask.completedAt).format("DD MMM YYYY, hh:mm A") : "—"}</strong></span>
+                </div>
               </div>
               <Badge className="bg-emerald-600 text-white font-black text-[10px] uppercase">
                 {inspectingTask.status}
               </Badge>
             </DialogHeader>
+
+            {/* Timeline & Location Card */}
+            {(inspectingTask.completionLat != null && inspectingTask.completionLng != null) && (
+              <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-2xl flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 block">Completion Location</span>
+                  <span className="text-xs font-bold text-slate-800">
+                    📍 {Number(inspectingTask.completionLat).toFixed(5)}, {Number(inspectingTask.completionLng).toFixed(5)}
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-[10px] font-bold text-blue-600 border-blue-200 bg-white hover:bg-blue-50 rounded-lg gap-1"
+                  onClick={() => window.open(`https://maps.google.com/?q=${inspectingTask.completionLat},${inspectingTask.completionLng}`, '_blank')}
+                >
+                  <MapPin className="h-3 w-3 text-blue-600" /> Open in Google Maps
+                </Button>
+              </div>
+            )}
 
             {/* Remarks & Proof */}
             <div className="space-y-4">

@@ -68,6 +68,8 @@ export type Task = {
   completionRemarks?: string | null;
   completionLat?: number | null;
   completionLng?: number | null;
+  startDate?: string | null;
+  completedAt?: string | null;
   attachmentUrl?: string | null;
   attachmentName?: string | null;
   checklist?: any[] | null;

@@ -217,9 +217,18 @@ export function TasksScreen() {
       try {
         const foregroundPerm = await Location.requestForegroundPermissionsAsync();
         if (foregroundPerm.status === Location.PermissionStatus.GRANTED) {
-          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-          lat = loc.coords.latitude;
-          lng = loc.coords.longitude;
+          try {
+            const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+            lat = loc.coords.latitude;
+            lng = loc.coords.longitude;
+          } catch (gpsErr) {
+            console.warn("[TasksScreen] getCurrentPositionAsync failed, falling back to last known position:", gpsErr);
+            const lastKnown = await Location.getLastKnownPositionAsync();
+            if (lastKnown?.coords) {
+              lat = lastKnown.coords.latitude;
+              lng = lastKnown.coords.longitude;
+            }
+          }
         }
       } catch (locErr) {
         console.warn("[TasksScreen] Failed to retrieve GPS:", locErr);

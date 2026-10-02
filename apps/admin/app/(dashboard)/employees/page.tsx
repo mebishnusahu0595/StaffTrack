@@ -439,6 +439,11 @@ export default function EmployeesPage() {
         if (img) photo = img.fileUrl || img.photoUrl || img.image || img.url;
       }
 
+      const startTimeFormatted = t.startDate ? dayjs(t.startDate).format("hh:mm A") : "--";
+      const completedTimeFormatted = t.completedAt 
+        ? dayjs(t.completedAt).format("hh:mm A") 
+        : (t.updatedAt ? dayjs(t.updatedAt).format("hh:mm A") : "--");
+
       return {
         title: t.title || "Task",
         personName,
@@ -446,6 +451,8 @@ export default function EmployeesPage() {
         detailsText,
         contact,
         coords: locationCoords,
+        startTime: startTimeFormatted,
+        completedTime: completedTimeFormatted,
         points: t.points ?? 10,
         photoUrl: photo,
         remarks: t.completionRemarks || ""
@@ -476,8 +483,12 @@ export default function EmployeesPage() {
             <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #0f172a; font-size: 8px; font-weight: 700; white-space: nowrap;">
               ${row.contact ? `📞 ${row.contact}` : '<span style="color: #cbd5e1;">--</span>'}
             </td>
+            <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; white-space: nowrap; font-size: 7.5px;">
+              <div style="color: #475569; font-weight: 600;">▶ ${row.startTime}</div>
+              <div style="color: #16a34a; font-weight: 800; margin-top: 1px;">✔ ${row.completedTime}</div>
+            </td>
             <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #0284c7; font-size: 7.5px; font-weight: 700; white-space: nowrap;">
-              ${row.coords ? `🌐 ${row.coords}` : '<span style="color: #cbd5e1;">--</span>'}
+              ${row.coords ? `<a href="https://maps.google.com/?q=${row.coords}" target="_blank" style="color: #0284c7; text-decoration: underline;">🌐 ${row.coords}</a>` : '<span style="color: #cbd5e1;">--</span>'}
             </td>
             <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; text-align: center; white-space: nowrap;">
               <span style="font-size: 7.5px; font-weight: 800; color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 4px; border-radius: 3px;">+${row.points} pts</span>
@@ -497,6 +508,7 @@ export default function EmployeesPage() {
               <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Place / Location</th>
               <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Details / Crop</th>
               <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Contact</th>
+              <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Time (Start - Done)</th>
               <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Coordinates</th>
               <th style="padding: 4px 6px; text-align: center; border: 1px solid #e2e8f0;">Points</th>
               <th style="padding: 4px 6px; text-align: center; border: 1px solid #e2e8f0;">Photo</th>

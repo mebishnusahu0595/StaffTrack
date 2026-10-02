@@ -65,6 +65,8 @@ export interface Task {
   repeatFrequency?: "DAILY" | "WEEKLY" | "MONTHLY" | null;
   completionPhotoUrl?: string | null;
   completionRemarks?: string | null;
+  completionLat?: number | null;
+  completionLng?: number | null;
   completedAt?: string | null;
   assignedTo: User;
   assignedBy: User;
