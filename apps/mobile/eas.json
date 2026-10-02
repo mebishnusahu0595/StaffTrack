@@ -17,7 +17,8 @@
     },
     "production": {
       "env": {
-        "APP_ENV": "production"
+        "APP_ENV": "production",
+        "EAS_BUILD_DISABLE_EXPO_DOCTOR_STEP": "1"
       },
       "node": "20.18.0",
       "pnpm": "9.12.0",
