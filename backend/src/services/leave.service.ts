@@ -2,14 +2,19 @@ import { LeaveStatus, UserRole, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import type { AuthUser } from "../types/auth";
 import * as notificationService from "./notification.service";
+import { AppError } from "../lib/errors";
 
 export async function createLeaveRequest(
   userId: string,
   companyId: string,
-  data: { startDate: Date; endDate: Date; reason: string; status?: LeaveStatus; approvedById?: string }
+  data: { startDate: Date; endDate: Date; reason: string; status?: LeaveStatus; approvedById?: string; confirmed?: boolean }
 ) {
   const reqStart = new Date(data.startDate);
   const reqEnd = new Date(data.endDate);
+  
+  // Total days of this request (e.g. 5th to 9th = 5 days)
+  const reqTotalDays = Math.max(1, Math.round((reqEnd.getTime() - reqStart.getTime()) / (24 * 60 * 60 * 1000)) + 1);
+
   const monthStart = new Date(reqStart.getFullYear(), reqStart.getMonth(), 1);
   const monthEnd = new Date(reqStart.getFullYear(), reqStart.getMonth() + 1, 0, 23, 59, 59, 999);
 
@@ -39,16 +44,49 @@ export async function createLeaveRequest(
   const currentReqDaysThisMonth = countDaysInMonth(reqStart, reqEnd);
   const totalDaysThisMonth = priorDaysThisMonth + currentReqDaysThisMonth;
 
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, managerId: true, baseSalary: true, group: true }
+  });
+
+  const effectiveBaseSalary = (user?.baseSalary != null && user.baseSalary > 0)
+    ? user.baseSalary
+    : (user?.group?.baseSalary || 0);
+  const perDaySalary = effectiveBaseSalary > 0 ? Math.round(effectiveBaseSalary / 30) : 0;
+  const rateText = perDaySalary > 0 ? `₹${perDaySalary}/day` : `Base Salary / 30`;
+
   let warning: string | null = null;
-  if (totalDaysThisMonth > 2) {
-    const lwpDays = totalDaysThisMonth - 2;
-    warning = `Warning: 2 days of leave per month are payable. You have ${priorDaysThisMonth} prior leave day(s) this month. With this request of ${currentReqDaysThisMonth} day(s), ${Math.min(currentReqDaysThisMonth, lwpDays)} day(s) will be Leave Without Pay (LWP) and pay will be deducted from your salary.`;
+  // Trigger warning / confirmation popup if single request > 2 days OR total month leaves > 2 days
+  if (reqTotalDays > 2 || totalDaysThisMonth > 2) {
+    const lwpDays = Math.max(Math.max(0, reqTotalDays - 2), Math.max(0, totalDaysThisMonth - 2));
+    const excessCount = Math.max(1, lwpDays);
+
+    // Check if the user has confirmed LWP
+    const reasonText = (data.reason || "").toLowerCase();
+    const hasConfirmed = 
+      reasonText.includes("confirm") ||
+      reasonText.includes("agree") ||
+      reasonText.includes("yes") ||
+      reasonText.includes("ok") ||
+      reasonText.includes("ha") ||
+      reasonText.includes("haa") ||
+      reasonText.includes("lwp") ||
+      reasonText.includes("manzoor") ||
+      reasonText.includes("swikar") ||
+      data.confirmed === true;
+
+    if (!hasConfirmed) {
+      const popupMsg = `⚠️ LEAVE POLICY NOTICE:\n\nAap ${reqTotalDays} din ki leave le rahe hain (is month total ${totalDaysThisMonth} din).\n\nCompany policy ke anusaar mahine me keval 2 din PAID leave milti hai. Baaki ${excessCount} din 'Leave Without Pay' (LWP) rahega aur per-day salary deduct hogi (${rateText}).\n\nAgar aapko yeh manzoor hai, toh Reason me 'CONFIRM' likh kar dobara Submit karein.`;
+      throw new AppError(400, popupMsg);
+    }
+
+    warning = `Warning: 2 paid leaves allowed per month. This request is for ${reqTotalDays} days (Total: ${totalDaysThisMonth} days this month). ${excessCount} day(s) exceed the 2-day paid limit and will be Leave Without Pay (LWP). Daily pay deduction: ${rateText}.`;
 
     try {
       await notificationService.createNotification(
         userId,
         "Leave Warning: LWP Notice",
-        `Your leave request from ${reqStart.toLocaleDateString()} to ${reqEnd.toLocaleDateString()} exceeds the 2-day paid leave limit for this month. Additional days will be marked as Leave Without Pay (LWP).`,
+        warning,
         "LEAVE_WARNING"
       );
     } catch (err) {
@@ -56,10 +94,10 @@ export async function createLeaveRequest(
     }
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { name: true, managerId: true }
-  });
+  const lwpNoticeTag = (reqTotalDays > 2 || totalDaysThisMonth > 2)
+    ? `\n\n⚠️ [Employee Confirmed: ${reqTotalDays} days leave requested (> 2 days monthly limit). ${Math.max(1, totalDaysThisMonth - 2)} day(s) marked as LWP - Daily deduction: ${rateText}]`
+    : "";
+  const finalReason = `${data.reason || ""}${lwpNoticeTag}`.trim();
 
   const leave = await prisma.leaveRequest.create({
     data: {
@@ -67,7 +105,7 @@ export async function createLeaveRequest(
       companyId,
       startDate: new Date(data.startDate),
       endDate: new Date(data.endDate),
-      reason: data.reason,
+      reason: finalReason,
       status: data.status || "PENDING",
       approvedById: data.status === "APPROVED" ? data.approvedById : null
     }
@@ -157,13 +195,32 @@ export async function listLeaveRequests(actor: AuthUser, filter?: any) {
     where.userId = filter.userId;
   }
 
-  return prisma.leaveRequest.findMany({
+  const leaves = await prisma.leaveRequest.findMany({
     where,
     include: {
       user: { select: { id: true, name: true, designation: true, group: true, managerId: true } },
       approvedBy: { select: { id: true, name: true } }
     },
     orderBy: { createdAt: "desc" }
+  });
+
+  return leaves.map((l) => {
+    const s = new Date(l.startDate);
+    const e = new Date(l.endDate);
+    const days = Math.max(1, Math.round((e.getTime() - s.getTime()) / (24 * 60 * 60 * 1000)) + 1);
+    if (days > 2) {
+      const lwpDays = days - 2;
+      const warningText = `⚠️ Leave Warning: ${days} days requested (> 2 days monthly limit). ${lwpDays} day(s) marked as LWP / Salary Deduction.`;
+      const reasonText = l.reason && !l.reason.includes("⚠️ [LWP Warning")
+        ? `${l.reason}\n\n⚠️ [LWP Warning: ${days} days requested. Exceeds 2 monthly paid leaves. ${lwpDays} day(s) marked as LWP - Salary Deduction applied]`.trim()
+        : l.reason;
+      return {
+        ...l,
+        reason: reasonText,
+        warning: warningText
+      };
+    }
+    return l;
   });
 }
 
@@ -265,7 +322,7 @@ export async function getYearlyLeaveSummary(userId: string, companyId: string, y
     where: {
       userId,
       companyId,
-      status: "APPROVED",
+      status: { in: ["APPROVED", "PENDING"] },
       startDate: { lte: endOfYear },
       endDate: { gte: startOfYear }
     }
@@ -291,12 +348,13 @@ export async function getYearlyLeaveSummary(userId: string, companyId: string, y
   const monthlyPaidLimit = 2;
   const monthlyPaidUsed = Math.min(monthlyPaidLimit, usedThisMonth);
   const monthlyLwpUsed = Math.max(0, usedThisMonth - monthlyPaidLimit);
-  const exceedsMonthlyLimit = usedThisMonth >= monthlyPaidLimit;
+  const exceedsMonthlyLimit = usedThisMonth > monthlyPaidLimit;
 
   const effectiveBaseSalary = (user?.baseSalary != null && user.baseSalary > 0)
     ? user.baseSalary
     : (user?.group?.baseSalary || 0);
-  const perDaySalary = Math.round(effectiveBaseSalary / 30);
+  const perDaySalary = effectiveBaseSalary > 0 ? Math.round(effectiveBaseSalary / 30) : 0;
+  const rateText = perDaySalary > 0 ? `₹${perDaySalary}/day` : `Base / 30`;
 
   return {
     userId,
@@ -313,7 +371,7 @@ export async function getYearlyLeaveSummary(userId: string, companyId: string, y
     exceedsMonthlyLimit,
     perDaySalary,
     warning: exceedsMonthlyLimit
-      ? `Warning: 2 days of leave per month are payable. You have used ${usedThisMonth} leave days this month. Additional leaves are Leave Without Pay (LWP) and will deduct ₹${perDaySalary}/day.`
+      ? `Warning: 2 days of leave per month are payable. You have ${usedThisMonth} leave day(s) this month. ${usedThisMonth - monthlyPaidLimit} day(s) exceed the 2-day limit and will be Leave Without Pay (LWP). Salary will be deducted at ${rateText}.`
       : null
   };
 }
