@@ -286,7 +286,7 @@ export async function getYearlyLeaveSummary(userId: string, companyId: string, y
     usedThisMonth += countDaysInInterval(l.startDate, l.endDate, startOfMonth, endOfMonth);
   }
 
-  const yearlyQuota = 20; // Company yearly leave quota: 20 days
+  const yearlyQuota = 24; // Company yearly leave quota: 24 days (2 paid leaves/month * 12 months)
   const availableYearly = Math.max(0, yearlyQuota - usedYearly);
   const monthlyPaidLimit = 2;
   const monthlyPaidUsed = Math.min(monthlyPaidLimit, usedThisMonth);

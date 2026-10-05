@@ -80,13 +80,13 @@ export function LeaveRequestScreen() {
             <View style={styles.summaryHeader}>
               <RN.Text style={styles.summaryTitle}>Annual Leave Balance ({summary?.year || new Date().getFullYear()})</RN.Text>
               <View style={styles.quotaPill}>
-                <RN.Text style={styles.quotaPillText}>Total: {summary?.yearlyQuota || 20} Days</RN.Text>
+                <RN.Text style={styles.quotaPillText}>Total: {summary?.yearlyQuota || 24} Days</RN.Text>
               </View>
             </View>
 
             <View style={styles.statsRow}>
               <View style={styles.statBox}>
-                <RN.Text style={styles.statNumber}>{summary?.availableYearly ?? 20}</RN.Text>
+                <RN.Text style={styles.statNumber}>{summary?.availableYearly ?? 24}</RN.Text>
                 <RN.Text style={styles.statLabel}>Available</RN.Text>
               </View>
               <View style={styles.statDivider} />

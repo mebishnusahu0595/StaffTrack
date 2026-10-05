@@ -245,7 +245,7 @@ export default function LeaveManagementPage() {
     queryFn: () => fetchCompanyYearlyLeaveSummaries()
   });
 
-  const [showYearlyBreakdown, setShowYearlyBreakdown] = useState(true);
+  const [showYearlyBreakdown, setShowYearlyBreakdown] = useState(false);
 
   // Mutations
   const updateLeaveStatusMutation = useMutation({
@@ -409,7 +409,7 @@ export default function LeaveManagementPage() {
               <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
                 Annual Leave Quota & Policy ({new Date().getFullYear()})
                 <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200/60 font-bold text-[10px]">
-                  20 Yearly Leaves
+                  24 Yearly Leaves
                 </Badge>
               </h2>
               <p className="text-xs text-slate-500 font-medium">
@@ -424,7 +424,7 @@ export default function LeaveManagementPage() {
             className="rounded-xl font-bold text-xs gap-2 border-slate-200"
           >
             <Sliders className="h-3.5 w-3.5 text-slate-500" />
-            {showYearlyBreakdown ? "Hide Staff Balances" : "View Staff Balances"}
+            {showYearlyBreakdown ? "Hide Staff Balances" : "Show Staff Balances"}
           </Button>
         </div>
 
@@ -432,7 +432,7 @@ export default function LeaveManagementPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100/60">
             <p className="text-[10px] font-black uppercase tracking-wider text-blue-600">Annual Quota</p>
-            <p className="text-2xl font-black text-slate-900 mt-1">20 <span className="text-xs font-bold text-slate-500">Days / Staff</span></p>
+            <p className="text-2xl font-black text-slate-900 mt-1">24 <span className="text-xs font-bold text-slate-500">Days / Staff</span></p>
             <p className="text-[11px] text-slate-500 font-medium mt-1">Total allowed calendar year leaves (Jan – Dec)</p>
           </div>
           <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/50 border border-emerald-100/60">
@@ -579,7 +579,7 @@ export default function LeaveManagementPage() {
                     {userSummary && (
                       <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
                         <div className="flex items-center justify-between text-[11px] font-bold">
-                          <span className="text-slate-500">Annual Available: <strong className="text-emerald-700">{userSummary.availableYearly} / 20</strong></span>
+                          <span className="text-slate-500">Annual Available: <strong className="text-emerald-700">{userSummary.availableYearly} / {userSummary.yearlyQuota || 24}</strong></span>
                           <span className="text-slate-500">Month: <strong className={userSummary.exceedsMonthlyLimit ? "text-rose-600 font-black" : "text-slate-700"}>{userSummary.usedThisMonth} / 2</strong></span>
                         </div>
                         {userSummary.exceedsMonthlyLimit && (
