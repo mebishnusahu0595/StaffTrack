@@ -428,6 +428,7 @@ export async function calculateMusterReport(companyId: string, month: number, ye
     const today = new Date();
     today.setHours(23, 59, 59, 999);
     let monthlyPoints = 0;
+    let leaveDaysCount = 0;
 
     daysInMonth.forEach((day) => {
       const dateStr = format(day, "yyyy-MM-dd");
@@ -436,20 +437,36 @@ export async function calculateMusterReport(companyId: string, month: number, ye
 
       if (day.getDay() === 0) status = "W"; // Only Sunday is a weekend
 
+      let isLeave = false;
       const applicableHoliday = findHolidayForUser(holidays, user, day);
       if (applicableHoliday) {
-        status = applicableHoliday.type === "HOLIDAY" ? "H" : "L";
+        if (applicableHoliday.type === "HOLIDAY") {
+          status = "H";
+        } else {
+          isLeave = true;
+        }
       }
 
       const attendance = user.attendances.find((row: any) => isSameDay(new Date(row.date), day));
       if (attendance) {
-        if (attendance.status === "PRESENT" && attendance.checkInApproved === false) status = "PEN";
-        else if (attendance.status === "PRESENT") status = "P";
-        else if (attendance.status === "HALF_DAY") status = "HD";
-        else if (attendance.status === "ON_LEAVE") status = "L";
+        if (attendance.status === "PRESENT" && attendance.checkInApproved === false) {
+          status = "PEN";
+          isLeave = false;
+        } else if (attendance.status === "PRESENT") {
+          status = "P";
+          isLeave = false;
+        } else if (attendance.status === "HALF_DAY") {
+          status = "HD";
+          isLeave = false;
+        } else if (attendance.status === "ON_LEAVE") {
+          isLeave = true;
+        }
       }
 
-      if (dayDate > today) {
+      if (isLeave) {
+        leaveDaysCount++;
+        status = leaveDaysCount <= 2 ? "L" : "LWP";
+      } else if (dayDate > today && status !== "H") {
         status = "-";
       }
 

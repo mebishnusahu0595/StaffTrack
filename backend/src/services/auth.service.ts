@@ -75,11 +75,16 @@ export async function login(email: string, password: string) {
 }
 
 export async function refreshAccessToken(refreshToken: string) {
-  const payload = jwt.verify(refreshToken, getRefreshSecret()) as JwtPayload & {
-    tokenType?: string;
-  };
+  let payload: (JwtPayload & { tokenType?: string }) | undefined;
+  try {
+    payload = jwt.verify(refreshToken, getRefreshSecret()) as JwtPayload & {
+      tokenType?: string;
+    };
+  } catch (_err) {
+    unauthorized("Refresh token expired or invalid");
+  }
 
-  if (!payload.sub || payload.tokenType !== "refresh") {
+  if (!payload || !payload.sub || payload.tokenType !== "refresh") {
     unauthorized("Invalid refresh token");
   }
 

@@ -116,6 +116,7 @@ async function getFcmAccessToken(serviceAccount: ServiceAccount): Promise<string
     headers: {
       "Content-Type": "application/x-www-form-urlencoded"
     },
+    signal: AbortSignal.timeout(4000),
     body: new URLSearchParams({
       grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
       assertion: token
@@ -170,6 +171,7 @@ async function sendFcmPushNotification(token: string, title: string, message: st
         "Content-Type": "application/json",
         "Authorization": `Bearer ${accessToken}`
       },
+      signal: AbortSignal.timeout(4000),
       body: JSON.stringify({
         message: {
           token,

@@ -57,6 +57,7 @@ export default function MusterReportPage() {
       case "HD": return "bg-amber-400 text-white";
       case "A": return "bg-rose-500 text-white";
       case "L": return "bg-indigo-500 text-white";
+      case "LWP": return "bg-purple-600 text-white";
       case "H": return "bg-amber-200 text-amber-700";
       case "W": return "bg-slate-100 text-slate-400";
       default: return "bg-slate-50 text-slate-300";
@@ -65,12 +66,13 @@ export default function MusterReportPage() {
 
   const exportToCSV = () => {
     const dayHeaders = days.map((day: string) => dayjs(day).format("DD"));
-    const enrichedHeaders = ["Employee", "Group/Dept", "Monthly Points", "Present Days", "Total Leaves", "Total Holidays", "Total Absents", ...dayHeaders];
+    const enrichedHeaders = ["Employee", "Group/Dept", "Monthly Points", "Present Days", "Paid Leaves (L)", "LWP (Unpaid)", "Total Holidays", "Total Absents", ...dayHeaders];
 
     const rowsData = filteredData.map((item: any) => {
       const attendanceValues = Object.values(item.attendance || {});
       const totalPresent = attendanceValues.filter((v: any) => v === "P" || v === "HD").length;
       const totalLeaves = attendanceValues.filter((v: any) => v === "L").length;
+      const totalLwp = attendanceValues.filter((v: any) => v === "LWP").length;
       const totalHolidays = attendanceValues.filter((v: any) => v === "H").length;
       const totalAbsents = attendanceValues.filter((v: any) => v === "A").length;
 
@@ -85,6 +87,7 @@ export default function MusterReportPage() {
         item.monthlyPoints ?? 0,
         totalPresent,
         totalLeaves,
+        totalLwp,
         totalHolidays,
         totalAbsents,
         ...dayValues
@@ -183,7 +186,8 @@ export default function MusterReportPage() {
                        <th className="sticky left-0 z-20 bg-slate-50/50 px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest border-r border-slate-100">Employee / Dept</th>
                        <th className="px-4 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[80px] border-r border-slate-100/50">Points</th>
                        <th className="px-4 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[80px] border-r border-slate-100/50">Present</th>
-                       <th className="px-4 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[80px] border-r border-slate-100/50">Leaves</th>
+                       <th className="px-4 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[80px] border-r border-slate-100/50">Leaves (L)</th>
+                       <th className="px-4 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[80px] border-r border-slate-100/50">LWP</th>
                        <th className="px-4 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[80px] border-r border-slate-100/50">Holidays</th>
                        <th className="px-4 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center min-w-[80px] border-r border-slate-100/50">Absents</th>
                        {days.map((day: string) => (
@@ -212,10 +216,15 @@ export default function MusterReportPage() {
                              </div>
                            </td>
                            <td className="px-4 py-4 border-r border-slate-50/50 text-center">
-                             <div className="inline-flex min-w-[40px] items-center justify-center rounded-lg bg-indigo-50 px-2 py-1 text-[11px] font-black text-indigo-700">
+                             <div className="inline-flex min-w-[40px] items-center justify-center rounded-lg bg-indigo-50 px-2 py-1 text-[11px] font-black text-indigo-700" title="Paid Leaves (Max 2)">
                                {Object.values(item.attendance || {}).filter(v => v === "L").length}
                              </div>
                            </td>
+                           <td className="px-4 py-4 border-r border-slate-50/50 text-center">
+                              <div className="inline-flex min-w-[40px] items-center justify-center rounded-lg bg-purple-50 px-2 py-1 text-[11px] font-black text-purple-700" title="Leave Without Pay (Salary Deducted)">
+                                {Object.values(item.attendance || {}).filter(v => v === "LWP").length}
+                              </div>
+                            </td>
                            <td className="px-4 py-4 border-r border-slate-50/50 text-center">
                              <div className="inline-flex min-w-[40px] items-center justify-center rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-black text-amber-700">
                                {Object.values(item.attendance || {}).filter(v => v === "H").length}
@@ -256,7 +265,8 @@ export default function MusterReportPage() {
                  <LegendItem color="bg-emerald-500" label="P: Present" />
                  <LegendItem color="bg-amber-400" label="HD: Half Day" />
                  <LegendItem color="bg-rose-500" label="A: Absent" />
-                 <LegendItem color="bg-indigo-500" label="L: Leave" />
+                 <LegendItem color="bg-indigo-500" label="L: Paid Leave" />
+                 <LegendItem color="bg-purple-600" label="LWP: Leave Without Pay" />
                  <LegendItem color="bg-amber-200" label="H: Holiday" />
                  <LegendItem color="bg-slate-100" label="W: Weekend" />
               </div>

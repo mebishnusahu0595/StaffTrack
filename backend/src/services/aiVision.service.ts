@@ -3,8 +3,9 @@ import path from "path";
 import crypto from "crypto";
 import { callGeminiWithFallback, getGeminiApiKey } from "../lib/gemini";
 
-// Timeout for Gemini API calls (25s to handle large image payloads reliably)
-const GEMINI_TIMEOUT_MS = 25_000;
+// Timeout for Gemini API calls (strict 3.5s to prevent attendance punch delays and 504 network errors)
+const GEMINI_TIMEOUT_MS = 3_500;
+const FAST_VISION_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
 
 export interface FaceAiResult {
   isHumanFace: boolean;
@@ -151,7 +152,7 @@ function parseGeminiJson<T>(rawText: string): T | null {
 
 /** Call Gemini API with automatic model fallback sequence */
 async function callGeminiWithRetry(body: object, timeoutMs: number = GEMINI_TIMEOUT_MS): Promise<any> {
-  return callGeminiWithFallback(body, { timeoutMs });
+  return callGeminiWithFallback(body, { timeoutMs, models: FAST_VISION_MODELS });
 }
 
 /**
