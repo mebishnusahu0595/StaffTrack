@@ -344,7 +344,7 @@ export default function EmployeesPage() {
       );
     }
 
-    // Only get completed tasks for this day
+    // Only get completed tasks for this day and sort chronologically
     const completedTasks = dayTasks.filter((t: any) => 
       t.status === "COMPLETED" &&
       (
@@ -352,7 +352,11 @@ export default function EmployeesPage() {
         dayjs(t.dueDate).format("YYYY-MM-DD") === reportDateStr ||
         dayjs(t.updatedAt).format("YYYY-MM-DD") === reportDateStr
       )
-    );
+    ).sort((a: any, b: any) => {
+      const timeA = new Date(a.completedAt || a.updatedAt || a.startedAt || a.startDate || 0).getTime();
+      const timeB = new Date(b.completedAt || b.updatedAt || b.startedAt || b.startDate || 0).getTime();
+      return timeA - timeB;
+    });
     const completedCount = completedTasks.length;
 
     // Calculate month-to-date distance
@@ -376,7 +380,7 @@ export default function EmployeesPage() {
     const breakTimeLabel = breakTimeMs > 0 ? formatDurationLabel(breakTimeMs) : "0h 0m";
 
     // Helper to parse all task fields into clean columns
-    const parseTaskDetails = (t: any) => {
+    const parseTaskDetails = (t: any, idx: number) => {
       let locationCoords = "";
       if (t.completionLat != null && t.completionLng != null) {
         locationCoords = `${Number(t.completionLat).toFixed(4)}, ${Number(t.completionLng).toFixed(4)}`;
@@ -439,10 +443,23 @@ export default function EmployeesPage() {
         if (img) photo = img.fileUrl || img.photoUrl || img.image || img.url;
       }
 
-      const startTimeFormatted = t.startDate ? dayjs(t.startDate).format("hh:mm A") : "--";
-      const completedTimeFormatted = t.completedAt 
-        ? dayjs(t.completedAt).format("hh:mm A") 
-        : (t.updatedAt ? dayjs(t.updatedAt).format("hh:mm A") : "--");
+      const completedDate = t.completedAt ? new Date(t.completedAt) : (t.updatedAt ? new Date(t.updatedAt) : null);
+      const completedTimeFormatted = completedDate ? dayjs(completedDate).format("hh:mm A") : "--";
+
+      let startTimeFormatted = "--";
+      if (t.startedAt) {
+        startTimeFormatted = dayjs(t.startedAt).format("hh:mm A");
+      } else if (idx > 0 && completedTasks[idx - 1]) {
+        const prev = completedTasks[idx - 1];
+        const prevDone = prev.completedAt || prev.updatedAt;
+        startTimeFormatted = prevDone ? dayjs(prevDone).format("hh:mm A") : "--";
+      } else if (dayAttendanceSessions[0]?.checkInTime && completedDate && new Date(dayAttendanceSessions[0].checkInTime).getTime() < completedDate.getTime()) {
+        startTimeFormatted = dayjs(dayAttendanceSessions[0].checkInTime).format("hh:mm A");
+      } else if (completedDate) {
+        startTimeFormatted = dayjs(new Date(completedDate.getTime() - 25 * 60 * 1000)).format("hh:mm A");
+      } else if (t.startDate) {
+        startTimeFormatted = dayjs(t.startDate).format("hh:mm A");
+      }
 
       return {
         title: t.title || "Task",
@@ -464,7 +481,7 @@ export default function EmployeesPage() {
       tasksGridHtml = `<p style="font-size: 10px; color: #94a3b8; font-style: italic; margin: 0; padding: 4px 0;">No completed tasks recorded on this date.</p>`;
     } else {
       const tableRows = completedTasks.map((t, idx) => {
-        const row = parseTaskDetails(t);
+        const row = parseTaskDetails(t, idx);
         const isEven = idx % 2 === 0;
         return `
           <tr style="background: ${isEven ? '#ffffff' : '#f8fafc'}; border-bottom: 1px solid #e2e8f0;">

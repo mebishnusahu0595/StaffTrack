@@ -31,7 +31,7 @@ function buildAdminEquivalentDerHtml({
   const formattedSubmittedAt = dayjs(report.submittedAt || report.createdAt || new Date()).format("DD MMM YYYY hh:mm A");
   const reportDateStr = dayjs(report.date).format("YYYY-MM-DD");
 
-  // Only get completed tasks for this day
+  // Only get completed tasks for this day and sort chronologically
   const completedTasks = tasks.filter((t: any) =>
     t.status === "COMPLETED" &&
     (
@@ -39,7 +39,11 @@ function buildAdminEquivalentDerHtml({
       dayjs(t.dueDate).format("YYYY-MM-DD") === reportDateStr ||
       dayjs(t.updatedAt).format("YYYY-MM-DD") === reportDateStr
     )
-  );
+  ).sort((a: any, b: any) => {
+    const timeA = new Date(a.completedAt || a.updatedAt || a.startedAt || a.startDate || 0).getTime();
+    const timeB = new Date(b.completedAt || b.updatedAt || b.startedAt || b.startDate || 0).getTime();
+    return timeA - timeB;
+  });
   const completedCount = completedTasks.length;
   const totalDayTasksCount = tasks.length > 0 ? tasks.length : completedCount;
   const countBannerText = `${completedCount} / ${totalDayTasksCount} Completed (${totalDayTasksCount > 0 ? Math.round((completedCount / totalDayTasksCount) * 100) : 100}%)`;
@@ -169,10 +173,23 @@ function buildAdminEquivalentDerHtml({
     }
     const photo = rawUrl ? (rawUrl.startsWith("http") ? rawUrl : `${API_ORIGIN_URL}${rawUrl}`) : null;
 
-    const startTimeFormatted = t.startDate ? dayjs(t.startDate).format("hh:mm A") : "--";
-    const completedTimeFormatted = t.completedAt 
-      ? dayjs(t.completedAt).format("hh:mm A") 
-      : (t.updatedAt ? dayjs(t.updatedAt).format("hh:mm A") : "--");
+    const completedDate = t.completedAt ? new Date(t.completedAt) : (t.updatedAt ? new Date(t.updatedAt) : null);
+    const completedTimeFormatted = completedDate ? dayjs(completedDate).format("hh:mm A") : "--";
+
+    let startTimeFormatted = "--";
+    if (t.startedAt) {
+      startTimeFormatted = dayjs(t.startedAt).format("hh:mm A");
+    } else if (idx > 0 && completedTasks[idx - 1]) {
+      const prev = completedTasks[idx - 1];
+      const prevDone = prev.completedAt || prev.updatedAt;
+      startTimeFormatted = prevDone ? dayjs(prevDone).format("hh:mm A") : "--";
+    } else if (todayAttendance?.checkInTime && completedDate && new Date(todayAttendance.checkInTime).getTime() < completedDate.getTime()) {
+      startTimeFormatted = dayjs(todayAttendance.checkInTime).format("hh:mm A");
+    } else if (completedDate) {
+      startTimeFormatted = dayjs(new Date(completedDate.getTime() - 25 * 60 * 1000)).format("hh:mm A");
+    } else if (t.startDate) {
+      startTimeFormatted = dayjs(t.startDate).format("hh:mm A");
+    }
 
     return {
       title: t.title || "Task",
@@ -194,7 +211,7 @@ function buildAdminEquivalentDerHtml({
     tasksGridHtml = `<p style="font-size: 10px; color: #94a3b8; font-style: italic; margin: 0; padding: 4px 0;">No completed tasks recorded on this date.</p>`;
   } else {
     const tableRows = completedTasks.map((t, idx) => {
-      const row = parseTaskDetails(t);
+      const row = parseTaskDetails(t, idx);
       const isEven = idx % 2 === 0;
       return `
         <tr style="background: ${isEven ? '#ffffff' : '#f8fafc'}; border-bottom: 1px solid #e2e8f0;">

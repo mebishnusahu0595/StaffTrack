@@ -71,6 +71,7 @@ export interface Task {
   assignedTo: User;
   assignedBy: User;
   startDate?: string | null;
+  startedAt?: string | null;
   endDate?: string | null;
   validations?: string[] | null;
   checklist?: any[] | null;

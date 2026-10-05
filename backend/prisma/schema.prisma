@@ -152,6 +152,7 @@ model Task {
   parentTaskId       String?
   reminder           Int?
   startDate          DateTime?
+  startedAt          DateTime?
   templateId         String?
   validations        Json?
   completedAt        DateTime?
@@ -172,6 +173,7 @@ model Task {
   @@index([parentTaskId])
   @@index([dueDate])
   @@index([startDate])
+  @@index([startedAt])
   @@index([completedAt])
   @@index([assignedToId, dueDate])
 }

@@ -69,6 +69,7 @@ export type Task = {
   completionLat?: number | null;
   completionLng?: number | null;
   startDate?: string | null;
+  startedAt?: string | null;
   completedAt?: string | null;
   attachmentUrl?: string | null;
   attachmentName?: string | null;
@@ -229,7 +230,7 @@ export async function fetchTasks(date?: string | unknown): Promise<Task[]> {
 export async function updateTaskStatus(
   taskId: string, 
   status: TaskStatus, 
-  completionData?: { photoUrl?: string; remarks?: string; lat?: number; lng?: number; checklistResponses?: any }
+  completionData?: { photoUrl?: string; remarks?: string; lat?: number; lng?: number; checklistResponses?: any; startedAt?: string }
 ): Promise<Task> {
   return unwrap(await api.patch<ApiEnvelope<Task>>(`/tasks/${taskId}/status`, { status, completionData }));
 }

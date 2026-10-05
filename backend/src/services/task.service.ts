@@ -11,6 +11,7 @@ interface CreateTaskInput {
   assignedToId: string;
   dueDate: Date;
   startDate?: Date | null;
+  startedAt?: Date | null;
   endDate?: Date | null;
   location?: {
     lat: number;
@@ -88,6 +89,7 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
       assignedById: actor.id,
       dueDate: baseDueDate,
       startDate: baseStartDate,
+      startedAt: input.startedAt ? new Date(input.startedAt) : null,
       endDate: baseEndDate,
       lat,
       lng,
@@ -338,6 +340,7 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
       validations: input.validations,
       checklist: input.checklist,
       checklistResponses: input.checklistResponses,
+      startedAt: input.startedAt !== undefined ? (input.startedAt ? new Date(input.startedAt) : null) : undefined,
       geofenceLat: input.geofenceLat,
       geofenceLng: input.geofenceLng,
       geofenceRadius: input.geofenceRadius,
@@ -708,7 +711,7 @@ export async function updateTaskStatus(
   actor: AuthUser, 
   taskId: string, 
   status: TaskStatus, 
-  completionData?: { photoUrl?: string; remarks?: string; lat?: number; lng?: number; checklistResponses?: any }
+  completionData?: { photoUrl?: string; remarks?: string; lat?: number; lng?: number; checklistResponses?: any; startedAt?: Date | string }
 ) {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
@@ -752,10 +755,18 @@ export async function updateTaskStatus(
   if (status === TaskStatus.COMPLETED) {
     data.points = 10;
     data.completedAt = new Date();
+    if (completionData?.startedAt) {
+      data.startedAt = new Date(completionData.startedAt);
+    } else if (!task.startedAt) {
+      data.startedAt = task.status === TaskStatus.IN_PROGRESS ? task.updatedAt : new Date();
+    }
     if (!task.startDate) {
       data.startDate = task.createdAt || new Date();
     }
   } else if (status === TaskStatus.IN_PROGRESS) {
+    if (!task.startedAt) {
+      data.startedAt = new Date();
+    }
     if (!task.startDate) {
       data.startDate = new Date();
     }

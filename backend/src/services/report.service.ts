@@ -470,7 +470,10 @@ export async function getDaySummary(actor: AuthUser, userId: string, date: Date)
       where: {
         assignedToId: userId,
         status: TaskStatus.COMPLETED,
-        updatedAt: { gte: dayStart, lt: dayEnd }
+        OR: [
+          { completedAt: { gte: dayStart, lt: dayEnd } },
+          { updatedAt: { gte: dayStart, lt: dayEnd } }
+        ]
       },
       select: {
         id: true,
@@ -479,6 +482,7 @@ export async function getDaySummary(actor: AuthUser, userId: string, date: Date)
         priority: true,
         points: true,
         startDate: true,
+        startedAt: true,
         completedAt: true,
         completionLat: true,
         completionLng: true,
@@ -488,7 +492,7 @@ export async function getDaySummary(actor: AuthUser, userId: string, date: Date)
         checklistResponses: true,
         updatedAt: true
       },
-      orderBy: { updatedAt: "asc" }
+      orderBy: [{ completedAt: "asc" }, { updatedAt: "asc" }]
     }),
     prisma.task.findMany({
       where: {
@@ -753,8 +757,12 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
       where: {
         assignedToId: userId,
         status: TaskStatus.COMPLETED,
-        updatedAt: { gte: reportDate, lt: nextDate }
-      }
+        OR: [
+          { completedAt: { gte: reportDate, lt: nextDate } },
+          { updatedAt: { gte: reportDate, lt: nextDate } }
+        ]
+      },
+      orderBy: [{ completedAt: "asc" }, { updatedAt: "asc" }]
     })
   ]);
 
@@ -810,10 +818,30 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
     hour12: true
   });
 
-  const completedCount = completedTasks.length;
+  const sortedCompletedTasks = [...completedTasks].sort((a, b) => {
+    const timeA = new Date(a.completedAt || a.updatedAt || a.startedAt || a.startDate || 0).getTime();
+    const timeB = new Date(b.completedAt || b.updatedAt || b.startedAt || b.startDate || 0).getTime();
+    return timeA - timeB;
+  });
+
+  const completedCount = sortedCompletedTasks.length;
   const countBannerText = `${completedCount} Completed`;
 
-  const parseTaskDetails = (t: any) => {
+  const formatTimeIST = (dateObj: Date | string | null | undefined): string => {
+    if (!dateObj) return "--";
+    try {
+      return new Intl.DateTimeFormat("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+        timeZone: "Asia/Kolkata"
+      }).format(new Date(dateObj));
+    } catch {
+      return "--";
+    }
+  };
+
+  const parseTaskDetails = (t: any, idx: number, allTasks: any[]) => {
     let locationCoords = "";
     if (t.completionLat != null && t.completionLng != null) {
       locationCoords = `${Number(t.completionLat).toFixed(4)}, ${Number(t.completionLng).toFixed(4)}`;
@@ -876,14 +904,25 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
       if (img) rawUrl = img.fileUrl || img.photoUrl || img.image || img.url;
     }
 
-    const startTimeFormatted = t.startDate 
-      ? new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" }).format(new Date(t.startDate))
-      : "--";
-    const completedTimeFormatted = t.completedAt
-      ? new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" }).format(new Date(t.completedAt))
-      : (t.updatedAt 
-          ? new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" }).format(new Date(t.updatedAt))
-          : "--");
+    const completedDate = t.completedAt ? new Date(t.completedAt) : (t.updatedAt ? new Date(t.updatedAt) : null);
+    const completedTimeFormatted = formatTimeIST(completedDate);
+
+    let startDateObj: Date | null = null;
+    if (t.startedAt) {
+      startDateObj = new Date(t.startedAt);
+    } else if (idx > 0 && allTasks[idx - 1]) {
+      const prev = allTasks[idx - 1];
+      const prevDone = prev.completedAt || prev.updatedAt;
+      if (prevDone) startDateObj = new Date(prevDone);
+    } else if (attendance?.checkInTime && completedDate && new Date(attendance.checkInTime).getTime() < completedDate.getTime()) {
+      startDateObj = new Date(attendance.checkInTime);
+    } else if (completedDate) {
+      startDateObj = new Date(completedDate.getTime() - 25 * 60 * 1000);
+    } else if (t.startDate) {
+      startDateObj = new Date(t.startDate);
+    }
+
+    const startTimeFormatted = formatTimeIST(startDateObj);
 
     return {
       title: t.title || "Task",
@@ -901,11 +940,11 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
   };
 
   let tasksGridHtml = "";
-  if (completedTasks.length === 0) {
+  if (sortedCompletedTasks.length === 0) {
     tasksGridHtml = `<p style="font-size: 10px; color: #94a3b8; font-style: italic; margin: 0; padding: 4px 0;">No completed tasks recorded on this date.</p>`;
   } else {
-    const tableRows = completedTasks.map((t, idx) => {
-      const row = parseTaskDetails(t);
+    const tableRows = sortedCompletedTasks.map((t, idx) => {
+      const row = parseTaskDetails(t, idx, sortedCompletedTasks);
       const isEven = idx % 2 === 0;
       return `
         <tr style="background: ${isEven ? '#ffffff' : '#f8fafc'}; border-bottom: 1px solid #e2e8f0;">

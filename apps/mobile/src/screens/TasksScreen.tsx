@@ -25,6 +25,7 @@ export function TasksScreen() {
   // Completion Modal State
   const [completionModalVisible, setCompletionModalVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [taskStartTime, setTaskStartTime] = useState<string | null>(null);
   const [completionPhoto, setCompletionPhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [completionRemarks, setCompletionRemarks] = useState("");
   const [isSubmittingCompletion, setIsSubmittingCompletion] = useState(false);
@@ -283,16 +284,25 @@ export function TasksScreen() {
         if (farmerRemarks) remarksVal = farmerRemarks;
       }
 
+      const actualStartTime = selectedTask?.startedAt || taskStartTime || new Date().toISOString();
       await updateStatus({
         taskId: selectedTask.id,
         status: "COMPLETED",
-        completionData: { photoUrl, remarks: remarksVal, lat, lng, checklistResponses: compiledResponses },
+        completionData: {
+          photoUrl,
+          remarks: remarksVal,
+          lat,
+          lng,
+          checklistResponses: compiledResponses,
+          startedAt: actualStartTime
+        },
       });
       setCompletionModalVisible(false);
       setCompletionPhoto(null);
       setCompletionRemarks("");
       setChecklistResponses({});
       setSelectedTask(null);
+      setTaskStartTime(null);
       Alert.alert("Success", "Task submission updated.");
     } catch (error) {
       Alert.alert("Update failed", error instanceof Error ? error.message : "Please try again.");
@@ -305,6 +315,7 @@ export function TasksScreen() {
     if (task.status === "CANCELLED") return;
     if (task.status === "IN_PROGRESS" || task.status === "COMPLETED") {
       setSelectedTask(task);
+      setTaskStartTime(task.startedAt || new Date().toISOString());
       setCompletionRemarks(task.completionRemarks || "");
       setCompletionPhoto(null);
 

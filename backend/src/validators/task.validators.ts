@@ -9,6 +9,7 @@ export const createTaskBodySchema = z
     assignedToId: z.string().min(1),
     dueDate: z.coerce.date(),
     startDate: z.coerce.date().optional().nullable(),
+    startedAt: z.coerce.date().optional().nullable(),
     endDate: z.coerce.date().optional().nullable(),
     location: latLngSchema.optional(),
     lat: z.number().min(-90).max(90).optional(),
@@ -47,7 +48,8 @@ export const taskStatusBodySchema = z.object({
       remarks: z.string().optional(),
       lat: z.number().optional(),
       lng: z.number().optional(),
-      checklistResponses: z.any().optional()
+      checklistResponses: z.any().optional(),
+      startedAt: z.coerce.date().optional().nullable()
     })
     .optional()
 });
@@ -58,6 +60,7 @@ export const updateTaskBodySchema = z.object({
   assignedToId: z.string().min(1).optional(),
   dueDate: z.coerce.date().optional(),
   startDate: z.coerce.date().optional().nullable(),
+  startedAt: z.coerce.date().optional().nullable(),
   endDate: z.coerce.date().optional().nullable(),
   status: z.nativeEnum(TaskStatus).optional(),
   lat: z.number().min(-90).max(90).optional(),
