@@ -490,7 +490,8 @@ export async function getDaySummary(actor: AuthUser, userId: string, date: Date)
         completionPhotoUrl: true,
         checklist: true,
         checklistResponses: true,
-        updatedAt: true
+        updatedAt: true,
+        createdAt: true
       },
       orderBy: [{ completedAt: "asc" }, { updatedAt: "asc" }]
     }),
@@ -534,6 +535,72 @@ export async function getDaySummary(actor: AuthUser, userId: string, date: Date)
   const pendingPoints = pendingTasks.reduce((sum, t) => sum + Number(t.points ?? 0), 0);
   const possibleTaskPoints = completedPoints + pendingPoints;
 
+  // Sort completed tasks strictly in chronological order by completion/update time
+  const sortedCompleted = [...completedTasks].sort((a, b) => {
+    const timeA = new Date(a.completedAt || a.updatedAt || 0).getTime();
+    const timeB = new Date(b.completedAt || b.updatedAt || 0).getTime();
+    return timeA - timeB;
+  });
+
+  // Build sequential continuous timeline for each completed task
+  const mappedCompleted = sortedCompleted.map((t, idx) => {
+    const completedDate = t.completedAt ? new Date(t.completedAt) : (t.updatedAt ? new Date(t.updatedAt) : null);
+    let startDateObj: Date | null = null;
+
+    if (t.startedAt) {
+      const d = new Date(t.startedAt);
+      if (!isNaN(d.getTime())) {
+        if (d.getHours() === 9 && d.getMinutes() === 0 && t.createdAt) {
+          const cDate = new Date(t.createdAt);
+          if (!isNaN(cDate.getTime()) && cDate.getTime() > d.getTime() && (!completedDate || cDate.getTime() <= completedDate.getTime())) {
+            startDateObj = cDate;
+          } else {
+            startDateObj = d;
+          }
+        } else {
+          startDateObj = d;
+        }
+      }
+    }
+
+    if (!startDateObj && idx > 0 && sortedCompleted[idx - 1]) {
+      const prev = sortedCompleted[idx - 1];
+      const prevDone = prev.completedAt || prev.updatedAt;
+      if (prevDone) {
+        const pd = new Date(prevDone);
+        if (!isNaN(pd.getTime())) {
+          startDateObj = pd;
+        }
+      }
+    }
+
+    if (!startDateObj) {
+      if (t.createdAt && completedDate) {
+        const cDate = new Date(t.createdAt);
+        if (!isNaN(cDate.getTime()) && cDate.toDateString() === completedDate.toDateString() && cDate.getTime() <= completedDate.getTime()) {
+          startDateObj = cDate;
+        }
+      }
+      if (!startDateObj && checkInTime && completedDate && new Date(checkInTime).getTime() < completedDate.getTime()) {
+        startDateObj = new Date(checkInTime);
+      }
+    }
+
+    if (!startDateObj) {
+      if (completedDate) {
+        startDateObj = new Date(completedDate.getTime() - 25 * 60 * 1000);
+      } else if (t.startDate) {
+        startDateObj = new Date(t.startDate);
+      }
+    }
+
+    return {
+      ...t,
+      startedAt: startDateObj,
+      startDate: startDateObj || t.startDate
+    };
+  });
+
   // Map each form response's stored JSON onto its field labels for readable Q&A.
   const forms = formResponses.map((fr) => {
     let parsed: Record<string, any> = {};
@@ -574,9 +641,9 @@ export async function getDaySummary(actor: AuthUser, userId: string, date: Date)
       ? { ...report, ...metrics }
       : { ...metrics, kmTravelled, startOdometer, endOdometer, remarks: null, visitsSummary: null, ordersTaken: 0, ordersCancelled: 0 },
     tasks: {
-      completed: completedTasks,
+      completed: mappedCompleted,
       pending: pendingTasks,
-      completedCount: completedTasks.length,
+      completedCount: mappedCompleted.length,
       pendingCount: pendingTasks.length,
       pointsEarned: completedPoints,
       pointsPossible: possibleTaskPoints
@@ -909,17 +976,50 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
 
     let startDateObj: Date | null = null;
     if (t.startedAt) {
-      startDateObj = new Date(t.startedAt);
-    } else if (idx > 0 && allTasks[idx - 1]) {
+      const d = new Date(t.startedAt);
+      if (!isNaN(d.getTime())) {
+        if (d.getHours() === 9 && d.getMinutes() === 0 && t.createdAt) {
+          const cDate = new Date(t.createdAt);
+          if (!isNaN(cDate.getTime()) && cDate.getTime() > d.getTime() && (!completedDate || cDate.getTime() <= completedDate.getTime())) {
+            startDateObj = cDate;
+          } else {
+            startDateObj = d;
+          }
+        } else {
+          startDateObj = d;
+        }
+      }
+    }
+
+    if (!startDateObj && idx > 0 && allTasks[idx - 1]) {
       const prev = allTasks[idx - 1];
       const prevDone = prev.completedAt || prev.updatedAt;
-      if (prevDone) startDateObj = new Date(prevDone);
-    } else if (attendance?.checkInTime && completedDate && new Date(attendance.checkInTime).getTime() < completedDate.getTime()) {
-      startDateObj = new Date(attendance.checkInTime);
-    } else if (completedDate) {
-      startDateObj = new Date(completedDate.getTime() - 25 * 60 * 1000);
-    } else if (t.startDate) {
-      startDateObj = new Date(t.startDate);
+      if (prevDone) {
+        const pd = new Date(prevDone);
+        if (!isNaN(pd.getTime())) {
+          startDateObj = pd;
+        }
+      }
+    }
+
+    if (!startDateObj) {
+      if (t.createdAt && completedDate) {
+        const cDate = new Date(t.createdAt);
+        if (!isNaN(cDate.getTime()) && cDate.toDateString() === completedDate.toDateString() && cDate.getTime() <= completedDate.getTime()) {
+          startDateObj = cDate;
+        }
+      }
+      if (!startDateObj && attendance?.checkInTime && completedDate && new Date(attendance.checkInTime).getTime() < completedDate.getTime()) {
+        startDateObj = new Date(attendance.checkInTime);
+      }
+    }
+
+    if (!startDateObj) {
+      if (completedDate) {
+        startDateObj = new Date(completedDate.getTime() - 25 * 60 * 1000);
+      } else if (t.startDate) {
+        startDateObj = new Date(t.startDate);
+      }
     }
 
     const startTimeFormatted = formatTimeIST(startDateObj);

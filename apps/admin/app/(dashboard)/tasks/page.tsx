@@ -89,6 +89,59 @@ import {
 type ViewMode = "LIST" | "BOARD" | "CALENDAR";
 type FilterType = "ALL" | "ACTIVE" | "INACTIVE" | "TODAYS" | "ONGOING" | "OVERDUE" | "MISSED" | "SCHEDULED" | "COMPLETE" | "GROUP" | "REPEAT" | "REVIEW" | "ISSUE" | "TRASHED";
 
+function getTaskStartTime(task: any): Date | null {
+  if (!task) return null;
+  if (task.startedAt) {
+    const d = new Date(task.startedAt);
+    if (!isNaN(d.getTime())) {
+      // If startedAt is 09:00:00 shift default and createdAt is on the same day and later, prefer createdAt
+      if (d.getHours() === 9 && d.getMinutes() === 0 && task.createdAt) {
+        const cDate = new Date(task.createdAt);
+        if (!isNaN(cDate.getTime()) && cDate.getTime() > d.getTime()) {
+          return cDate;
+        }
+      }
+      return d;
+    }
+  }
+
+  const completedDate = task.completedAt ? new Date(task.completedAt) : (task.updatedAt ? new Date(task.updatedAt) : null);
+  const createdDate = task.createdAt ? new Date(task.createdAt) : null;
+  const startDate = task.startDate ? new Date(task.startDate) : null;
+
+  if (createdDate && !isNaN(createdDate.getTime()) && completedDate && !isNaN(completedDate.getTime())) {
+    const isSameDay = 
+      createdDate.getFullYear() === completedDate.getFullYear() &&
+      createdDate.getMonth() === completedDate.getMonth() &&
+      createdDate.getDate() === completedDate.getDate();
+    
+    if (isSameDay) {
+      if (startDate && !isNaN(startDate.getTime())) {
+        const startHours = startDate.getHours();
+        const startMins = startDate.getMinutes();
+        if ((startHours === 9 && startMins === 0) || (startHours === 0 && startMins === 0) || startDate.getTime() < createdDate.getTime()) {
+          return createdDate;
+        }
+      } else {
+        return createdDate;
+      }
+    }
+  }
+
+  if (startDate && !isNaN(startDate.getTime())) {
+    if (createdDate && !isNaN(createdDate.getTime())) {
+      const sh = startDate.getHours();
+      const sm = startDate.getMinutes();
+      if ((sh === 9 && sm === 0) || (sh === 0 && sm === 0)) {
+        return createdDate;
+      }
+    }
+    return startDate;
+  }
+
+  return createdDate || null;
+}
+
 export default function TasksPage() {
   const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<ViewMode>("LIST");
@@ -1267,11 +1320,14 @@ export default function TasksPage() {
                                  )}
                               </td>
                               <td className="py-2 px-4 whitespace-nowrap">
-                                {task.startDate ? (
-                                  <span className="text-[11px] font-bold text-slate-700">{format(new Date(task.startDate), 'dd MMM, hh:mm a')}</span>
-                                ) : (
-                                  <span className="text-[10px] text-slate-300 font-medium">—</span>
-                                )}
+                                {(() => {
+                                  const tStart = getTaskStartTime(task);
+                                  return tStart ? (
+                                    <span className="text-[11px] font-bold text-slate-700">{format(tStart, 'dd MMM, hh:mm a')}</span>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-300 font-medium">—</span>
+                                  );
+                                })()}
                               </td>
                               <td className="py-2 px-4 whitespace-nowrap">
                                 {task.completedAt ? (
@@ -1425,11 +1481,14 @@ export default function TasksPage() {
                         </Badge>
                       </td>
                       <td className="py-2 px-4 whitespace-nowrap">
-                        {task.startDate ? (
-                          <span className="text-[11px] font-bold text-slate-700">{format(new Date(task.startDate), 'dd MMM, hh:mm a')}</span>
-                        ) : (
-                          <span className="text-[10px] text-slate-300 font-medium">—</span>
-                        )}
+                        {(() => {
+                          const tStart = getTaskStartTime(task);
+                          return tStart ? (
+                            <span className="text-[11px] font-bold text-slate-700">{format(tStart, 'dd MMM, hh:mm a')}</span>
+                          ) : (
+                            <span className="text-[10px] text-slate-300 font-medium">—</span>
+                          );
+                        })()}
                       </td>
                       <td className="py-2 px-4 whitespace-nowrap">
                         {task.completedAt ? (
@@ -1639,31 +1698,35 @@ export default function TasksPage() {
                         </div>
 
                         {/* Timings & Map Pin */}
-                        {(task.startDate || task.completedAt || (task.completionLat != null && task.completionLng != null)) && (
-                          <div className="flex flex-col gap-0.5 pt-1 text-[9px] border-t border-slate-50">
-                            {task.startDate && (
-                              <span className="text-slate-500 font-bold">
-                                ▶ Start: {format(new Date(task.startDate), 'hh:mm a')}
-                              </span>
-                            )}
-                            {task.completedAt && (
-                              <span className="text-emerald-600 font-bold">
-                                ✔ Done: {format(new Date(task.completedAt), 'hh:mm a')}
-                              </span>
-                            )}
-                            {task.completionLat != null && task.completionLng != null && (
-                              <a
-                                href={`https://maps.google.com/?q=${task.completionLat},${task.completionLng}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-0.5 text-blue-600 font-bold hover:underline"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <MapPin className="h-2.5 w-2.5" /> Map Pin
-                              </a>
-                            )}
-                          </div>
-                        )}
+                        {(() => {
+                          const tStart = getTaskStartTime(task);
+                          if (!tStart && !task.completedAt && !(task.completionLat != null && task.completionLng != null)) return null;
+                          return (
+                            <div className="flex flex-col gap-0.5 pt-1 text-[9px] border-t border-slate-50">
+                              {tStart && (
+                                <span className="text-slate-500 font-bold">
+                                  ▶ Start: {format(tStart, 'hh:mm a')}
+                                </span>
+                              )}
+                              {task.completedAt && (
+                                <span className="text-emerald-600 font-bold">
+                                  ✔ Done: {format(new Date(task.completedAt), 'hh:mm a')}
+                                </span>
+                              )}
+                              {task.completionLat != null && task.completionLng != null && (
+                                <a
+                                  href={`https://maps.google.com/?q=${task.completionLat},${task.completionLng}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-0.5 text-blue-600 font-bold hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <MapPin className="h-2.5 w-2.5" /> Map Pin
+                                </a>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {/* Due Date & Move Controls */}
                         <div className="flex items-center justify-between pt-1">
@@ -4534,84 +4597,91 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
 function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => void }) {
   if (!task) return null;
 
+  const actualStartTime = getTaskStartTime(task);
+
   return (
-    <DialogContent className="max-w-4xl w-[94vw] max-h-[90vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl bg-white rounded-[28px] hide-close">
-      <DialogHeader className="p-6 md:p-8 bg-slate-900 text-white relative shrink-0">
-        <div className="absolute right-6 top-6 flex items-center gap-2">
-          {onEdit && (
-            <Button
-              type="button"
-              size="sm"
-              onClick={onEdit}
-              className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold px-3 py-1.5 h-8 gap-1 shadow-md shadow-blue-900/30"
-            >
-              <Pencil className="h-3.5 w-3.5" /> Edit Task
-            </Button>
-          )}
-          <DialogClose className="rounded-xl bg-white/10 p-1.5 text-white/50 hover:bg-white/20 transition-all">
-             <X className="h-4 w-4" />
-          </DialogClose>
-        </div>
-        <div className="flex items-center gap-3 mb-2 flex-wrap pr-24">
-           <StatusBadge status={task.status} dueDate={task.dueDate} />
-           <Badge className={cn(
-             "text-[9px] font-black uppercase tracking-wider border",
-             task.taskType === "DEALER"
-               ? "bg-blue-500/20 text-blue-300 border-blue-400/30"
-               : task.taskType === "FARMER"
-               ? "bg-emerald-500/20 text-emerald-300 border-emerald-400/30"
-               : "bg-slate-500/20 text-slate-300 border-slate-400/30"
-           )}>
-             {task.taskType === "DEALER" ? "🤝 Dealer Visit Task" : task.taskType === "FARMER" ? "🌾 Farmer Visit Task" : "📋 Standard Task"}
-           </Badge>
-           <Badge variant="outline" className="border-white/20 text-white/60 text-[9px] font-black uppercase">Task ID: {task.id.slice(-6)}</Badge>
-        </div>
-        <DialogTitle className="text-2xl font-black">{task.title}</DialogTitle>
-        <div className="flex items-center gap-4 mt-2 flex-wrap">
-           <p className="text-slate-400 text-xs font-bold">Created on {format(new Date(task.createdAt), 'dd MMM yyyy, hh:mm a')}</p>
-           <div className={cn(
-              "flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-black uppercase",
-              task.isRepeating ? "bg-blue-500/20 text-blue-200" : "bg-slate-500/20 text-slate-300"
-           )}>
-              {task.isRepeating ? <RefreshCw className="h-3 w-3" /> : <CalendarIcon className="h-3 w-3" />}
-               {task.isRepeating 
-                 ? (task.repeatFrequency === 'DAILY' ? 'Every Day' : 
-                    task.repeatFrequency === 'WEEKLY' ? `Every Week (${task.repeatDays?.split(',').map((d:any) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')})` : 
-                    task.repeatFrequency === 'MONTHLY' ? `Every Month (${task.repeatDates})` : 
-                    task.repeatFrequency)
-                 : "No Repeat"}
-               {task.skipHolidays && <span className="ml-1 opacity-60">(Skip Holidays)</span>}
-           </div>
+    <DialogContent className="fixed inset-0 z-50 w-screen h-screen max-w-none max-h-none left-0 top-0 translate-x-0 translate-y-0 rounded-none flex flex-col p-0 overflow-hidden border-none shadow-none bg-slate-50 hide-close">
+      <DialogHeader className="px-6 md:px-10 py-5 bg-slate-900 text-white relative shrink-0 border-b border-slate-800 shadow-md">
+        <div className="flex items-center justify-between gap-4 w-full">
+          <div className="flex-1 min-w-0 pr-4">
+            <div className="flex items-center gap-3 mb-2 flex-wrap">
+               <StatusBadge status={task.status} dueDate={task.dueDate} />
+               <Badge className={cn(
+                 "text-[9px] font-black uppercase tracking-wider border",
+                 task.taskType === "DEALER"
+                   ? "bg-blue-500/20 text-blue-300 border-blue-400/30"
+                   : task.taskType === "FARMER"
+                   ? "bg-emerald-500/20 text-emerald-300 border-emerald-400/30"
+                   : "bg-slate-500/20 text-slate-300 border-slate-400/30"
+               )}>
+                 {task.taskType === "DEALER" ? "🤝 Dealer Visit Task" : task.taskType === "FARMER" ? "🌾 Farmer Visit Task" : "📋 Standard Task"}
+               </Badge>
+               <Badge variant="outline" className="border-white/20 text-white/60 text-[9px] font-black uppercase">Task ID: {task.id.slice(-6)}</Badge>
+            </div>
+            <DialogTitle className="text-2xl md:text-3xl font-black truncate">{task.title}</DialogTitle>
+            <div className="flex items-center gap-4 mt-2 flex-wrap text-slate-400 text-xs font-bold">
+               <p>Created on {format(new Date(task.createdAt), 'dd MMM yyyy, hh:mm a')}</p>
+               <div className={cn(
+                  "flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-black uppercase",
+                  task.isRepeating ? "bg-blue-500/20 text-blue-200" : "bg-slate-500/20 text-slate-300"
+               )}>
+                  {task.isRepeating ? <RefreshCw className="h-3 w-3" /> : <CalendarIcon className="h-3 w-3" />}
+                   {task.isRepeating 
+                     ? (task.repeatFrequency === 'DAILY' ? 'Every Day' : 
+                        task.repeatFrequency === 'WEEKLY' ? `Every Week (${task.repeatDays?.split(',').map((d:any) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')})` : 
+                        task.repeatFrequency === 'MONTHLY' ? `Every Month (${task.repeatDates})` : 
+                        task.repeatFrequency)
+                     : "No Repeat"}
+                   {task.skipHolidays && <span className="ml-1 opacity-60">(Skip Holidays)</span>}
+               </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            {onEdit && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={onEdit}
+                className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 h-9 gap-1.5 shadow-md shadow-blue-900/30"
+              >
+                <Pencil className="h-4 w-4" /> Edit Task
+              </Button>
+            )}
+            <DialogClose className="rounded-xl bg-white/10 p-2 text-white/80 hover:text-white hover:bg-white/20 transition-all flex items-center gap-1.5 text-xs font-bold px-3">
+               <X className="h-4 w-4" /> Close
+            </DialogClose>
+          </div>
         </div>
       </DialogHeader>
 
-      <div className="p-6 md:p-8 flex-1 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-8">
-         <div className="space-y-6">
+      <div className="p-6 md:p-10 flex-1 overflow-y-auto w-full max-w-[1700px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+         <div className="lg:col-span-6 space-y-6">
             <div className="space-y-2">
                <Label className="text-[10px] font-black uppercase text-slate-400">Description</Label>
-               <p className="text-sm font-medium text-slate-600 leading-relaxed bg-slate-50 p-4 rounded-2xl min-h-[90px] border border-slate-100">
+               <p className="text-sm font-medium text-slate-600 leading-relaxed bg-white p-4 rounded-2xl min-h-[90px] border border-slate-200/70 shadow-sm">
                   {task.description || "No description provided."}
                </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4 bg-white p-4 rounded-2xl border border-slate-200/70 shadow-sm">
                <div className="space-y-1">
                   <Label className="text-[10px] font-black uppercase text-slate-400">Assigned To</Label>
                   <div className="flex items-center gap-2">
-                     <Avatar className="h-6 w-6">
+                     <Avatar className="h-7 w-7">
                         <AvatarImage src={task.assignedTo?.avatarUrl} />
-                        <AvatarFallback className="bg-blue-600 text-white text-[8px] font-black">{task.assignedTo?.name?.slice(0, 1)}</AvatarFallback>
+                        <AvatarFallback className="bg-blue-600 text-white text-[9px] font-black">{task.assignedTo?.name?.slice(0, 1)}</AvatarFallback>
                      </Avatar>
-                     <span className="text-xs font-bold text-slate-700">{task.assignedTo?.name}</span>
+                     <span className="text-sm font-bold text-slate-700">{task.assignedTo?.name}</span>
                   </div>
                </div>
                <div className="space-y-1">
                   <Label className="text-[10px] font-black uppercase text-slate-400">Due Date</Label>
-                  <p className="text-xs font-bold text-slate-700">{format(new Date(task.endDate || task.dueDate), 'dd MMM yyyy')}</p>
+                  <p className="text-sm font-bold text-slate-700">{format(new Date(task.endDate || task.dueDate), 'dd MMM yyyy')}</p>
                </div>
             </div>
 
-            <div className="space-y-2 pt-2 border-t border-slate-100">
+            <div className="space-y-2 pt-2 border-t border-slate-200/60">
                <div className="flex items-center justify-between">
                   <Label className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-1.5">
                      <Store className="h-3.5 w-3.5" /> Assigned Dealers ({task.dealers?.length || 0})
@@ -4624,7 +4694,7 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                {task.dealers && task.dealers.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                      {task.dealers.map((d: any) => (
-                        <div key={d.id} className="bg-blue-50 border border-blue-200 px-3 py-2 rounded-xl flex flex-col gap-0.5 text-xs font-bold text-blue-900">
+                        <div key={d.id} className="bg-blue-50 border border-blue-200 px-3 py-2 rounded-xl flex flex-col gap-0.5 text-xs font-bold text-blue-900 shadow-sm">
                            <div className="flex items-center gap-1.5">
                               <Store className="h-3.5 w-3.5 text-blue-600" />
                               <span>{d.name}</span>
@@ -4640,7 +4710,7 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                      ))}
                   </div>
                ) : (
-                  <div className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl text-xs text-slate-500 font-medium flex items-center justify-between gap-2">
+                  <div className="p-4 bg-white border border-slate-200/70 rounded-2xl text-xs text-slate-500 font-medium flex items-center justify-between gap-2 shadow-sm">
                      <span>No dealers linked to this task.</span>
                      {onEdit && (
                        <Button
@@ -4648,9 +4718,9 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                          size="sm"
                          variant="outline"
                          onClick={onEdit}
-                         className="h-7 text-[10px] font-bold text-blue-600 border-blue-200 bg-white hover:bg-blue-50 rounded-lg gap-1 shrink-0 px-2"
+                         className="h-8 text-[11px] font-bold text-blue-600 border-blue-200 bg-white hover:bg-blue-50 rounded-lg gap-1 shrink-0 px-2.5"
                        >
-                         <Pencil className="h-3 w-3" /> Add Dealers
+                         <Pencil className="h-3.5 w-3.5" /> Add Dealers
                        </Button>
                      )}
                   </div>
@@ -4658,22 +4728,22 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
             </div>
 
             {/* Task Timeline & Completion Details */}
-            {(task.startedAt || task.startDate || task.completedAt || task.completionRemarks || (task.completionLat != null && task.completionLng != null)) && (
-               <div className="space-y-2 pt-4 border-t border-slate-100">
+            {(actualStartTime || task.completedAt || task.completionRemarks || (task.completionLat != null && task.completionLng != null)) && (
+               <div className="space-y-2 pt-2 border-t border-slate-200/60">
                   <Label className="text-[10px] font-black uppercase text-blue-600">Task Timeline & Location</Label>
-                  <div className="bg-blue-50/40 p-4 rounded-2xl border border-blue-100/60 space-y-3">
-                     <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200/70 space-y-3.5 shadow-sm">
+                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-0.5">
                            <span className="text-[10px] font-black uppercase text-slate-400 block">Start Time</span>
-                           <span className="text-xs font-bold text-slate-800">
-                              {task.startedAt 
-                                 ? format(new Date(task.startedAt), 'dd MMM yyyy, hh:mm a')
-                                 : (task.startDate ? format(new Date(task.startDate), 'dd MMM yyyy, hh:mm a') : "Not recorded")}
+                           <span className="text-sm font-bold text-slate-800">
+                              {actualStartTime 
+                                 ? format(actualStartTime, 'dd MMM yyyy, hh:mm a')
+                                 : "Not recorded"}
                            </span>
                         </div>
                         <div className="space-y-0.5">
                            <span className="text-[10px] font-black uppercase text-slate-400 block">Complete Time</span>
-                           <span className="text-xs font-bold text-emerald-700">
+                           <span className="text-sm font-bold text-emerald-700">
                               {task.completedAt 
                                  ? format(new Date(task.completedAt), 'dd MMM yyyy, hh:mm a') 
                                  : (task.status === "COMPLETED" && task.updatedAt ? format(new Date(task.updatedAt), 'dd MMM yyyy, hh:mm a') : "In Progress / Pending")}
@@ -4682,7 +4752,7 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                      </div>
 
                      {(task.completionLat != null && task.completionLng != null) && (
-                        <div className="pt-2.5 border-t border-blue-100/70 flex items-center justify-between gap-2 flex-wrap">
+                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
                            <div>
                               <span className="text-[10px] font-black uppercase text-slate-400 block">Completion Coordinates</span>
                               <span className="text-xs font-bold text-slate-700">
@@ -4693,16 +4763,16 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                               type="button"
                               size="sm"
                               variant="outline"
-                              className="h-7 text-[10px] font-bold text-blue-600 border-blue-200 bg-white hover:bg-blue-50 rounded-lg gap-1 shrink-0"
+                              className="h-8 text-xs font-bold text-blue-600 border-blue-200 bg-white hover:bg-blue-50 rounded-xl gap-1 shrink-0 px-3"
                               onClick={() => window.open(`https://maps.google.com/?q=${task.completionLat},${task.completionLng}`, '_blank')}
                            >
-                              <MapPin className="h-3 w-3 text-blue-600" /> Open in Google Maps
+                              <MapPin className="h-3.5 w-3.5 text-blue-600" /> Open in Google Maps
                            </Button>
                         </div>
                      )}
 
                      {task.completionRemarks && (
-                        <div className="pt-2 border-t border-blue-100/70">
+                        <div className="pt-3 border-t border-slate-100">
                            <span className="text-[10px] font-black uppercase text-slate-400 block">Remarks</span>
                            <p className="text-xs font-bold text-slate-800 mt-0.5">
                               {task.completionRemarks}
@@ -4714,9 +4784,9 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
             )}
 
             {task.attachmentUrl && (
-               <div className="space-y-2 pt-4 border-t border-slate-100">
+               <div className="space-y-2 pt-2 border-t border-slate-200/60">
                   <Label className="text-[10px] font-black uppercase text-blue-600">Task Attachment</Label>
-                  <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200/50 rounded-2xl">
+                  <div className="flex items-center justify-between p-3.5 bg-white border border-slate-200/70 rounded-2xl shadow-sm">
                      <div className="flex items-center gap-2.5 min-w-0">
                         <div className="h-8 w-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
                            {task.attachmentName?.split('.').pop()?.slice(0, 4) || 'FILE'}
@@ -4736,11 +4806,11 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
             )}
          </div>
 
-         <div className="space-y-5">
+         <div className="lg:col-span-6 space-y-6">
             <div>
                <Label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Evidence / Attachments</Label>
                {task.completionPhotoUrl ? (
-                  <div className="relative h-64 w-full rounded-2xl overflow-hidden border border-slate-200 shadow-sm group bg-slate-100">
+                  <div className="relative h-80 md:h-96 w-full rounded-2xl overflow-hidden border border-slate-200/80 shadow-md group bg-slate-100">
                      <img 
                        src={task.completionPhotoUrl} 
                        alt="Task Completion" 
@@ -4753,7 +4823,7 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                      </div>
                   </div>
                ) : (
-                  <div className="h-44 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 p-6 text-center">
+                  <div className="h-48 rounded-2xl bg-white border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 p-6 text-center shadow-sm">
                      <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center mb-2">
                         <Eye className="h-5 w-5" />
                      </div>
@@ -4764,7 +4834,7 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
             </div>
 
             {task.checklistResponses && (task.checklistResponses as any[]).length > 0 && (
-               <div className="space-y-3 pt-3 border-t border-slate-100">
+               <div className="space-y-3 pt-2 border-t border-slate-200/60">
                   <div className="flex items-center justify-between">
                      <Label className="text-[10px] font-black uppercase text-blue-600">Checklist Responses</Label>
                      <span className="text-[10px] font-bold text-slate-400 uppercase">
@@ -4773,11 +4843,11 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                   </div>
                   <div className="grid grid-cols-1 gap-2.5">
                      {(task.checklistResponses as any[]).map((item: any, idx: number) => (
-                        <div key={idx} className="p-3 bg-slate-50/70 border border-slate-200/60 rounded-xl space-y-1.5">
+                        <div key={idx} className="p-3.5 bg-white border border-slate-200/70 rounded-2xl space-y-1.5 shadow-sm">
                            {item.type === "IMAGE" && item.fileUrl && (
                               <div className="space-y-1.5">
                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.title}</span>
-                                 <div className="relative w-32 h-32 rounded-xl overflow-hidden border border-slate-200/50 shadow-inner group">
+                                 <div className="relative w-36 h-36 rounded-xl overflow-hidden border border-slate-200/50 shadow-inner group">
                                     <img src={item.fileUrl} alt={item.title} className="w-full h-full object-cover" />
                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                        <Button size="sm" variant="secondary" className="h-7 text-[10px] px-2 font-black" onClick={() => window.open(item.fileUrl)}>OPEN</Button>
@@ -4800,7 +4870,7 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                            {item.type === "FILE" && item.fileUrl && (
                               <div className="space-y-1.5 w-full">
                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.title}</span>
-                                 <div className="flex items-center justify-between p-2.5 bg-white border border-slate-100 rounded-xl">
+                                 <div className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-100 rounded-xl">
                                     <span className="text-xs font-bold text-slate-700 truncate max-w-[180px]">{item.fileName || "File"}</span>
                                     <Button size="sm" variant="ghost" className="h-7 text-blue-600 hover:text-blue-700 font-bold text-xs gap-1" onClick={() => window.open(item.fileUrl)}>
                                        Download
@@ -4811,7 +4881,7 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                            {item.type === "TEXT" && (
                               <div className="space-y-1">
                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.title}</span>
-                                 <p className="text-xs font-bold text-slate-800 bg-white border border-slate-100 px-3 py-2 rounded-lg">{item.value}</p>
+                                 <p className="text-xs font-bold text-slate-800 bg-slate-50 border border-slate-100 px-3 py-2 rounded-lg">{item.value}</p>
                               </div>
                            )}
                            {item.type === "DROPDOWN" && (
@@ -4831,7 +4901,7 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                                     <Button 
                                       size="sm" 
                                       variant="outline" 
-                                      className="h-7 font-black text-xs gap-1.5 rounded-lg border-slate-200 hover:bg-slate-50" 
+                                      className="h-8 font-black text-xs gap-1.5 rounded-xl border-blue-200 text-blue-600 hover:bg-blue-50" 
                                       onClick={() => window.open(`https://maps.google.com/?q=${item.value}`)}
                                     >
                                        📍 {item.value} (Open Maps)
@@ -4847,11 +4917,11 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
          </div>
 
           {task.subtasks && task.subtasks.length > 0 && (
-             <div className="md:col-span-2 pt-6 border-t border-slate-100 space-y-4">
+             <div className="lg:col-span-12 pt-6 border-t border-slate-200/60 space-y-4">
                 <Label className="text-[10px] font-black uppercase text-slate-400">Subtasks ({task.subtasks.length})</Label>
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                    {task.subtasks.map((sub: any) => (
-                      <div key={sub.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-slate-50 border border-slate-200/50 rounded-2xl gap-3">
+                      <div key={sub.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white border border-slate-200/70 rounded-2xl gap-3 shadow-sm">
                          <div className="flex items-center gap-3">
                             <StatusBadge status={sub.status} dueDate={sub.dueDate} />
                             <div>

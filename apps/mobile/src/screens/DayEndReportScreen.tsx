@@ -178,17 +178,45 @@ function buildAdminEquivalentDerHtml({
 
     let startTimeFormatted = "--";
     if (t.startedAt) {
-      startTimeFormatted = dayjs(t.startedAt).format("hh:mm A");
-    } else if (idx > 0 && completedTasks[idx - 1]) {
+      const d = dayjs(t.startedAt);
+      if (d.isValid()) {
+        if (d.hour() === 9 && d.minute() === 0 && t.createdAt) {
+          const cDate = dayjs(t.createdAt);
+          if (cDate.isValid() && cDate.isAfter(d) && (!completedDate || !cDate.isAfter(dayjs(completedDate)))) {
+            startTimeFormatted = cDate.format("hh:mm A");
+          } else {
+            startTimeFormatted = d.format("hh:mm A");
+          }
+        } else {
+          startTimeFormatted = d.format("hh:mm A");
+        }
+      }
+    }
+    
+    if (startTimeFormatted === "--" && idx > 0 && completedTasks[idx - 1]) {
       const prev = completedTasks[idx - 1];
       const prevDone = prev.completedAt || prev.updatedAt;
       startTimeFormatted = prevDone ? dayjs(prevDone).format("hh:mm A") : "--";
-    } else if (todayAttendance?.checkInTime && completedDate && new Date(todayAttendance.checkInTime).getTime() < completedDate.getTime()) {
-      startTimeFormatted = dayjs(todayAttendance.checkInTime).format("hh:mm A");
-    } else if (completedDate) {
-      startTimeFormatted = dayjs(new Date(completedDate.getTime() - 25 * 60 * 1000)).format("hh:mm A");
-    } else if (t.startDate) {
-      startTimeFormatted = dayjs(t.startDate).format("hh:mm A");
+    }
+    
+    if (startTimeFormatted === "--") {
+      if (t.createdAt && completedDate) {
+        const cDate = dayjs(t.createdAt);
+        if (cDate.isValid() && cDate.isSame(dayjs(completedDate), "day") && !cDate.isAfter(dayjs(completedDate))) {
+          startTimeFormatted = cDate.format("hh:mm A");
+        }
+      }
+      if (startTimeFormatted === "--" && todayAttendance?.checkInTime && completedDate && new Date(todayAttendance.checkInTime).getTime() < completedDate.getTime()) {
+        startTimeFormatted = dayjs(todayAttendance.checkInTime).format("hh:mm A");
+      }
+    }
+    
+    if (startTimeFormatted === "--") {
+      if (completedDate) {
+        startTimeFormatted = dayjs(new Date(completedDate.getTime() - 25 * 60 * 1000)).format("hh:mm A");
+      } else if (t.startDate) {
+        startTimeFormatted = dayjs(t.startDate).format("hh:mm A");
+      }
     }
 
     return {
@@ -931,7 +959,7 @@ export function DayEndReportScreen() {
                       <View style={{ flexDirection: "row", gap: 12, marginTop: 5, backgroundColor: "#F8FAFC", paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: "#E2E8F0" }}>
                         <Text style={{ fontSize: 11, color: "#475569" }}>
                           <Text style={{ fontWeight: "700", color: "#334155" }}>Start: </Text>
-                          {t.startDate ? fmtTime(t.startDate) : "—"}
+                          {t.startedAt ? fmtTime(t.startedAt) : (t.startDate ? fmtTime(t.startDate) : "—")}
                         </Text>
                         <Text style={{ fontSize: 11, color: "#16A34A" }}>
                           <Text style={{ fontWeight: "700", color: "#334155" }}>Done: </Text>
