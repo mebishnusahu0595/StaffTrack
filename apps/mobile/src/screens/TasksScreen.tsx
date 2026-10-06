@@ -1,7 +1,7 @@
 import dayjs from "dayjs";
 import { useCallback, useMemo, useState } from "react";
 import { Alert, FlatList, Linking, RefreshControl, StyleSheet, TouchableOpacity, View, Image, ScrollView } from "react-native";
-import { Menu, Button, Text, Portal, Modal, TextInput, IconButton, Divider, TouchableRipple } from "react-native-paper";
+import { Menu, Button, Text, Portal, Modal, TextInput, IconButton, Divider, TouchableRipple, Icon } from "react-native-paper";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import * as Print from "expo-print";
@@ -583,6 +583,26 @@ export function TasksScreen() {
             </Text>
 
             <Divider style={styles.divider} />
+
+            {(() => {
+              const start = selectedTask?.startedAt || taskStartTime;
+              const completed = selectedTask?.completedAt;
+              return (
+                <View style={{ backgroundColor: "#F8FAFC", padding: 10, borderRadius: 10, marginBottom: 12, borderWidth: 1, borderColor: "#E2E8F0", flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Icon source="clock-outline" size={18} color="#0284C7" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, fontWeight: "700", color: "#1E293B" }}>
+                      {completed
+                        ? `Timing: ${start ? dayjs(start).format("hh:mm A") : "—"} → ${dayjs(completed).format("hh:mm A")}`
+                        : `Started at: ${start ? dayjs(start).format("hh:mm A") : "—"}`}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: "#64748B" }}>
+                      Due: {dayjs(selectedTask?.dueDate).format("DD MMM YYYY, hh:mm A")}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })()}
 
             {selectedTask?.taskType === "DEALER" && (
               <View style={{ backgroundColor: "#E0F2FE", padding: 12, borderRadius: 14, marginBottom: 14, borderWidth: 1, borderColor: "#BAE6FD" }}>

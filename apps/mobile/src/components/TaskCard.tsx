@@ -50,6 +50,45 @@ export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
         </View>
 
         {(() => {
+          const startTime = getTaskStartTime(task);
+          if (task.status === "COMPLETED") {
+            const end = task.completedAt || null;
+            return (
+              <View style={styles.timingBadgeCompleted}>
+                <Icon source="clock-check-outline" size={14} color="#15803D" />
+                <Text style={styles.timingTextCompleted}>
+                  {startTime ? dayjs(startTime).format("hh:mm A") : "—"}
+                  {" – "}
+                  {end ? dayjs(end).format("hh:mm A") : "Completed"}
+                  {startTime && end ? ` (${formatDuration(startTime, end)})` : ""}
+                </Text>
+              </View>
+            );
+          }
+          if (task.status === "IN_PROGRESS" && startTime) {
+            return (
+              <View style={styles.timingBadgeProgress}>
+                <Icon source="clock-fast" size={14} color="#B45309" />
+                <Text style={styles.timingTextProgress}>
+                  Started at {dayjs(startTime).format("hh:mm A")}
+                </Text>
+              </View>
+            );
+          }
+          if (task.status === "PENDING" && startTime) {
+            return (
+              <View style={styles.metaRow}>
+                <Icon source="clock-outline" size={16} color="#66736F" />
+                <Text style={styles.metaText}>
+                  Scheduled: {dayjs(startTime).format("hh:mm A")}
+                </Text>
+              </View>
+            );
+          }
+          return null;
+        })()}
+
+        {(() => {
           const now = dayjs();
           const due = dayjs(task.dueDate);
           const diffMinutes = due.diff(now, "minute");
@@ -256,6 +295,29 @@ function getTaskLocation(task: Task) {
   }
 
   return null;
+}
+
+function getTaskStartTime(task: Task): string | null {
+  if (task.startedAt) return task.startedAt;
+  if (task.startDate) {
+    const d = dayjs(task.startDate);
+    // Ignore default 09:00:00 shift start
+    if (!(d.hour() === 9 && d.minute() === 0 && d.second() === 0)) {
+      return task.startDate;
+    }
+  }
+  if (task.createdAt && task.dueDate && dayjs(task.createdAt).isSame(dayjs(task.dueDate), "day")) {
+    return task.createdAt;
+  }
+  return task.startedAt || task.startDate || null;
+}
+
+function formatDuration(startIso: string, endIso: string): string {
+  const m = Math.max(1, dayjs(endIso).diff(dayjs(startIso), "minute"));
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  const remM = m % 60;
+  return remM > 0 ? `${h}h ${remM}m` : `${h}h`;
 }
 
 const styles = StyleSheet.create({
@@ -517,5 +579,41 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "900",
     letterSpacing: 0.5,
+  },
+  timingBadgeCompleted: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F0FDF4",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    marginTop: 6,
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: "#DCFCE7",
+  },
+  timingTextCompleted: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#15803D",
+  },
+  timingBadgeProgress: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    marginTop: 6,
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  timingTextProgress: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#92400E",
   },
 });

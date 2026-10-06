@@ -15,6 +15,7 @@ import { API_ORIGIN_URL } from "../config/env";
 function buildAdminEquivalentDerHtml({
   report,
   user,
+  attendance,
   tasks = [],
   workTimeLabel = "0h 0m",
   breakTimeLabel = "0h 0m",
@@ -22,6 +23,7 @@ function buildAdminEquivalentDerHtml({
 }: {
   report: any;
   user: any;
+  attendance?: any;
   tasks?: any[];
   workTimeLabel?: string;
   breakTimeLabel?: string;
@@ -109,7 +111,7 @@ function buildAdminEquivalentDerHtml({
     return t.description || "";
   };
 
-  const parseTaskDetails = (t: any) => {
+  const parseTaskDetails = (t: any, idx = 0) => {
     let locationCoords = "";
     if (t.completionLat != null && t.completionLng != null) {
       locationCoords = `${Number(t.completionLat).toFixed(4)}, ${Number(t.completionLng).toFixed(4)}`;
@@ -206,8 +208,8 @@ function buildAdminEquivalentDerHtml({
           startTimeFormatted = cDate.format("hh:mm A");
         }
       }
-      if (startTimeFormatted === "--" && todayAttendance?.checkInTime && completedDate && new Date(todayAttendance.checkInTime).getTime() < completedDate.getTime()) {
-        startTimeFormatted = dayjs(todayAttendance.checkInTime).format("hh:mm A");
+      if (startTimeFormatted === "--" && attendance?.checkInTime && completedDate && new Date(attendance.checkInTime).getTime() < completedDate.getTime()) {
+        startTimeFormatted = dayjs(attendance.checkInTime).format("hh:mm A");
       }
     }
     
@@ -615,6 +617,7 @@ export function DayEndReportScreen() {
         html = buildAdminEquivalentDerHtml({
           report: targetReport,
           user: summary?.user || user,
+          attendance: summary?.attendance || (targetReport as any)?.attendance,
           tasks: dayTasks,
           workTimeLabel,
           breakTimeLabel: "0h 0m",
@@ -830,6 +833,7 @@ export function DayEndReportScreen() {
         htmlContent = buildAdminEquivalentDerHtml({
           report,
           user,
+          attendance: summary?.attendance || (report as any)?.attendance,
           tasks: dayTasks,
           workTimeLabel,
           breakTimeLabel: "0h 0m",

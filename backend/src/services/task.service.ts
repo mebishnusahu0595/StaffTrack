@@ -214,7 +214,29 @@ export interface ListTasksFilter {
 
   if (actor.role === UserRole.EMPLOYEE) {
     for (const t of tasks) {
-      if (t.startDate) {
+      if (t.description) {
+        t.description = t.description.replace(/^\[Start:[^\]]+\]\n?/i, "").replace(/^\[Time:[^\]]+\]\n?/i, "");
+      }
+
+      let effectiveStart: Date | null = t.startedAt ? new Date(t.startedAt) : null;
+      if (!effectiveStart && t.startDate) {
+        const sDate = new Date(t.startDate);
+        const kolkataHours = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", hour12: false }).format(sDate);
+        const kolkataMins = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", minute: "numeric" }).format(sDate);
+        // Only treat as real start if not default 09:00 AM shift start
+        if (!(parseInt(kolkataHours, 10) === 9 && parseInt(kolkataMins, 10) === 0)) {
+          effectiveStart = sDate;
+        }
+      }
+      if (!effectiveStart && t.createdAt && t.dueDate) {
+        const cDate = new Date(t.createdAt);
+        const dDate = new Date(t.dueDate);
+        if (cDate.toDateString() === dDate.toDateString()) {
+          effectiveStart = cDate;
+        }
+      }
+
+      if (effectiveStart) {
         const formatOptionsDate: Intl.DateTimeFormatOptions = {
           timeZone: "Asia/Kolkata",
           day: "2-digit",
@@ -226,11 +248,17 @@ export interface ListTasksFilter {
           minute: "2-digit",
           hour12: true
         };
-        const startStr = new Intl.DateTimeFormat("en-IN", formatOptionsDate).format(new Date(t.startDate));
-        const startTimeStr = new Intl.DateTimeFormat("en-IN", formatOptionsTime).format(new Date(t.startDate));
-        const dueTimeStr = new Intl.DateTimeFormat("en-IN", formatOptionsTime).format(new Date(t.dueDate));
+        const startStr = new Intl.DateTimeFormat("en-IN", formatOptionsDate).format(effectiveStart);
+        const startTimeStr = new Intl.DateTimeFormat("en-IN", formatOptionsTime).format(effectiveStart);
 
-        const timingInfo = `[Start: ${startStr} @ ${startTimeStr} - ${dueTimeStr}]`;
+        let timingInfo: string;
+        if (t.completedAt) {
+          const compTimeStr = new Intl.DateTimeFormat("en-IN", formatOptionsTime).format(new Date(t.completedAt));
+          timingInfo = `[Time: ${startTimeStr} – ${compTimeStr}]`;
+        } else {
+          const dueTimeStr = new Intl.DateTimeFormat("en-IN", formatOptionsTime).format(new Date(t.dueDate));
+          timingInfo = `[Start: ${startStr} @ ${startTimeStr} - ${dueTimeStr}]`;
+        }
         t.description = t.description ? `${timingInfo}\n${t.description}` : timingInfo;
       }
     }
