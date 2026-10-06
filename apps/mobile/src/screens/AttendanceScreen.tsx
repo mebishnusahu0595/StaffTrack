@@ -24,17 +24,20 @@ function calculateRecordBreakMs(breaks?: any[]) {
 
 const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-const statusMeta: Record<AttendanceStatus, { label: string; color: string; textColor: string }> = {
+const statusMeta: Record<string, { label: string; color: string; textColor: string }> = {
   PRESENT: { label: "Present", color: "#DFF3E6", textColor: "#17633A" },
   ABSENT: { label: "Absent", color: "#FDE7E9", textColor: "#A4262C" },
   HALF_DAY: { label: "Half-day", color: "#FFF4CE", textColor: "#7A4D00" },
-  ON_LEAVE: { label: "Leave", color: "#E8F0FE", textColor: "#174EA6" }
+  ON_LEAVE: { label: "Leave", color: "#E8F0FE", textColor: "#174EA6" },
+  LWP: { label: "LWP", color: "#FEE2E2", textColor: "#991B1B" }
 };
 
 type CalendarCell = {
   key: string;
   day?: number;
   record?: Attendance;
+  isHoliday?: boolean;
+  isLwp?: boolean;
 };
 
 export function AttendanceScreen() {
@@ -45,9 +48,21 @@ export function AttendanceScreen() {
     visibleMonth.year()
   );
 
+  const lwpDates = useMemo(() => {
+    const leaveDates = Array.from(
+      new Set(
+        attendance
+          .filter((r) => r.status === "ON_LEAVE")
+          .map((r) => toDateKey(r.date))
+      )
+    ).sort();
+    // 2 leaves are normal paid, leaves from index 2 onwards are LWP
+    return new Set(leaveDates.slice(2));
+  }, [attendance]);
+
   const cells = useMemo(
-    () => buildCalendarCells(visibleMonth, attendance, holidays),
-    [attendance, holidays, visibleMonth]
+    () => buildCalendarCells(visibleMonth, attendance, holidays, lwpDates),
+    [attendance, holidays, visibleMonth, lwpDates]
   );
 
   const stats = useMemo(() => {
@@ -74,7 +89,10 @@ export function AttendanceScreen() {
       if (status === "ON_LEAVE") onLeave++;
     });
 
-    return { present, absent, halfDay, onLeave, holidayCount };
+    const paidLeave = Math.min(2, onLeave);
+    const lwpCount = Math.max(0, onLeave - 2);
+
+    return { present, absent, halfDay, onLeave, paidLeave, lwpCount, holidayCount };
   }, [attendance, holidays]);
 
   const attendanceRows = useMemo(
@@ -122,20 +140,27 @@ export function AttendanceScreen() {
             <Text style={[styles.summaryLabel, { color: "#A4262C" }]}>ABSENT</Text>
           </Card.Content>
         </Card>
-        <Card mode="contained" style={[styles.summaryCard, { backgroundColor: "#FFF4CE" }]}>
-          <Card.Content style={styles.summaryCardContent}>
-            <AppIcon name="clock-outline" size={24} color="#7A4D00" />
-            <Text style={[styles.summaryValue, { color: "#7A4D00" }]}>{stats.halfDay}</Text>
-            <Text style={[styles.summaryLabel, { color: "#7A4D00" }]}>HALF DAY</Text>
-          </Card.Content>
-        </Card>
         <Card mode="contained" style={[styles.summaryCard, { backgroundColor: "#E8F0FE" }]}>
           <Card.Content style={styles.summaryCardContent}>
-            <AppIcon name="calendar-star" size={24} color="#174EA6" />
-            <Text style={[styles.summaryValue, { color: "#174EA6" }]}>{stats.holidayCount}</Text>
-            <Text style={[styles.summaryLabel, { color: "#174EA6" }]}>HOLIDAYS</Text>
+            <AppIcon name="calendar-check" size={24} color="#174EA6" />
+            <Text style={[styles.summaryValue, { color: "#174EA6" }]}>{stats.paidLeave}/2</Text>
+            <Text style={[styles.summaryLabel, { color: "#174EA6" }]}>PAID LEAVE</Text>
           </Card.Content>
         </Card>
+        <Card mode="contained" style={[styles.summaryCard, { backgroundColor: stats.lwpCount > 0 ? "#FEE2E2" : "#F8FAFC" }]}>
+          <Card.Content style={styles.summaryCardContent}>
+            <AppIcon name="alert-circle-outline" size={24} color={stats.lwpCount > 0 ? "#991B1B" : "#64748B"} />
+            <Text style={[styles.summaryValue, { color: stats.lwpCount > 0 ? "#991B1B" : "#64748B" }]}>{stats.lwpCount}</Text>
+            <Text style={[styles.summaryLabel, { color: stats.lwpCount > 0 ? "#991B1B" : "#64748B" }]}>LWP (UNPAID)</Text>
+          </Card.Content>
+        </Card>
+      </View>
+
+      <View style={styles.policyBanner}>
+        <AppIcon name="information-outline" size={16} color="#0369A1" />
+        <Text style={styles.policyBannerText}>
+          <Text style={{ fontWeight: "700" }}>Monthly Leave Policy:</Text> 2 days paid leave allowed per month. Extra leaves are marked as <Text style={{ fontWeight: "800", color: "#991B1B" }}>LWP (Leave Without Pay)</Text>.
+        </Text>
       </View>
 
       <Card mode="elevated" style={styles.calendarCard}>
@@ -151,7 +176,9 @@ export function AttendanceScreen() {
             <View key={`week-${rowIndex}`} style={styles.weekGridRow}>
               {row.map((cell) => {
                 const meta = cell.record
-                  ? statusMeta[cell.record.status]
+                  ? (cell.isLwp 
+                      ? statusMeta.LWP 
+                      : (statusMeta[cell.record.status] || { label: cell.record.status, color: "#F1F5F9", textColor: "#475569" }))
                   : cell.isHoliday
                     ? { label: "Holiday", color: "#FEF3C7", textColor: "#92400E" }
                     : undefined;
@@ -170,8 +197,18 @@ export function AttendanceScreen() {
                         <Text style={[styles.dayNumber, meta ? { color: meta.textColor } : undefined]}>
                           {cell.day}
                         </Text>
-                        {meta ? (
-                          <View style={[styles.statusDot, { backgroundColor: meta.textColor }]} />
+                        {cell.isLwp ? (
+                          <Text style={styles.lwpDayTag}>LWP</Text>
+                        ) : cell.record?.status === "PRESENT" ? (
+                          <Text style={[styles.letterTag, { color: "#17633A" }]}>P</Text>
+                        ) : cell.record?.status === "ABSENT" ? (
+                          <Text style={[styles.letterTag, { color: "#A4262C" }]}>A</Text>
+                        ) : cell.record?.status === "ON_LEAVE" ? (
+                          <Text style={[styles.letterTag, { color: "#174EA6" }]}>L</Text>
+                        ) : cell.record?.status === "HALF_DAY" ? (
+                          <Text style={[styles.letterTag, { color: "#7A4D00" }]}>HD</Text>
+                        ) : cell.isHoliday ? (
+                          <Text style={[styles.letterTag, { color: "#92400E" }]}>H</Text>
                         ) : null}
                       </>
                     ) : null}
@@ -184,12 +221,42 @@ export function AttendanceScreen() {
       </Card>
 
       <View style={styles.legend}>
-        {(Object.keys(statusMeta) as AttendanceStatus[]).map((status) => (
-          <View key={status} style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: statusMeta[status].color, borderColor: statusMeta[status].textColor, borderWidth: 1 }]} />
-            <Text style={styles.legendText}>{statusMeta[status].label}</Text>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendBadge, { backgroundColor: statusMeta.PRESENT.color, borderColor: statusMeta.PRESENT.textColor }]}>
+            <Text style={[styles.legendBadgeText, { color: statusMeta.PRESENT.textColor }]}>P</Text>
           </View>
-        ))}
+          <Text style={styles.legendText}>Present (P)</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendBadge, { backgroundColor: statusMeta.ABSENT.color, borderColor: statusMeta.ABSENT.textColor }]}>
+            <Text style={[styles.legendBadgeText, { color: statusMeta.ABSENT.textColor }]}>A</Text>
+          </View>
+          <Text style={styles.legendText}>Absent (A)</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendBadge, { backgroundColor: statusMeta.HALF_DAY.color, borderColor: statusMeta.HALF_DAY.textColor }]}>
+            <Text style={[styles.legendBadgeText, { color: statusMeta.HALF_DAY.textColor }]}>HD</Text>
+          </View>
+          <Text style={styles.legendText}>Half-day (HD)</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendBadge, { backgroundColor: statusMeta.ON_LEAVE.color, borderColor: statusMeta.ON_LEAVE.textColor }]}>
+            <Text style={[styles.legendBadgeText, { color: statusMeta.ON_LEAVE.textColor }]}>L</Text>
+          </View>
+          <Text style={styles.legendText}>Leave - Paid (L)</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendBadge, { backgroundColor: statusMeta.LWP.color, borderColor: statusMeta.LWP.textColor, paddingHorizontal: 3 }]}>
+            <Text style={[styles.legendBadgeText, { color: statusMeta.LWP.textColor, fontSize: 8 }]}>LWP</Text>
+          </View>
+          <Text style={[styles.legendText, { color: "#991B1B", fontWeight: "700" }]}>LWP - Unpaid</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendBadge, { backgroundColor: "#FEF3C7", borderColor: "#92400E" }]}>
+            <Text style={[styles.legendBadgeText, { color: "#92400E" }]}>H</Text>
+          </View>
+          <Text style={styles.legendText}>Holiday (H)</Text>
+        </View>
       </View>
 
       <View style={styles.recordsList}>
@@ -202,7 +269,8 @@ export function AttendanceScreen() {
           </Card>
         ) : (
           attendanceRows.map((record) => {
-            const display = getAttendanceDisplay(record, user?.shiftStart, user?.shiftEnd);
+            const isRecordLwp = record.status === "ON_LEAVE" && lwpDates.has(toDateKey(record.date));
+            const display = getAttendanceDisplay(record, isRecordLwp, user?.shiftStart, user?.shiftEnd);
             return (
               <Card key={record.id} mode="contained" style={styles.recordCard}>
                 <Card.Content style={styles.recordContent}>
@@ -226,7 +294,12 @@ export function AttendanceScreen() {
   );
 }
 
-function buildCalendarCells(month: dayjs.Dayjs, records: Attendance[], holidays: Holiday[]): (CalendarCell & { isHoliday?: boolean })[] {
+function buildCalendarCells(
+  month: dayjs.Dayjs,
+  records: Attendance[],
+  holidays: Holiday[],
+  lwpDates: Set<string>
+): CalendarCell[] {
   const byDate = new Map<string, Attendance[]>();
   records.forEach((record) => {
     const dateKey = toDateKey(record.date);
@@ -236,7 +309,7 @@ function buildCalendarCells(month: dayjs.Dayjs, records: Attendance[], holidays:
   });
   const holidayDates = new Set(holidays.filter((holiday) => holiday.type === "HOLIDAY").map((holiday) => toDateKey(holiday.date)));
   
-  const cells: (CalendarCell & { isHoliday?: boolean })[] = [];
+  const cells: CalendarCell[] = [];
   const firstDayOffset = month.startOf("month").day();
 
   for (let index = 0; index < firstDayOffset; index += 1) {
@@ -246,11 +319,15 @@ function buildCalendarCells(month: dayjs.Dayjs, records: Attendance[], holidays:
   for (let day = 1; day <= month.daysInMonth(); day += 1) {
     const date = month.date(day);
     const dateStr = date.format("YYYY-MM-DD");
+    const rec = resolveDayRecord(byDate.get(dateStr));
+    const isLwp = Boolean(rec && rec.status === "ON_LEAVE" && lwpDates.has(dateStr));
+
     cells.push({
       key: dateStr,
       day,
-      record: resolveDayRecord(byDate.get(dateStr)),
-      isHoliday: holidayDates.has(dateStr)
+      record: rec,
+      isHoliday: holidayDates.has(dateStr),
+      isLwp
     });
   }
 
@@ -261,8 +338,8 @@ function buildCalendarCells(month: dayjs.Dayjs, records: Attendance[], holidays:
   return cells;
 }
 
-function chunkCalendarRows(cells: (CalendarCell & { isHoliday?: boolean })[]) {
-  const rows: (CalendarCell & { isHoliday?: boolean })[][] = [];
+function chunkCalendarRows(cells: CalendarCell[]) {
+  const rows: CalendarCell[][] = [];
   for (let index = 0; index < cells.length; index += 7) {
     rows.push(cells.slice(index, index + 7));
   }
@@ -295,9 +372,16 @@ function toDateKey(value: string) {
   return match ? match[0] : dayjs(value).format("YYYY-MM-DD");
 }
 
-function getAttendanceDisplay(record: Attendance, shiftStart = "09:00", shiftEnd = "18:00") {
+function getAttendanceDisplay(record: Attendance, isLwp = false, shiftStart = "09:00", shiftEnd = "18:00") {
+  if (record.status === "ON_LEAVE") {
+    if (isLwp) {
+      return { label: "LWP (Without Pay)", bg: "#FEE2E2", color: "#991B1B" };
+    }
+    return { label: "Leave (Paid)", bg: "#E8F0FE", color: "#174EA6" };
+  }
+
   if (record.status !== "PRESENT") {
-    const meta = statusMeta[record.status];
+    const meta = statusMeta[record.status] || { label: record.status, color: "#F1F5F9", textColor: "#475569" };
     return { label: meta.label, bg: meta.color, color: meta.textColor };
   }
 
@@ -377,13 +461,49 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     marginTop: 2
   },
+  letterTag: {
+    fontSize: 11,
+    fontWeight: "900",
+    marginTop: 1,
+    textAlign: "center"
+  },
+  lwpDayTag: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: "#991B1B",
+    backgroundColor: "#FEE2E2",
+    paddingHorizontal: 2,
+    paddingVertical: 1,
+    borderRadius: 3,
+    marginTop: 1,
+    textAlign: "center"
+  },
   dayNumber: {
     color: "#24312D",
-    fontWeight: "700"
+    fontWeight: "700",
+    fontSize: 12
   },
   statusText: {
     fontSize: 10,
     marginTop: 2
+  },
+  policyBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F0F9FF",
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+    borderRadius: 10,
+    padding: 10,
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 12
+  },
+  policyBannerText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#0369A1",
+    lineHeight: 16
   },
   legend: {
     flexDirection: "row",
@@ -396,13 +516,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 6
   },
+  legendBadge: {
+    borderRadius: 4,
+    borderWidth: 1,
+    minWidth: 20,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 2
+  },
+  legendBadgeText: {
+    fontSize: 9,
+    fontWeight: "800"
+  },
   legendDot: {
     borderRadius: 5,
     height: 10,
     width: 10
   },
   legendText: {
-    color: "#66736F"
+    color: "#66736F",
+    fontSize: 11,
+    fontWeight: "600"
   },
   recordsList: {
     gap: 10,

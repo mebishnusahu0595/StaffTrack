@@ -9,6 +9,7 @@ import { ActivityIndicator, Image, View, StyleSheet, TouchableOpacity } from "re
 import { Text, Divider, IconButton } from "react-native-paper";
 import { useEffect } from "react";
 import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
 
 import { appIconSource, AppIcon } from "../components/AppIcon";
 import { useAuth } from "../auth/AuthContext";
@@ -212,7 +213,7 @@ function CustomDrawerContent(props: any) {
       </TouchableOpacity>
 
       <View style={{ padding: 16, alignItems: "center" }}>
-        <Text style={{ fontSize: 11, color: "#94A3B8", fontWeight: "600" }}>Version 1.0.8</Text>
+        <Text style={{ fontSize: 11, color: "#94A3B8", fontWeight: "600" }}>Version {Constants.expoConfig?.version || "1.1.1"}</Text>
       </View>
     </DrawerContentScrollView>
   );

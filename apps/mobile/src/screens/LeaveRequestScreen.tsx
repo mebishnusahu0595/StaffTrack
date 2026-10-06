@@ -50,15 +50,30 @@ export function LeaveRequestScreen() {
   const leaves = leavesQuery.data ?? [];
   const summary = summaryQuery.data;
 
+  const usedThisMonth = summary?.usedThisMonth ?? 0;
+  const remainingPaidThisMonth = Math.max(0, 2 - usedThisMonth);
+
+  const startDay = dayjs(startDate).startOf("day");
+  const endDay = dayjs(endDate).startOf("day");
+  const requestedDays = Math.max(1, endDay.diff(startDay, "day") + 1);
+  const lwpDaysInRequest = Math.max(0, requestedDays - remainingPaidThisMonth);
+  const perDaySalary = summary?.perDaySalary || 733;
+  const isLwpApplication = lwpDaysInRequest > 0 || usedThisMonth >= 2;
+
   function handleSubmit() {
     if (!reason.trim()) {
       Alert.alert("Missing Reason", "Please provide a reason for your leave.");
       return;
     }
+    const finalReason = isLwpApplication && !reason.toLowerCase().includes("lwp") && !reason.toLowerCase().includes("confirm")
+      ? `${reason.trim()} (Confirmed LWP)`
+      : reason.trim();
+
     mutation.mutate({
       startDate: dayjs(startDate).format("YYYY-MM-DD"),
       endDate: dayjs(endDate).format("YYYY-MM-DD"),
-      reason
+      reason: finalReason,
+      confirmed: true
     });
   }
 
@@ -153,14 +168,51 @@ export function LeaveRequestScreen() {
         <Dialog visible={isDialogVisible} onDismiss={() => setIsDialogVisible(false)} style={styles.dialog}>
           <Dialog.Title>Apply for Leave</Dialog.Title>
           <Dialog.Content>
-            {summary?.exceedsMonthlyLimit && (
-              <View style={[styles.warningBanner, { marginBottom: 12 }]}>
-                <RN.Text style={styles.warningTitle}>⚠️ Leave Without Pay (LWP)</RN.Text>
-                <RN.Text style={styles.warningText}>
-                  You have used your 2 paid leaves for this month. This leave will deduct pay at ₹{summary.perDaySalary || 733}/day.
+            {/* Prominent Upfront Policy Notice & Live LWP Breakdown */}
+            <View style={{
+              backgroundColor: isLwpApplication ? "#FEF2F2" : "#F0F9FF",
+              borderColor: isLwpApplication ? "#FCA5A5" : "#BAE6FD",
+              borderWidth: 1,
+              borderRadius: 8,
+              padding: 10,
+              marginBottom: 12
+            }}>
+              <RN.Text style={{
+                color: isLwpApplication ? "#991B1B" : "#0369A1",
+                fontWeight: "700",
+                fontSize: 13,
+                marginBottom: 4
+              }}>
+                {isLwpApplication ? "⚠️ Leave Policy & LWP Notice" : "ℹ️ Monthly Leave Policy"}
+              </RN.Text>
+              <RN.Text style={{ color: "#374151", fontSize: 12, lineHeight: 17 }}>
+                Company policy allows maximum <RN.Text style={{ fontWeight: "700" }}>2 days of paid leave</RN.Text> per month. Extra leaves are treated as <RN.Text style={{ fontWeight: "700", color: "#991B1B" }}>Leave Without Pay (LWP)</RN.Text> and ₹{perDaySalary}/day will be deducted from your base salary.
+              </RN.Text>
+              <View style={{
+                marginTop: 8,
+                paddingTop: 8,
+                borderTopColor: isLwpApplication ? "#FECACA" : "#E0F2FE",
+                borderTopWidth: 1,
+                flexDirection: "row",
+                justifyContent: "space-between"
+              }}>
+                <RN.Text style={{ fontSize: 11, color: "#4B5563" }}>
+                  Used This Month: <RN.Text style={{ fontWeight: "700" }}>{usedThisMonth}/2</RN.Text>
                 </RN.Text>
+                <RN.Text style={{ fontSize: 11, color: "#4B5563" }}>
+                  Days: <RN.Text style={{ fontWeight: "700" }}>{requestedDays}</RN.Text>
+                </RN.Text>
+                {lwpDaysInRequest > 0 ? (
+                  <RN.Text style={{ fontSize: 11, color: "#DC2626", fontWeight: "700" }}>
+                    {lwpDaysInRequest} LWP Day(s)
+                  </RN.Text>
+                ) : (
+                  <RN.Text style={{ fontSize: 11, color: "#16A34A", fontWeight: "700" }}>
+                    Paid Leave
+                  </RN.Text>
+                )}
               </View>
-            )}
+            </View>
 
             {/* Today quick-select */}
             <View style={styles.quickSelectRow}>

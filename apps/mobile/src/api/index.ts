@@ -667,7 +667,7 @@ export interface YearlyLeaveSummary {
   warning: string | null;
 }
 
-export async function submitLeaveRequest(payload: { startDate: string; endDate: string; reason: string }): Promise<LeaveRequest> {
+export async function submitLeaveRequest(payload: { startDate: string; endDate: string; reason: string; confirmed?: boolean }): Promise<LeaveRequest> {
   return unwrap(await api.post<ApiEnvelope<LeaveRequest>>("/leaves", payload));
 }
 
