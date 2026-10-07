@@ -20,9 +20,25 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import dayjs from "dayjs";
 import axios from "axios";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
 import { api } from "../api/client";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
+export interface SelectedPhotoInfo {
+  url: string;
+  invoiceNo?: string;
+  dealerName?: string;
+  destination?: string;
+  vehicleNumber?: string;
+  driverName?: string;
+  driverMobile?: string;
+  handoverTo?: string;
+  dispatchDate?: string;
+  pdfUrl?: string;
+  boxesCount?: number;
+}
 
 export interface DispatchTrackingData {
   success: boolean;
@@ -87,9 +103,10 @@ export function VanikiOrderHistoryScreen() {
   // Expanded items state
   const [expandedOrderIds, setExpandedOrderIds] = useState<Record<string, boolean>>({});
 
-  // Full-Screen Image Preview Modal
-  const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
-  const [selectedPhotoTitle, setSelectedPhotoTitle] = useState<string>("");
+  // Full-Screen Interactive Photo Zoom & Bilty Download Modal
+  const [selectedPhoto, setSelectedPhoto] = useState<SelectedPhotoInfo | null>(null);
+  const [zoomScale, setZoomScale] = useState<number>(1);
+  const [isSavingBilty, setIsSavingBilty] = useState<boolean>(false);
 
   // Instant Custom Track Input
   const [directInvoiceQuery, setDirectInvoiceQuery] = useState("");
@@ -99,6 +116,99 @@ export function VanikiOrderHistoryScreen() {
   useEffect(() => {
     loadOrderHistory();
   }, []);
+
+  const handleDownloadBilty = async () => {
+    if (!selectedPhoto?.url) return;
+    try {
+      setIsSavingBilty(true);
+      const isAvailable = await Sharing.isAvailableAsync();
+      const invoiceNo = selectedPhoto.invoiceNo || "N/A";
+      const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 24px; background: #ffffff; color: #1E293B; }
+    .header { border-bottom: 3px solid #0284C7; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end; }
+    .title { font-size: 22px; font-weight: 900; color: #0284C7; }
+    .subtitle { font-size: 12px; color: #64748B; margin-top: 4px; }
+    .badge { background: #DCFCE7; color: #166534; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; border: 1px solid #BBF7D0; }
+    .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; background: #F8FAFC; border: 1px solid #E2E8F0; padding: 12px; border-radius: 8px; }
+    .meta-item { font-size: 12px; }
+    .meta-label { color: #64748B; font-weight: 600; font-size: 10px; text-transform: uppercase; }
+    .meta-value { font-weight: 700; color: #0F172A; margin-top: 2px; }
+    .photo-container { text-align: center; border: 1px solid #CBD5E1; border-radius: 8px; padding: 12px; background: #0F172A; margin-top: 10px; }
+    .photo-title { color: #FFFFFF; font-size: 12px; font-weight: 700; margin-bottom: 8px; text-align: left; }
+    img { max-width: 100%; max-height: 750px; border-radius: 6px; object-fit: contain; }
+    .footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #E2E8F0; font-size: 10px; color: #94A3B8; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="title">VANIKI CROP - DISPATCH & BILTY PROOF</div>
+      <div class="subtitle">Official Goods Dispatch Proof & Warehouse Scan Verification</div>
+    </div>
+    <div class="badge">VERIFIED DISPATCH</div>
+  </div>
+
+  <div class="meta-grid">
+    <div class="meta-item">
+      <div class="meta-label">Invoice Number</div>
+      <div class="meta-value">#${invoiceNo}</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Destination</div>
+      <div class="meta-value">${selectedPhoto.destination || 'N/A'}</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Vehicle Number</div>
+      <div class="meta-value">${selectedPhoto.vehicleNumber || 'N/A'}</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Driver Details</div>
+      <div class="meta-value">${selectedPhoto.driverName || 'N/A'} ${selectedPhoto.driverMobile ? `(${selectedPhoto.driverMobile})` : ''}</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Dealer / Handover</div>
+      <div class="meta-value">${selectedPhoto.dealerName || selectedPhoto.handoverTo || 'Vaniki Authorized Dealer'}</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Dispatch Date</div>
+      <div class="meta-value">${selectedPhoto.dispatchDate ? dayjs(selectedPhoto.dispatchDate).format("DD MMM YYYY, hh:mm A") : dayjs().format("DD MMM YYYY, hh:mm A")}</div>
+    </div>
+  </div>
+
+  <div class="photo-container">
+    <div class="photo-title">📷 Scanned Goods & Bilty Photo Proof:</div>
+    <img src="${selectedPhoto.url}" alt="Goods Bilty" />
+  </div>
+
+  <div class="footer">
+    Vaniki Crop Logistics • Warehouse Verified Dispatch • Generated via StaffTrack
+  </div>
+</body>
+</html>
+      `;
+
+      const { uri } = await Print.printToFileAsync({ html });
+      if (isAvailable) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "application/pdf",
+          dialogTitle: `Download / Save Bilty - Inv #${invoiceNo}`,
+          UTI: "com.adobe.pdf"
+        });
+      } else {
+        Alert.alert("Bilty PDF Saved", "File saved at: " + uri);
+      }
+    } catch (err: any) {
+      Alert.alert("Download Error", "Could not generate or save the bilty PDF: " + (err.message || "Unknown error"));
+    } finally {
+      setIsSavingBilty(false);
+    }
+  };
 
   const loadOrderHistory = async (isPullToRefresh = false) => {
     try {
@@ -453,8 +563,19 @@ export function VanikiOrderHistoryScreen() {
                     </View>
                     <TouchableOpacity
                       onPress={() => {
-                        setSelectedPhotoUrl(directTrackingResult.dispatchPhotoUrl || null);
-                        setSelectedPhotoTitle(`Invoice #${directTrackingResult.invoiceNo || directInvoiceQuery} Goods Photo`);
+                        setSelectedPhoto({
+                          url: directTrackingResult.dispatchPhotoUrl!,
+                          invoiceNo: directTrackingResult.invoiceNo || directInvoiceQuery,
+                          dealerName: directTrackingResult.dealer?.name,
+                          destination: directTrackingResult.destination,
+                          vehicleNumber: directTrackingResult.transport?.vehicleNumber,
+                          driverName: directTrackingResult.transport?.driverName,
+                          driverMobile: directTrackingResult.transport?.driverMobile,
+                          handoverTo: directTrackingResult.transport?.handoverTo,
+                          dispatchDate: directTrackingResult.dispatchDate,
+                          pdfUrl: directTrackingResult.pdfUrl
+                        });
+                        setZoomScale(1);
                       }}
                       activeOpacity={0.85}
                     >
@@ -775,10 +896,19 @@ export function VanikiOrderHistoryScreen() {
                               </View>
                               <TouchableOpacity
                                 onPress={() => {
-                                  setSelectedPhotoUrl(tracking.dispatchPhotoUrl || null);
-                                  setSelectedPhotoTitle(
-                                    `Invoice #${inv} Goods Photo • ${ord.dealerName || ""}`
-                                  );
+                                  setSelectedPhoto({
+                                    url: tracking.dispatchPhotoUrl!,
+                                    invoiceNo: inv,
+                                    dealerName: ord.dealerName,
+                                    destination: tracking.destination || ord.dealerCity,
+                                    vehicleNumber: tracking.transport?.vehicleNumber,
+                                    driverName: tracking.transport?.driverName,
+                                    driverMobile: tracking.transport?.driverMobile,
+                                    handoverTo: tracking.transport?.handoverTo,
+                                    dispatchDate: tracking.dispatchDate || ord.createdAt,
+                                    pdfUrl: tracking.pdfUrl
+                                  });
+                                  setZoomScale(1);
                                 }}
                                 activeOpacity={0.85}
                               >
@@ -876,40 +1006,161 @@ export function VanikiOrderHistoryScreen() {
         )}
       </ScrollView>
 
-      {/* ─── Full-Screen Photo Zoom Modal ─── */}
+      {/* ─── Full-Screen Interactive Photo Zoom & Bilty Download Modal ─── */}
       <Modal
-        visible={Boolean(selectedPhotoUrl)}
+        visible={Boolean(selectedPhoto?.url)}
         transparent
         animationType="fade"
-        onRequestClose={() => setSelectedPhotoUrl(null)}
+        onRequestClose={() => setSelectedPhoto(null)}
       >
         <View style={styles.photoModalBackdrop}>
+          {/* Header Bar */}
           <View style={styles.photoModalHeader}>
-            <Text style={styles.photoModalTitle} numberOfLines={1}>
-              {selectedPhotoTitle || "Dispatched Goods Photo"}
-            </Text>
-            <TouchableOpacity
-              onPress={() => setSelectedPhotoUrl(null)}
-              style={styles.photoModalCloseBtn}
-            >
-              <Ionicons name="close" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={styles.photoModalTitle} numberOfLines={1}>
+                Invoice #{selectedPhoto?.invoiceNo || "N/A"} • Goods / Bilty
+              </Text>
+              <Text style={styles.photoModalSub} numberOfLines={1}>
+                {selectedPhoto?.dealerName || "Vaniki Dealer"} • {selectedPhoto?.destination || "Dispatched"}
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              {/* Quick Save / Share Bilty in Header */}
+              <TouchableOpacity
+                onPress={handleDownloadBilty}
+                style={styles.headerDownloadBtn}
+                activeOpacity={0.8}
+                disabled={isSavingBilty}
+              >
+                {isSavingBilty ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="download" size={16} color="#FFFFFF" />
+                    <Text style={styles.headerDownloadText}>Bilty</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setSelectedPhoto(null)}
+                style={styles.photoModalCloseBtn}
+              >
+                <Ionicons name="close" size={22} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           </View>
 
+          {/* Interactive Zoomable Body */}
           <View style={styles.photoModalBody}>
-            {selectedPhotoUrl && (
-              <Image
-                source={{ uri: selectedPhotoUrl }}
-                style={styles.photoModalImage}
-                resizeMode="contain"
-              />
-            )}
+            <ScrollView
+              style={{ flex: 1, width: "100%" }}
+              contentContainerStyle={styles.zoomScrollContent}
+              maximumZoomScale={5}
+              minimumZoomScale={1}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+              centerContent={true}
+            >
+              {selectedPhoto?.url && (
+                <TouchableOpacity
+                  activeOpacity={1}
+                  onPress={() => setZoomScale((prev) => (prev >= 2 ? 1 : 2.5))}
+                >
+                  <Image
+                    source={{ uri: selectedPhoto.url }}
+                    style={[
+                      styles.photoModalImage,
+                      {
+                        transform: [{ scale: zoomScale }]
+                      }
+                    ]}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              )}
+            </ScrollView>
           </View>
 
+          {/* Zoom Controls & Bilty Download Action Bar */}
           <View style={styles.photoModalFooter}>
-            <Text style={styles.photoModalFooterText}>
-              Proof of Dispatch captured by Vaniki Warehouse Scanner
-            </Text>
+            {/* Zoom Controls Bar */}
+            <View style={styles.zoomControlsRow}>
+              <TouchableOpacity
+                onPress={() => setZoomScale((prev) => Math.max(1, Number((prev - 0.5).toFixed(1))))}
+                style={styles.zoomPillBtn}
+              >
+                <Ionicons name="remove-circle-outline" size={18} color="#FFFFFF" />
+                <Text style={styles.zoomPillText}>Zoom -</Text>
+              </TouchableOpacity>
+
+              <View style={styles.zoomScaleBadge}>
+                <Ionicons name="search" size={12} color="#38BDF8" />
+                <Text style={styles.zoomScaleBadgeText}>{zoomScale.toFixed(1)}x</Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => setZoomScale((prev) => Math.min(4.5, Number((prev + 0.5).toFixed(1))))}
+                style={styles.zoomPillBtn}
+              >
+                <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
+                <Text style={styles.zoomPillText}>Zoom +</Text>
+              </TouchableOpacity>
+
+              {zoomScale !== 1 && (
+                <TouchableOpacity
+                  onPress={() => setZoomScale(1)}
+                  style={styles.zoomResetBtn}
+                >
+                  <Ionicons name="refresh" size={14} color="#FFFFFF" />
+                  <Text style={styles.zoomResetText}>Reset</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Delivery Info Chips */}
+            <View style={styles.photoMetaRow}>
+              {selectedPhoto?.vehicleNumber ? (
+                <Text style={styles.photoMetaChip}>🚚 {selectedPhoto.vehicleNumber}</Text>
+              ) : null}
+              {selectedPhoto?.driverName ? (
+                <Text style={styles.photoMetaChip}>👤 {selectedPhoto.driverName}</Text>
+              ) : null}
+              {selectedPhoto?.destination ? (
+                <Text style={styles.photoMetaChip}>📍 {selectedPhoto.destination}</Text>
+              ) : null}
+            </View>
+
+            {/* Action Buttons: Save Bilty PDF & Warehouse Statement */}
+            <View style={styles.modalActionButtonsRow}>
+              <TouchableOpacity
+                onPress={handleDownloadBilty}
+                style={styles.saveBiltyPrimaryBtn}
+                activeOpacity={0.8}
+                disabled={isSavingBilty}
+              >
+                {isSavingBilty ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="document-text" size={18} color="#FFFFFF" />
+                    <Text style={styles.saveBiltyPrimaryText}>Download / Save Bilty (PDF)</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {selectedPhoto?.pdfUrl ? (
+                <TouchableOpacity
+                  onPress={() => openUrl(selectedPhoto.pdfUrl)}
+                  style={styles.warehousePdfBtn}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="open-outline" size={16} color="#0284C7" />
+                  <Text style={styles.warehousePdfBtnText}>Statement PDF</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
         </View>
       </Modal>
@@ -1581,10 +1832,10 @@ const styles = StyleSheet.create({
     color: "#0F172A"
   },
 
-  /* Photo Modal Preview */
+  /* Photo Modal Preview & Zoom & Bilty Actions */
   photoModalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.92)",
+    backgroundColor: "rgba(0,0,0,0.95)",
     justifyContent: "space-between"
   },
   photoModalHeader: {
@@ -1593,13 +1844,34 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingTop: Platform.OS === "ios" ? 54 : 20,
-    paddingBottom: 10
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(15,23,42,0.85)"
   },
   photoModalTitle: {
     color: "#FFFFFF",
     fontSize: 14,
-    fontWeight: "700",
-    flex: 1
+    fontWeight: "700"
+  },
+  photoModalSub: {
+    color: "#94A3B8",
+    fontSize: 11,
+    marginTop: 2
+  },
+  headerDownloadBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#059669",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8
+  },
+  headerDownloadText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700"
   },
   photoModalCloseBtn: {
     padding: 6,
@@ -1611,16 +1883,122 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center"
   },
-  photoModalImage: {
-    width: SCREEN_WIDTH - 20,
-    height: "80%"
-  },
-  photoModalFooter: {
-    padding: 16,
+  zoomScrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
     alignItems: "center"
   },
-  photoModalFooterText: {
-    color: "#94A3B8",
-    fontSize: 11
+  photoModalImage: {
+    width: SCREEN_WIDTH - 24,
+    height: "85%"
+  },
+  photoModalFooter: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "rgba(15,23,42,0.92)",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.15)",
+    gap: 10
+  },
+  zoomControlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10
+  },
+  zoomPillBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20
+  },
+  zoomPillText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  zoomScaleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(2,132,199,0.25)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(56,189,248,0.4)"
+  },
+  zoomScaleBadgeText: {
+    color: "#38BDF8",
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  zoomResetBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "rgba(239,68,68,0.25)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20
+  },
+  zoomResetText: {
+    color: "#FCA5A5",
+    fontSize: 11,
+    fontWeight: "700"
+  },
+  photoMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 6
+  },
+  photoMetaChip: {
+    color: "#E2E8F0",
+    backgroundColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    fontSize: 11,
+    fontWeight: "600"
+  },
+  modalActionButtonsRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center"
+  },
+  saveBiltyPrimaryBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#059669",
+    paddingVertical: 12,
+    borderRadius: 10,
+    elevation: 3
+  },
+  saveBiltyPrimaryText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  warehousePdfBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 10
+  },
+  warehousePdfBtnText: {
+    color: "#0284C7",
+    fontSize: 12,
+    fontWeight: "700"
   }
 });
