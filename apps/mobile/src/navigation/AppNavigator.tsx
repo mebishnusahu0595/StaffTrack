@@ -30,6 +30,7 @@ import { SalarySlipScreen } from "../screens/SalarySlipScreen";
 import { ProjectsScreen } from "../screens/ProjectsScreen";
 import { FilesScreen } from "../screens/FilesScreen";
 import { VanikiDealerOrdersScreen } from "../screens/VanikiDealerOrdersScreen";
+import { VanikiOrderHistoryScreen } from "../screens/VanikiOrderHistoryScreen";
 
 // Manager Screens
 import { ManagerHomeScreen } from "../screens/manager/ManagerHomeScreen";
@@ -48,6 +49,7 @@ export type RootStackParamList = {
 export type MainDrawerParamList = {
   Home: undefined;
   VanikiDealerOrders: undefined;
+  VanikiOrderHistory: undefined;
   Files: undefined;
   Projects: undefined;
   Tasks: undefined;
@@ -71,6 +73,7 @@ export type MainDrawerParamList = {
 export type ManagerDrawerParamList = {
   ManagerHome: undefined;
   VanikiDealerOrders: undefined;
+  VanikiOrderHistory: undefined;
   ManagerTeam: undefined;
   ManagerAttendance: undefined;
   Files: undefined;
@@ -213,7 +216,7 @@ function CustomDrawerContent(props: any) {
       </TouchableOpacity>
 
       <View style={{ padding: 16, alignItems: "center" }}>
-        <Text style={{ fontSize: 11, color: "#94A3B8", fontWeight: "600" }}>Version {Constants.expoConfig?.version || "1.1.1"}</Text>
+        <Text style={{ fontSize: 11, color: "#94A3B8", fontWeight: "600" }}>Version {Constants.expoConfig?.version || "1.1.2"}</Text>
       </View>
     </DrawerContentScrollView>
   );
@@ -276,14 +279,24 @@ function MainDrawer() {
         }} 
       />
       {isSalesStaff && (
-        <Drawer.Screen 
-          component={VanikiDealerOrdersScreen} 
-          name="VanikiDealerOrders" 
-          options={{ 
-            title: "Vaniki Dealer Orders",
-            drawerIcon: ({ color, size }) => <AppIcon color={color} name="coffee" size={size} /> 
-          }} 
-        />
+        <>
+          <Drawer.Screen 
+            component={VanikiDealerOrdersScreen} 
+            name="VanikiDealerOrders" 
+            options={{ 
+              title: "Vaniki Dealer Orders",
+              drawerIcon: ({ color, size }) => <AppIcon color={color} name="coffee" size={size} /> 
+            }} 
+          />
+          <Drawer.Screen 
+            component={VanikiOrderHistoryScreen} 
+            name="VanikiOrderHistory" 
+            options={{ 
+              title: "Order & Dispatch History",
+              drawerIcon: ({ color, size }) => <AppIcon color={color} name="history" size={size} /> 
+            }} 
+          />
+        </>
       )}
       <Drawer.Screen 
         component={FormsScreen} 
@@ -481,14 +494,24 @@ function ManagerDrawer() {
         }} 
       />
       {isSalesStaff && (
-        <ManagerDrawerNavigator.Screen 
-          component={VanikiDealerOrdersScreen} 
-          name="VanikiDealerOrders" 
-          options={{ 
-            title: "Vaniki Dealer Orders",
-            drawerIcon: ({ color, size }) => <AppIcon color={color} name="coffee" size={size} /> 
-          }} 
-        />
+        <>
+          <ManagerDrawerNavigator.Screen 
+            component={VanikiDealerOrdersScreen} 
+            name="VanikiDealerOrders" 
+            options={{ 
+              title: "Vaniki Dealer Orders",
+              drawerIcon: ({ color, size }) => <AppIcon color={color} name="coffee" size={size} /> 
+            }} 
+          />
+          <ManagerDrawerNavigator.Screen 
+            component={VanikiOrderHistoryScreen} 
+            name="VanikiOrderHistory" 
+            options={{ 
+              title: "Order & Dispatch History",
+              drawerIcon: ({ color, size }) => <AppIcon color={color} name="history" size={size} /> 
+            }} 
+          />
+        </>
       )}
       <ManagerDrawerNavigator.Screen
         component={MonthlyReportScreen}

@@ -67,7 +67,7 @@ interface CartItem {
 }
 
 export function VanikiDealerOrdersScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const { user } = useAuth();
   const scrollViewRef = useRef<ScrollView>(null);
   const catalogLayoutY = useRef<number>(0);
@@ -144,55 +144,6 @@ export function VanikiDealerOrdersScreen() {
   const [payUdhaarNotes, setPayUdhaarNotes] = useState("");
   const [isUploadingPaySlip, setIsUploadingPaySlip] = useState(false);
   const [isSubmittingCredit, setIsSubmittingCredit] = useState(false);
-
-  // ─── Order History Dedicated Modal & Filter State ─────────────────────────
-  const [isOrderHistoryModalOpen, setIsOrderHistoryModalOpen] = useState(false);
-  const [historyDateFilter, setHistoryDateFilter] = useState<"TODAY" | "YESTERDAY" | "THIS_WEEK" | "THIS_MONTH" | "ALL">("TODAY");
-  const [historyStatusFilter, setHistoryStatusFilter] = useState<"ALL" | "DUE" | "PAID">("ALL");
-  const [historySearchQuery, setHistorySearchQuery] = useState("");
-
-  const filteredOrderHistory = useMemo(() => {
-    const rawOrders: any[] = dealerData?.orders || [];
-    if (!Array.isArray(rawOrders)) return [];
-
-    return rawOrders.filter((ord: any) => {
-      // 1. Date filter
-      if (ord.createdAt) {
-        const ordDate = dayjs(ord.createdAt);
-        if (historyDateFilter === "TODAY") {
-          if (!ordDate.isSame(dayjs(), "day")) return false;
-        } else if (historyDateFilter === "YESTERDAY") {
-          if (!ordDate.isSame(dayjs().subtract(1, "day"), "day")) return false;
-        } else if (historyDateFilter === "THIS_WEEK") {
-          if (!ordDate.isAfter(dayjs().startOf("week"))) return false;
-        } else if (historyDateFilter === "THIS_MONTH") {
-          if (!ordDate.isSame(dayjs(), "month")) return false;
-        }
-      }
-
-      // 2. Status filter
-      const outstanding = Number(ord.outstandingAmount || 0);
-      if (historyStatusFilter === "DUE" && outstanding <= 0) return false;
-      if (historyStatusFilter === "PAID" && outstanding > 0) return false;
-
-      // 3. Search query
-      if (historySearchQuery.trim()) {
-        const q = historySearchQuery.toLowerCase().trim();
-        const orderIdMatch = (ord.orderId || ord.id || "").toLowerCase().includes(q);
-        const invoiceMatch = (ord.invoiceNumber || "").toLowerCase().includes(q);
-        const staffMatch = (ord.staffName || "").toLowerCase().includes(q);
-        const garageMatch = (ord.garageName || "").toLowerCase().includes(q);
-        const itemMatch = Array.isArray(ord.items) && ord.items.some((it: any) =>
-          (it.productName || it.name || "").toLowerCase().includes(q)
-        );
-        if (!orderIdMatch && !invoiceMatch && !staffMatch && !garageMatch && !itemMatch) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [dealerData?.orders, historyDateFilter, historyStatusFilter, historySearchQuery]);
 
   const scrollToCheckout = () => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -685,10 +636,23 @@ export function VanikiDealerOrdersScreen() {
         {/* ─── Header Search Card ─── */}
         <Card style={styles.searchCard}>
           <Card.Content>
-            <Text style={styles.cardHeaderTitle}>Search Vaniki Crop Dealer</Text>
-            <Text style={styles.cardHeaderSubtitle}>
-              Enter 4-digit code (e.g. 1018) or 10-digit mobile number
-            </Text>
+            <View style={styles.cardHeaderTopRow}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <Text style={styles.cardHeaderTitle}>Search Vaniki Crop Dealer</Text>
+                <Text style={styles.cardHeaderSubtitle}>
+                  Enter 4-digit code (e.g. 1018) or 10-digit mobile
+                </Text>
+              </View>
+              {/* TOP RIGHT HISTORY ICON / BUTTON */}
+              <TouchableOpacity
+                onPress={() => navigation.navigate("VanikiOrderHistory" as any)}
+                style={styles.topRightHistoryBtn}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="time" size={16} color="#FFFFFF" />
+                <Text style={styles.topRightHistoryBtnText}>History</Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.searchRow}>
               <TextInput
@@ -807,35 +771,7 @@ export function VanikiDealerOrdersScreen() {
           </Card>
         )}
 
-        {/* ─── Dedicated Wholesale Order History Trigger Card ─── */}
-        {dealerData?.dealer && (
-          <TouchableOpacity
-            style={styles.historyTriggerCard}
-            onPress={() => setIsOrderHistoryModalOpen(true)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.historyTriggerLeft}>
-              <View style={styles.historyTriggerIconBox}>
-                <Ionicons name="receipt" size={20} color="#0284C7" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <Text style={styles.historyTriggerTitle}>Wholesale Order History</Text>
-                  <Badge style={styles.historyCountBadge}>
-                    {dealerData.orders?.length || 0}
-                  </Badge>
-                </View>
-                <Text style={styles.historyTriggerSubtitle}>
-                  View past invoices, Today's orders & date filters in full view
-                </Text>
-              </View>
-            </View>
-            <View style={styles.historyTriggerRight}>
-              <Text style={styles.historyTriggerOpenText}>Open</Text>
-              <Ionicons name="chevron-forward" size={16} color="#0284C7" />
-            </View>
-          </TouchableOpacity>
-        )}
+
 
         {/* ─── Real-Time Warehouse / Garage Selector ─── */}
         {dealerData?.dealer && (
@@ -1844,247 +1780,7 @@ export function VanikiDealerOrdersScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ─── Dedicated Full-Screen Wholesale Order History Modal ─── */}
-      <Modal
-        visible={isOrderHistoryModalOpen}
-        animationType="slide"
-        onRequestClose={() => setIsOrderHistoryModalOpen(false)}
-      >
-        <View style={styles.historyModalContainer}>
-          {/* Header Bar */}
-          <View style={styles.historyModalHeader}>
-            <TouchableOpacity
-              onPress={() => setIsOrderHistoryModalOpen(false)}
-              style={styles.historyModalBackBtn}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="arrow-back" size={24} color="#0F172A" />
-            </TouchableOpacity>
-            <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={styles.historyModalTitle}>Order History</Text>
-              <Text style={styles.historyModalSubtitle} numberOfLines={1}>
-                {dealerData?.dealer?.cleanName || dealerData?.dealer?.name || "Dealer"} • {dealerData?.dealer?.city || "Wholesale"}
-              </Text>
-            </View>
-            <View style={styles.historyTotalBadge}>
-              <Text style={styles.historyTotalBadgeText}>
-                {filteredOrderHistory.length} / {dealerData?.orders?.length || 0}
-              </Text>
-            </View>
-          </View>
 
-          {/* Quick Date Filters Bar */}
-          <View style={styles.dateFilterContainer}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.dateFilterScroll}
-            >
-              {[
-                { key: "TODAY", label: "📅 Today" },
-                { key: "YESTERDAY", label: "Yesterday" },
-                { key: "THIS_WEEK", label: "This Week" },
-                { key: "THIS_MONTH", label: "This Month" },
-                { key: "ALL", label: "All Time" }
-              ].map((tab) => {
-                const isActive = historyDateFilter === tab.key;
-                return (
-                  <TouchableOpacity
-                    key={tab.key}
-                    onPress={() => setHistoryDateFilter(tab.key as any)}
-                    style={[styles.dateFilterPill, isActive && styles.dateFilterPillActive]}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.dateFilterText, isActive && styles.dateFilterTextActive]}>
-                      {tab.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-
-          {/* Search & Status Filters */}
-          <View style={styles.searchAndStatusWrapper}>
-            <View style={styles.historySearchBox}>
-              <Ionicons name="search" size={16} color="#64748B" />
-              <TextInput
-                placeholder="Search by Invoice #, Order ID, item..."
-                value={historySearchQuery}
-                onChangeText={setHistorySearchQuery}
-                style={styles.historySearchInput}
-                dense
-                underlineColor="transparent"
-                activeUnderlineColor="transparent"
-              />
-              {historySearchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setHistorySearchQuery("")}>
-                  <Ionicons name="close-circle" size={16} color="#94A3B8" />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View style={styles.statusPillsRow}>
-              {[
-                { key: "ALL", label: "All" },
-                { key: "DUE", label: "⚠️ Due / Udhaar" },
-                { key: "PAID", label: "✅ Fully Paid" }
-              ].map((st) => {
-                const isActive = historyStatusFilter === st.key;
-                return (
-                  <TouchableOpacity
-                    key={st.key}
-                    onPress={() => setHistoryStatusFilter(st.key as any)}
-                    style={[styles.statusPill, isActive && styles.statusPillActive]}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.statusPillText, isActive && styles.statusPillTextActive]}>
-                      {st.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Orders Scroll List */}
-          <ScrollView contentContainerStyle={styles.historyOrdersListScroll}>
-            {filteredOrderHistory.length === 0 ? (
-              <View style={styles.historyEmptyStateBox}>
-                <Ionicons name="calendar-outline" size={48} color="#94A3B8" />
-                <Text style={styles.historyEmptyTitle}>No orders found</Text>
-                <Text style={styles.historyEmptySub}>
-                  {historyDateFilter === "TODAY"
-                    ? "No orders were placed today for this dealer."
-                    : "No orders match the selected filters."}
-                </Text>
-                {historyDateFilter !== "ALL" && (
-                  <Button
-                    mode="contained"
-                    onPress={() => {
-                      setHistoryDateFilter("ALL");
-                      setHistoryStatusFilter("ALL");
-                      setHistorySearchQuery("");
-                    }}
-                    buttonColor="#0284C7"
-                    style={{ marginTop: 14, borderRadius: 12 }}
-                  >
-                    View All Orders
-                  </Button>
-                )}
-              </View>
-            ) : (
-              filteredOrderHistory.map((ord: any) => {
-                const isDue = Number(ord.outstandingAmount || 0) > 0;
-                const isExpanded = expandedOrderIds[ord.id || ord.orderId];
-                const formattedDate = ord.createdAt
-                  ? dayjs(ord.createdAt).format("DD MMM YYYY, hh:mm A")
-                  : "";
-                const isToday = ord.createdAt && dayjs(ord.createdAt).isSame(dayjs(), "day");
-
-                return (
-                  <Card key={ord.id || ord.orderId} style={styles.richOrderCard}>
-                    <Card.Content>
-                      {/* Top: ID, Invoice & Amount */}
-                      <View style={styles.richOrderTopRow}>
-                        <View style={{ flex: 1 }}>
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                            <Text style={styles.richOrderId}>
-                              {ord.orderId || ord.id}
-                            </Text>
-                            {isToday && (
-                              <View style={styles.todayTag}>
-                                <Text style={styles.todayTagText}>TODAY</Text>
-                              </View>
-                            )}
-                          </View>
-                          {ord.invoiceNumber ? (
-                            <Text style={styles.richOrderInvoice}>
-                              Invoice #{ord.invoiceNumber}
-                            </Text>
-                          ) : null}
-                        </View>
-                        <View style={{ alignItems: "flex-end" }}>
-                          <Text style={styles.richOrderAmount}>
-                            ₹{Number(ord.totalAmount || 0).toLocaleString("en-IN")}
-                          </Text>
-                          <View style={[styles.richStatusBadge, isDue ? styles.richStatusDue : styles.richStatusPaid]}>
-                            <Text style={[styles.richStatusText, isDue ? styles.richStatusDueText : styles.richStatusPaidText]}>
-                              {isDue ? `Due: ₹${Number(ord.outstandingAmount).toLocaleString("en-IN")}` : "Fully Paid"}
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
-
-                      {/* Date & Staff */}
-                      <View style={styles.richOrderDateRow}>
-                        <Ionicons name="time-outline" size={13} color="#64748B" />
-                        <Text style={styles.richOrderDateText}>
-                          {formattedDate} • By {ord.staffName || "Staff"}
-                        </Text>
-                      </View>
-
-                      {/* Warehouse & Petis meta */}
-                      <View style={styles.richOrderMetaBar}>
-                        <Text style={styles.richOrderMetaPill}>
-                          📦 {ord.petis || 0} Petis ({ord.itemsCount || 0} items)
-                        </Text>
-                        <Text style={styles.richOrderMetaPill}>
-                          🏬 {ord.garageName || "Warehouse"}
-                        </Text>
-                        <Text style={styles.richOrderMetaPill}>
-                          💳 {(ord.paymentMode || "Credit").toUpperCase()}
-                        </Text>
-                      </View>
-
-                      {/* Items Accordion */}
-                      {Array.isArray(ord.items) && ord.items.length > 0 && (
-                        <View style={styles.richOrderItemsWrapper}>
-                          <TouchableOpacity
-                            onPress={() => toggleOrderExpand(ord.id || ord.orderId)}
-                            style={styles.richOrderItemsToggle}
-                            activeOpacity={0.7}
-                          >
-                            <Text style={styles.richOrderItemsToggleText}>
-                              {isExpanded ? "Hide Ordered Items" : `View Ordered Items (${ord.items.length})`}
-                            </Text>
-                            <Ionicons
-                              name={isExpanded ? "chevron-up" : "chevron-down"}
-                              size={14}
-                              color="#0284C7"
-                            />
-                          </TouchableOpacity>
-
-                          {isExpanded && (
-                            <View style={styles.richOrderItemsList}>
-                              {ord.items.map((it: any, idx: number) => (
-                                <View key={idx} style={styles.richOrderItemRow}>
-                                  <View style={{ flex: 1, marginRight: 8 }}>
-                                    <Text style={styles.richOrderItemName} numberOfLines={1}>
-                                      {it.productName || it.name || "Product"}
-                                    </Text>
-                                    <Text style={styles.richOrderItemSub}>
-                                      {it.packSize ? `Pack: ${it.packSize} • ` : ""}
-                                      {it.petiQty ? `${it.petiQty} Peti ` : ""}({it.qty || 1} units)
-                                    </Text>
-                                  </View>
-                                  <Text style={styles.richOrderItemPrice}>
-                                    ₹{Number(it.total || (it.price * (it.qty || 1)) || 0).toLocaleString("en-IN")}
-                                  </Text>
-                                </View>
-                              ))}
-                            </View>
-                          )}
-                        </View>
-                      )}
-                    </Card.Content>
-                  </Card>
-                );
-              })
-            )}
-          </ScrollView>
-        </View>
-      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -2098,6 +1794,31 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
     elevation: 2,
+  },
+  cardHeaderTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  topRightHistoryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#0284C7",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    elevation: 2,
+    shadowColor: "#0284C7",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 2,
+  },
+  topRightHistoryBtnText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
   },
   cardHeaderTitle: {
     fontSize: 16,
