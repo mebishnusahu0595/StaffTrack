@@ -4655,33 +4655,33 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
         </div>
       </DialogHeader>
 
-      <div className="p-6 md:p-10 flex-1 overflow-y-auto w-full max-w-[1700px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
-         <div className="lg:col-span-6 space-y-6">
-            <div className="space-y-2">
+      <div className="p-4 md:p-6 lg:p-8 flex-1 overflow-y-auto w-full max-w-[1700px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
+         <div className="lg:col-span-6 space-y-4">
+            <div className="space-y-1.5">
                <Label className="text-[10px] font-black uppercase text-slate-400">Description</Label>
-               <p className="text-sm font-medium text-slate-600 leading-relaxed bg-white p-4 rounded-2xl min-h-[90px] border border-slate-200/70 shadow-sm">
+               <p className="text-sm font-medium text-slate-600 leading-relaxed bg-white p-3.5 rounded-2xl min-h-[75px] border border-slate-200/70 shadow-xs">
                   {task.description || "No description provided."}
                </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 bg-white p-4 rounded-2xl border border-slate-200/70 shadow-sm">
-               <div className="space-y-1">
+            <div className="grid grid-cols-2 gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/70 shadow-xs">
+               <div className="space-y-0.5">
                   <Label className="text-[10px] font-black uppercase text-slate-400">Assigned To</Label>
                   <div className="flex items-center gap-2">
-                     <Avatar className="h-7 w-7">
+                     <Avatar className="h-6 w-6">
                         <AvatarImage src={task.assignedTo?.avatarUrl} />
                         <AvatarFallback className="bg-blue-600 text-white text-[9px] font-black">{task.assignedTo?.name?.slice(0, 1)}</AvatarFallback>
                      </Avatar>
-                     <span className="text-sm font-bold text-slate-700">{task.assignedTo?.name}</span>
+                     <span className="text-xs font-bold text-slate-700 truncate">{task.assignedTo?.name}</span>
                   </div>
                </div>
-               <div className="space-y-1">
+               <div className="space-y-0.5">
                   <Label className="text-[10px] font-black uppercase text-slate-400">Due Date</Label>
-                  <p className="text-sm font-bold text-slate-700">{format(new Date(task.endDate || task.dueDate), 'dd MMM yyyy')}</p>
+                  <p className="text-xs font-bold text-slate-700">{format(new Date(task.endDate || task.dueDate), 'dd MMM yyyy')}</p>
                </div>
             </div>
 
-            <div className="space-y-2 pt-2 border-t border-slate-200/60">
+            <div className="space-y-1.5 pt-1 border-t border-slate-200/60">
                <div className="flex items-center justify-between">
                   <Label className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-1.5">
                      <Store className="h-3.5 w-3.5" /> Assigned Dealers ({task.dealers?.length || 0})
@@ -4694,7 +4694,7 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                {task.dealers && task.dealers.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                      {task.dealers.map((d: any) => (
-                        <div key={d.id} className="bg-blue-50 border border-blue-200 px-3 py-2 rounded-xl flex flex-col gap-0.5 text-xs font-bold text-blue-900 shadow-sm">
+                        <div key={d.id} className="bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl flex flex-col gap-0.5 text-xs font-bold text-blue-900 shadow-xs">
                            <div className="flex items-center gap-1.5">
                               <Store className="h-3.5 w-3.5 text-blue-600" />
                               <span>{d.name}</span>
@@ -4710,7 +4710,7 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                      ))}
                   </div>
                ) : (
-                  <div className="p-4 bg-white border border-slate-200/70 rounded-2xl text-xs text-slate-500 font-medium flex items-center justify-between gap-2 shadow-sm">
+                  <div className="p-3 bg-white border border-slate-200/70 rounded-xl text-xs text-slate-500 font-medium flex items-center justify-between gap-2 shadow-xs">
                      <span>No dealers linked to this task.</span>
                      {onEdit && (
                        <Button
@@ -4718,9 +4718,9 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                          size="sm"
                          variant="outline"
                          onClick={onEdit}
-                         className="h-8 text-[11px] font-bold text-blue-600 border-blue-200 bg-white hover:bg-blue-50 rounded-lg gap-1 shrink-0 px-2.5"
+                         className="h-7 text-[11px] font-bold text-blue-600 border-blue-200 bg-white hover:bg-blue-50 rounded-lg gap-1 shrink-0 px-2"
                        >
-                         <Pencil className="h-3.5 w-3.5" /> Add Dealers
+                         <Pencil className="h-3 w-3" /> Add Dealers
                        </Button>
                      )}
                   </div>
@@ -4729,13 +4729,13 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
 
             {/* Task Timeline & Completion Details */}
             {(actualStartTime || task.completedAt || task.completionRemarks || (task.completionLat != null && task.completionLng != null)) && (
-               <div className="space-y-2 pt-2 border-t border-slate-200/60">
+               <div className="space-y-1.5 pt-1 border-t border-slate-200/60">
                   <Label className="text-[10px] font-black uppercase text-blue-600">Task Timeline & Location</Label>
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200/70 space-y-3.5 shadow-sm">
-                     <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200/70 space-y-2.5 shadow-xs">
+                     <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-0.5">
                            <span className="text-[10px] font-black uppercase text-slate-400 block">Start Time</span>
-                           <span className="text-sm font-bold text-slate-800">
+                           <span className="text-xs font-bold text-slate-800">
                               {actualStartTime 
                                  ? format(actualStartTime, 'dd MMM yyyy, hh:mm a')
                                  : "Not recorded"}
@@ -4743,7 +4743,7 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                         </div>
                         <div className="space-y-0.5">
                            <span className="text-[10px] font-black uppercase text-slate-400 block">Complete Time</span>
-                           <span className="text-sm font-bold text-emerald-700">
+                           <span className="text-xs font-bold text-emerald-700">
                               {task.completedAt 
                                  ? format(new Date(task.completedAt), 'dd MMM yyyy, hh:mm a') 
                                  : (task.status === "COMPLETED" && task.updatedAt ? format(new Date(task.updatedAt), 'dd MMM yyyy, hh:mm a') : "In Progress / Pending")}
@@ -4752,7 +4752,7 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                      </div>
 
                      {(task.completionLat != null && task.completionLng != null) && (
-                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
                            <div>
                               <span className="text-[10px] font-black uppercase text-slate-400 block">Completion Coordinates</span>
                               <span className="text-xs font-bold text-slate-700">
@@ -4763,16 +4763,16 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                               type="button"
                               size="sm"
                               variant="outline"
-                              className="h-8 text-xs font-bold text-blue-600 border-blue-200 bg-white hover:bg-blue-50 rounded-xl gap-1 shrink-0 px-3"
+                              className="h-7 text-xs font-bold text-blue-600 border-blue-200 bg-white hover:bg-blue-50 rounded-lg gap-1 shrink-0 px-2.5"
                               onClick={() => window.open(`https://maps.google.com/?q=${task.completionLat},${task.completionLng}`, '_blank')}
                            >
-                              <MapPin className="h-3.5 w-3.5 text-blue-600" /> Open in Google Maps
+                              <MapPin className="h-3 w-3 text-blue-600" /> Open in Google Maps
                            </Button>
                         </div>
                      )}
 
                      {task.completionRemarks && (
-                        <div className="pt-3 border-t border-slate-100">
+                        <div className="pt-2 border-t border-slate-100">
                            <span className="text-[10px] font-black uppercase text-slate-400 block">Remarks</span>
                            <p className="text-xs font-bold text-slate-800 mt-0.5">
                               {task.completionRemarks}
@@ -4784,11 +4784,11 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
             )}
 
             {task.attachmentUrl && (
-               <div className="space-y-2 pt-2 border-t border-slate-200/60">
+               <div className="space-y-1.5 pt-1 border-t border-slate-200/60">
                   <Label className="text-[10px] font-black uppercase text-blue-600">Task Attachment</Label>
-                  <div className="flex items-center justify-between p-3.5 bg-white border border-slate-200/70 rounded-2xl shadow-sm">
+                  <div className="flex items-center justify-between p-3 bg-white border border-slate-200/70 rounded-xl shadow-xs">
                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="h-8 w-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
+                        <div className="h-7 w-7 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center font-bold text-[9px] uppercase shrink-0">
                            {task.attachmentName?.split('.').pop()?.slice(0, 4) || 'FILE'}
                         </div>
                         <span className="text-xs font-bold text-slate-700 truncate max-w-[150px]">{task.attachmentName || "Attachment"}</span>
@@ -4796,7 +4796,7 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                      <Button 
                        size="sm" 
                        variant="ghost" 
-                       className="h-8 rounded-lg text-blue-600 hover:text-blue-700 font-bold text-xs gap-1"
+                       className="h-7 rounded-lg text-blue-600 hover:text-blue-700 font-bold text-xs gap-1"
                        onClick={() => window.open(task.attachmentUrl)}
                      >
                         <Download className="h-3.5 w-3.5" /> Download
@@ -4806,111 +4806,154 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
             )}
          </div>
 
-         <div className="lg:col-span-6 space-y-6">
+         <div className="lg:col-span-6 space-y-4">
             <div>
-               <Label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Evidence / Attachments</Label>
+               <div className="flex items-center justify-between mb-1.5">
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Evidence / Attachments</Label>
+                  {task.completionPhotoUrl && (
+                     <Button 
+                       variant="ghost" 
+                       size="sm" 
+                       className="h-6 text-[11px] font-bold text-blue-600 hover:text-blue-700 px-2 gap-1"
+                       onClick={() => window.open(task.completionPhotoUrl)}
+                     >
+                        <Eye className="h-3 w-3" /> Full View
+                     </Button>
+                  )}
+               </div>
                {task.completionPhotoUrl ? (
-                  <div className="relative h-80 md:h-96 w-full rounded-2xl overflow-hidden border border-slate-200/80 shadow-md group bg-slate-100">
+                  <div className="relative h-40 sm:h-44 w-full rounded-2xl overflow-hidden border border-slate-200/80 shadow-xs group bg-slate-900 flex items-center justify-center">
                      <img 
                        src={task.completionPhotoUrl} 
                        alt="Task Completion" 
                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                      />
-                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
-                        <Button variant="secondary" size="sm" className="w-full rounded-xl font-bold text-xs" onClick={() => window.open(task.completionPhotoUrl)}>
-                           Open Full Image
+                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-90 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3">
+                        <span className="text-[11px] font-bold text-white drop-shadow flex items-center gap-1.5">
+                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Completion Photo
+                        </span>
+                        <Button 
+                          variant="secondary" 
+                          size="sm" 
+                          className="h-7 text-xs font-bold px-3 rounded-lg shadow-sm gap-1 bg-white/95 hover:bg-white text-slate-800" 
+                          onClick={() => window.open(task.completionPhotoUrl)}
+                        >
+                           <Eye className="h-3 w-3" /> Open Full Image
                         </Button>
                      </div>
                   </div>
                ) : (
-                  <div className="h-48 rounded-2xl bg-white border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 p-6 text-center shadow-sm">
-                     <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center mb-2">
-                        <Eye className="h-5 w-5" />
+                  <div className="h-24 rounded-xl bg-white border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 p-3 text-center shadow-xs">
+                     <div className="h-7 w-7 rounded-full bg-slate-100 flex items-center justify-center mb-1">
+                        <Eye className="h-3.5 w-3.5" />
                      </div>
-                     <p className="text-xs font-bold uppercase tracking-wider">No evidence uploaded</p>
-                     <p className="text-[10px] mt-1 font-medium">Photo will appear here after staff completes the task.</p>
+                     <p className="text-[10px] font-bold uppercase tracking-wider">No evidence uploaded</p>
                   </div>
                )}
             </div>
 
             {task.checklistResponses && (task.checklistResponses as any[]).length > 0 && (
-               <div className="space-y-3 pt-2 border-t border-slate-200/60">
+               <div className="space-y-2 pt-2 border-t border-slate-200/60">
                   <div className="flex items-center justify-between">
-                     <Label className="text-[10px] font-black uppercase text-blue-600">Checklist Responses</Label>
+                     <Label className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-1">
+                        <ListTodo className="h-3 w-3" /> Checklist Responses
+                     </Label>
                      <span className="text-[10px] font-bold text-slate-400 uppercase">
                         {(task.checklistResponses as any[]).length} Fields
                      </span>
                   </div>
-                  <div className="grid grid-cols-1 gap-2.5">
-                     {(task.checklistResponses as any[]).map((item: any, idx: number) => (
-                        <div key={idx} className="p-3.5 bg-white border border-slate-200/70 rounded-2xl space-y-1.5 shadow-sm">
-                           {item.type === "IMAGE" && item.fileUrl && (
-                              <div className="space-y-1.5">
-                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.title}</span>
-                                 <div className="relative w-36 h-36 rounded-xl overflow-hidden border border-slate-200/50 shadow-inner group">
-                                    <img src={item.fileUrl} alt={item.title} className="w-full h-full object-cover" />
-                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                       <Button size="sm" variant="secondary" className="h-7 text-[10px] px-2 font-black" onClick={() => window.open(item.fileUrl)}>OPEN</Button>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                     {(task.checklistResponses as any[]).map((item: any, idx: number) => {
+                        const isImage = item.type === "IMAGE" && item.fileUrl;
+                        const isVideo = item.type === "VIDEO" && item.fileUrl;
+                        const isAudio = item.type === "AUDIO" && item.fileUrl;
+                        const isFile = item.type === "FILE" && item.fileUrl;
+                        const isLong = item.value && item.value.length > 30;
+                        const spanCols = (isImage || isVideo || isFile || isLong) ? "col-span-2 md:col-span-2" : "col-span-1";
+
+                        return (
+                           <div key={idx} className={cn("p-2.5 bg-white border border-slate-200/70 rounded-xl space-y-1 shadow-xs hover:border-slate-300 transition-all", spanCols)}>
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block truncate" title={item.title}>
+                                 {item.title}
+                              </span>
+
+                              {isImage && (
+                                 <div className="flex items-center gap-2 pt-0.5">
+                                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-200/70 shrink-0 group bg-slate-100">
+                                       <img src={item.fileUrl} alt={item.title} className="w-full h-full object-cover" />
+                                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                          <Button size="sm" variant="secondary" className="h-4 text-[8px] px-1 font-black" onClick={() => window.open(item.fileUrl)}>
+                                             VIEW
+                                          </Button>
+                                       </div>
                                     </div>
-                                 </div>
-                              </div>
-                           )}
-                           {item.type === "VIDEO" && item.fileUrl && (
-                              <div className="space-y-1.5 w-full">
-                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.title}</span>
-                                 <video src={item.fileUrl} controls className="w-full max-h-48 rounded-xl border border-slate-200/50 bg-black" />
-                              </div>
-                           )}
-                           {item.type === "AUDIO" && item.fileUrl && (
-                              <div className="space-y-1.5 w-full">
-                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.title}</span>
-                                 <audio src={item.fileUrl} controls className="w-full h-9" />
-                              </div>
-                           )}
-                           {item.type === "FILE" && item.fileUrl && (
-                              <div className="space-y-1.5 w-full">
-                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.title}</span>
-                                 <div className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-100 rounded-xl">
-                                    <span className="text-xs font-bold text-slate-700 truncate max-w-[180px]">{item.fileName || "File"}</span>
-                                    <Button size="sm" variant="ghost" className="h-7 text-blue-600 hover:text-blue-700 font-bold text-xs gap-1" onClick={() => window.open(item.fileUrl)}>
-                                       Download
+                                    <Button 
+                                       size="sm" 
+                                       variant="outline" 
+                                       className="h-6 text-[10px] font-bold text-blue-600 border-blue-200 hover:bg-blue-50 rounded-md gap-1 px-2"
+                                       onClick={() => window.open(item.fileUrl)}
+                                    >
+                                       <Eye className="h-3 w-3" /> View Photo
                                     </Button>
                                  </div>
-                              </div>
-                           )}
-                           {item.type === "TEXT" && (
-                              <div className="space-y-1">
-                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.title}</span>
-                                 <p className="text-xs font-bold text-slate-800 bg-slate-50 border border-slate-100 px-3 py-2 rounded-lg">{item.value}</p>
-                              </div>
-                           )}
-                           {item.type === "DROPDOWN" && (
-                              <div className="space-y-1">
-                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.title}</span>
-                                 <div>
-                                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-blue-100 text-blue-800 uppercase tracking-wide">
-                                       {item.value}
+                              )}
+
+                              {isVideo && (
+                                 <div className="space-y-1 w-full">
+                                    <video src={item.fileUrl} controls className="w-full max-h-28 rounded-lg border border-slate-200/50 bg-black" />
+                                 </div>
+                              )}
+
+                              {isAudio && (
+                                 <div className="space-y-1 w-full">
+                                    <audio src={item.fileUrl} controls className="w-full h-7" />
+                                 </div>
+                              )}
+
+                              {isFile && (
+                                 <div className="flex items-center justify-between p-1.5 bg-slate-50 border border-slate-100 rounded-lg">
+                                    <span className="text-[11px] font-bold text-slate-700 truncate max-w-[120px]">{item.fileName || "File"}</span>
+                                    <Button size="sm" variant="ghost" className="h-6 text-blue-600 hover:text-blue-700 font-bold text-[10px] px-1.5 gap-0.5" onClick={() => window.open(item.fileUrl)}>
+                                       <Download className="h-3 w-3" /> Download
+                                    </Button>
+                                 </div>
+                              )}
+
+                              {item.type === "TEXT" && (
+                                 <p className="text-xs font-bold text-slate-800 bg-slate-50 border border-slate-100/80 px-2 py-1 rounded-md truncate" title={item.value}>
+                                    {item.value || "—"}
+                                 </p>
+                              )}
+
+                              {item.type === "DROPDOWN" && (
+                                 <div className="truncate">
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-100 truncate" title={item.value}>
+                                       {item.value || "—"}
                                     </span>
                                  </div>
-                              </div>
-                           )}
-                           {item.type === "GEOTAG" && (
-                              <div className="space-y-1">
-                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{item.title}</span>
+                              )}
+
+                              {item.type === "GEOTAG" && (
                                  <div>
                                     <Button 
                                       size="sm" 
                                       variant="outline" 
-                                      className="h-8 font-black text-xs gap-1.5 rounded-xl border-blue-200 text-blue-600 hover:bg-blue-50" 
+                                      className="h-6 font-bold text-[10px] gap-1 rounded-md border-blue-200 text-blue-600 hover:bg-blue-50 px-2 w-full justify-start truncate" 
                                       onClick={() => window.open(`https://maps.google.com/?q=${item.value}`)}
                                     >
-                                       📍 {item.value} (Open Maps)
+                                       📍 {item.value}
                                     </Button>
                                  </div>
-                              </div>
-                           )}
-                        </div>
-                     ))}
+                              )}
+
+                              {!["IMAGE", "VIDEO", "AUDIO", "FILE", "TEXT", "DROPDOWN", "GEOTAG"].includes(item.type) && item.value && (
+                                 <p className="text-xs font-bold text-slate-800 bg-slate-50 border border-slate-100/80 px-2 py-1 rounded-md truncate" title={item.value}>
+                                    {item.value}
+                                 </p>
+                              )}
+                           </div>
+                        );
+                     })}
                   </div>
                </div>
             )}
