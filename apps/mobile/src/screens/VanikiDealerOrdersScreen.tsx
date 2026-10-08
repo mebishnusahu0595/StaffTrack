@@ -996,26 +996,63 @@ export function VanikiDealerOrdersScreen() {
                             const vPetiSize = Number(v.petiSize ?? p.petiSize ?? 10);
                             const vPetiWithGst = Math.round(vPriceWithGst * vPetiSize);
 
+                            const currentQty = inCart ? inCart.petiQuantity : 1;
+                            const totalUnits = currentQty * vPetiSize;
+                            const totalExclGst = totalUnits * vBasePrice;
+                            const totalWithGst = currentQty * vPetiWithGst;
+
                             return (
                               <View key={v.id} style={[styles.variantRowBox, inCart && styles.variantRowBoxActive]}>
                                 <View style={{ flex: 1 }}>
                                   <Text style={styles.variantLabel}>
                                     📦 {v.label || v.name || v.packSize || "Variant"}
                                   </Text>
-                                  {/* Without GST vs With GST pricing */}
-                                  <View style={styles.priceComparisonRow}>
-                                    <Text style={styles.priceExclGst}>
-                                      ₹{vBasePrice} <Text style={styles.priceSubText}>(Excl. GST)</Text>
-                                    </Text>
-                                    <Text style={styles.priceDivider}>•</Text>
-                                    <Text style={styles.priceWithGst}>
-                                      ₹{vPriceWithGst} <Text style={styles.priceSubText}>(+18% GST)</Text>
-                                    </Text>
-                                  </View>
-                                  <Text style={styles.petiSummaryText}>
-                                    Peti ({vPetiSize} units): ₹{vPetiWithGst.toLocaleString("en-IN")}{" "}
-                                    <Text style={{ fontSize: 10, color: "#64748B" }}>(incl. GST)</Text>
-                                  </Text>
+                                  {/* Without GST vs With GST pricing - dynamic when in cart */}
+                                  {inCart ? (
+                                    <>
+                                      <View style={styles.priceComparisonRow}>
+                                        <Text style={styles.priceExclGst}>
+                                          ₹{totalExclGst.toLocaleString("en-IN")}{" "}
+                                          <Text style={styles.priceSubText}>(Excl. GST)</Text>
+                                        </Text>
+                                        <Text style={styles.priceDivider}>•</Text>
+                                        <Text style={styles.priceWithGst}>
+                                          ₹{totalWithGst.toLocaleString("en-IN")}{" "}
+                                          <Text style={styles.priceSubText}>(+{taxRate}% GST)</Text>
+                                        </Text>
+                                      </View>
+                                      <Text style={styles.petiSummaryText}>
+                                        {currentQty} {currentQty === 1 ? "Peti" : "Petis"} ({totalUnits} units):{" "}
+                                        <Text style={{ fontWeight: "800", color: "#059669" }}>
+                                          ₹{totalWithGst.toLocaleString("en-IN")}
+                                        </Text>{" "}
+                                        <Text style={{ fontSize: 10, color: "#64748B" }}>(incl. GST)</Text>
+                                        {currentQty > 1 && (
+                                          <Text style={{ fontSize: 10, color: "#64748B" }}>
+                                            {" "}• ₹{vPetiWithGst.toLocaleString("en-IN")}/P
+                                          </Text>
+                                        )}
+                                      </Text>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <View style={styles.priceComparisonRow}>
+                                        <Text style={styles.priceExclGst}>
+                                          ₹{vBasePrice.toLocaleString("en-IN")}{" "}
+                                          <Text style={styles.priceSubText}>(Excl. GST)</Text>
+                                        </Text>
+                                        <Text style={styles.priceDivider}>•</Text>
+                                        <Text style={styles.priceWithGst}>
+                                          ₹{vPriceWithGst.toLocaleString("en-IN")}{" "}
+                                          <Text style={styles.priceSubText}>(+{taxRate}% GST)</Text>
+                                        </Text>
+                                      </View>
+                                      <Text style={styles.petiSummaryText}>
+                                        Peti ({vPetiSize} units): ₹{vPetiWithGst.toLocaleString("en-IN")}{" "}
+                                        <Text style={{ fontSize: 10, color: "#64748B" }}>(incl. GST)</Text>
+                                      </Text>
+                                    </>
+                                  )}
                                 </View>
 
                                 {/* Stepper or Add button for this variant */}
@@ -1061,22 +1098,59 @@ export function VanikiDealerOrdersScreen() {
                           const petiSize = Number(p.petiSize || 10);
                           const petiWithGst = Math.round(priceWithGst * petiSize);
 
+                          const currentQty = inCart ? inCart.petiQuantity : 1;
+                          const totalUnits = currentQty * petiSize;
+                          const totalExclGst = totalUnits * basePrice;
+                          const totalWithGst = currentQty * petiWithGst;
+
                           return (
                             <View style={styles.singleProductBottomRow}>
                               <View style={{ flex: 1 }}>
-                                <View style={styles.priceComparisonRow}>
-                                  <Text style={styles.priceExclGst}>
-                                    ₹{basePrice} <Text style={styles.priceSubText}>(Excl. GST)</Text>
-                                  </Text>
-                                  <Text style={styles.priceDivider}>•</Text>
-                                  <Text style={styles.priceWithGst}>
-                                    ₹{priceWithGst} <Text style={styles.priceSubText}>(+18% GST)</Text>
-                                  </Text>
-                                </View>
-                                <Text style={styles.petiSummaryText}>
-                                  Peti ({petiSize} units): ₹{petiWithGst.toLocaleString("en-IN")}{" "}
-                                  <Text style={{ fontSize: 10, color: "#64748B" }}>(incl. GST)</Text>
-                                </Text>
+                                {inCart ? (
+                                  <>
+                                    <View style={styles.priceComparisonRow}>
+                                      <Text style={styles.priceExclGst}>
+                                        ₹{totalExclGst.toLocaleString("en-IN")}{" "}
+                                        <Text style={styles.priceSubText}>(Excl. GST)</Text>
+                                      </Text>
+                                      <Text style={styles.priceDivider}>•</Text>
+                                      <Text style={styles.priceWithGst}>
+                                        ₹{totalWithGst.toLocaleString("en-IN")}{" "}
+                                        <Text style={styles.priceSubText}>(+{taxRate}% GST)</Text>
+                                      </Text>
+                                    </View>
+                                    <Text style={styles.petiSummaryText}>
+                                      {currentQty} {currentQty === 1 ? "Peti" : "Petis"} ({totalUnits} units):{" "}
+                                      <Text style={{ fontWeight: "800", color: "#059669" }}>
+                                        ₹{totalWithGst.toLocaleString("en-IN")}
+                                      </Text>{" "}
+                                      <Text style={{ fontSize: 10, color: "#64748B" }}>(incl. GST)</Text>
+                                      {currentQty > 1 && (
+                                        <Text style={{ fontSize: 10, color: "#64748B" }}>
+                                          {" "}• ₹{petiWithGst.toLocaleString("en-IN")}/P
+                                        </Text>
+                                      )}
+                                    </Text>
+                                  </>
+                                ) : (
+                                  <>
+                                    <View style={styles.priceComparisonRow}>
+                                      <Text style={styles.priceExclGst}>
+                                        ₹{basePrice.toLocaleString("en-IN")}{" "}
+                                        <Text style={styles.priceSubText}>(Excl. GST)</Text>
+                                      </Text>
+                                      <Text style={styles.priceDivider}>•</Text>
+                                      <Text style={styles.priceWithGst}>
+                                        ₹{priceWithGst.toLocaleString("en-IN")}{" "}
+                                        <Text style={styles.priceSubText}>(+{taxRate}% GST)</Text>
+                                      </Text>
+                                    </View>
+                                    <Text style={styles.petiSummaryText}>
+                                      Peti ({petiSize} units): ₹{petiWithGst.toLocaleString("en-IN")}{" "}
+                                      <Text style={{ fontSize: 10, color: "#64748B" }}>(incl. GST)</Text>
+                                    </Text>
+                                  </>
+                                )}
                               </View>
 
                               {inCart ? (
