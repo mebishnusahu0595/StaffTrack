@@ -1227,11 +1227,15 @@ export default function TasksPage() {
                             <tr 
                               key={task.id} 
                               className={cn(
-                                "group hover:bg-[#f1f3f5]/30 transition-colors",
+                                "group hover:bg-blue-50/40 transition-colors cursor-pointer",
                                 viewDensity === "COMPACT" ? "h-11" : "h-16"
                               )}
+                              onClick={() => {
+                                setViewingTask(task);
+                                setIsDetailsOpen(true);
+                              }}
                             >
-                              <td className="py-2 px-6">
+                              <td className="py-2 px-6" onClick={(e) => e.stopPropagation()}>
                                 <input 
                                   type="checkbox" 
                                   className="rounded border-slate-300 cursor-pointer" 
@@ -1257,7 +1261,7 @@ export default function TasksPage() {
                                    </div>
                                     <div>
                                        <div className="flex items-center gap-2 flex-wrap">
-                                          <p className="text-sm font-bold text-slate-700 leading-tight">
+                                          <p className="text-sm font-bold text-slate-700 leading-tight group-hover:text-blue-600 transition-colors">
                                              {task.title}
                                           </p>
                                           {task.taskType && task.taskType !== "NORMAL" && (
@@ -1354,7 +1358,7 @@ export default function TasksPage() {
                               <td className="py-2 px-4 whitespace-nowrap">
                                 <span className="text-[10px] font-bold text-slate-600">{format(new Date(task.endDate || task.parentTask?.endDate || task.dueDate), 'dd-MM-yyyy')}</span>
                               </td>
-                              <td className="py-2 px-6 text-right">
+                              <td className="py-2 px-6 text-right" onClick={(e) => e.stopPropagation()}>
                                 <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                    <Button 
                                      variant="ghost" 
@@ -1416,11 +1420,15 @@ export default function TasksPage() {
                     <tr 
                       key={task.id} 
                       className={cn(
-                        "group hover:bg-[#f1f3f5]/30 transition-colors",
+                        "group hover:bg-blue-50/40 transition-colors cursor-pointer",
                         viewDensity === "COMPACT" ? "h-11" : "h-16"
                       )}
+                      onClick={() => {
+                        setViewingTask(task);
+                        setIsDetailsOpen(true);
+                      }}
                     >
-                      <td className="py-2 px-6">
+                      <td className="py-2 px-6" onClick={(e) => e.stopPropagation()}>
                         <input 
                           type="checkbox" 
                           className="rounded border-slate-300 cursor-pointer" 
@@ -1445,7 +1453,7 @@ export default function TasksPage() {
                                    </span>
                            </div>
                            <div>
-                              <p className="text-sm font-bold text-slate-700 leading-tight flex items-center gap-2">
+                              <p className="text-sm font-bold text-slate-700 leading-tight flex items-center gap-2 group-hover:text-blue-600 transition-colors">
                                  {task.title}
                                  {task.subtasks && task.subtasks.length > 0 && (
                                     <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-black bg-slate-100 text-slate-500 border border-slate-200/50 uppercase tracking-tighter">
@@ -1515,7 +1523,7 @@ export default function TasksPage() {
                       <td className="py-2 px-4 whitespace-nowrap">
                         <span className="text-[10px] font-bold text-slate-600">{format(new Date(task.endDate || task.parentTask?.endDate || task.dueDate), 'dd-MM-yyyy')}</span>
                       </td>
-                      <td className="py-2 px-6 text-right">
+                      <td className="py-2 px-6 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                            <Button 
                              variant="ghost" 
@@ -1602,9 +1610,13 @@ export default function TasksPage() {
                       <div 
                         key={task.id} 
                         className={cn(
-                          "bg-white rounded-xl p-4 border border-slate-200/60 shadow-sm hover:shadow-md hover:border-blue-200 transition-all flex flex-col gap-3 group border-t-4",
+                          "bg-white rounded-xl p-4 border border-slate-200/60 shadow-sm hover:shadow-md hover:border-blue-200 transition-all flex flex-col gap-3 group border-t-4 cursor-pointer",
                           col.border
                         )}
+                        onClick={() => {
+                          setViewingTask(task);
+                          setIsDetailsOpen(true);
+                        }}
                       >
                         {/* Task Card Header */}
                         <div className="flex items-start justify-between">
@@ -1617,7 +1629,7 @@ export default function TasksPage() {
                              {task.priority || "Medium"}
                           </Badge>
 
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                             <Button 
                               variant="ghost" 
                               size="icon" 
@@ -4822,24 +4834,23 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                   )}
                </div>
                {task.completionPhotoUrl ? (
-                  <div className="relative h-40 sm:h-44 w-full rounded-2xl overflow-hidden border border-slate-200/80 shadow-xs group bg-slate-900 flex items-center justify-center">
+                  <div 
+                    className="relative h-44 sm:h-48 w-full rounded-2xl overflow-hidden border border-slate-200/80 shadow-xs group bg-slate-950 flex items-center justify-center cursor-pointer"
+                    onClick={() => window.open(task.completionPhotoUrl)}
+                    title="Click to view full image in new tab"
+                  >
                      <img 
                        src={task.completionPhotoUrl} 
                        alt="Task Completion" 
-                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                       className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-[1.02]"
                      />
-                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-90 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3">
+                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3 pointer-events-none">
                         <span className="text-[11px] font-bold text-white drop-shadow flex items-center gap-1.5">
-                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Completion Photo
+                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Completion Photo Proof
                         </span>
-                        <Button 
-                          variant="secondary" 
-                          size="sm" 
-                          className="h-7 text-xs font-bold px-3 rounded-lg shadow-sm gap-1 bg-white/95 hover:bg-white text-slate-800" 
-                          onClick={() => window.open(task.completionPhotoUrl)}
-                        >
-                           <Eye className="h-3 w-3" /> Open Full Image
-                        </Button>
+                        <span className="text-[10px] font-bold text-white bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/20 flex items-center gap-1">
+                           <Eye className="h-3 w-3" /> Full View
+                        </span>
                      </div>
                   </div>
                ) : (
@@ -4879,12 +4890,14 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
 
                               {isImage && (
                                  <div className="flex items-center gap-2 pt-0.5">
-                                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-200/70 shrink-0 group bg-slate-100">
-                                       <img src={item.fileUrl} alt={item.title} className="w-full h-full object-cover" />
+                                    <div 
+                                       className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-200/70 shrink-0 group bg-slate-900 cursor-pointer flex items-center justify-center"
+                                       onClick={() => window.open(item.fileUrl)}
+                                       title="Click to view full photo"
+                                    >
+                                       <img src={item.fileUrl} alt={item.title} className="w-full h-full object-contain" />
                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                          <Button size="sm" variant="secondary" className="h-4 text-[8px] px-1 font-black" onClick={() => window.open(item.fileUrl)}>
-                                             VIEW
-                                          </Button>
+                                          <Eye className="h-3.5 w-3.5 text-white" />
                                        </div>
                                     </div>
                                     <Button 
