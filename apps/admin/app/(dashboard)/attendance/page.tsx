@@ -1268,80 +1268,87 @@ function AttendanceDetailDialog({
 </body>
 </html>
     `;
-    printWindow.document.write(htmlContent);
     printWindow.document.close();
   };
 
   return (
     <Dialog open={!!propRecord} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-y-auto p-0 border-none shadow-2xl bg-white rounded-2xl">
-        <div className="bg-slate-900 p-8 text-white">
-           <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                 <Avatar className="h-12 w-12 border-2 border-slate-800 shadow-xl">
-                    <AvatarFallback className="bg-slate-800 text-slate-400 font-bold">{record.user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+      <DialogContent className="max-w-[1360px] w-[96vw] max-h-[94vh] overflow-y-auto p-0 border-none shadow-2xl bg-white rounded-2xl flex flex-col">
+        {/* COMPACT TOP HEADER */}
+        <div className="bg-slate-900 px-6 py-3.5 text-white shrink-0">
+           <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                 <Avatar className="h-10 w-10 border border-slate-700 shadow-md">
+                    <AvatarFallback className="bg-slate-800 text-slate-300 font-bold text-sm">{record.user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
                  </Avatar>
                  <div>
-                    <h2 className="text-xl font-bold">{record.user.name}</h2>
-                    <p className="text-xs font-medium text-slate-400">{record.user.email} / {new Date(record.date).toLocaleDateString()}</p>
+                    <div className="flex items-center gap-2">
+                       <h2 className="text-base font-bold leading-tight">{record.user.name}</h2>
+                       <AttendanceStatusBadge 
+                         status={record.status} 
+                         hasCheckOut={!!record.checkOutTime} 
+                         checkInTime={record.checkInTime ?? undefined} 
+                         checkOutTime={record.checkOutTime}
+                         shiftStart={record.user.shiftStart}
+                         shiftEnd={record.user.shiftEnd}
+                       />
+                    </div>
+                    <p className="text-[11px] font-medium text-slate-400">{record.user.email} / {new Date(record.date).toLocaleDateString()}</p>
                  </div>
               </div>
-              <div className="flex items-center gap-3">
-                 <Button 
-                   variant="outline" 
-                   size="sm" 
-                   className="h-9 border-slate-700 bg-transparent text-white hover:bg-slate-800 hover:text-white font-bold text-xs gap-1.5"
-                   onClick={() => handlePrintAttendance(record)}
-                 >
-                   Print Details (Landscape)
-                 </Button>
-                 <Button
-                    size="sm"
-                    className="h-9 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs gap-1.5"
-                    onClick={handleOpenFullEdit}
-                  >
-                    <Pencil className="w-3 h-3" /> Edit Attendance
-                  </Button>
-                 <AttendanceStatusBadge 
-                   status={record.status} 
-                   hasCheckOut={!!record.checkOutTime} 
-                   checkInTime={record.checkInTime ?? undefined} 
-                   checkOutTime={record.checkOutTime}
-                   shiftStart={record.user.shiftStart}
-                   shiftEnd={record.user.shiftEnd}
-                 />
-              </div>
-           </div>
-           
-           {/* Durations Row */}
-           <div className="mt-6 pt-6 border-t border-slate-800 grid grid-cols-3 gap-4">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Total Office Time</p>
-                <p className="text-lg font-bold text-blue-400">{formatDurationLabel(totals.officeTimeMs)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Total Field Time</p>
-                <p className="text-lg font-bold text-amber-400">{formatDurationLabel(totals.fieldTimeMs)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Total Break Time</p>
-                <p className="text-lg font-bold text-emerald-400">{formatDurationLabel(totals.breakTimeMs)}</p>
+
+              <div className="flex items-center gap-4">
+                 {/* Compact Durations */}
+                 <div className="flex items-center gap-3.5 bg-slate-800/80 px-3.5 py-1.5 rounded-xl border border-slate-700/60 text-xs">
+                    <div className="flex items-center gap-1.5">
+                       <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Office:</span>
+                       <span className="font-bold text-blue-400">{formatDurationLabel(totals.officeTimeMs)}</span>
+                    </div>
+                    <div className="h-3 w-px bg-slate-700" />
+                    <div className="flex items-center gap-1.5">
+                       <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Field:</span>
+                       <span className="font-bold text-amber-400">{formatDurationLabel(totals.fieldTimeMs)}</span>
+                    </div>
+                    <div className="h-3 w-px bg-slate-700" />
+                    <div className="flex items-center gap-1.5">
+                       <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Break:</span>
+                       <span className="font-bold text-emerald-400">{formatDurationLabel(totals.breakTimeMs)}</span>
+                    </div>
+                 </div>
+
+                 <div className="flex items-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-8 border-slate-700 bg-transparent text-white hover:bg-slate-800 hover:text-white font-bold text-xs gap-1.5"
+                      onClick={() => handlePrintAttendance(record)}
+                    >
+                      Print Details (Landscape)
+                    </Button>
+                    <Button
+                       size="sm"
+                       className="h-8 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs gap-1.5"
+                       onClick={handleOpenFullEdit}
+                     >
+                       <Pencil className="w-3 h-3" /> Edit Attendance
+                     </Button>
+                 </div>
               </div>
            </div>
         </div>
 
         {/* Full Edit Panel */}
         {isEditingFull && editData && (
-          <div className="px-8 pt-6 pb-4 border-b border-slate-100 bg-amber-50/30">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm font-black uppercase tracking-wider text-amber-700">✏️ Edit Attendance Record</p>
-              <Button variant="ghost" size="sm" className="text-slate-500 h-7 text-xs" onClick={() => { setIsEditingFull(false); setEditData(null); }}>Cancel</Button>
+          <div className="px-6 pt-4 pb-3 border-b border-slate-100 bg-amber-50/30 shrink-0">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-black uppercase tracking-wider text-amber-700">✏️ Edit Attendance Record</p>
+              <Button variant="ghost" size="sm" className="text-slate-500 h-6 text-xs" onClick={() => { setIsEditingFull(false); setEditData(null); }}>Cancel</Button>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
               <div className="space-y-1">
                 <Label className="text-[10px] font-black uppercase text-slate-500">Status</Label>
                 <Select value={editData.status} onValueChange={(v) => setEditData((p) => p ? { ...p, status: v } : null)}>
-                  <SelectTrigger className="h-9 text-xs rounded-lg"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-8 text-xs rounded-lg"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="PRESENT">Present</SelectItem>
                     <SelectItem value="ABSENT">Absent</SelectItem>
@@ -1353,7 +1360,7 @@ function AttendanceDetailDialog({
               <div className="space-y-1">
                 <Label className="text-[10px] font-black uppercase text-slate-500">Punch Type</Label>
                 <Select value={editData.punchType} onValueChange={(v) => setEditData((p) => p ? { ...p, punchType: v } : null)}>
-                  <SelectTrigger className="h-9 text-xs rounded-lg"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-8 text-xs rounded-lg"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="OFFICE">Office</SelectItem>
                     <SelectItem value="FIELD">Field</SelectItem>
@@ -1362,25 +1369,25 @@ function AttendanceDetailDialog({
               </div>
               <div className="space-y-1">
                 <Label className="text-[10px] font-black uppercase text-slate-500">Check In Time</Label>
-                <Input type="datetime-local" value={editData.checkInTime} onChange={(e) => setEditData((p) => p ? { ...p, checkInTime: e.target.value } : null)} className="h-9 text-xs rounded-lg" />
+                <Input type="datetime-local" value={editData.checkInTime} onChange={(e) => setEditData((p) => p ? { ...p, checkInTime: e.target.value } : null)} className="h-8 text-xs rounded-lg" />
               </div>
               <div className="space-y-1">
                 <Label className="text-[10px] font-black uppercase text-slate-500">Check Out Time</Label>
-                <Input type="datetime-local" value={editData.checkOutTime} onChange={(e) => setEditData((p) => p ? { ...p, checkOutTime: e.target.value } : null)} className="h-9 text-xs rounded-lg" />
+                <Input type="datetime-local" value={editData.checkOutTime} onChange={(e) => setEditData((p) => p ? { ...p, checkOutTime: e.target.value } : null)} className="h-8 text-xs rounded-lg" />
               </div>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
               <div className="space-y-1">
                 <Label className="text-[10px] font-black uppercase text-slate-500">Start Odometer</Label>
-                <Input type="number" placeholder="e.g. 45000" value={editData.startOdometer} onChange={(e) => setEditData((p) => p ? { ...p, startOdometer: e.target.value } : null)} className="h-9 text-xs rounded-lg" />
+                <Input type="number" placeholder="e.g. 45000" value={editData.startOdometer} onChange={(e) => setEditData((p) => p ? { ...p, startOdometer: e.target.value } : null)} className="h-8 text-xs rounded-lg" />
               </div>
               <div className="space-y-1">
                 <Label className="text-[10px] font-black uppercase text-slate-500">End Odometer</Label>
-                <Input type="number" placeholder="e.g. 45080" value={editData.endOdometer} onChange={(e) => setEditData((p) => p ? { ...p, endOdometer: e.target.value } : null)} className="h-9 text-xs rounded-lg" />
+                <Input type="number" placeholder="e.g. 45080" value={editData.endOdometer} onChange={(e) => setEditData((p) => p ? { ...p, endOdometer: e.target.value } : null)} className="h-8 text-xs rounded-lg" />
               </div>
             </div>
             {/* Photo fields */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
               {([
                 { field: "checkInPhotoUrl", label: "Check-In Photo" },
                 { field: "checkOutPhotoUrl", label: "Check-Out Photo" },
@@ -1390,7 +1397,7 @@ function AttendanceDetailDialog({
                 <div key={field} className="space-y-1">
                   <Label className="text-[10px] font-black uppercase text-slate-500">{label}</Label>
                   <div className="flex items-center gap-2">
-                    <div className="h-12 w-16 rounded border bg-slate-100 overflow-hidden flex items-center justify-center shrink-0">
+                    <div className="h-10 w-14 rounded border bg-slate-100 overflow-hidden flex items-center justify-center shrink-0">
                       {editData[field] ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={editData[field]!} alt={label} className="h-full w-full object-cover" />
@@ -1399,7 +1406,7 @@ function AttendanceDetailDialog({
                       )}
                     </div>
                     <div className="flex flex-col gap-1">
-                      <label className="inline-flex cursor-pointer items-center gap-1 rounded border bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-50">
+                      <label className="inline-flex cursor-pointer items-center gap-1 rounded border bg-white px-2 py-0.5 text-[10px] font-bold text-slate-700 hover:bg-slate-50">
                         {photoUploading === field ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
                         {editData[field] ? "Replace" : "Upload"}
                         <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUploadPhoto(field, e.target.files?.[0])} />
@@ -1415,395 +1422,459 @@ function AttendanceDetailDialog({
               ))}
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" size="sm" className="h-8 text-xs font-bold text-slate-500" onClick={() => { setIsEditingFull(false); setEditData(null); }} disabled={isSaving}>Cancel</Button>
-              <Button size="sm" className="h-8 px-4 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white" onClick={handleSaveFullEdit} disabled={isSaving}>
+              <Button variant="ghost" size="sm" className="h-7 text-xs font-bold text-slate-500" onClick={() => { setIsEditingFull(false); setEditData(null); }} disabled={isSaving}>Cancel</Button>
+              <Button size="sm" className="h-7 px-3 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white" onClick={handleSaveFullEdit} disabled={isSaving}>
                 {isSaving ? "Saving..." : "Save All Changes"}
               </Button>
             </div>
           </div>
         )}
 
-        {record.punchType === "FIELD" && (
-          <div className="px-8 pt-8">
-            {isEditingOdo ? (
-              <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4 shadow-sm space-y-4">
-                <p className="text-xs font-black uppercase tracking-wider text-slate-700">Edit Odometer Readings</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="startOdo" className="text-[10px] font-black uppercase text-slate-500">Start Odometer</Label>
-                    <Input 
-                      id="startOdo"
-                      type="number" 
-                      placeholder="e.g. 452538"
-                      value={startOdoVal}
-                      onChange={(e) => setStartOdoVal(e.target.value)}
-                      className="h-9 text-xs rounded-lg"
-                    />
+        {/* MAIN BODY: 3-COLUMN SIDE-BY-SIDE LAYOUT */}
+        <div className="p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-10 gap-4 flex-1">
+          {/* LEFT COLUMN: ODOMETER + AI VERIFICATION AUDIT (40% width) */}
+          <div className="lg:col-span-4 flex flex-col gap-3">
+            {/* Odometer Card */}
+            {record.punchType === "FIELD" && (
+              <div>
+                {isEditingOdo ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 shadow-xs space-y-2.5">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-700">Edit Odometer Readings</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="startOdo" className="text-[9px] font-black uppercase text-slate-500">Start Odometer</Label>
+                        <Input 
+                          id="startOdo"
+                          type="number" 
+                          placeholder="e.g. 452538"
+                          value={startOdoVal}
+                          onChange={(e) => setStartOdoVal(e.target.value)}
+                          className="h-8 text-xs rounded-lg"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="endOdo" className="text-[9px] font-black uppercase text-slate-500">End Odometer</Label>
+                        <Input 
+                          id="endOdo"
+                          type="number" 
+                          placeholder="e.g. 452597"
+                          value={endOdoVal}
+                          onChange={(e) => setEndOdoVal(e.target.value)}
+                          className="h-8 text-xs rounded-lg"
+                        />
+                      </div>
+                    </div>
+                    
+                    {startOdoVal !== "" && endOdoVal !== "" && (
+                      <div className={cn(
+                         "rounded-lg p-2 border flex flex-col justify-center text-center",
+                         parseFloat(endOdoVal) < parseFloat(startOdoVal)
+                           ? "bg-rose-50 border-rose-100 text-rose-700"
+                           : "bg-blue-50/50 border-blue-100/60 text-blue-700"
+                      )}>
+                        <p className="text-xs font-black">
+                          {parseFloat(endOdoVal) >= parseFloat(startOdoVal)
+                            ? `Calculated Distance: ${(parseFloat(endOdoVal) - parseFloat(startOdoVal)).toFixed(1)} km`
+                            : "Warning: End Odometer is less than Start Odometer"}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="flex justify-end gap-2 pt-1">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-7 px-2.5 text-[11px] font-bold text-slate-500 hover:bg-slate-100"
+                        onClick={handleCancel}
+                        disabled={isSaving}
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        className="h-7 px-3 text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white"
+                        onClick={handleSaveOdometer}
+                        disabled={isSaving}
+                      >
+                        {isSaving ? "Saving..." : "Save Readings"}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="endOdo" className="text-[10px] font-black uppercase text-slate-500">End Odometer</Label>
-                    <Input 
-                      id="endOdo"
-                      type="number" 
-                      placeholder="e.g. 452597"
-                      value={endOdoVal}
-                      onChange={(e) => setEndOdoVal(e.target.value)}
-                      className="h-9 text-xs rounded-lg"
-                    />
-                  </div>
-                </div>
-                
-                {startOdoVal !== "" && endOdoVal !== "" && (
-                  <div className={cn(
-                     "rounded-xl p-3 border flex flex-col justify-center text-center",
-                     parseFloat(endOdoVal) < parseFloat(startOdoVal)
-                       ? "bg-rose-50 border-rose-100 text-rose-700"
-                       : "bg-blue-50/50 border-blue-100/60 text-blue-700"
-                  )}>
-                    <p className="mt-1 text-sm font-black">
-                      {parseFloat(endOdoVal) >= parseFloat(startOdoVal)
-                        ? `Calculated Distance: ${(parseFloat(endOdoVal) - parseFloat(startOdoVal)).toFixed(1)} km`
-                        : "Warning: End Odometer is less than Start Odometer"}
-                    </p>
+                ) : (
+                  <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-2.5 shadow-xs grid grid-cols-3 gap-2">
+                    <div className="flex flex-col justify-between">
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Start Odometer</p>
+                        <p className="mt-0.5 text-xs sm:text-sm font-bold text-slate-800">
+                          {record.startOdometer != null ? `${record.startOdometer} km` : "No reading"}
+                        </p>
+                      </div>
+                      <div className="mt-1">
+                        <Button 
+                          variant="link" 
+                          size="sm" 
+                          className="p-0 h-auto text-[10px] font-bold text-blue-600 hover:underline"
+                          onClick={() => setIsEditingOdo(true)}
+                        >
+                          Edit
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex flex-col justify-between">
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">End Odometer</p>
+                        <p className="mt-0.5 text-xs sm:text-sm font-bold text-slate-800">
+                          {record.endOdometer != null ? `${record.endOdometer} km` : "No reading"}
+                        </p>
+                      </div>
+                      <div className="mt-1">
+                        <Button 
+                          variant="link" 
+                          size="sm" 
+                          className="p-0 h-auto text-[10px] font-bold text-blue-600 hover:underline"
+                          onClick={() => setIsEditingOdo(true)}
+                        >
+                          Edit
+                        </Button>
+                      </div>
+                    </div>
+                    <div className={cn(
+                       "rounded-lg p-2 border flex flex-col justify-center",
+                       record.startOdometer != null && record.endOdometer != null && record.endOdometer < record.startOdometer
+                         ? "bg-rose-50 border-rose-100 text-rose-700"
+                         : "bg-blue-50/60 border-blue-100/70 text-blue-700"
+                    )}>
+                      <p className={cn(
+                         "text-[9px] font-black uppercase tracking-wider",
+                         record.startOdometer != null && record.endOdometer != null && record.endOdometer < record.startOdometer
+                           ? "text-rose-500"
+                           : "text-blue-500"
+                      )}>Odometer Distance</p>
+                      <p className="mt-0.5 text-xs sm:text-sm font-black">
+                        {record.startOdometer != null && record.endOdometer != null
+                          ? record.endOdometer >= record.startOdometer
+                            ? `${(record.endOdometer - record.startOdometer).toFixed(1)} km`
+                            : "Error: End < Start"
+                          : "--"}
+                      </p>
+                    </div>
                   </div>
                 )}
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-8 px-3 text-xs font-bold text-slate-500 hover:bg-slate-100"
-                    onClick={handleCancel}
-                    disabled={isSaving}
-                  >
-                    Cancel
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    className="h-8 px-4 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white"
-                    onClick={handleSaveOdometer}
-                    disabled={isSaving}
-                  >
-                    {isSaving ? "Saving..." : "Save Readings"}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4 shadow-sm grid grid-cols-3 gap-6">
-                <div className="flex flex-col justify-between">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Start Odometer</p>
-                    <p className="mt-1 text-sm font-bold text-slate-800">
-                      {record.startOdometer != null ? `${record.startOdometer} km` : "No reading"}
-                    </p>
-                  </div>
-                  <div className="mt-2">
-                    <Button 
-                      variant="link" 
-                      size="sm" 
-                      className="p-0 h-auto text-[10px] font-bold text-blue-600 hover:underline"
-                      onClick={() => setIsEditingOdo(true)}
-                    >
-                      Edit
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex flex-col justify-between">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">End Odometer</p>
-                    <p className="mt-1 text-sm font-bold text-slate-800">
-                      {record.endOdometer != null ? `${record.endOdometer} km` : "No reading"}
-                    </p>
-                  </div>
-                  <div className="mt-2">
-                    <Button 
-                      variant="link" 
-                      size="sm" 
-                      className="p-0 h-auto text-[10px] font-bold text-blue-600 hover:underline"
-                      onClick={() => setIsEditingOdo(true)}
-                    >
-                      Edit
-                    </Button>
-                  </div>
-                </div>
-                <div className={cn(
-                   "rounded-xl p-3 border flex flex-col justify-center",
-                   record.startOdometer != null && record.endOdometer != null && record.endOdometer < record.startOdometer
-                     ? "bg-rose-50 border-rose-100 text-rose-700"
-                     : "bg-blue-50/50 border-blue-100/60 text-blue-700"
-                )}>
-                  <p className={cn(
-                     "text-[10px] font-black uppercase tracking-wider",
-                     record.startOdometer != null && record.endOdometer != null && record.endOdometer < record.startOdometer
-                       ? "text-rose-500"
-                       : "text-blue-500"
-                  )}>Odometer Distance</p>
-                  <p className="mt-1 text-lg font-black">
-                    {record.startOdometer != null && record.endOdometer != null
-                      ? record.endOdometer >= record.startOdometer
-                        ? `${(record.endOdometer - record.startOdometer).toFixed(1)} km`
-                        : "Error: End < Start"
-                      : "--"}
-                  </p>
-                </div>
               </div>
             )}
-          </div>
-        )}
 
-        {/* AI & OCR Verification Audit Report Card */}
-        <div className="mx-8 mt-6 p-4 rounded-2xl border border-purple-100 bg-purple-50/30 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-purple-600 animate-pulse" />
-              <h4 className="text-xs font-black uppercase tracking-wider text-purple-900">
-                AI & OCR Verification Audit Report
-              </h4>
-            </div>
-            <span className="text-[10px] font-bold text-purple-700 bg-purple-100/90 px-2 py-0.5 rounded-md border border-purple-200">
-              Gemini Flash Vision AI
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-            {/* Check-in AI Audit */}
-            <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xs space-y-2">
-              <div className="flex items-center justify-between border-b pb-1.5">
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">
-                  Check-in AI Verification
+            {/* AI & OCR Verification Audit Report */}
+            <div className="p-3 rounded-xl border border-purple-100 bg-purple-50/30 space-y-2 flex-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-purple-600 animate-pulse" />
+                  <h4 className="text-[11px] font-black uppercase tracking-wider text-purple-900">
+                    AI & OCR Verification Audit Report
+                  </h4>
+                </div>
+                <span className="text-[9px] font-bold text-purple-700 bg-purple-100/90 px-1.5 py-0.5 rounded border border-purple-200">
+                  Gemini Flash Vision AI
                 </span>
-                {(record as any).checkInAiAnalysis?.faceAi?.isHumanFace ? (
-                  <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">
-                    ✓ Human Verified
-                  </span>
-                ) : (
-                  <span className="text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">
-                    {(record as any).checkInAiAnalysis ? "⚠️ Warnings / Fallback" : "Standard Photo"}
-                  </span>
-                )}
               </div>
 
-              <div className="space-y-1 text-xs">
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-slate-500 font-medium">Face Type:</span>
-                  <span className="font-bold text-slate-800">
-                    {(record as any).checkInAiAnalysis?.faceAi?.isScreenOrPrintout ? "⚠️ Photo of Screen" : (record as any).checkInAiAnalysis?.faceAi?.isHumanFace ? "Live Living Human" : "Standard Check-in Photo"}
-                  </span>
-                </div>
-
-                {record.punchType === "FIELD" && record.startOdometerPhotoUrl && (
-                  <>
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-slate-500 font-medium">Odometer Meter:</span>
-                      <span className="font-bold text-slate-800">
-                        {(record as any).checkInAiAnalysis?.odometerAi?.isOdometer !== false ? "Valid Vehicle Meter" : "Invalid Meter"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-slate-500 font-medium">OCR Detected vs Entered:</span>
-                      <span className="font-bold text-slate-800">
-                        {(record as any).checkInAiAnalysis?.odometerAi?.detectedReading != null ? `${(record as any).checkInAiAnalysis.odometerAi.detectedReading} KM` : "N/A"} vs {record.startOdometer != null ? `${record.startOdometer} KM` : "N/A"}
-                      </span>
-                    </div>
-                  </>
-                )}
-
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-slate-500 font-medium">Retake Count:</span>
-                  <span className="font-bold text-slate-800">
-                    Face: {(record as any).checkInAiAnalysis?.faceRetakeCount ?? 0} | Odo: {(record as any).checkInAiAnalysis?.odoRetakeCount ?? 0}
-                  </span>
-                </div>
-
-                {(record as any).checkInAiAnalysis?.faceAi?.warningMessage && (
-                  <p className="text-[10px] text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-100 font-medium mt-1">
-                    Note: {(record as any).checkInAiAnalysis.faceAi.warningMessage}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Check-out AI Audit */}
-            <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xs space-y-2">
-              <div className="flex items-center justify-between border-b pb-1.5">
-                <span className="text-[10px] font-black uppercase tracking-wider text-rose-700">
-                  Check-out AI Verification
-                </span>
-                {record.checkOutTime ? (
-                  (record as any).checkOutAiAnalysis?.faceAi?.isHumanFace ? (
-                    <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">
-                      ✓ Human Verified
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                {/* Check-in AI Audit */}
+                <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-xs space-y-1.5">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-emerald-700">
+                      Check-in AI Verification
                     </span>
+                    {(record as any).checkInAiAnalysis?.faceAi?.isHumanFace ? (
+                      <span className="text-[8px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1 py-0.2 rounded">
+                        ✓ Human Verified
+                      </span>
+                    ) : (
+                      <span className="text-[8px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1 py-0.2 rounded">
+                        {(record as any).checkInAiAnalysis ? "⚠️ Warnings" : "Standard"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-1 text-[10px]">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 font-medium">Face Type:</span>
+                      <span className="font-bold text-slate-800">
+                        {(record as any).checkInAiAnalysis?.faceAi?.isScreenOrPrintout ? "⚠️ Screen" : (record as any).checkInAiAnalysis?.faceAi?.isHumanFace ? "Live Living Human" : "Standard Photo"}
+                      </span>
+                    </div>
+                    {record.punchType === "FIELD" && record.startOdometerPhotoUrl && (
+                      <>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500 font-medium">Odometer Meter:</span>
+                          <span className="font-bold text-slate-800">
+                            {(record as any).checkInAiAnalysis?.odometerAi?.isOdometer !== false ? "Valid Vehicle Meter" : "Invalid Meter"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500 font-medium">OCR vs Entered:</span>
+                          <span className="font-bold text-slate-800">
+                            {(record as any).checkInAiAnalysis?.odometerAi?.detectedReading != null ? `${(record as any).checkInAiAnalysis.odometerAi.detectedReading} KM` : "N/A"} vs {record.startOdometer != null ? `${record.startOdometer} KM` : "N/A"}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 font-medium">Retake Count:</span>
+                      <span className="font-bold text-slate-800">
+                        Face: {(record as any).checkInAiAnalysis?.faceRetakeCount ?? 0} | Odo: {(record as any).checkInAiAnalysis?.odoRetakeCount ?? 0}
+                      </span>
+                    </div>
+                    {(record as any).checkInAiAnalysis?.faceAi?.warningMessage && (
+                      <p className="text-[8px] text-amber-700 bg-amber-50 p-1 rounded border border-amber-100 font-medium leading-tight">
+                        Note: {(record as any).checkInAiAnalysis.faceAi.warningMessage}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Check-out AI Audit */}
+                <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-xs space-y-1.5">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-rose-700">
+                      Check-out AI Verification
+                    </span>
+                    {record.checkOutTime ? (
+                      (record as any).checkOutAiAnalysis?.faceAi?.isHumanFace ? (
+                        <span className="text-[8px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1 py-0.2 rounded">
+                          ✓ Human Verified
+                        </span>
+                      ) : (
+                        <span className="text-[8px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1 py-0.2 rounded">
+                          {(record as any).checkOutAiAnalysis ? "⚠️ Warnings" : "Standard"}
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-[8px] font-medium text-slate-400">In Progress</span>
+                    )}
+                  </div>
+                  {record.checkOutTime ? (
+                    <div className="space-y-1 text-[10px]">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 font-medium">Face Type:</span>
+                        <span className="font-bold text-slate-800">
+                          {(record as any).checkOutAiAnalysis?.faceAi?.isScreenOrPrintout ? "⚠️ Screen" : (record as any).checkOutAiAnalysis?.faceAi?.isHumanFace ? "Live Living Human" : "Standard Photo"}
+                        </span>
+                      </div>
+                      {record.punchType === "FIELD" && record.endOdometerPhotoUrl && (
+                        <>
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-500 font-medium">Odometer Meter:</span>
+                            <span className="font-bold text-slate-800">
+                              {(record as any).checkOutAiAnalysis?.odometerAi?.isOdometer !== false ? "Valid Vehicle Meter" : "Invalid Meter"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-500 font-medium">OCR vs Entered:</span>
+                            <span className="font-bold text-slate-800">
+                              {(record as any).checkOutAiAnalysis?.odometerAi?.detectedReading != null ? `${(record as any).checkOutAiAnalysis.odometerAi.detectedReading} KM` : "N/A"} vs {record.endOdometer != null ? `${record.endOdometer} KM` : "N/A"}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 font-medium">Retake Count:</span>
+                        <span className="font-bold text-slate-800">
+                          Face: {(record as any).checkOutAiAnalysis?.faceRetakeCount ?? 0} | Odo: {(record as any).checkOutAiAnalysis?.odoRetakeCount ?? 0}
+                        </span>
+                      </div>
+                      {(record as any).checkOutAiAnalysis?.faceAi?.warningMessage && (
+                        <p className="text-[8px] text-amber-700 bg-amber-50 p-1 rounded border border-amber-100 font-medium leading-tight">
+                          Note: {(record as any).checkOutAiAnalysis.faceAi.warningMessage}
+                        </p>
+                      )}
+                    </div>
                   ) : (
-                    <span className="text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">
-                      {(record as any).checkOutAiAnalysis ? "⚠️ Warnings / Fallback" : "Standard Photo"}
-                    </span>
-                  )
-                ) : (
-                  <span className="text-[9px] font-medium text-slate-400">In Progress</span>
-                )}
-              </div>
-
-              {record.checkOutTime ? (
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between text-[11px]">
-                    <span className="text-slate-500 font-medium">Face Type:</span>
-                    <span className="font-bold text-slate-800">
-                      {(record as any).checkOutAiAnalysis?.faceAi?.isScreenOrPrintout ? "⚠️ Photo of Screen" : (record as any).checkOutAiAnalysis?.faceAi?.isHumanFace ? "Live Living Human" : "Standard Check-out Photo"}
-                    </span>
-                  </div>
-
-                  {record.punchType === "FIELD" && record.endOdometerPhotoUrl && (
-                    <>
-                      <div className="flex justify-between text-[11px]">
-                        <span className="text-slate-500 font-medium">Odometer Meter:</span>
-                        <span className="font-bold text-slate-800">
-                          {(record as any).checkOutAiAnalysis?.odometerAi?.isOdometer !== false ? "Valid Vehicle Meter" : "Invalid Meter"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-[11px]">
-                        <span className="text-slate-500 font-medium">OCR Detected vs Entered:</span>
-                        <span className="font-bold text-slate-800">
-                          {(record as any).checkOutAiAnalysis?.odometerAi?.detectedReading != null ? `${(record as any).checkOutAiAnalysis.odometerAi.detectedReading} KM` : "N/A"} vs {record.endOdometer != null ? `${record.endOdometer} KM` : "N/A"}
-                        </span>
-                      </div>
-                    </>
-                  )}
-
-                  <div className="flex justify-between text-[11px]">
-                    <span className="text-slate-500 font-medium">Retake Count:</span>
-                    <span className="font-bold text-slate-800">
-                      Face: {(record as any).checkOutAiAnalysis?.faceRetakeCount ?? 0} | Odo: {(record as any).checkOutAiAnalysis?.odoRetakeCount ?? 0}
-                    </span>
-                  </div>
-
-                  {(record as any).checkOutAiAnalysis?.faceAi?.warningMessage && (
-                    <p className="text-[10px] text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-100 font-medium mt-1">
-                      Note: {(record as any).checkOutAiAnalysis.faceAi.warningMessage}
-                    </p>
+                    <p className="text-[10px] text-slate-400 italic pt-1.5">Check-out not completed yet</p>
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* MIDDLE COLUMN: CHECK IN (30% width) */}
+          <div className="lg:col-span-3 rounded-xl border border-slate-200/80 bg-slate-50/40 p-3 flex flex-col gap-2">
+            {/* Check In Header */}
+            <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-lg bg-emerald-50 flex items-center justify-center border border-emerald-100 shrink-0">
+                  <Clock className="h-3.5 w-3.5 text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 leading-none">Check In</p>
+                  <p className="text-xs sm:text-sm font-bold text-slate-900 leading-tight mt-0.5">
+                    {record.checkInTime ? formatTime(record.checkInTime) : "--"}
+                  </p>
+                </div>
+              </div>
+              {record.checkInLat != null && record.checkInLng != null ? (
+                <a 
+                  href={`https://www.google.com/maps/search/?api=1&query=${record.checkInLat},${record.checkInLng}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="h-6 px-2 rounded-md bg-white border border-slate-200 flex items-center gap-1 hover:bg-blue-50 hover:border-blue-200 transition-all shadow-2xs"
+                >
+                  <MapPin className="h-3 w-3 text-blue-600" />
+                  <span className="text-[9px] font-bold text-slate-600 uppercase">View Map</span>
+                </a>
+              ) : null}
+            </div>
+
+            {/* Live Photo Check-In */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Live Photo Check-in</span>
+                {record.checkInPhotoUrl && (
+                  <span className="text-[8px] font-semibold text-blue-600">Tap to expand</span>
+                )}
+              </div>
+              {record.checkInPhotoUrl ? (
+                <PhotoViewer url={record.checkInPhotoUrl} title={`${record.user.name} - Check In Photo`}>
+                  <div className="h-28 sm:h-32 w-full rounded-xl border border-slate-200/80 bg-slate-950 overflow-hidden relative group cursor-zoom-in shadow-xs flex items-center justify-center">
+                    <img 
+                      src={record.checkInPhotoUrl} 
+                      className="h-full w-full object-contain transition-transform group-hover:scale-105" 
+                      alt={`${record.user.name} check-in`} 
+                    />
+                    <div className="absolute top-1.5 left-1.5 bg-black/60 backdrop-blur-xs text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider">
+                      Check-in
+                    </div>
+                  </div>
+                </PhotoViewer>
               ) : (
-                <p className="text-xs text-slate-400 italic">Check-out not completed yet</p>
+                <div className="h-28 sm:h-32 w-full rounded-xl border border-slate-200/60 bg-white flex flex-col items-center justify-center text-slate-300">
+                  <UserIcon className="h-7 w-7 opacity-30" />
+                  <p className="text-[9px] font-bold uppercase mt-1">No photo</p>
+                </div>
               )}
             </div>
+
+            {/* Start Odometer Photo */}
+            {record.punchType === "FIELD" && record.startOdometerPhotoUrl && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-amber-600">
+                    Start Odometer {record.startOdometer ? `(${record.startOdometer} KM)` : ""}
+                  </span>
+                  <span className="text-[8px] font-semibold text-amber-600">Tap to expand</span>
+                </div>
+                <PhotoViewer url={record.startOdometerPhotoUrl} title={`Start Odometer ${record.startOdometer ? `(${record.startOdometer} KM)` : ""}`}>
+                  <div className="h-20 sm:h-24 w-full rounded-xl border border-amber-200/80 bg-slate-950 overflow-hidden relative group cursor-zoom-in shadow-xs flex items-center justify-center">
+                    <img 
+                      src={record.startOdometerPhotoUrl} 
+                      className="h-full w-full object-contain transition-transform group-hover:scale-105" 
+                      alt="Start Odometer" 
+                    />
+                    <div className="absolute top-1.5 left-1.5 bg-amber-600/90 text-white px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-wider">
+                      Odo: {record.startOdometer ? `${record.startOdometer} KM` : ""}
+                    </div>
+                  </div>
+                </PhotoViewer>
+              </div>
+            )}
+
+            {/* Coordinates */}
+            <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-tighter mt-auto pt-1">
+              Coords: {formatCoords(record.checkInLat, record.checkInLng, 5)}
+            </p>
+          </div>
+
+          {/* RIGHT COLUMN: CHECK OUT (30% width) */}
+          <div className="lg:col-span-3 rounded-xl border border-slate-200/80 bg-slate-50/40 p-3 flex flex-col gap-2">
+            {/* Check Out Header */}
+            <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-lg bg-rose-50 flex items-center justify-center border border-rose-100 shrink-0">
+                  <Clock className="h-3.5 w-3.5 text-rose-600" />
+                </div>
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 leading-none">Check Out</p>
+                  <p className="text-xs sm:text-sm font-bold text-slate-900 leading-tight mt-0.5">
+                    {record.checkOutTime ? formatTime(record.checkOutTime) : "Active"}
+                  </p>
+                </div>
+              </div>
+              {record.checkOutTime && record.checkOutLat != null && record.checkOutLng != null ? (
+                <a 
+                  href={`https://www.google.com/maps/search/?api=1&query=${record.checkOutLat},${record.checkOutLng}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="h-6 px-2 rounded-md bg-white border border-slate-200 flex items-center gap-1 hover:bg-blue-50 hover:border-blue-200 transition-all shadow-2xs"
+                >
+                  <MapPin className="h-3 w-3 text-blue-600" />
+                  <span className="text-[9px] font-bold text-slate-600 uppercase">View Map</span>
+                </a>
+              ) : null}
+            </div>
+
+            {/* Live Photo Check-Out */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Live Photo Check-out</span>
+                {record.checkOutPhotoUrl && (
+                  <span className="text-[8px] font-semibold text-blue-600">Tap to expand</span>
+                )}
+              </div>
+              {record.checkOutPhotoUrl ? (
+                <PhotoViewer url={record.checkOutPhotoUrl} title={`${record.user.name} - Check Out Photo`}>
+                  <div className="h-28 sm:h-32 w-full rounded-xl border border-slate-200/80 bg-slate-950 overflow-hidden relative group cursor-zoom-in shadow-xs flex items-center justify-center">
+                    <img 
+                      src={record.checkOutPhotoUrl} 
+                      className="h-full w-full object-contain transition-transform group-hover:scale-105" 
+                      alt={`${record.user.name} check-out`} 
+                    />
+                    <div className="absolute top-1.5 left-1.5 bg-black/60 backdrop-blur-xs text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider">
+                      Check-out
+                    </div>
+                  </div>
+                </PhotoViewer>
+              ) : (
+                <div className="h-28 sm:h-32 w-full rounded-xl border border-slate-200/60 bg-white flex flex-col items-center justify-center text-slate-300">
+                  <UserIcon className="h-7 w-7 opacity-30" />
+                  <p className="text-[9px] font-bold uppercase mt-1">
+                    {record.checkOutTime ? "No photo" : "Employee still on site"}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* End Odometer Photo */}
+            {record.punchType === "FIELD" && record.endOdometerPhotoUrl && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-amber-600">
+                    End Odometer {record.endOdometer ? `(${record.endOdometer} KM)` : ""}
+                  </span>
+                  <span className="text-[8px] font-semibold text-amber-600">Tap to expand</span>
+                </div>
+                <PhotoViewer url={record.endOdometerPhotoUrl} title={`End Odometer ${record.endOdometer ? `(${record.endOdometer} KM)` : ""}`}>
+                  <div className="h-20 sm:h-24 w-full rounded-xl border border-amber-200/80 bg-slate-950 overflow-hidden relative group cursor-zoom-in shadow-xs flex items-center justify-center">
+                    <img 
+                      src={record.endOdometerPhotoUrl} 
+                      className="h-full w-full object-contain transition-transform group-hover:scale-105" 
+                      alt="End Odometer" 
+                    />
+                    <div className="absolute top-1.5 left-1.5 bg-amber-600/90 text-white px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-wider">
+                      Odo: {record.endOdometer ? `${record.endOdometer} KM` : ""}
+                    </div>
+                  </div>
+                </PhotoViewer>
+              </div>
+            )}
+
+            {/* Coordinates */}
+            <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-tighter mt-auto pt-1">
+              {record.checkOutTime ? `Coords: ${formatCoords(record.checkOutLat, record.checkOutLng, 5)}` : "Ongoing activity..."}
+            </p>
           </div>
         </div>
 
-        <div className="p-8 grid grid-cols-2 gap-8">
-           {/* Punch In */}
-           <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                 <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-lg bg-emerald-50 flex items-center justify-center border border-emerald-100">
-                       <Clock className="h-4 w-4 text-emerald-600" />
-                    </div>
-                   <div>
-                       <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 leading-none mb-1">Check In</p>
-                       <p className="text-sm font-bold text-slate-900">{record.checkInTime ? formatTime(record.checkInTime) : "--"}</p>
-                    </div>
-                 </div>
-                 {record.checkInLat != null && record.checkInLng != null ? (
-                   <a 
-                     href={`https://www.google.com/maps/search/?api=1&query=${record.checkInLat},${record.checkInLng}`} 
-                     target="_blank" 
-                     rel="noopener noreferrer"
-                     className="h-8 px-3 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-2 hover:bg-blue-50 hover:border-blue-100 transition-all"
-                   >
-                      <MapPin className="h-3.5 w-3.5 text-blue-600" />
-                      <span className="text-[10px] font-bold text-slate-600 uppercase">View Map</span>
-                   </a>
-                 ) : null}
-              </div>
-              <div className="aspect-[4/3] rounded-2xl border border-slate-100 bg-slate-50 overflow-hidden shadow-inner group relative">
-                 {record.checkInPhotoUrl ? (
-                    <img src={record.checkInPhotoUrl} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt={`${record.user.name} check-in verification`} />
-                 ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
-                       <UserIcon className="h-10 w-10 opacity-20" />
-                       <p className="text-[10px] font-bold uppercase mt-2">No photo available</p>
-                    </div>
-                 )}
-                 <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-2 py-1 rounded text-[9px] font-black text-slate-700 uppercase tracking-widest border border-white shadow-sm ring-1 ring-black/5">
-                    Live Photo Check-in
-                 </div>
-              </div>
-              {record.punchType === "FIELD" && record.startOdometerPhotoUrl && (
-                  <div className="mt-3 space-y-2">
-                     <p className="text-[10px] font-black uppercase tracking-wider text-amber-600">Start Odometer Verification{record.startOdometer ? ` (${record.startOdometer} KM)` : ""}</p>
-                     <PhotoViewer url={record.startOdometerPhotoUrl} title={`Start Odometer ${record.startOdometer ? `(${record.startOdometer} KM)` : ""}`}>
-                        <div className="aspect-[16/9] rounded-2xl border border-amber-100 bg-amber-50/20 overflow-hidden shadow-sm group/odo relative cursor-zoom-in">
-                           <img src={record.startOdometerPhotoUrl} className="w-full h-full object-cover transition-transform group-hover/odo:scale-105" alt="Start Odometer" />
-                           <div className="absolute top-2 left-2 bg-amber-600/90 text-white px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider shadow-sm">
-                              Odometer{record.startOdometer ? `: ${record.startOdometer} KM` : ""}
-                           </div>
-                        </div>
-                     </PhotoViewer>
-                  </div>
-               )}
-              <p className="text-[10px] font-bold text-slate-400 text-center uppercase tracking-tighter">Coordinates: {formatCoords(record.checkInLat, record.checkInLng, 6)}</p>
-           </div>
-
-           {/* Punch Out */}
-           <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                 <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-lg bg-rose-50 flex items-center justify-center border border-rose-100">
-                       <Clock className="h-4 w-4 text-rose-600" />
-                    </div>
-                    <div>
-                       <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 leading-none mb-1">Check Out</p>
-                       <p className="text-sm font-bold text-slate-900">{record.checkOutTime ? formatTime(record.checkOutTime) : "Active"}</p>
-                    </div>
-                 </div>
-                 {record.checkOutTime && record.checkOutLat != null && record.checkOutLng != null && (
-                   <a 
-                     href={`https://www.google.com/maps/search/?api=1&query=${record.checkOutLat},${record.checkOutLng}`} 
-                     target="_blank" 
-                     rel="noopener noreferrer"
-                     className="h-8 px-3 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-2 hover:bg-blue-50 hover:border-blue-100 transition-all"
-                   >
-                      <MapPin className="h-3.5 w-3.5 text-blue-600" />
-                      <span className="text-[10px] font-bold text-slate-600 uppercase">View Map</span>
-                   </a>
-                 )}
-              </div>
-              <div className="aspect-[4/3] rounded-2xl border border-slate-100 bg-slate-50 overflow-hidden shadow-inner group relative">
-                 {record.checkOutPhotoUrl ? (
-                    <img src={record.checkOutPhotoUrl} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt={`${record.user.name} check-out verification`} />
-                 ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
-                       <UserIcon className="h-10 w-10 opacity-20" />
-                       <p className="text-[10px] font-bold uppercase mt-2">{record.checkOutTime ? "No photo available" : "Employee still on site"}</p>
-                    </div>
-                 )}
-                 {record.checkOutTime && (
-                   <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-2 py-1 rounded text-[9px] font-black text-slate-700 uppercase tracking-widest border border-white shadow-sm ring-1 ring-black/5">
-                      Live Photo Check-out
-                   </div>
-                 )}
-              </div>
-              {record.punchType === "FIELD" && record.endOdometerPhotoUrl && (
-                  <div className="mt-3 space-y-2">
-                     <p className="text-[10px] font-black uppercase tracking-wider text-amber-600">End Odometer Verification{record.endOdometer ? ` (${record.endOdometer} KM)` : ""}</p>
-                     <PhotoViewer url={record.endOdometerPhotoUrl} title={`End Odometer ${record.endOdometer ? `(${record.endOdometer} KM)` : ""}`}>
-                        <div className="aspect-[16/9] rounded-2xl border border-amber-100 bg-amber-50/20 overflow-hidden shadow-sm group/odo relative cursor-zoom-in">
-                           <img src={record.endOdometerPhotoUrl} className="w-full h-full object-cover transition-transform group-hover/odo:scale-105" alt="End Odometer" />
-                           <div className="absolute top-2 left-2 bg-amber-600/90 text-white px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider shadow-sm">
-                              Odometer{record.endOdometer ? `: ${record.endOdometer} KM` : ""}
-                           </div>
-                        </div>
-                     </PhotoViewer>
-                  </div>
-               )}
-              <p className="text-[10px] font-bold text-slate-400 text-center uppercase tracking-tighter">
-                {record.checkOutTime ? `Coordinates: ${formatCoords(record.checkOutLat, record.checkOutLng, 6)}` : "Ongoing activity..."}
-              </p>
-           </div>
-        </div>
-
-        <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
-           <Button variant="outline" onClick={() => onOpenChange(false)} className="h-10 rounded-xl font-bold text-slate-500 hover:text-slate-700 border-slate-200">
+        {/* COMPACT FOOTER */}
+        <div className="px-6 py-2.5 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
+           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} className="h-8 rounded-lg font-bold text-xs text-slate-500 hover:text-slate-700 border-slate-200">
               Close Verification
            </Button>
         </div>
