@@ -216,7 +216,7 @@ function CustomDrawerContent(props: any) {
       </TouchableOpacity>
 
       <View style={{ padding: 16, alignItems: "center" }}>
-        <Text style={{ fontSize: 11, color: "#94A3B8", fontWeight: "600" }}>Version {Constants.expoConfig?.version || "1.1.2"}</Text>
+        <Text style={{ fontSize: 11, color: "#94A3B8", fontWeight: "600" }}>Version {Constants.expoConfig?.version || "1.1.3"}</Text>
       </View>
     </DrawerContentScrollView>
   );
