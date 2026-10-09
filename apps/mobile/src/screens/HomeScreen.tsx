@@ -36,7 +36,7 @@ export function HomeScreen() {
   const [showNotifications, setShowNotifications] = useState(false);
 
   // Time tracking & attendance states
-  const { todaySessions, activeAttendance, todayAttendance, activeBreak } = useAttendance();
+  const { todaySessions, activeAttendance, todayAttendance, activeBreak, isOnLeave } = useAttendance();
   const { officeTime, fieldTime, breakTime, friendlyBreakTime } = useTimeTracker(todaySessions, currentTime);
   const isCheckedIn = Boolean(activeAttendance);
   const isCheckedOut = !isCheckedIn && todaySessions.length > 0;
@@ -433,6 +433,27 @@ export function HomeScreen() {
       setCompletionModalVisible(true);
       return;
     }
+
+    if (isOnLeave) {
+      Alert.alert(
+        "Cannot Start Task",
+        "You are on leave today. Tasks cannot be started while on leave."
+      );
+      return;
+    }
+
+    if (!activeAttendance && todaySessions.length === 0) {
+      Alert.alert(
+        "Check-in Required",
+        "You have not checked in today. Please check in first before starting any tasks.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Go to Attendance", onPress: () => navigation.navigate("Attendance") }
+        ]
+      );
+      return;
+    }
+
     try {
       await updateStatus({ taskId: task.id, status: "IN_PROGRESS" });
     } catch (error) {

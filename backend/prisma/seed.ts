@@ -27,10 +27,10 @@ async function main() {
   console.log("Creating Company...");
   const company = await prisma.company.upsert({
     where: { id: "demo-corp-company" },
-    update: { name: "Demo Corp" },
+    update: { name: "Vaniki Crop Science Pvt. Ltd." },
     create: {
       id: "demo-corp-company",
-      name: "Demo Corp"
+      name: "Vaniki Crop Science Pvt. Ltd."
     }
   });
 

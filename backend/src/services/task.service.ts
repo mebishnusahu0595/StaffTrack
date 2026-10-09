@@ -778,6 +778,30 @@ export async function updateTaskStatus(
     forbidden("Task is outside your company");
   }
 
+  // Prevent employee from starting task if on leave or not checked in
+  if (status === TaskStatus.IN_PROGRESS && actor.role === UserRole.EMPLOYEE) {
+    const todayStart = getStartOfDayIST(new Date());
+    const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+    const todayAttendance = await prisma.attendance.findFirst({
+      where: {
+        userId: actor.id,
+        date: {
+          gte: todayStart,
+          lt: tomorrowStart
+        }
+      }
+    });
+
+    if (todayAttendance?.status === "ON_LEAVE") {
+      forbidden("You are on leave today. Tasks cannot be started while on leave.");
+    }
+
+    if (!todayAttendance || !todayAttendance.checkInTime) {
+      forbidden("You have not checked in today. Please check in first before starting any tasks.");
+    }
+  }
+
   const data: Prisma.TaskUpdateInput = { status };
 
   if (status === TaskStatus.COMPLETED) {

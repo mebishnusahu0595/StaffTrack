@@ -11,6 +11,7 @@ import * as DocumentPicker from "expo-document-picker";
 import type { Task, TaskStatus } from "../api";
 import { TaskCard } from "../components/TaskCard";
 import { useTasks } from "../hooks/useTasks";
+import { useAttendance } from "../hooks/useAttendance";
 import { uploadPhoto, uploadFile } from "../api";
 import { API_ORIGIN_URL } from "../config/env";
 import { appIconSource } from "../components/AppIcon";
@@ -19,6 +20,7 @@ type TabValue = "ALL" | "PENDING" | "COMPLETED";
 
 export function TasksScreen() {
   const { tasks, isFetching, isUpdatingStatus, refetch, updateStatus } = useTasks();
+  const { isOnLeave, activeAttendance, todaySessions } = useAttendance();
   const [activeTab, setActiveTab] = useState<TabValue>("ALL");
   const [menuVisible, setMenuVisible] = useState(false);
 
@@ -355,6 +357,23 @@ export function TasksScreen() {
       setCompletionModalVisible(true);
       return;
     }
+
+    if (isOnLeave) {
+      Alert.alert(
+        "Cannot Start Task",
+        "You are on leave today. Tasks cannot be started while on leave."
+      );
+      return;
+    }
+
+    if (!activeAttendance && todaySessions.length === 0) {
+      Alert.alert(
+        "Check-in Required",
+        "You have not checked in today. Please check in first before starting any tasks."
+      );
+      return;
+    }
+
     try {
       await updateStatus({ taskId: task.id, status: "IN_PROGRESS" });
     } catch (error) {

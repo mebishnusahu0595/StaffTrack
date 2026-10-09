@@ -84,6 +84,13 @@ export function useAttendance(month = dayjs().month() + 1, year = dayjs().year()
   const todayAttendance = activeAttendance || todaySessions[todaySessions.length - 1];
   const activeBreak = activeAttendance?.breaks?.find((b) => !b.endTime);
 
+  const todayRecord = attendanceRows.find((record) =>
+    dayjs(record.date).isSame(dayjs(), "day") ||
+    (record.checkInTime && dayjs(record.checkInTime).isSame(dayjs(), "day"))
+  );
+  const isOnLeave = todayRecord?.status === "ON_LEAVE";
+  const isCheckedIn = Boolean(activeAttendance) || todaySessions.length > 0;
+
   return {
     ...attendanceQuery,
     attendance: attendanceQuery.data ?? [],
@@ -100,7 +107,9 @@ export function useAttendance(month = dayjs().month() + 1, year = dayjs().year()
     todayAttendance,
     activeAttendance,
     activeBreak,
-    todaySessions
+    todaySessions,
+    isOnLeave,
+    isCheckedIn
   };
 }
 
