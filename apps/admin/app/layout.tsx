@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { AppProviders } from "@/components/app-providers";
 import { getSessionUserFromToken, parseUserCookie } from "@/lib/auth";
 import { ACCESS_COOKIE, USER_COOKIE } from "@/lib/constants";
+import { RouteProgressBar } from "@/components/route-progress-bar";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
+        <RouteProgressBar />
         <AppProviders initialUser={user}>{children}</AppProviders>
       </body>
     </html>

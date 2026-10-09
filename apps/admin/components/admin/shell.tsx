@@ -99,7 +99,6 @@ const navItems: { href: string; label: string; icon: any; roles?: Role[] }[] = [
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, signOut } = useAuth();
-  const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [sidebarSearch, setSidebarSearch] = useState("");
 
@@ -184,12 +183,6 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    setCurrentTime(new Date());
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
     const handleAlert = (e: Event) => {
       const customEvent = e as CustomEvent<LocationOffAlert>;
       setAlerts((prev) => {
@@ -210,39 +203,48 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     setIsMobileMenuOpen(false);
   }, [pathname]);
 
-  // Live "needs attention" counts for sidebar badges. Polled lightly so a new
-  // request shows up within ~45s without a manual refresh.
+  // Live "needs attention" counts for sidebar badges with sensible intervals and caching
   const enabledBadges = Boolean(user);
   const { data: lateCheckIns = [] } = useQuery({
     queryKey: ["pendingLateCheckIns"],
     queryFn: fetchPendingLateCheckIns,
     enabled: enabledBadges,
-    refetchInterval: 45_000
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    refetchInterval: 90_000
   });
   const { data: pendingAdjustments = [] } = useQuery({
     queryKey: ["attendanceRequests", "PENDING"],
     queryFn: () => fetchAttendanceRequests("PENDING"),
     enabled: enabledBadges,
-    refetchInterval: 45_000
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    refetchInterval: 90_000
   });
   const { data: pendingLeaves = [] } = useQuery({
     queryKey: ["leaves", "PENDING"],
     queryFn: () => fetchLeaves({ status: "PENDING" }),
     enabled: enabledBadges,
-    refetchInterval: 45_000
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    refetchInterval: 90_000
   });
   const { data: allExpenses = [] } = useQuery({
     queryKey: ["expenses", "sidebar"],
     queryFn: () => fetchExpenses(),
     enabled: enabledBadges,
-    refetchInterval: 60_000
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    refetchInterval: 120_000
   });
 
   const { data: allIssues = [] } = useQuery({
     queryKey: ["issues", "sidebar"],
     queryFn: () => fetchIssues(),
     enabled: enabledBadges,
-    refetchInterval: 60_000
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    refetchInterval: 120_000
   });
  
   const pendingExpenses = (allExpenses as any[]).filter((e) => !e.approved && !e.approvedById).length;
@@ -254,7 +256,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     "/issues": pendingIssues
   };
 
-  // Live Location Warnings and Today's Attendance Query
+  // Live Location Warnings and Today's Attendance Query (polled moderately)
   const todayDate = dayjs().format("YYYY-MM-DD");
   const [readWarningIds, setReadWarningIds] = useState<Set<string>>(new Set());
   const [notifDateFilter, setNotifDateFilter] = useState(todayDate);
@@ -263,14 +265,18 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     queryKey: ["attendance", "overview", notifDateFilter],
     queryFn: () => fetchAllAttendance(notifDateFilter),
     enabled: enabledBadges,
-    refetchInterval: 15_000
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    refetchInterval: 60_000
   });
 
   const usersQuery = useQuery({
     queryKey: ["users", "all-list"],
     queryFn: () => fetchUsers({ page: 1, pageSize: 100 }),
     enabled: enabledBadges,
-    refetchInterval: 15_000
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    refetchInterval: 60_000
   });
 
   const locationWarnings = useMemo(() => {
@@ -466,18 +472,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <LayoutDashboard className="h-6 w-6" />
             </Button>
             {/* Clock Widget */}
-            <div className="hidden md:flex items-center gap-4 px-5 py-2.5 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-                <span className="text-sm font-black text-slate-700 tracking-tight tabular-nums">
-                  {currentTime ? currentTime.toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:-- --'}
-                </span>
-              </div>
-              <div className="h-4 w-px bg-slate-200" />
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-                {currentTime ? currentTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '---'}
-              </span>
-            </div>
+            <HeaderClock />
 
             <div className="relative group hidden lg:block">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
@@ -740,6 +735,31 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function HeaderClock() {
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setCurrentTime(new Date());
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="hidden md:flex items-center gap-4 px-5 py-2.5 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
+      <div className="flex items-center gap-2">
+        <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+        <span className="text-sm font-black text-slate-700 tracking-tight tabular-nums">
+          {currentTime ? currentTime.toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:-- --'}
+        </span>
+      </div>
+      <div className="h-4 w-px bg-slate-200" />
+      <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+        {currentTime ? currentTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '---'}
+      </span>
     </div>
   );
 }

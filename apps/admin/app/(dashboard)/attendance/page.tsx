@@ -57,14 +57,6 @@ export default function AttendancePage() {
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
   const [manualUserId, setManualUserId] = useState("");
   const [manualDate, setManualDate] = useState(startDate);
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTick((prev) => prev + 1);
-    }, 10000);
-    return () => clearInterval(timer);
-  }, []);
   const [manualStatus, setManualStatus] = useState<Extract<AttendanceStatus, "ON_LEAVE" | "HALF_DAY">>("ON_LEAVE");
   const queryClient = useQueryClient();
   
@@ -151,12 +143,109 @@ export default function AttendancePage() {
     return sortedData;
   }, [attendanceData, employeeFilter, selectedDepartment, searchQuery, sortBy]);
 
+  // Group records by user and date so multiple checkins/checkouts are consolidated into a single row
+  const groupedData = useMemo(() => {
+    const map = new Map<string, (AttendanceRecord & { user: User })[]>();
+    for (const record of filteredData) {
+      if (!record.userId) continue;
+      const dateKey = record.date ? new Date(record.date).toISOString().slice(0, 10) : "today";
+      const groupKey = `${record.userId}_${dateKey}`;
+      const list = map.get(groupKey) || [];
+      list.push(record);
+      map.set(groupKey, list);
+    }
+
+    const rows: Array<{
+      key: string;
+      userId: string;
+      user: User;
+      date: string;
+      records: (AttendanceRecord & { user: User })[];
+      latestRecord: AttendanceRecord & { user: User };
+      earliestRecord: AttendanceRecord & { user: User };
+      sessionCount: number;
+      firstCheckInTime: string | null;
+      latestCheckOutTime: string | null;
+      isActive: boolean;
+      punchType: "OFFICE" | "FIELD" | "BOTH";
+      totalDurationMs: number;
+      totalKmTravelled: number;
+      hasOdoError: boolean;
+      status: AttendanceStatus;
+    }> = [];
+
+    map.forEach((records, groupKey) => {
+      const sortedRecords = [...records].sort((a, b) => {
+        const tA = a.checkInTime ? new Date(a.checkInTime).getTime() : 0;
+        const tB = b.checkInTime ? new Date(b.checkInTime).getTime() : 0;
+        return tA - tB;
+      });
+
+      const earliest = sortedRecords[0];
+      const latest = sortedRecords[sortedRecords.length - 1];
+      const user = latest.user || earliest.user;
+
+      const activeSession = sortedRecords.find((r) => r.checkInTime && !r.checkOutTime);
+      const isActive = Boolean(activeSession);
+      const firstCheckInTime = earliest.checkInTime;
+      const latestCheckOutTime = isActive ? null : latest.checkOutTime;
+
+      const hasField = sortedRecords.some((r) => r.punchType === "FIELD");
+      const hasOffice = sortedRecords.some((r) => r.punchType === "OFFICE");
+      const punchType: "OFFICE" | "FIELD" | "BOTH" = hasField && hasOffice ? "BOTH" : hasField ? "FIELD" : "OFFICE";
+
+      const durations = calculateDurations(sortedRecords);
+      const totalDurationMs = durations.officeTimeMs + durations.fieldTimeMs;
+
+      let totalKm = 0;
+      let hasOdoError = false;
+      for (const r of sortedRecords) {
+        if (r.punchType === "FIELD" && r.startOdometer != null && r.endOdometer != null) {
+          if (r.endOdometer >= r.startOdometer) {
+            totalKm += r.endOdometer - r.startOdometer;
+          } else {
+            hasOdoError = true;
+          }
+        }
+      }
+
+      const status = sortedRecords.some((r) => r.status === "PRESENT")
+        ? "PRESENT"
+        : sortedRecords.some((r) => r.status === "HALF_DAY")
+        ? "HALF_DAY"
+        : sortedRecords.some((r) => r.status === "ON_LEAVE")
+        ? "ON_LEAVE"
+        : earliest.status || "ABSENT";
+
+      rows.push({
+        key: groupKey,
+        userId: user.id,
+        user,
+        date: earliest.date,
+        records: sortedRecords,
+        latestRecord: activeSession || latest,
+        earliestRecord: earliest,
+        sessionCount: sortedRecords.length,
+        firstCheckInTime,
+        latestCheckOutTime,
+        isActive,
+        punchType,
+        totalDurationMs,
+        totalKmTravelled: totalKm,
+        hasOdoError,
+        status
+      });
+    });
+
+    return rows;
+  }, [filteredData]);
+
   const summaryCounts = useMemo(() => {
     let present = 0;
     let absent = 0;
     let halfDay = 0;
     let onLeave = 0;
-    filteredData.forEach((r) => {
+    groupedData.forEach((r) => {
       if (r.status === "PRESENT") present++;
       else if (r.status === "ABSENT") absent++;
       else if (r.status === "HALF_DAY") halfDay++;
@@ -167,23 +256,13 @@ export default function AttendancePage() {
       absent,
       halfDay,
       onLeave,
-      total: filteredData.length
+      total: groupedData.length
     };
-  }, [filteredData]);
+  }, [groupedData]);
 
   const totalFieldKm = useMemo(() => {
-    return filteredData.reduce((acc, record) => {
-      if (
-        record.punchType === "FIELD" &&
-        record.startOdometer != null &&
-        record.endOdometer != null &&
-        record.endOdometer >= record.startOdometer
-      ) {
-        return acc + (record.endOdometer - record.startOdometer);
-      }
-      return acc;
-    }, 0);
-  }, [filteredData]);
+    return groupedData.reduce((acc, row) => acc + row.totalKmTravelled, 0);
+  }, [groupedData]);
 
   const markMutation = useMutation({
     mutationFn: markAttendanceStatus,
@@ -759,7 +838,7 @@ export default function AttendancePage() {
                   </div>
                 </TableCell>
               </TableRow>
-            ) : filteredData.length === 0 ? (
+            ) : groupedData.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={9} className="h-40 text-center">
                   <div className="flex flex-col items-center gap-2 text-slate-300">
@@ -769,11 +848,11 @@ export default function AttendancePage() {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredData.map((record, index) => (
+              groupedData.map((row, index) => (
                 <TableRow 
-                  key={record.id} 
+                  key={row.key} 
                   className="group hover:bg-blue-50/30 border-slate-50 transition-colors cursor-pointer"
-                  onClick={() => setViewingRecord(record)}
+                  onClick={() => setViewingRecord(row.latestRecord)}
                 >
                   <TableCell className="py-5 px-4 text-center text-xs font-bold text-slate-500">
                     {index + 1}
@@ -781,83 +860,95 @@ export default function AttendancePage() {
                   <TableCell className="py-5 px-8">
                     <div className="flex items-center gap-3">
                       <Avatar className="h-9 w-9 border border-slate-100 shadow-sm ring-2 ring-white">
-                        <AvatarFallback className="bg-slate-50 text-slate-400 font-bold text-xs">{record.user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                        <AvatarFallback className="bg-slate-50 text-slate-400 font-bold text-xs">{row.user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
                       </Avatar>
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-900 text-sm leading-tight group-hover:text-blue-600 transition-colors">{record.user.name}</span>
-                          {record.user.batteryLevel !== undefined && record.user.batteryLevel !== null && (
+                          <span className="font-bold text-slate-900 text-sm leading-tight group-hover:text-blue-600 transition-colors">{row.user.name}</span>
+                          {row.user.batteryLevel !== undefined && row.user.batteryLevel !== null && (
                             <div className="flex items-center gap-0.5 text-[9px] font-black text-slate-500 bg-slate-100/80 px-1.5 py-0.5 rounded-md border border-slate-200/50">
                               <Battery className="h-2.5 w-2.5 text-slate-500" />
-                              <span>{record.user.batteryLevel}%</span>
+                              <span>{row.user.batteryLevel}%</span>
                             </div>
                           )}
-                          {record.user.isLocationOn !== undefined && (
+                          {row.user.isLocationOn !== undefined && (
                             <span 
                               className={cn(
                                 "h-2 w-2 rounded-full ring-2 ring-white shadow-sm",
-                                record.user.isLocationOn ? "bg-emerald-500" : "bg-rose-500 animate-pulse"
+                                row.user.isLocationOn ? "bg-emerald-500" : "bg-rose-500 animate-pulse"
                               )} 
-                              title={record.user.isLocationOn ? "Location On" : "Location Off"} 
+                              title={row.user.isLocationOn ? "Location On" : "Location Off"} 
                             />
                           )}
                         </div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{record.user.email} / {record.user.workMode}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{row.user.email} / {row.user.workMode}</span>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell className="py-5 px-6">
                     <div className="flex flex-col">
-                      <span className="text-xs font-bold text-slate-600">{record.checkInTime ? formatTime(record.checkInTime) : "--"}</span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{formatCoords(record.checkInLat, record.checkInLng)}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-700">{row.firstCheckInTime ? formatTime(row.firstCheckInTime) : "--"}</span>
+                        {row.sessionCount > 1 && (
+                          <span className="px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-black leading-none">
+                            {row.sessionCount} Sessions
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">
+                        {formatCoords(row.earliestRecord.checkInLat, row.earliestRecord.checkInLng)}
+                      </span>
                     </div>
                   </TableCell>
                   <TableCell className="py-5 px-6">
-                    {record.checkOutTime ? (
+                    {row.isActive ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-600 border border-emerald-200 uppercase tracking-wider animate-pulse">
+                        Active Now
+                      </span>
+                    ) : row.latestCheckOutTime ? (
                       <div className="flex flex-col">
-                        <span className="text-xs font-bold text-slate-600">{formatTime(record.checkOutTime)}</span>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{formatCoords(record.checkOutLat, record.checkOutLng)}</span>
+                        <span className="text-xs font-bold text-slate-700">{formatTime(row.latestCheckOutTime)}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">
+                          {formatCoords(row.latestRecord.checkOutLat, row.latestRecord.checkOutLng)}
+                        </span>
                       </div>
                     ) : (
-                      <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest italic">In Progress</span>
+                      <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest italic">--</span>
                     )}
                   </TableCell>
                   <TableCell className="py-5 px-6 text-center">
                     <div className={cn(
                       "inline-flex items-center justify-center px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-wider",
-                      record.punchType === "FIELD" ? "bg-amber-50 text-amber-600 border-amber-100" : "bg-blue-50 text-blue-600 border-blue-100"
+                      row.punchType === "FIELD" ? "bg-amber-50 text-amber-600 border-amber-100" :
+                      row.punchType === "BOTH" ? "bg-purple-50 text-purple-600 border-purple-100" :
+                      "bg-blue-50 text-blue-600 border-blue-100"
                     )}>
-                      {record.punchType || "MANUAL"}
+                      {row.punchType}
                     </div>
                   </TableCell>
                   <TableCell className="py-5 px-6 text-center">
-                    <span className="text-xs font-bold text-slate-600">
-                      {formatDurationLabel(calculateDurations([record]).officeTimeMs + calculateDurations([record]).fieldTimeMs)}
+                    <span className="text-xs font-bold text-slate-700">
+                      {formatDurationLabel(row.totalDurationMs)}
                     </span>
                   </TableCell>
                   <TableCell className="py-5 px-6 text-center">
-                    {record.punchType === "FIELD" ? (
-                      record.startOdometer != null && record.endOdometer != null ? (
-                        record.endOdometer >= record.startOdometer ? (
-                          <div className="flex flex-col items-center">
-                            <span className="text-xs font-black text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60 shadow-xs">
-                              {(record.endOdometer - record.startOdometer).toFixed(1)} KM
-                            </span>
-                            <span className="text-[9px] font-bold text-slate-400 mt-0.5">
-                              {record.startOdometer} → {record.endOdometer}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center">
-                            <span className="text-xs font-bold text-rose-600">Odo Error</span>
-                            <span className="text-[9px] font-bold text-slate-400 mt-0.5">{record.startOdometer} &gt; {record.endOdometer}</span>
-                          </div>
-                        )
-                      ) : record.startOdometer != null ? (
+                    {row.punchType !== "OFFICE" ? (
+                      row.hasOdoError ? (
                         <div className="flex flex-col items-center">
-                          <span className="text-xs font-bold text-amber-600">Start: {record.startOdometer}</span>
-                          <span className="text-[9px] font-bold text-slate-300 italic mt-0.5">In Progress</span>
+                          <span className="text-xs font-bold text-rose-600">Odo Error</span>
+                          <span className="text-[9px] font-bold text-slate-400 mt-0.5">Discrepancy</span>
                         </div>
+                      ) : row.totalKmTravelled > 0 ? (
+                        <div className="flex flex-col items-center">
+                          <span className="text-xs font-black text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60 shadow-xs">
+                            {row.totalKmTravelled.toFixed(1)} KM
+                          </span>
+                          {row.sessionCount > 1 && (
+                            <span className="text-[9px] font-bold text-slate-400 mt-0.5">across trips</span>
+                          )}
+                        </div>
+                      ) : row.isActive ? (
+                        <span className="text-[10px] font-bold text-amber-600 italic">In Progress</span>
                       ) : (
                         <span className="text-xs font-bold text-slate-300">--</span>
                       )
@@ -866,32 +957,56 @@ export default function AttendancePage() {
                     )}
                   </TableCell>
                   <TableCell className="py-5 px-6">
-                     <div className="flex items-center justify-center gap-2" onClick={(e) => e.stopPropagation()}>
-                        {record.checkInPhotoUrl ? (
-                          <PhotoViewer url={record.checkInPhotoUrl} title="Check In">
-                             <div className="relative h-8 w-10 rounded border border-slate-200 overflow-hidden cursor-zoom-in hover:border-blue-400 transition-all">
-                               <img src={record.checkInPhotoUrl} className="h-full w-full object-cover" alt={`${record.user.name} check-in thumbnail`} />
+                     <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        {row.latestRecord.checkInPhotoUrl ? (
+                          <PhotoViewer url={row.latestRecord.checkInPhotoUrl} title={`${row.user.name} - Check In`}>
+                             <div className="relative h-8 w-10 rounded border border-slate-200 overflow-hidden cursor-zoom-in hover:border-blue-400 transition-all bg-slate-900">
+                               <img 
+                                 src={row.latestRecord.checkInPhotoUrl} 
+                                 className="h-full w-full object-cover" 
+                                 alt={`${row.user.name} check-in`} 
+                                 loading="lazy"
+                                 decoding="async"
+                               />
                              </div>
                           </PhotoViewer>
                         ) : null}
-                        {record.punchType === "FIELD" && record.startOdometerPhotoUrl ? (
-                           <PhotoViewer url={record.startOdometerPhotoUrl} title={`Start Odometer ${record.startOdometer ? `(${record.startOdometer} KM)` : ""}`}>
+                        {row.punchType !== "OFFICE" && row.latestRecord.startOdometerPhotoUrl ? (
+                           <PhotoViewer url={row.latestRecord.startOdometerPhotoUrl} title={`${row.user.name} - Start Odometer`}>
                               <div className="relative h-8 w-10 rounded border border-amber-200 overflow-hidden cursor-zoom-in hover:border-amber-400 transition-all bg-amber-50">
-                                <img src={record.startOdometerPhotoUrl} className="h-full w-full object-cover" alt={`${record.user.name} start odometer`} />
+                                <img 
+                                  src={row.latestRecord.startOdometerPhotoUrl} 
+                                  className="h-full w-full object-cover" 
+                                  alt={`${row.user.name} start odometer`} 
+                                  loading="lazy"
+                                  decoding="async"
+                                />
                               </div>
                            </PhotoViewer>
                          ) : null}
-                        {record.checkOutPhotoUrl ? (
-                          <PhotoViewer url={record.checkOutPhotoUrl} title="Check Out">
-                             <div className="relative h-8 w-10 rounded border border-slate-200 overflow-hidden cursor-zoom-in hover:border-blue-400 transition-all">
-                               <img src={record.checkOutPhotoUrl} className="h-full w-full object-cover" alt={`${record.user.name} check-out thumbnail`} />
+                        {row.latestRecord.checkOutPhotoUrl ? (
+                          <PhotoViewer url={row.latestRecord.checkOutPhotoUrl} title={`${row.user.name} - Check Out`}>
+                             <div className="relative h-8 w-10 rounded border border-slate-200 overflow-hidden cursor-zoom-in hover:border-blue-400 transition-all bg-slate-900">
+                               <img 
+                                 src={row.latestRecord.checkOutPhotoUrl} 
+                                 className="h-full w-full object-cover" 
+                                 alt={`${row.user.name} check-out`} 
+                                 loading="lazy"
+                                 decoding="async"
+                               />
                              </div>
                           </PhotoViewer>
                         ) : null}
-                        {record.punchType === "FIELD" && record.endOdometerPhotoUrl ? (
-                           <PhotoViewer url={record.endOdometerPhotoUrl} title={`End Odometer ${record.endOdometer ? `(${record.endOdometer} KM)` : ""}`}>
+                        {row.punchType !== "OFFICE" && row.latestRecord.endOdometerPhotoUrl ? (
+                           <PhotoViewer url={row.latestRecord.endOdometerPhotoUrl} title={`${row.user.name} - End Odometer`}>
                               <div className="relative h-8 w-10 rounded border border-amber-200 overflow-hidden cursor-zoom-in hover:border-amber-400 transition-all bg-amber-50">
-                                <img src={record.endOdometerPhotoUrl} className="h-full w-full object-cover" alt={`${record.user.name} end odometer`} />
+                                <img 
+                                  src={row.latestRecord.endOdometerPhotoUrl} 
+                                  className="h-full w-full object-cover" 
+                                  alt={`${row.user.name} end odometer`} 
+                                  loading="lazy"
+                                  decoding="async"
+                                />
                               </div>
                            </PhotoViewer>
                          ) : null}
@@ -899,12 +1014,12 @@ export default function AttendancePage() {
                   </TableCell>
                   <TableCell className="py-5 px-8 text-right">
                     <AttendanceStatusBadge
-                      status={record.status}
-                      hasCheckOut={Boolean(record.checkOutTime)}
-                      checkInTime={record.checkInTime ?? undefined}
-                      checkOutTime={record.checkOutTime}
-                      shiftStart={record.user.shiftStart}
-                      shiftEnd={record.user.shiftEnd}
+                      status={row.status}
+                      hasCheckOut={!row.isActive && Boolean(row.latestCheckOutTime)}
+                      checkInTime={row.firstCheckInTime ?? undefined}
+                      checkOutTime={row.latestCheckOutTime}
+                      shiftStart={row.user.shiftStart}
+                      shiftEnd={row.user.shiftEnd}
                     />
                   </TableCell>
                 </TableRow>
@@ -916,7 +1031,7 @@ export default function AttendancePage() {
 
       <AttendanceDetailDialog 
         record={viewingRecord} 
-        userRecords={filteredData.filter(r => r.userId === viewingRecord?.userId)}
+        userRecords={groupedData.find(g => g.userId === viewingRecord?.userId && (!viewingRecord.date || g.date?.slice(0, 10) === viewingRecord.date?.slice(0, 10)))?.records || (viewingRecord ? [viewingRecord] : [])}
         onOpenChange={(open) => !open && setViewingRecord(null)} 
       />
 
