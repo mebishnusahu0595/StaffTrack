@@ -159,7 +159,7 @@ export default function AttendancePage() {
       key: string;
       userId: string;
       user: User;
-      date: string;
+      date?: string | null;
       records: (AttendanceRecord & { user: User })[];
       latestRecord: AttendanceRecord & { user: User };
       earliestRecord: AttendanceRecord & { user: User };
@@ -187,8 +187,8 @@ export default function AttendancePage() {
 
       const activeSession = sortedRecords.find((r) => r.checkInTime && !r.checkOutTime);
       const isActive = Boolean(activeSession);
-      const firstCheckInTime = earliest.checkInTime;
-      const latestCheckOutTime = isActive ? null : latest.checkOutTime;
+      const firstCheckInTime = earliest.checkInTime || null;
+      const latestCheckOutTime = isActive ? null : (latest.checkOutTime || null);
 
       const hasField = sortedRecords.some((r) => r.punchType === "FIELD");
       const hasOffice = sortedRecords.some((r) => r.punchType === "OFFICE");
@@ -209,13 +209,13 @@ export default function AttendancePage() {
         }
       }
 
-      const status = sortedRecords.some((r) => r.status === "PRESENT")
+      const status = (sortedRecords.some((r) => r.status === "PRESENT")
         ? "PRESENT"
         : sortedRecords.some((r) => r.status === "HALF_DAY")
         ? "HALF_DAY"
         : sortedRecords.some((r) => r.status === "ON_LEAVE")
         ? "ON_LEAVE"
-        : earliest.status || "ABSENT";
+        : earliest.status || "ABSENT") as AttendanceStatus;
 
       rows.push({
         key: groupKey,
