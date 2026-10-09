@@ -328,6 +328,68 @@ export default function TasksPage() {
     const isGrouped = employeeName === "All Staff";
     let bodyContent = "";
 
+    const renderTaskDetailCell = (task: any, index: number) => {
+      const dealersList = (task.dealers || []).map((d: any) => {
+        const parts = [];
+        const dName = d.name || d.firmName || "";
+        if (dName) parts.push(dName);
+        if (d.firmName && d.firmName !== d.name) parts.push(`(${d.firmName})`);
+        if (d.city || d.address) parts.push(`📍 ${d.city || d.address}`);
+        if (d.phone) parts.push(`📞 ${d.phone}`);
+        return parts.join(" • ");
+      });
+
+      const farmersList = (task.farmers || []).map((f: any) => {
+        const parts = [];
+        if (f.name) parts.push(f.name);
+        if (f.village) parts.push(`📍 ${f.village}`);
+        if (f.phone) parts.push(`📞 ${f.phone}`);
+        return parts.join(" • ");
+      });
+
+      let cleanDesc = (task.description || "").trim();
+      cleanDesc = cleanDesc.replace(/\[(Start|Due|Time|Date):[^\]]+\]/gi, "").trim();
+      cleanDesc = cleanDesc.replace(/^[-—\s]+/, "").trim();
+
+      const checklistItems: string[] = [];
+      if (task.checklistResponses && Array.isArray(task.checklistResponses)) {
+        for (const item of task.checklistResponses) {
+          const val = item.value !== undefined ? String(item.value).trim() : (item.response !== undefined ? String(item.response).trim() : (item.text !== undefined ? String(item.text).trim() : ""));
+          if (!val || item.type === "IMAGE" || item.type === "VIDEO" || item.type === "AUDIO" || item.type === "GEOTAG") continue;
+          const label = item.title || item.label || item.id || "";
+          const lower = label.toLowerCase();
+          if (lower.includes("remark") || lower.includes("note")) continue;
+          checklistItems.push(`<span style="color:#64748b;">${label}:</span> <strong style="color:#1e293b;">${val}</strong>`);
+        }
+      }
+
+      return `
+        <div style="font-weight: 800; color: #0f172a; font-size: 13px; line-height: 1.35;">
+          ${index + 1}. ${task.title}
+        </div>
+        ${dealersList.length > 0 ? `
+          <div style="margin-top: 4px; font-size: 11px; font-weight: 700; color: #1d4ed8; line-height: 1.35; background: #eff6ff; padding: 3px 8px; border-radius: 6px; border: 1px solid #bfdbfe; display: inline-block;">
+            🏢 Dealer: ${dealersList.join(", ")}
+          </div>
+        ` : ""}
+        ${farmersList.length > 0 ? `
+          <div style="margin-top: 4px; font-size: 11px; font-weight: 700; color: #15803d; line-height: 1.35; background: #f0fdf4; padding: 3px 8px; border-radius: 6px; border: 1px solid #bbf7d0; display: inline-block;">
+            🌾 Farmer: ${farmersList.join(", ")}
+          </div>
+        ` : ""}
+        ${cleanDesc ? `
+          <div style="margin-top: 4px; font-size: 11px; color: #475569; line-height: 1.35;">
+            📝 ${cleanDesc}
+          </div>
+        ` : ""}
+        ${checklistItems.length > 0 ? `
+          <div style="margin-top: 4px; font-size: 10.5px; line-height: 1.35; background: #f8fafc; border: 1px solid #e2e8f0; padding: 3px 8px; border-radius: 6px;">
+            ${checklistItems.slice(0, 5).join(" &nbsp;&bull;&nbsp; ")}
+          </div>
+        ` : ""}
+      `;
+    };
+
     if (isGrouped) {
       // Group tasks by assignee name
       const tasksByUser: Record<string, { name: string; tasks: any[] }> = {};
@@ -346,15 +408,16 @@ export default function TasksPage() {
         const inProgress = tasks.filter(t => t.status === "IN_PROGRESS").length;
         const userRows = tasks.map((task, i) => `
           <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#ffffff'}; page-break-inside: avoid;">
-            <td style="padding: 10px 14px; font-weight: 700; color: #1e293b; font-size: 12px;">${i + 1}. ${task.title}</td>
-            <td style="padding: 10px 14px; text-align:center;">
-              <span style="background:${statusColor[task.status] || '#94a3b8'}20; color:${statusColor[task.status] || '#94a3b8'}; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase;">${task.status}</span>
+            <td style="padding: 10px 14px; vertical-align: top;">
+              ${renderTaskDetailCell(task, i)}
             </td>
-            <td style="padding: 10px 14px; color: #64748b; font-size: 11px;">${task.completionRemarks || "—"}</td>
-            ${task.attachmentName ? `<td style="padding:10px 14px;"><a href="${task.attachmentUrl}" style="color:#3b82f6; font-size:10px; font-weight:700; text-decoration:none;">📎 ${task.attachmentName.slice(0, 15)}</a></td>` : '<td style="padding:10px 14px; color:#94a3b8; font-size:10px;">—</td>'}
+            <td style="padding: 10px 14px; text-align:center; vertical-align: top;">
+              <span style="background:${statusColor[task.status] || '#94a3b8'}20; color:${statusColor[task.status] || '#94a3b8'}; padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase;">${task.status}</span>
+            </td>
+            <td style="padding: 10px 14px; color: #475569; font-size: 11px; vertical-align: top; line-height: 1.35;">${task.completionRemarks || "—"}</td>
           </tr>
         `).join("");
- 
+
         return `
           <div style="margin-bottom: 30px; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; page-break-inside: avoid; background: white;">
             <div style="background: #f8fafc; padding: 14px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
@@ -370,10 +433,9 @@ export default function TasksPage() {
               <table style="width: 100%; border-collapse: collapse;">
                 <thead>
                   <tr style="text-align: left; background: #1e293b; color: white;">
-                    <th style="padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Task</th>
-                    <th style="padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase; text-align: center;">Status</th>
-                    <th style="padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">User Remarks</th>
-                    <th style="padding: 8px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Attachment</th>
+                    <th style="padding: 10px 14px; font-size: 11px; font-weight: 800; text-transform: uppercase;">Task & Details</th>
+                    <th style="padding: 10px 14px; font-size: 11px; font-weight: 800; text-transform: uppercase; text-align: center;">Status</th>
+                    <th style="padding: 10px 14px; font-size: 11px; font-weight: 800; text-transform: uppercase;">User Remarks</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -390,12 +452,13 @@ export default function TasksPage() {
       const inProgress = employeeTasks.filter(t => t.status === "IN_PROGRESS").length;
       const taskRows = employeeTasks.map((task, i) => `
         <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#ffffff'}; page-break-inside: avoid;">
-          <td style="padding: 12px 16px; font-weight: 700; color: #1e293b; font-size: 13px;">${i + 1}. ${task.title}</td>
-          <td style="padding: 12px 16px; text-align:center;">
+          <td style="padding: 12px 16px; vertical-align: top;">
+            ${renderTaskDetailCell(task, i)}
+          </td>
+          <td style="padding: 12px 16px; text-align:center; vertical-align: top;">
             <span style="background:${statusColor[task.status] || '#94a3b8'}20; color:${statusColor[task.status] || '#94a3b8'}; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">${task.status}</span>
           </td>
-          <td style="padding: 12px 16px; color: #64748b; font-size: 12px;">${task.completionRemarks || "—"}</td>
-          ${task.attachmentName ? `<td style="padding:12px 16px;"><a href="${task.attachmentUrl}" style="color:#3b82f6; font-size:11px; font-weight:700; text-decoration:none;">📎 ${task.attachmentName.slice(0, 20)}</a></td>` : '<td style="padding:12px 16px; color:#94a3b8; font-size:11px;">—</td>'}
+          <td style="padding: 12px 16px; color: #475569; font-size: 12px; vertical-align: top; line-height: 1.35;">${task.completionRemarks || "—"}</td>
         </tr>
       `).join("");
  
@@ -409,7 +472,7 @@ export default function TasksPage() {
         <div class="content" style="padding: 0 48px 48px;">
           <p class="section-title" style="font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 16px;">Task Breakdown</p>
           <table style="width: 100%; border-collapse: collapse; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0;">
-            <thead><tr style="background: #1e293b; color: white;"><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Task</th><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Status</th><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">User Remarks</th><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Attachment</th></tr></thead>
+            <thead><tr style="background: #1e293b; color: white;"><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Task & Details</th><th style="padding: 12px 16px; text-align: center; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Status</th><th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">User Remarks</th></tr></thead>
             <tbody>${taskRows}</tbody>
           </table>
         </div>

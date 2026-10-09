@@ -518,7 +518,7 @@ export async function checkOut(actor: AuthUser, input: CheckOutInput) {
       // 5. Automatically create/upsert Day End Report
       await createDayEndReport(actor, {
         date: dayStart,
-        visitsSummary: "Auto-generated upon field checkout",
+        visitsSummary: "",
         ordersTaken: completedTasksCount,
         ordersCancelled: 0,
         kmTravelled: Number(kmTravelled.toFixed(2)),
@@ -526,7 +526,7 @@ export async function checkOut(actor: AuthUser, input: CheckOutInput) {
         startOdometerPhotoUrl: attendance.startOdometerPhotoUrl ?? undefined,
         startOdometer: attendance.startOdometer ?? undefined,
         endOdometer: input.endOdometer ?? undefined,
-        remarks: "Auto-generated report upon checkout"
+        remarks: ""
       });
     } catch (err) {
       console.error("[AUTO-DER-ERROR] Failed to auto-generate Day End Report:", err);

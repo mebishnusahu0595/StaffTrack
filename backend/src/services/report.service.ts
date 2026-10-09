@@ -823,13 +823,14 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
     prisma.task.findMany({
       where: {
         assignedToId: userId,
-        status: TaskStatus.COMPLETED,
         OR: [
           { completedAt: { gte: reportDate, lt: nextDate } },
-          { updatedAt: { gte: reportDate, lt: nextDate } }
+          { updatedAt: { gte: reportDate, lt: nextDate }, status: TaskStatus.COMPLETED },
+          { startDate: { gte: reportDate, lt: nextDate } },
+          { dueDate: { gte: reportDate, lt: nextDate } }
         ]
       },
-      orderBy: [{ completedAt: "asc" }, { updatedAt: "asc" }]
+      orderBy: [{ completedAt: "asc" }, { updatedAt: "asc" }, { startDate: "asc" }, { dueDate: "asc" }]
     })
   ]);
 
@@ -870,7 +871,7 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
     endOdometer: attendance?.endOdometer,
     startOdometerPhotoUrl: attendance?.startOdometerPhotoUrl,
     kmPhotoUrl: attendance?.endOdometerPhotoUrl,
-    visitsSummary: "Field Work Mode",
+    visitsSummary: "",
     remarks: "",
     submittedAt: attendance?.checkOutTime || new Date()
   };
@@ -885,14 +886,41 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
     hour12: true
   });
 
-  const sortedCompletedTasks = [...completedTasks].sort((a, b) => {
+  // Deduplicate tasks by id
+  const uniqueTasksMap = new Map<string, any>();
+  for (const t of completedTasks) {
+    if (!uniqueTasksMap.has(t.id)) {
+      uniqueTasksMap.set(t.id, t);
+    }
+  }
+  const uniqueDayTasks = Array.from(uniqueTasksMap.values());
+
+  const doneTasks = uniqueDayTasks.filter((t: any) => t.status === TaskStatus.COMPLETED || Boolean(t.completedAt));
+  const pendingTasks = uniqueDayTasks.filter((t: any) => t.status !== TaskStatus.COMPLETED && !t.completedAt);
+
+  const sortedCompletedTasks = [...doneTasks].sort((a, b) => {
     const timeA = new Date(a.completedAt || a.updatedAt || a.startedAt || a.startDate || 0).getTime();
     const timeB = new Date(b.completedAt || b.updatedAt || b.startedAt || b.startDate || 0).getTime();
     return timeA - timeB;
   });
 
+  const sortedPendingTasks = [...pendingTasks].sort((a, b) => {
+    const timeA = new Date(a.dueDate || a.startDate || a.createdAt || 0).getTime();
+    const timeB = new Date(b.dueDate || b.startDate || b.createdAt || 0).getTime();
+    return timeA - timeB;
+  });
+
+  const allOrderedTasks = [...sortedCompletedTasks, ...sortedPendingTasks];
+  const totalTasksCount = allOrderedTasks.length;
   const completedCount = sortedCompletedTasks.length;
-  const countBannerText = `${completedCount} Completed`;
+
+  const taskWeight = totalTasksCount > 0 ? (100 / totalTasksCount) : 0;
+  const taskWeightFormatted = taskWeight % 1 === 0 ? `${taskWeight}%` : `${taskWeight.toFixed(1)}%`;
+  const totalPercentage = totalTasksCount > 0 ? Math.round((completedCount / totalTasksCount) * 100) : 0;
+
+  const countBannerText = totalTasksCount > 0 
+    ? `${completedCount} / ${totalTasksCount} Completed (${totalPercentage}%)`
+    : `${completedCount} Completed`;
 
   const formatTimeIST = (dateObj: Date | string | null | undefined): string => {
     if (!dateObj) return "--";
@@ -963,15 +991,7 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
     if (extraParts.length > 0) detailsParts.push(...extraParts.slice(0, 2));
     const detailsText = detailsParts.length > 0 ? detailsParts.join(" • ") : (t.description || "");
 
-    let rawUrl = t.completionPhotoUrl;
-    if (!rawUrl && t.checklistResponses && Array.isArray(t.checklistResponses)) {
-      const img = t.checklistResponses.find((item: any) => 
-        item.type === "IMAGE" && (item.fileUrl || item.photoUrl || item.image || item.url)
-      );
-      if (img) rawUrl = img.fileUrl || img.photoUrl || img.image || img.url;
-    }
-
-    const completedDate = t.completedAt ? new Date(t.completedAt) : (t.updatedAt ? new Date(t.updatedAt) : null);
+    const completedDate = t.completedAt ? new Date(t.completedAt) : (t.updatedAt && t.status === TaskStatus.COMPLETED ? new Date(t.updatedAt) : null);
     const completedTimeFormatted = formatTimeIST(completedDate);
 
     let startDateObj: Date | null = null;
@@ -1033,26 +1053,44 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
       coords: locationCoords,
       startTime: startTimeFormatted,
       completedTime: completedTimeFormatted,
-      points: t.points ?? 10,
-      photoUrl: rawUrl,
       remarks: t.completionRemarks || ""
     };
   };
 
   let tasksGridHtml = "";
-  if (sortedCompletedTasks.length === 0) {
-    tasksGridHtml = `<p style="font-size: 10px; color: #94a3b8; font-style: italic; margin: 0; padding: 4px 0;">No completed tasks recorded on this date.</p>`;
+  if (allOrderedTasks.length === 0) {
+    tasksGridHtml = `<p style="font-size: 10px; color: #94a3b8; font-style: italic; margin: 0; padding: 4px 0;">No tasks assigned or recorded on this date.</p>`;
   } else {
-    const tableRows = sortedCompletedTasks.map((t, idx) => {
-      const row = parseTaskDetails(t, idx, sortedCompletedTasks);
+    const tableRows = allOrderedTasks.map((t, idx) => {
+      const isCompleted = t.status === TaskStatus.COMPLETED || Boolean(t.completedAt);
+      const row = parseTaskDetails(t, idx, allOrderedTasks);
       const isEven = idx % 2 === 0;
+
+      const titleHtml = isCompleted ? `
+        <div style="font-weight: 800; color: #16a34a; font-size: 8.5px; white-space: nowrap;">
+          ✅ ${row.title}
+        </div>
+        ${row.personName ? `<div style="font-weight: 700; color: #0f172a; font-size: 8px; margin-top: 1px;">— ${row.personName}</div>` : ""}
+      ` : `
+        <div style="font-weight: 800; color: #d97706; font-size: 8.5px; white-space: nowrap;">
+          ⏳ ${row.title}
+        </div>
+        ${row.personName ? `<div style="font-weight: 700; color: #0f172a; font-size: 8px; margin-top: 1px;">— ${row.personName}</div>` : ""}
+      `;
+
+      const checkinHtml = row.startTime !== '--' ? `▶ ${row.startTime}` : (t.dueDate ? `Due: ${formatTimeIST(t.dueDate)}` : '--');
+      const checkoutHtml = isCompleted ? `✔ ${row.completedTime}` : `<span style="color: #d97706; font-weight: 800;">⏳ Pending</span>`;
+
+      const percentHtml = isCompleted ? `
+        <span style="font-size: 7.5px; font-weight: 800; color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 4px; border-radius: 3px;">+${taskWeightFormatted}</span>
+      ` : `
+        <span style="font-size: 7.5px; font-weight: 700; color: #64748b; background: #f1f5f9; border: 1px solid #e2e8f0; padding: 1px 4px; border-radius: 3px;">0%</span>
+      `;
+
       return `
         <tr style="background: ${isEven ? '#ffffff' : '#f8fafc'}; border-bottom: 1px solid #e2e8f0;">
           <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle;">
-            <div style="font-weight: 800; color: #16a34a; font-size: 8.5px; white-space: nowrap;">
-              ✅ ${row.title}
-            </div>
-            ${row.personName ? `<div style="font-weight: 700; color: #0f172a; font-size: 8px; margin-top: 1px;">— ${row.personName}</div>` : ""}
+            ${titleHtml}
           </td>
           <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #334155; font-size: 8px; font-weight: 600;">
             ${row.village ? `📍 ${row.village}` : '<span style="color: #cbd5e1;">--</span>'}
@@ -1063,18 +1101,17 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
           <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #0f172a; font-size: 8px; font-weight: 700; white-space: nowrap;">
             ${row.contact ? `📞 ${row.contact}` : '<span style="color: #cbd5e1;">--</span>'}
           </td>
-          <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; white-space: nowrap; font-size: 7.5px;">
-            <div style="color: #475569; font-weight: 600;">▶ ${row.startTime}</div>
-            <div style="color: #16a34a; font-weight: 800; margin-top: 1px;">✔ ${row.completedTime}</div>
+          <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; white-space: nowrap; font-size: 7.5px; color: #475569; font-weight: 700;">
+            ${checkinHtml}
+          </td>
+          <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; white-space: nowrap; font-size: 7.5px; color: #16a34a; font-weight: 800;">
+            ${checkoutHtml}
           </td>
           <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #0284c7; font-size: 7.5px; font-weight: 700; white-space: nowrap;">
             ${row.coords ? `<a href="https://maps.google.com/?q=${row.coords}" target="_blank" style="color: #0284c7; text-decoration: underline;">🌐 ${row.coords}</a>` : '<span style="color: #cbd5e1;">--</span>'}
           </td>
           <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; text-align: center; white-space: nowrap;">
-            <span style="font-size: 7.5px; font-weight: 800; color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 4px; border-radius: 3px;">+${row.points} pts</span>
-          </td>
-          <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; text-align: center;">
-            ${row.photoUrl ? `<img src="${row.photoUrl}" style="width: 28px; height: 28px; border-radius: 3px; object-fit: cover; border: 1px solid #cbd5e1;" alt="Pic" />` : '<span style="color: #cbd5e1; font-size: 7px;">No pic</span>'}
+            ${percentHtml}
           </td>
         </tr>
       `;
@@ -1088,10 +1125,10 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
             <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Place / Location</th>
             <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Details / Crop</th>
             <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Contact</th>
-            <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Time (Start - Done)</th>
+            <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Task Checkin</th>
+            <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Task Checkout</th>
             <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Coordinates</th>
-            <th style="padding: 4px 6px; text-align: center; border: 1px solid #e2e8f0;">Points</th>
-            <th style="padding: 4px 6px; text-align: center; border: 1px solid #e2e8f0;">Photo</th>
+            <th style="padding: 4px 6px; text-align: center; border: 1px solid #e2e8f0;">Percentage</th>
           </tr>
         </thead>
         <tbody>
@@ -1101,8 +1138,16 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
     `;
   }
 
-  const startPhoto = currentReport.startOdometerPhotoUrl;
-  const endPhoto = currentReport.kmPhotoUrl;
+  // Work Summary & Remarks clean check
+  const rawVisits = (currentReport.visitsSummary || "").trim();
+  const isVisitsEmpty = !rawVisits || rawVisits.toLowerCase().includes("auto-generated") || rawVisits.toLowerCase() === "field work mode" || rawVisits.toLowerCase() === "office work";
+  const cleanVisits = isVisitsEmpty ? "" : rawVisits;
+
+  const rawRemarks = (currentReport.remarks || "").trim();
+  const isRemarksEmpty = !rawRemarks || rawRemarks.toLowerCase().includes("auto-generated");
+  const cleanRemarks = isRemarksEmpty ? "" : rawRemarks;
+
+  const companyDisplayName = user.company?.name || "Vaniki Crop Science Pvt. Ltd.";
 
   const html = `
 <!DOCTYPE html>
@@ -1129,7 +1174,7 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
       <tr>
         <td style="vertical-align: top;">
           <h1 style="font-size: 18px; font-weight: 800; color: #1e293b; margin: 0; letter-spacing: -0.5px;">DAY END REPORT</h1>
-          <p style="font-size: 9px; font-weight: 700; color: #2563eb; margin: 2px 0 0 0; text-transform: uppercase; letter-spacing: 0.8px;">${user.company?.name || "Vaniki Crop Science Pvt Ltd"}</p>
+          <p style="font-size: 9px; font-weight: 700; color: #2563eb; margin: 2px 0 0 0; text-transform: uppercase; letter-spacing: 0.8px;">${companyDisplayName}</p>
         </td>
         <td style="vertical-align: top; text-align: right;">
           <h2 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 0;">${user.name}</h2>
@@ -1216,10 +1261,10 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
     </div>
     ` : ''}
 
-    <!-- Tasks Completed -->
+    <!-- Tasks Summary & List -->
     <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; box-sizing: border-box;">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 4px; margin-bottom: 5px;">
-        <h3 style="font-size: 10px; font-weight: 800; color: #1e293b; text-transform: uppercase; margin: 0; letter-spacing: 0.5px;">Tasks Completed Today</h3>
+        <h3 style="font-size: 10px; font-weight: 800; color: #1e293b; text-transform: uppercase; margin: 0; letter-spacing: 0.5px;">Today's Tasks (${totalTasksCount} Assigned)</h3>
         <span style="font-size: 9px; font-weight: 700; color: #166534; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 5px; border-radius: 3px;">
           ✅ ${countBannerText}
         </span>
@@ -1232,52 +1277,23 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
     <!-- Work Summary & Remarks -->
     <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
       <tr>
-        <td style="width: ${currentReport.remarks ? '50%' : '100%'}; padding-right: ${currentReport.remarks ? '4px' : '0'}; vertical-align: top;">
+        <td style="width: 50%; padding-right: 4px; vertical-align: top;">
           <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; box-sizing: border-box; min-height: 40px;">
             <h4 style="font-size: 7.5px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Work Summary</h4>
-            <p style="font-size: 9.5px; line-height: 1.3; color: #334155; margin: 0;">${currentReport.visitsSummary || "Field Work Mode"}</p>
+            <p style="font-size: 9.5px; line-height: 1.3; color: #334155; margin: 0;">${cleanVisits ? cleanVisits : '<span style="color: #94a3b8; font-style: italic;">—</span>'}</p>
           </div>
         </td>
-        ${currentReport.remarks ? `
         <td style="width: 50%; padding-left: 4px; vertical-align: top;">
           <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; box-sizing: border-box; min-height: 40px;">
             <h4 style="font-size: 7.5px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Remarks</h4>
-            <p style="font-size: 9.5px; font-style: italic; line-height: 1.3; color: #64748b; margin: 0;">${currentReport.remarks}</p>
+            <p style="font-size: 9.5px; line-height: 1.3; color: #64748b; margin: 0;">${cleanRemarks ? cleanRemarks : '<span style="color: #94a3b8; font-style: italic;">—</span>'}</p>
           </div>
         </td>
-        ` : ''}
       </tr>
     </table>
 
-    <!-- Verification Media -->
-    ${startPhoto || endPhoto ? `
-    <div style="border-top: 1px solid #e2e8f0; padding-top: 6px; margin-top: 4px; box-sizing: border-box;">
-      <h3 style="font-size: 8.5px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 4px 0; letter-spacing: 0.5px;">Verification Photos</h3>
-      <table style="width: 100%; border-collapse: collapse;">
-        <tr>
-          ${startPhoto ? `
-          <td style="width: 50%; padding-right: 4px; text-align: center; vertical-align: top;">
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px; box-sizing: border-box;">
-              <p style="font-size: 7.5px; font-weight: 700; color: #64748b; margin: 0 0 2px 0; text-transform: uppercase;">Start Odometer</p>
-              <img src="${startPhoto}" style="max-width: 100%; max-height: 70px; border-radius: 3px; object-fit: contain;" />
-            </div>
-          </td>
-          ` : ''}
-          ${endPhoto ? `
-          <td style="width: 50%; padding-left: 4px; text-align: center; vertical-align: top;">
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px; box-sizing: border-box;">
-              <p style="font-size: 7.5px; font-weight: 700; color: #64748b; margin: 0 0 2px 0; text-transform: uppercase;">End Odometer</p>
-              <img src="${endPhoto}" style="max-width: 100%; max-height: 70px; border-radius: 3px; object-fit: contain;" />
-            </div>
-          </td>
-          ` : ''}
-        </tr>
-      </table>
-    </div>
-    ` : ''}
-
     <div style="text-align: center; margin-top: 12px; font-size: 8.5px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 6px;">
-      System-generated Document &bull; StaffTrack &copy; ${new Date().getFullYear()} &bull; ${user.company?.name || "Vaniki Crop Science"}
+      System-generated Document &bull; StaffTrack &copy; ${new Date().getFullYear()} &bull; ${companyDisplayName}
     </div>
   </div>
 </body>

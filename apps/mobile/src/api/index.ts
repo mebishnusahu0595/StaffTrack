@@ -75,7 +75,8 @@ export type Task = {
   attachmentName?: string | null;
   checklist?: any[] | null;
   checklistResponses?: any[] | null;
-  dealers?: Array<{ id: string; name: string; city?: string; state?: string; phone?: string; code?: string }> | null;
+  dealers?: Array<{ id: string; name: string; city?: string; state?: string; phone?: string; code?: string; firmName?: string }> | null;
+  farmers?: Array<{ id: string; name: string; phone?: string; village?: string }> | null;
   isSubtask?: boolean;
   parentTask?: { id: string; title: string } | null;
   subtasks?: Task[] | null;

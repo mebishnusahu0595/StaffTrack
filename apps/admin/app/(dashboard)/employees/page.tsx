@@ -344,20 +344,41 @@ export default function EmployeesPage() {
       );
     }
 
-    // Only get completed tasks for this day and sort chronologically
-    const completedTasks = dayTasks.filter((t: any) => 
-      t.status === "COMPLETED" &&
-      (
-        (t.completedAt && dayjs(t.completedAt).format("YYYY-MM-DD") === reportDateStr) ||
-        dayjs(t.dueDate).format("YYYY-MM-DD") === reportDateStr ||
-        dayjs(t.updatedAt).format("YYYY-MM-DD") === reportDateStr
-      )
-    ).sort((a: any, b: any) => {
+    // Deduplicate tasks by id
+    const uniqueTasksMap = new Map<string, any>();
+    for (const t of dayTasks) {
+      if (!uniqueTasksMap.has(t.id)) {
+        uniqueTasksMap.set(t.id, t);
+      }
+    }
+    const uniqueDayTasks = Array.from(uniqueTasksMap.values());
+
+    const doneTasks = uniqueDayTasks.filter((t: any) => t.status === "COMPLETED" || Boolean(t.completedAt));
+    const pendingTasks = uniqueDayTasks.filter((t: any) => t.status !== "COMPLETED" && !t.completedAt);
+
+    const sortedCompletedTasks = [...doneTasks].sort((a: any, b: any) => {
       const timeA = new Date(a.completedAt || a.updatedAt || a.startedAt || a.startDate || 0).getTime();
       const timeB = new Date(b.completedAt || b.updatedAt || b.startedAt || b.startDate || 0).getTime();
       return timeA - timeB;
     });
-    const completedCount = completedTasks.length;
+
+    const sortedPendingTasks = [...pendingTasks].sort((a: any, b: any) => {
+      const timeA = new Date(a.dueDate || a.startDate || a.createdAt || 0).getTime();
+      const timeB = new Date(b.dueDate || b.startDate || b.createdAt || 0).getTime();
+      return timeA - timeB;
+    });
+
+    const allOrderedTasks = [...sortedCompletedTasks, ...sortedPendingTasks];
+    const totalDayTasksCount = allOrderedTasks.length;
+    const completedCount = sortedCompletedTasks.length;
+
+    const taskWeight = totalDayTasksCount > 0 ? (100 / totalDayTasksCount) : 0;
+    const taskWeightFormatted = taskWeight % 1 === 0 ? `${taskWeight}%` : `${taskWeight.toFixed(1)}%`;
+    const totalPercentage = totalDayTasksCount > 0 ? Math.round((completedCount / totalDayTasksCount) * 100) : 0;
+
+    const countBannerText = totalDayTasksCount > 0 
+      ? `${completedCount} / ${totalDayTasksCount} Completed (${totalPercentage}%)`
+      : `${completedCount} Completed`;
 
     // Calculate month-to-date distance
     const startOfMonth = dayjs(report.date).startOf("month");
@@ -394,7 +415,7 @@ export default function EmployeesPage() {
       let crop = "";
       let land = "";
       let product = "";
-      let extraParts: string[] = [];
+      const extraParts: string[] = [];
 
       if (t.checklistResponses && Array.isArray(t.checklistResponses) && t.checklistResponses.length > 0) {
         for (const item of t.checklistResponses) {
@@ -435,22 +456,14 @@ export default function EmployeesPage() {
       if (extraParts.length > 0) detailsParts.push(...extraParts.slice(0, 2));
       const detailsText = detailsParts.length > 0 ? detailsParts.join(" • ") : (t.description || "");
 
-      let photo: string | null = t.completionPhotoUrl || null;
-      if (!photo && t.checklistResponses && Array.isArray(t.checklistResponses)) {
-        const img = t.checklistResponses.find((item: any) => 
-          item.type === "IMAGE" && (item.fileUrl || item.photoUrl || item.image || item.url)
-        );
-        if (img) photo = img.fileUrl || img.photoUrl || img.image || img.url;
-      }
-
-      const completedDate = t.completedAt ? new Date(t.completedAt) : (t.updatedAt ? new Date(t.updatedAt) : null);
+      const completedDate = t.completedAt ? new Date(t.completedAt) : (t.updatedAt && t.status === "COMPLETED" ? new Date(t.updatedAt) : null);
       const completedTimeFormatted = completedDate ? dayjs(completedDate).format("hh:mm A") : "--";
 
       let startTimeFormatted = "--";
       if (t.startedAt) {
         startTimeFormatted = dayjs(t.startedAt).format("hh:mm A");
-      } else if (idx > 0 && completedTasks[idx - 1]) {
-        const prev = completedTasks[idx - 1];
+      } else if (idx > 0 && allOrderedTasks[idx - 1]) {
+        const prev = allOrderedTasks[idx - 1];
         const prevDone = prev.completedAt || prev.updatedAt;
         startTimeFormatted = prevDone ? dayjs(prevDone).format("hh:mm A") : "--";
       } else if (dayAttendanceSessions[0]?.checkInTime && completedDate && new Date(dayAttendanceSessions[0].checkInTime).getTime() < completedDate.getTime()) {
@@ -470,26 +483,44 @@ export default function EmployeesPage() {
         coords: locationCoords,
         startTime: startTimeFormatted,
         completedTime: completedTimeFormatted,
-        points: t.points ?? 10,
-        photoUrl: photo,
         remarks: t.completionRemarks || ""
       };
     };
 
     let tasksGridHtml = "";
-    if (completedTasks.length === 0) {
-      tasksGridHtml = `<p style="font-size: 10px; color: #94a3b8; font-style: italic; margin: 0; padding: 4px 0;">No completed tasks recorded on this date.</p>`;
+    if (allOrderedTasks.length === 0) {
+      tasksGridHtml = `<p style="font-size: 10px; color: #94a3b8; font-style: italic; margin: 0; padding: 4px 0;">No tasks assigned or recorded on this date.</p>`;
     } else {
-      const tableRows = completedTasks.map((t, idx) => {
+      const tableRows = allOrderedTasks.map((t, idx) => {
+        const isCompleted = t.status === "COMPLETED" || Boolean(t.completedAt);
         const row = parseTaskDetails(t, idx);
         const isEven = idx % 2 === 0;
+
+        const titleHtml = isCompleted ? `
+          <div style="font-weight: 800; color: #16a34a; font-size: 8.5px; white-space: nowrap;">
+            ✅ ${row.title}
+          </div>
+          ${row.personName ? `<div style="font-weight: 700; color: #0f172a; font-size: 8px; margin-top: 1px;">— ${row.personName}</div>` : ""}
+        ` : `
+          <div style="font-weight: 800; color: #d97706; font-size: 8.5px; white-space: nowrap;">
+            ⏳ ${row.title}
+          </div>
+          ${row.personName ? `<div style="font-weight: 700; color: #0f172a; font-size: 8px; margin-top: 1px;">— ${row.personName}</div>` : ""}
+        `;
+
+        const checkinHtml = row.startTime !== '--' ? `▶ ${row.startTime}` : (t.dueDate ? `Due: ${dayjs(t.dueDate).format("hh:mm A")}` : '--');
+        const checkoutHtml = isCompleted ? `✔ ${row.completedTime}` : `<span style="color: #d97706; font-weight: 800;">⏳ Pending</span>`;
+
+        const percentHtml = isCompleted ? `
+          <span style="font-size: 7.5px; font-weight: 800; color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 4px; border-radius: 3px;">+${taskWeightFormatted}</span>
+        ` : `
+          <span style="font-size: 7.5px; font-weight: 700; color: #64748b; background: #f1f5f9; border: 1px solid #e2e8f0; padding: 1px 4px; border-radius: 3px;">0%</span>
+        `;
+
         return `
           <tr style="background: ${isEven ? '#ffffff' : '#f8fafc'}; border-bottom: 1px solid #e2e8f0;">
             <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle;">
-              <div style="font-weight: 800; color: #16a34a; font-size: 8.5px; white-space: nowrap;">
-                ✅ ${row.title}
-              </div>
-              ${row.personName ? `<div style="font-weight: 700; color: #0f172a; font-size: 8px; margin-top: 1px;">— ${row.personName}</div>` : ""}
+              ${titleHtml}
             </td>
             <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #334155; font-size: 8px; font-weight: 600;">
               ${row.village ? `📍 ${row.village}` : '<span style="color: #cbd5e1;">--</span>'}
@@ -500,18 +531,17 @@ export default function EmployeesPage() {
             <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #0f172a; font-size: 8px; font-weight: 700; white-space: nowrap;">
               ${row.contact ? `📞 ${row.contact}` : '<span style="color: #cbd5e1;">--</span>'}
             </td>
-            <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; white-space: nowrap; font-size: 7.5px;">
-              <div style="color: #475569; font-weight: 600;">▶ ${row.startTime}</div>
-              <div style="color: #16a34a; font-weight: 800; margin-top: 1px;">✔ ${row.completedTime}</div>
+            <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; white-space: nowrap; font-size: 7.5px; color: #475569; font-weight: 700;">
+              ${checkinHtml}
+            </td>
+            <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; white-space: nowrap; font-size: 7.5px; color: #16a34a; font-weight: 800;">
+              ${checkoutHtml}
             </td>
             <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #0284c7; font-size: 7.5px; font-weight: 700; white-space: nowrap;">
               ${row.coords ? `<a href="https://maps.google.com/?q=${row.coords}" target="_blank" style="color: #0284c7; text-decoration: underline;">🌐 ${row.coords}</a>` : '<span style="color: #cbd5e1;">--</span>'}
             </td>
             <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; text-align: center; white-space: nowrap;">
-              <span style="font-size: 7.5px; font-weight: 800; color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 4px; border-radius: 3px;">+${row.points} pts</span>
-            </td>
-            <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; text-align: center;">
-              ${row.photoUrl ? `<img src="${row.photoUrl}" style="width: 28px; height: 28px; border-radius: 3px; object-fit: cover; border: 1px solid #cbd5e1;" alt="Pic" />` : '<span style="color: #cbd5e1; font-size: 7px;">No pic</span>'}
+              ${percentHtml}
             </td>
           </tr>
         `;
@@ -525,10 +555,10 @@ export default function EmployeesPage() {
               <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Place / Location</th>
               <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Details / Crop</th>
               <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Contact</th>
-              <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Time (Start - Done)</th>
+              <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Task Checkin</th>
+              <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Task Checkout</th>
               <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Coordinates</th>
-              <th style="padding: 4px 6px; text-align: center; border: 1px solid #e2e8f0;">Points</th>
-              <th style="padding: 4px 6px; text-align: center; border: 1px solid #e2e8f0;">Photo</th>
+              <th style="padding: 4px 6px; text-align: center; border: 1px solid #e2e8f0;">Percentage</th>
             </tr>
           </thead>
           <tbody>
@@ -538,8 +568,16 @@ export default function EmployeesPage() {
       `;
     }
 
-    const totalDayTasksCount = dayTasks.length > 0 ? dayTasks.length : completedCount;
-    const countBannerText = `${completedCount} / ${totalDayTasksCount} Completed (${totalDayTasksCount > 0 ? Math.round((completedCount / totalDayTasksCount) * 100) : 100}%)`;
+    // Work Summary & Remarks clean check
+    const rawVisits = (report.visitsSummary || "").trim();
+    const isVisitsEmpty = !rawVisits || rawVisits.toLowerCase().includes("auto-generated") || rawVisits.toLowerCase() === "field work mode" || rawVisits.toLowerCase() === "office work";
+    const cleanVisits = isVisitsEmpty ? "" : rawVisits;
+
+    const rawRemarks = (report.remarks || "").trim();
+    const isRemarksEmpty = !rawRemarks || rawRemarks.toLowerCase().includes("auto-generated");
+    const cleanRemarks = isRemarksEmpty ? "" : rawRemarks;
+
+    const companyDisplayName = employee.company?.name || "Vaniki Crop Science Pvt. Ltd.";
 
     const htmlContent = `
 <div style="font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155; padding: 10px 14px; background: #ffffff; box-sizing: border-box; max-width: 820px; margin: 0 auto;">
@@ -552,7 +590,7 @@ export default function EmployeesPage() {
     <tr>
       <td style="vertical-align: top;">
         <h1 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0; letter-spacing: -0.5px;">DAY END REPORT</h1>
-        <p style="font-size: 8.5px; font-weight: 700; color: #2563eb; margin: 1px 0 0 0; text-transform: uppercase; letter-spacing: 0.8px;">Vaniki Crop Science Pvt Ltd</p>
+        <p style="font-size: 8.5px; font-weight: 700; color: #2563eb; margin: 1px 0 0 0; text-transform: uppercase; letter-spacing: 0.8px;">${companyDisplayName}</p>
       </td>
       <td style="vertical-align: top; text-align: right;">
         <h2 style="font-size: 13px; font-weight: 700; color: #0f172a; margin: 0;">${employee.name}</h2>
@@ -639,10 +677,10 @@ export default function EmployeesPage() {
   </div>
   ` : ''}
 
-  <!-- Tasks Completed (1-line each in compact grid, NO pending list) -->
+  <!-- Tasks Summary & List -->
   <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px; margin-bottom: 7px; box-sizing: border-box;">
     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 3px; margin-bottom: 4px;">
-      <h3 style="font-size: 9.5px; font-weight: 800; color: #1e293b; text-transform: uppercase; margin: 0; letter-spacing: 0.5px;">Tasks Completed Today</h3>
+      <h3 style="font-size: 9.5px; font-weight: 800; color: #1e293b; text-transform: uppercase; margin: 0; letter-spacing: 0.5px;">Today's Tasks (${totalDayTasksCount} Assigned)</h3>
       <span style="font-size: 8.5px; font-weight: 700; color: #166534; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 5px; border-radius: 3px;">
         ✅ ${countBannerText}
       </span>
@@ -656,49 +694,24 @@ export default function EmployeesPage() {
   <!-- Work Summary & Remarks (Side by Side / Compact) -->
   <table style="width: 100%; border-collapse: collapse; margin-bottom: 7px;">
     <tr>
-      <td style="width: ${report.remarks ? '50%' : '100%'}; padding-right: ${report.remarks ? '4px' : '0'}; vertical-align: top;">
+      <td style="width: 50%; padding-right: 4px; vertical-align: top;">
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 8px; box-sizing: border-box; min-height: 38px;">
           <h4 style="font-size: 7.5px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 1px 0;">Work Summary</h4>
-          <p style="font-size: 9.5px; line-height: 1.25; color: #334155; margin: 0;">${report.visitsSummary || "Field Work Mode"}</p>
+          <p style="font-size: 9.5px; line-height: 1.25; color: #334155; margin: 0;">${cleanVisits ? cleanVisits : '<span style="color: #94a3b8; font-style: italic;">—</span>'}</p>
         </div>
       </td>
-      ${report.remarks ? `
       <td style="width: 50%; padding-left: 4px; vertical-align: top;">
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 8px; box-sizing: border-box; min-height: 38px;">
           <h4 style="font-size: 7.5px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 1px 0;">Remarks</h4>
-          <p style="font-size: 9.5px; font-style: italic; line-height: 1.25; color: #64748b; margin: 0;">${report.remarks}</p>
+          <p style="font-size: 9.5px; line-height: 1.25; color: #64748b; margin: 0;">${cleanRemarks ? cleanRemarks : '<span style="color: #94a3b8; font-style: italic;">—</span>'}</p>
         </div>
       </td>
-      ` : ''}
     </tr>
   </table>
 
-  <!-- Verification Media (Compact Thumbnails) -->
-  ${report.startOdometerPhotoUrl || report.kmPhotoUrl ? `
-  <div style="border-top: 1px solid #e2e8f0; padding-top: 5px; margin-top: 4px; box-sizing: border-box;">
-    <h3 style="font-size: 8px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 4px 0; letter-spacing: 0.5px;">Verification Photos</h3>
-    <table style="width: 100%; border-collapse: collapse;">
-      <tr>
-        ${report.startOdometerPhotoUrl ? `
-        <td style="width: 50%; padding-right: 4px; text-align: center; vertical-align: top;">
-          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px; box-sizing: border-box;">
-            <p style="font-size: 7.5px; font-weight: 700; color: #64748b; margin: 0 0 2px 0; text-transform: uppercase;">Start Odometer</p>
-            <img src="${report.startOdometerPhotoUrl}" style="max-width: 100%; max-height: 65px; border-radius: 3px; object-fit: contain;" />
-          </div>
-        </td>
-        ` : ''}
-        ${report.kmPhotoUrl ? `
-        <td style="width: 50%; padding-left: 4px; text-align: center; vertical-align: top;">
-          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px; box-sizing: border-box;">
-            <p style="font-size: 7.5px; font-weight: 700; color: #64748b; margin: 0 0 2px 0; text-transform: uppercase;">End Odometer</p>
-            <img src="${report.kmPhotoUrl}" style="max-width: 100%; max-height: 65px; border-radius: 3px; object-fit: contain;" />
-          </div>
-        </td>
-        ` : ''}
-      </tr>
-    </table>
+  <div style="text-align: center; margin-top: 10px; font-size: 8px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 5px;">
+    System-generated Document &bull; StaffTrack &copy; ${new Date().getFullYear()} &bull; ${companyDisplayName}
   </div>
-  ` : ''}
 </div>
     `;
 

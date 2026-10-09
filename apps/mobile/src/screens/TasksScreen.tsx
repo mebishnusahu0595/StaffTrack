@@ -387,17 +387,77 @@ export function TasksScreen() {
     };
 
     const taskRows = filteredTasks
-      .map(
-        (task, i) => `
+      .map((task, i) => {
+        const dealersList = (task.dealers || []).map((d: any) => {
+          const parts = [];
+          const dName = d.name || d.firmName || "";
+          if (dName) parts.push(dName);
+          if (d.firmName && d.firmName !== d.name) parts.push(`(${d.firmName})`);
+          if (d.city || d.address) parts.push(`📍 ${d.city || d.address}`);
+          if (d.phone) parts.push(`📞 ${d.phone}`);
+          return parts.join(" • ");
+        });
+
+        const farmersList = (task.farmers || []).map((f: any) => {
+          const parts = [];
+          if (f.name) parts.push(f.name);
+          if (f.village) parts.push(`📍 ${f.village}`);
+          if (f.phone) parts.push(`📞 ${f.phone}`);
+          return parts.join(" • ");
+        });
+
+        let cleanDesc = (task.description || "").trim();
+        cleanDesc = cleanDesc.replace(/\[(Start|Due|Time|Date):[^\]]+\]/gi, "").trim();
+        cleanDesc = cleanDesc.replace(/^[-—\s]+/, "").trim();
+
+        const checklistItems: string[] = [];
+        if (task.checklistResponses && Array.isArray(task.checklistResponses)) {
+          for (const item of task.checklistResponses) {
+            const val = item.value !== undefined ? String(item.value).trim() : (item.response !== undefined ? String(item.response).trim() : (item.text !== undefined ? String(item.text).trim() : ""));
+            if (!val || item.type === "IMAGE" || item.type === "VIDEO" || item.type === "AUDIO" || item.type === "GEOTAG") continue;
+            const label = item.title || item.label || item.id || "";
+            const lower = label.toLowerCase();
+            if (lower.includes("remark") || lower.includes("note")) continue;
+            checklistItems.push(`<span style="color:#64748b;">${label}:</span> <strong style="color:#1e293b;">${val}</strong>`);
+          }
+        }
+
+        return `
       <tr style="background:${i % 2 === 0 ? "#f8fafc" : "#ffffff"};">
-        <td style="padding:10px 14px;font-weight:700;color:#1e293b;font-size:12px;">${i + 1}. ${task.title}</td>
-        <td style="padding:10px 14px;text-align:center;">
-          <span style="background:${(statusColor[task.status] || "#94a3b8")}20;color:${statusColor[task.status] || "#94a3b8"};padding:2px 8px;border-radius:20px;font-size:10px;font-weight:800;text-transform:uppercase;">${task.status.replace("_", " ")}</span>
+        <td style="padding:10px 14px;vertical-align:top;">
+          <div style="font-weight:800;color:#0f172a;font-size:12.5px;line-height:1.35;">
+            ${i + 1}. ${task.title}
+          </div>
+          ${dealersList.length > 0 ? `
+            <div style="margin-top:4px;font-size:11px;font-weight:700;color:#1d4ed8;line-height:1.35;background:#eff6ff;padding:3px 8px;border-radius:6px;border:1px solid #bfdbfe;display:inline-block;">
+              🏢 Dealer: ${dealersList.join(", ")}
+            </div>
+          ` : ""}
+          ${farmersList.length > 0 ? `
+            <div style="margin-top:4px;font-size:11px;font-weight:700;color:#15803d;line-height:1.35;background:#f0fdf4;padding:3px 8px;border-radius:6px;border:1px solid #bbf7d0;display:inline-block;">
+              🌾 Farmer: ${farmersList.join(", ")}
+            </div>
+          ` : ""}
+          ${cleanDesc ? `
+            <div style="margin-top:4px;font-size:11px;color:#475569;line-height:1.35;">
+              📝 ${cleanDesc}
+            </div>
+          ` : ""}
+          ${checklistItems.length > 0 ? `
+            <div style="margin-top:4px;font-size:10px;line-height:1.35;background:#f1f5f9;border:1px solid #e2e8f0;padding:3px 8px;border-radius:6px;">
+              ${checklistItems.slice(0, 4).join(" &nbsp;&bull;&nbsp; ")}
+            </div>
+          ` : ""}
         </td>
-        <td style="padding:10px 14px;color:#64748b;font-size:11px;font-weight:600;">${task.priority || "Medium"}</td>
-        <td style="padding:10px 14px;color:#64748b;font-size:11px;">${task.attachmentName ? "📎 " + task.attachmentName.slice(0, 18) : "—"}</td>
-      </tr>`
-      )
+        <td style="padding:10px 14px;text-align:center;vertical-align:top;">
+          <span style="background:${(statusColor[task.status] || "#94a3b8")}20;color:${statusColor[task.status] || "#94a3b8"};padding:3px 10px;border-radius:20px;font-size:10px;font-weight:800;text-transform:uppercase;">${task.status.replace("_", " ")}</span>
+          <div style="font-size:9.5px;color:#94a3b8;font-weight:700;margin-top:4px;">${task.priority || "Medium"}</div>
+        </td>
+        <td style="padding:10px 14px;color:#475569;font-size:11px;vertical-align:top;line-height:1.35;">
+          ${task.completionRemarks || "—"}
+        </td>
+      </tr>`;
+      })
       .join("");
 
     const html = `<!DOCTYPE html>
@@ -436,8 +496,14 @@ export function TasksScreen() {
   <div class="content">
     <p class="section-title">Tasks</p>
     <table>
-      <thead><tr><th>Task</th><th>Status</th><th>Priority</th><th>Attachment</th></tr></thead>
-      <tbody>${taskRows || '<tr><td colspan="4" style="text-align:center;padding:20px;color:#94a3b8;">No tasks for this day</td></tr>'}</tbody>
+      <thead>
+        <tr>
+          <th style="width:60%;">Task & Details</th>
+          <th style="width:15%;text-align:center;">Status</th>
+          <th style="width:25%;">Remarks</th>
+        </tr>
+      </thead>
+      <tbody>${taskRows || '<tr><td colspan="3" style="text-align:center;padding:20px;color:#94a3b8;">No tasks for this day</td></tr>'}</tbody>
     </table>
   </div>
   <div class="footer">
