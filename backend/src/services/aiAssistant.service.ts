@@ -22,11 +22,11 @@ async function buildStaffContext(companyId: string): Promise<string> {
   const today = new Date();
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
 
-  // Fetch all staff
+  // Fetch all staff members (Employees, Managers, and Admins)
   const users = await prisma.user.findMany({
-    where: { companyId, role: { in: ["EMPLOYEE", "MANAGER"] } },
+    where: { companyId, role: { in: ["EMPLOYEE", "MANAGER", "ADMIN"] } },
     select: {
-      id: true, name: true, email: true, role: true, designation: true,
+      id: true, name: true, email: true, phone: true, role: true, designation: true,
       workMode: true, shiftStart: true, shiftEnd: true, employeeCode: true
     }
   });
@@ -40,10 +40,11 @@ async function buildStaffContext(companyId: string): Promise<string> {
     select: {
       userId: true, date: true, status: true, checkInTime: true,
       checkOutTime: true, punchType: true, startOdometer: true, endOdometer: true
-    }
+    },
+    orderBy: { date: "desc" }
   });
 
-  // Fetch overdue/pending tasks
+  // Fetch recent tasks with titles and due dates
   const tasks = await prisma.task.findMany({
     where: {
       assignedToId: { in: users.map(u => u.id) },
@@ -88,11 +89,27 @@ async function buildStaffContext(companyId: string): Promise<string> {
     const attendancePct = workingDays > 0 ? Math.round((presents / workingDays) * 100) : 100;
 
     const userTasks = tasks.filter(t => t.assignedToId === u.id);
-    const overdueTasks = userTasks.filter(t => t.dueDate && new Date(t.dueDate) < today).length;
-    const pendingTasks = userTasks.filter(t => t.status === "PENDING").length;
+    const overdueTasks = userTasks.filter(t => t.dueDate && new Date(t.dueDate) < today);
+    const pendingTasks = userTasks.filter(t => t.status === "PENDING");
+
+    const overdueTitles = overdueTasks.slice(0, 3).map(t => `"${t.title}" (Due: ${t.dueDate ? t.dueDate.toISOString().slice(0, 10) : "N/A"})`).join(", ");
+    const pendingTitles = pendingTasks.slice(0, 3).map(t => `"${t.title}"`).join(", ");
 
     const userLeaves = leaves.filter((l: { userId: string }) => l.userId === u.id).length;
     const todayPunch = todayAttendance.find(a => a.userId === u.id);
+
+    let todayStatusStr = "Not Checked In Today";
+    if (todayPunch) {
+      const inTime = todayPunch.checkInTime ? new Date(todayPunch.checkInTime).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "N/A";
+      const outTime = todayPunch.checkOutTime ? new Date(todayPunch.checkOutTime).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "Currently Working";
+      todayStatusStr = `Checked In at ${inTime} (${todayPunch.punchType || "GEO"}), Check-out: ${outTime}`;
+    } else {
+      // Find most recent past punch
+      const lastPunch = userAttendance.find(a => a.checkInTime);
+      if (lastPunch) {
+        todayStatusStr = `Not Checked In Today (Last Punch: ${new Date(lastPunch.date).toLocaleDateString("en-IN")})`;
+      }
+    }
 
     const latestSalary = salarySlips.find(s => s.userId === u.id);
 
@@ -101,15 +118,22 @@ async function buildStaffContext(companyId: string): Promise<string> {
       employeeCode: u.employeeCode || "N/A",
       name: u.name,
       role: u.role,
-      designation: u.designation || "Staff",
-      workMode: u.workMode,
+      phone: u.phone || "N/A",
+      designation: u.designation || (u.role === "ADMIN" ? "Administrator" : "Staff"),
+      workMode: u.workMode || "FIELD",
       attendance: {
         thisMonthPresents: presents,
         thisMonthAbsences: absences,
         attendancePct: `${attendancePct}%`,
-        todayStatus: todayPunch ? (todayPunch.checkOutTime ? "Checked Out" : "Currently Checked In") : "Not Checked In"
+        todayStatus: todayStatusStr
       },
-      tasks: { total: userTasks.length, overdue: overdueTasks, pending: pendingTasks },
+      tasks: {
+        total: userTasks.length,
+        overdueCount: overdueTasks.length,
+        overdueSamples: overdueTitles || "None",
+        pendingCount: pendingTasks.length,
+        pendingSamples: pendingTitles || "None"
+      },
       pendingLeaves: userLeaves,
       salary: latestSalary ? {
         period: `${latestSalary.month}/${latestSalary.year}`,
@@ -133,16 +157,45 @@ OVERVIEW:
 
 STAFF DETAILS:
 ${userSummaries.map(u => `
-• Name: ${u.name} | ID (Employee Code): ${u.employeeCode} | Database ID: ${u.id} (${u.designation} / ${u.role})
+• Name: ${u.name} | Phone: ${u.phone} | Emp Code: ${u.employeeCode} | Database ID: ${u.id} (${u.designation} / ${u.role})
   Attendance: ${u.attendance.thisMonthPresents} present, ${u.attendance.thisMonthAbsences} absent (${u.attendance.attendancePct} this month)
-  Today: ${u.attendance.todayStatus}
-  Tasks: ${u.tasks.total} total | ${u.tasks.overdue} OVERDUE | ${u.tasks.pending} pending
-  Pending Leave Requests: ${u.pendingLeaves}
+  Today Punch: ${u.attendance.todayStatus}
+  Tasks: Total: ${u.tasks.total} | Overdue: ${u.tasks.overdueCount} [Titles: ${u.tasks.overdueSamples}] | Pending: ${u.tasks.pendingCount} [Titles: ${u.tasks.pendingSamples}]
+  Pending Leaves: ${u.pendingLeaves}
   Salary (latest): ${u.salary ? `Net: ₹${u.salary.netPay} | Deductions: ${JSON.stringify(u.salary.deductions || {})} | Period: ${u.salary.period} | ${u.salary.status}` : "Not set"}
 `).join("")}
 
 === END OF CONTEXT ===`;
 }
+
+const COMMON_SYSTEM_INSTRUCTIONS = (context: string) => `Aap StaffTrack workforce management platform ke intelligent HR and Staff Voice Assistant hain.
+Aapka naam StaffTrack AI hai (powered by Gemini 3.8 Live).
+
+Aapke paas company ka real-time staff data (attendance, tasks, salary, leaves, holidays, punch timings, phone numbers) context mein diya gaya hai.
+
+BHASHA AUR BOLNE KA TARIQA (CRITICAL):
+1. Aapko hamesha natural, polite aur clear HINDI / conversational HINGLISH mein baat karni hai (jaise real voice assistant baat karta hai).
+   Udaharan: "Namaste! Aaj company mein 12 log present hain aur 3 absent hain."
+2. Response ko conversational, seedha aur crisp rakhein taaki voice audio mein sunne mein pleasant lage.
+3. CONVERSATIONAL MEMORY: Pichli baaton aur questions ko yaad rakhein. Agar user kahe "usko reminder bhej do", toh pichle context se samjhein ki kis staff ki baat ho rahi hai.
+
+KISI BHI SPECIFIC PERSON YA EMPLOYEE KE BAARE MEIN POOCHNE PAR (HIGH PRIORITY):
+Jab user kisi specific person ka naam (ya partial naam jaise 'Nandkishor', 'Ashish', 'Mohanish', 'Damini', 'Sitesh', etc.) poochta hai:
+1. Unka poora naam, role/designation aur phone number batayein.
+2. Aaj ka live attendance status: Aaj kitne baje check-in kiya, check-out hua ya nahi. Agar aaj check-in nahi kiya, toh unki aakhiri attendance date batayein.
+3. Is mahine ki attendance summary: Kitne din present rahe, kitne absent, aur attendance percentage.
+4. Tasks ka exact status: Unke overdue tasks ke exact titles aur pending tasks batayein. Agar overdue tasks hain toh batayein kitne overdue hain.
+5. Proactive Help: Poochhein ki kya unhe push reminder ya notification bhejna hai? Agar user kahe 'bhej do', toh Turant unhe notification bhej dein!
+
+NOTIFICATIONS & HOLIDAYS ACTION RULES:
+- Jab bhi user kisi staff ko notification bhejne ya holiday lagane ko kahe, normal baat-cheet mein confirm karein (jaise: "Ji, maine Nandkishor ko task complete karne ka reminder bhej diya hai.").
+- KABHI BHI visible sentences mein [SEND_NOTIFICATION] ya database ID mat boliye ya likhiye!
+- Action tags ko response ke bilkul aakhiri line mein alag se hidden metadata ki tarah add karein:
+  [SEND_NOTIFICATION userId="{database_id}" title="{title}" message="{message}"]
+  [MARK_HOLIDAY date="{YYYY-MM-DD}" name="{holiday name}" scope="ALL"]
+  [BULK_NOTIFY title="{title}" message="{message}" scope="ALL"]
+
+${context}`;
 
 /** AI Chat — sends message with full staff context, returns response text */
 export async function chatWithAssistant(adminId: string, companyId: string, userMessage: string): Promise<string> {
@@ -156,89 +209,19 @@ export async function chatWithAssistant(adminId: string, companyId: string, user
     }
     const history = chatSessions.get(adminId)!;
 
-    const systemPrompt = `You are an intelligent HR and Staff Management AI Assistant for StaffTrack — a workforce management platform.
+    const systemPrompt = COMMON_SYSTEM_INSTRUCTIONS(context);
 
-You have access to real-time company data provided below. Your role is to:
-1. Answer questions about staff attendance, tasks, salary, deductions, leaves accurately using the data
-2. Suggest specific, actionable HR decisions (who to warn, who to reward, what deductions to apply)
-3. Generate professional notification messages in English or Hindi when asked
-4. Identify patterns and flag concerns proactively
-5. NEVER make up data — only use what is provided in the context
-
-FORMATTING RULES (strictly follow):
-- Do NOT use markdown symbols like ** for bold or # for headings
-- Use plain text only
-- Use bullet points with the • character for lists
-- Use emoji sparingly (max 1-2 per response) for key points only
-- Be concise and direct — no filler phrases
-- When listing staff, show: Name — reason (e.g. 5 absences this month)
-
-NOTIFICATION ACTIONS:
-If the user asks you to send a notification, message, or reminder to a specific staff member:
-1. Match the staff member by Name (partial match is allowed), ID (Employee Code e.g. 103), or email.
-2. If multiple staff match the search name (e.g., duplicate names like two Vikram's or similar last names), you MUST NOT trigger a notification. Instead, list the matches with their Name and ID (Employee Code) and ask the user to clarify who they want to notify.
-3. If no staff matches the search name (spelling mistake or user doesn't exist), check the staff list and suggest the closest sounding name(s) (e.g., "I couldn't find anyone named Dikshant. Did you mean Deepika?"). Do not trigger any notifications.
-4. If a single unique staff matches:
-   At the VERY END of your response, on a new line, add:
-   [SEND_NOTIFICATION userId="{database_id}" title="{notification title}" message="{the message}"]
-   NOTE: You MUST use the Database ID (UUID/CUID e.g. cl...) for the userId parameter, NOT the name, and NOT the 3-digit Employee Code!
-5. Confirm in your response text that you have sent the notification to the unique match.
-
-HOLIDAY ACTIONS:
-If the user asks you to mark a holiday, create a holiday, declare a holiday, or set a day off for staff:
-1. Extract the date (e.g. "2 October", "tomorrow", "15 Oct 2026") and the holiday name.
-2. The scope can be "ALL" (for all staff) or a specific user's Database ID.
-3. At the VERY END of your response, on a new line, add:
-   [MARK_HOLIDAY date="{YYYY-MM-DD}" name="{holiday name}" scope="ALL"]
-   OR for a specific user:
-   [MARK_HOLIDAY date="{YYYY-MM-DD}" name="{holiday name}" scope="{database_id}"]
-4. Use today's year (${new Date().getFullYear()}) if the user doesn't specify a year.
-5. Confirm that the holiday is marked. Notifications will be sent AUTOMATICALLY on the morning of the holiday date (not immediately).
-6. Do NOT use action tags like [MARK_HOLIDAY] in your visible response text — only add them at the very end as hidden metadata.
-
-COMMON INDIAN HOLIDAYS (use these names when the user mentions them):
-• 26 Jan — Republic Day
-• 14 Feb — Basant Panchami
-• Mar — Holi (check lunar calendar)
-• 14 Apr — Ambedkar Jayanti
-• 1 May — May Day / Labour Day
-• 15 Aug — Independence Day
-• Aug/Sep — Raksha Bandhan, Janmashtami (lunar)
-• 2 Oct — Gandhi Jayanti
-• Oct — Dussehra / Vijayadashami (lunar)
-• Oct/Nov — Diwali, Bhai Dooj (lunar)
-• 14 Nov — Children's Day
-• 25 Dec — Christmas
-• 1 Jan — New Year's Day
-• Eid-ul-Fitr, Eid-ul-Adha, Muharram (Islamic calendar)
-• Guru Nanak Jayanti (Nov, lunar)
-• Chhath Puja (Oct/Nov, lunar)
-• Makar Sankranti / Pongal — 14 Jan
-
-BULK NOTIFICATION ACTIONS:
-If the user asks you to send a notification, message, or reminder to ALL staff or MULTIPLE staff at once (not a specific individual):
-1. At the VERY END of your response, on a new line, add:
-   [BULK_NOTIFY title="{title}" message="{message}" scope="ALL"]
-2. This sends a push notification to every staff member in the company.
-3. Confirm in your response text how many staff members will receive it.
-
-${context}`;
-
-    const buildContents = (msg: string) => {
-      const baseContents: Array<{ role: "user" | "model"; parts: { text: string }[] }> = [
-        { role: "user", parts: [{ text: systemPrompt + "\n\nQuestion: " + msg }] }
-      ];
-      const recentHistory = history.slice(-8);
-      if (recentHistory.length > 0) {
-        baseContents.push(...recentHistory);
-        baseContents.push({ role: "user", parts: [{ text: msg }] });
-      }
-      return baseContents;
-    };
+    const contents: Array<{ role: "user" | "model"; parts: { text: string }[] }> = [];
+    const recentHistory = history.slice(-10);
+    if (recentHistory.length > 0) {
+      contents.push(...recentHistory);
+    }
+    contents.push({ role: "user", parts: [{ text: userMessage }] });
 
     const data = await callGeminiWithFallback({
-      contents: buildContents(userMessage),
-      generationConfig: { temperature: 0.2, maxOutputTokens: 4096 }
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents,
+      generationConfig: { temperature: 0.3, maxOutputTokens: 2048 }
     });
 
     if (!data) return fallback;
@@ -270,82 +253,19 @@ export async function* chatWithAssistantStream(
     if (!chatSessions.has(adminId)) chatSessions.set(adminId, []);
     const history = chatSessions.get(adminId)!;
 
-    const systemPrompt = `You are an intelligent HR and Staff Management AI Assistant for StaffTrack — a workforce management platform.
+    const systemPrompt = COMMON_SYSTEM_INSTRUCTIONS(context);
 
-You have access to real-time company data below. Answer accurately using only provided data.
-
-FORMATTING & VOICE LATENCY RULES (strictly follow):
-- Do NOT use markdown symbols like ** or # 
-- Plain text only
-- Use • for bullet lists
-- Use emoji sparingly (max 2 per response)
-- State the direct answer or key summary in the first 1-2 short sentences so it can be spoken out immediately with zero latency like Google Assistant
-- No pleasantries or filler words (never say "Certainly", "Here is the information", "I'd be happy to help")
-- When listing staff: Name — reason (e.g. 5 absences this month)
-
-NOTIFICATION ACTIONS:
-If the user asks you to send a notification, message, or reminder to a specific staff member:
-1. Match the staff member by Name (partial match is allowed), ID (Employee Code e.g. 103), or email.
-2. If multiple staff match the search name (e.g., duplicate names like two Vikram's or similar last names), you MUST NOT trigger a notification. Instead, list the matches with their Name and ID (Employee Code) and ask the user to clarify who they want to notify.
-3. If no staff matches the search name (spelling mistake or user doesn't exist), check the staff list and suggest the closest sounding name(s) (e.g., "I couldn't find anyone named Dikshant. Did you mean Deepika?"). Do not trigger any notifications.
-4. If a single unique staff matches:
-   At the VERY END of your response, on a new line, add:
-   [SEND_NOTIFICATION userId="{database_id}" title="{notification title}" message="{the message}"]
-   NOTE: You MUST use the Database ID (UUID/CUID e.g. cl...) for the userId parameter, NOT the name, and NOT the 3-digit Employee Code!
-5. Confirm in your response text that you have sent the notification to the unique match.
-
-HOLIDAY ACTIONS:
-If the user asks you to mark a holiday, create a holiday, declare a holiday, or set a day off for staff:
-1. Extract the date (e.g. "2 October", "tomorrow", "15 Oct 2026") and the holiday name.
-2. The scope can be "ALL" (for all staff) or a specific user's Database ID.
-3. At the VERY END of your response, on a new line, add:
-   [MARK_HOLIDAY date="{YYYY-MM-DD}" name="{holiday name}" scope="ALL"]
-   OR for a specific user:
-   [MARK_HOLIDAY date="{YYYY-MM-DD}" name="{holiday name}" scope="{database_id}"]
-4. Use today's year (${new Date().getFullYear()}) if the user doesn't specify a year.
-5. Confirm that the holiday is marked. Notifications will be sent AUTOMATICALLY on the morning of the holiday date (not immediately).
-6. Do NOT use action tags like [MARK_HOLIDAY] in your visible response text — only add them at the very end as hidden metadata.
-
-COMMON INDIAN HOLIDAYS (use these names when the user mentions them):
-• 26 Jan — Republic Day
-• 14 Feb — Basant Panchami
-• Mar — Holi (check lunar calendar)
-• 14 Apr — Ambedkar Jayanti
-• 1 May — May Day / Labour Day
-• 15 Aug — Independence Day
-• Aug/Sep — Raksha Bandhan, Janmashtami (lunar)
-• 2 Oct — Gandhi Jayanti
-• Oct — Dussehra / Vijayadashami (lunar)
-• Oct/Nov — Diwali, Bhai Dooj (lunar)
-• 14 Nov — Children's Day
-• 25 Dec — Christmas
-• 1 Jan — New Year's Day
-• Eid-ul-Fitr, Eid-ul-Adha, Muharram (Islamic calendar)
-• Guru Nanak Jayanti (Nov, lunar)
-• Chhath Puja (Oct/Nov, lunar)
-• Makar Sankranti / Pongal — 14 Jan
-
-BULK NOTIFICATION ACTIONS:
-If the user asks you to send a notification, message, or reminder to ALL staff or MULTIPLE staff at once (not a specific individual):
-1. At the VERY END of your response, on a new line, add:
-   [BULK_NOTIFY title="{title}" message="{message}" scope="ALL"]
-2. This sends a push notification to every staff member in the company.
-3. Confirm in your response text how many staff members will receive it.
-
-${context}`;
-
-    const contents: Array<{ role: "user" | "model"; parts: { text: string }[] }> = [
-      { role: "user", parts: [{ text: systemPrompt + "\n\nQuestion: " + userMessage }] }
-    ];
-    const recentHistory = history.slice(-8);
+    const contents: Array<{ role: "user" | "model"; parts: { text: string }[] }> = [];
+    const recentHistory = history.slice(-10);
     if (recentHistory.length > 0) {
       contents.push(...recentHistory);
-      contents.push({ role: "user", parts: [{ text: userMessage }] });
     }
+    contents.push({ role: "user", parts: [{ text: userMessage }] });
 
     const streamResult = await streamGeminiWithFallback({
+      systemInstruction: { parts: [{ text: systemPrompt }] },
       contents,
-      generationConfig: { temperature: 0.2, maxOutputTokens: 4096 }
+      generationConfig: { temperature: 0.3, maxOutputTokens: 2048 }
     });
 
     if (!streamResult || !streamResult.response || !streamResult.response.body) {

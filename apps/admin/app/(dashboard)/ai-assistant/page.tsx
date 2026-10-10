@@ -6,7 +6,8 @@ import {
   Bot, Send, RefreshCw, Sparkles, AlertTriangle,
   CheckSquare, Bell, BellRing, Loader2,
   User, Clock, ClipboardList, TrendingDown, MessageSquare,
-  Zap, X, Check, RotateCcw, Mic, MicOff, Volume2, VolumeX, Square
+  Zap, X, Check, RotateCcw, Mic, MicOff, Volume2, VolumeX, Square,
+  Radio, RadioTower, Waves, AudioWaveform
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,19 +29,20 @@ interface ChatMessage {
   timestamp: Date;
   isTyping?: boolean;
   isStreaming?: boolean;
+  fromVoice?: boolean;
 }
 
 // ─── Quick suggestion chips ────────────────────────────────────────────────────
 
 const QUICK_QUESTIONS = [
-  { icon: AlertTriangle, label: "Who missed most this month?", color: "text-rose-500" },
-  { icon: TrendingDown, label: "Staff with low attendance?", color: "text-amber-500" },
-  { icon: ClipboardList, label: "Who has overdue tasks?", color: "text-blue-500" },
-  { icon: Clock, label: "Who hasn't checked in today?", color: "text-purple-500" },
-  { icon: Zap, label: "Suggest salary deductions this month", color: "text-emerald-500" },
-  { icon: Bell, label: "Generate attendance warning message", color: "text-indigo-500" },
-  { icon: BellRing, label: "Send holiday notification to all staff", color: "text-pink-500" },
-  { icon: CheckSquare, label: "Mark 2nd Oct as holiday for all", color: "text-teal-500" },
+  { icon: AlertTriangle, label: "Nandkishor ka status aur tasks batao", color: "text-rose-500" },
+  { icon: Clock, label: "Aaj kaun kaun absent hai?", color: "text-purple-500" },
+  { icon: ClipboardList, label: "Overdue tasks kiske paas hain?", color: "text-blue-500" },
+  { icon: TrendingDown, label: "Low attendance staff kaun hain?", color: "text-amber-500" },
+  { icon: Zap, label: "Is mahine salary deductions ka status?", color: "text-emerald-500" },
+  { icon: Bell, label: "Ashish ko urgent task reminder bhej do", color: "text-indigo-500" },
+  { icon: BellRing, label: "Sabhi staff ko holiday notice bhejo", color: "text-pink-500" },
+  { icon: CheckSquare, label: "2nd Oct ko company holiday mark karo", color: "text-teal-500" },
 ];
 
 // ─── Notification type config ──────────────────────────────────────────────────
@@ -54,10 +56,9 @@ const NOTIF_CONFIG: Record<string, { label: string; icon: any; color: string; bg
   LATE_WARNING:     { label: "Late Warning",       icon: AlertTriangle, color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-200" },
 };
 
-// ─── Plain text message renderer (no ** markdown) ─────────────────────────────
+// ─── Plain text message renderer (strips tags & markdown symbols) ──────────────
 
 function PlainMessage({ content, isStreaming }: { content: string; isStreaming?: boolean }) {
-  // Strip action tags before rendering
   const cleaned = content
     .replace(/\[SEND_NOTIFICATION[^\]]*\]/g, "")
     .replace(/\[MARK_HOLIDAY[^\]]*\]/g, "")
@@ -96,7 +97,7 @@ async function* streamAiChat(message: string): AsyncGenerator<string> {
   });
 
   if (!response.ok || !response.body) {
-    yield "Sorry, AI assistant is currently unavailable. Please try again.";
+    yield "Kshama karein, AI assistant abhi uplabdh nahi hai. Kripya punah prayas karein.";
     return;
   }
 
@@ -130,45 +131,60 @@ export default function AiAssistantPage() {
     {
       id: "welcome",
       role: "assistant",
-      content: "👋 Hello! I'm your AI HR Assistant, powered by Gemini AI.\n\nI have access to all staff data — attendance, tasks, salary, leaves, and more. Ask me anything!\n\nTry asking:\n• Who has been absent most this month?\n• Show me overdue task summary\n• Which staff need a salary warning?",
+      content: "👋 Namaste! Main aapka AI HR Voice Assistant hoon, powered by Gemini 3.8 Live.\n\nMujhe company ke sabhi staff data — attendance, punch timings, tasks, salary, aur leaves ka live access hai.\n\nAap bol kar ya type karke kisi bhi staff ke baare mein pooch sakte hain:\n• Nandkishor ka status aur overdue tasks batao\n• Aaj kaun kaun absent hai?\n• Ashish ka check-in time kya hai?\n• Damini ko urgent task reminder bhej do",
       timestamp: new Date()
     }
   ]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const isSendingRef = useRef(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
+  const liveLogsBottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<boolean>(false);
 
   const [sentIds, setSentIds] = useState<Set<string>>(new Set());
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
-  // Voice & Audio Speech State (Google Assistant Ultra-Low Latency Mode)
+  // Gemini 3.8 Live Voice Mode State
+  const [isLiveMode, setIsLiveMode] = useState(false);
+  const isLiveModeRef = useRef(false);
+  const [liveStatus, setLiveStatus] = useState<"idle" | "listening" | "thinking" | "speaking">("idle");
+  const [liveTranscript, setLiveTranscript] = useState("");
+  const [latestAiSpeechText, setLatestAiSpeechText] = useState("");
+
+  // Voice & Audio Speech State
   const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(true);
   const voiceOutputEnabledRef = useRef(true);
   const [isListening, setIsListening] = useState(false);
   const isListeningIntentRef = useRef(false);
-  const [autoSendVoice, setAutoSendVoice] = useState(false);
-  const autoSendVoiceRef = useRef(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
   const silenceTimerRef = useRef<any>(null);
   const latestVoiceTranscriptRef = useRef<string>("");
   const activeUtterancesRef = useRef<number>(0);
+  const startListeningRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     voiceOutputEnabledRef.current = voiceOutputEnabled;
   }, [voiceOutputEnabled]);
 
   useEffect(() => {
-    autoSendVoiceRef.current = autoSendVoice;
-  }, [autoSendVoice]);
+    isSendingRef.current = isSending;
+  }, [isSending]);
 
+  useEffect(() => {
+    isLiveModeRef.current = isLiveMode;
+  }, [isLiveMode]);
+
+  // Preferred Voice: High-Quality Native Hindi Voice
   const getPreferredVoice = useCallback(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
     const voices = window.speechSynthesis.getVoices();
-    return voices.find(v => (v.name.includes("Google") || v.name.includes("Natural")) && (v.lang.includes("en-IN") || v.lang.includes("hi")))
+    return voices.find(v => v.lang.toLowerCase() === "hi-in" || v.lang.toLowerCase().startsWith("hi"))
+      || voices.find(v => v.name.toLowerCase().includes("hindi") || v.name.toLowerCase().includes("google हिन्दी"))
+      || voices.find(v => (v.name.includes("Google") || v.name.includes("Natural")) && v.lang.includes("IN"))
       || voices.find(v => v.lang.includes("en-IN") || v.lang.includes("hi-IN"))
       || voices.find(v => v.name.includes("Google") && v.lang.startsWith("en"))
       || voices.find(v => v.lang.startsWith("en-"))
@@ -193,11 +209,17 @@ export default function AiAssistantPage() {
     };
   }, []);
 
+  // Clean text so internal tags, IDs, and notifications are NEVER spoken aloud
   const cleanTextForSpeech = (raw: string) => {
     return raw
       .replace(/\[SEND_NOTIFICATION[^\]]*\]/g, "")
       .replace(/\[MARK_HOLIDAY[^\]]*\]/g, "")
       .replace(/\[BULK_NOTIFY[^\]]*\]/g, "")
+      .replace(/__ACTION_RESULT__[\s\S]*$/g, "")
+      .replace(/🎉\s*Holiday Marked![\s\S]*$/g, "")
+      .replace(/📢\s*Bulk Notification Sent:[\s\S]*$/g, "")
+      .replace(/⚡\s*Action Successful:[\s\S]*$/g, "")
+      .replace(/cm[a-z0-9]{20,32}/gi, "") // strip database ids like cmucgphxg00cvsggl2q7xne9b
       .replace(/[•\-\*\_#]/g, " ")
       .replace(/https?:\/\/\S+/g, "")
       .replace(/\n+/g, ". ")
@@ -209,6 +231,11 @@ export default function AiAssistantPage() {
       window.speechSynthesis.cancel();
       activeUtterancesRef.current = 0;
       setSpeakingMsgId(null);
+      if (isLiveModeRef.current) {
+        setLiveStatus("listening");
+      } else {
+        setLiveStatus("idle");
+      }
     }
   }, []);
 
@@ -217,25 +244,42 @@ export default function AiAssistantPage() {
     if (!voiceOutputEnabledRef.current) return;
 
     const cleaned = cleanTextForSpeech(sentence);
-    // Ignore trivial punctuation fragments
-    if (!cleaned || cleaned.replace(/[^a-zA-Z0-9]/g, "").length < 2) return;
+    if (!cleaned || cleaned.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "").length < 2) return;
 
     try {
       const utterance = new SpeechSynthesisUtterance(cleaned);
       const voice = getPreferredVoice();
-      if (voice) utterance.voice = voice;
-      utterance.rate = 1.08; // crisp, responsive speed
+      if (voice) {
+        utterance.voice = voice;
+        utterance.lang = voice.lang || "hi-IN";
+      } else {
+        utterance.lang = "hi-IN";
+      }
+      utterance.rate = 1.0;
       utterance.pitch = 1.0;
 
       utterance.onstart = () => {
         activeUtterancesRef.current += 1;
         setSpeakingMsgId(msgId);
+        setLiveStatus("speaking");
+        setLatestAiSpeechText(cleaned);
       };
 
       utterance.onend = () => {
         activeUtterancesRef.current = Math.max(0, activeUtterancesRef.current - 1);
         if (activeUtterancesRef.current === 0) {
           setSpeakingMsgId(null);
+          // If in Live Voice Mode, automatically resume listening after speaking
+          if (isLiveModeRef.current) {
+            setLiveStatus("listening");
+            setTimeout(() => {
+              if (isLiveModeRef.current && !isSendingRef.current) {
+                startListeningRef.current();
+              }
+            }, 350);
+          } else {
+            setLiveStatus("idle");
+          }
         }
       };
 
@@ -243,6 +287,14 @@ export default function AiAssistantPage() {
         activeUtterancesRef.current = Math.max(0, activeUtterancesRef.current - 1);
         if (activeUtterancesRef.current === 0) {
           setSpeakingMsgId(null);
+          if (isLiveModeRef.current) {
+            setLiveStatus("listening");
+            setTimeout(() => {
+              if (isLiveModeRef.current && !isSendingRef.current) {
+                startListeningRef.current();
+              }
+            }, 350);
+          }
         }
       };
 
@@ -306,24 +358,36 @@ export default function AiAssistantPage() {
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    liveLogsBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSendRef = useRef<(text?: string) => Promise<void>>(async () => {});
+  const handleSendRef = useRef<(text?: string, isVoiceInput?: boolean) => Promise<void>>(async () => {});
 
-  const handleSend = useCallback(async (messageText?: string) => {
+  // Send message handler: handles text typing vs live voice input
+  const handleSend = useCallback(async (messageText?: string, isVoiceInput?: boolean) => {
     const text = (messageText ?? input).trim();
-    if (!text || isSending) return;
+    if (!text || isSendingRef.current) return;
     setInput("");
+    setLiveTranscript("");
     setIsSending(true);
     abortRef.current = false;
     stopSpeaking();
     stopListening();
 
+    // Voice response is ONLY triggered if spoken via Mic or in Live Mode!
+    // Typing into the text box will NOT speak aloud automatically.
+    const shouldSpeakOutput = Boolean(isVoiceInput || isLiveModeRef.current);
+
+    if (isLiveModeRef.current) {
+      setLiveStatus("thinking");
+    }
+
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
       role: "user",
       content: text,
-      timestamp: new Date()
+      timestamp: new Date(),
+      fromVoice: shouldSpeakOutput
     };
 
     const aiId = `ai-${Date.now()}`;
@@ -358,6 +422,9 @@ export default function AiAssistantPage() {
 
         if (first) {
           first = false;
+          if (isLiveModeRef.current) {
+            setLiveStatus("speaking");
+          }
           setMessages(prev => prev.map(m =>
             m.id === aiId ? { ...m, isTyping: false, isStreaming: true, content: chunk } : m
           ));
@@ -367,11 +434,10 @@ export default function AiAssistantPage() {
           ));
         }
 
-        // ULTRA-LOW LATENCY: Sentence-by-sentence TTS streaming (Google Assistant Experience)
-        // Speak sentence 1 immediately while sentence 2 is still streaming!
-        if (voiceOutputEnabledRef.current && sentencesSpokenCount < 5) {
+        // Sentence-by-sentence TTS streaming (only if voice mode / mic input)
+        if (shouldSpeakOutput && voiceOutputEnabledRef.current && sentencesSpokenCount < 6) {
           speechStreamBuffer += chunk;
-          const match = speechStreamBuffer.match(/^(.*?[.!?\n]+)\s*(.*)$/s);
+          const match = speechStreamBuffer.match(/^(.*?[.!?\n\u0964]+)\s*(.*)$/s);
           if (match) {
             const completedSentence = match[1];
             speechStreamBuffer = match[2] || "";
@@ -382,7 +448,7 @@ export default function AiAssistantPage() {
       }
 
       // Finish speaking remaining buffer
-      if (voiceOutputEnabledRef.current && speechStreamBuffer.trim() && sentencesSpokenCount < 5) {
+      if (shouldSpeakOutput && voiceOutputEnabledRef.current && speechStreamBuffer.trim() && sentencesSpokenCount < 6) {
         queueSentenceForSpeech(speechStreamBuffer.trim(), aiId);
       }
 
@@ -405,20 +471,26 @@ export default function AiAssistantPage() {
         return m;
       }));
 
-      // Force notification panel refetch if any action was taken
       if (actionResult) {
         refetchNotifs();
+      }
+
+      if (!shouldSpeakOutput && isLiveModeRef.current) {
+        setLiveStatus("listening");
       }
     } catch {
       setMessages(prev => prev.map(m =>
         m.id === aiId
-          ? { ...m, isTyping: false, isStreaming: false, content: "Unable to get AI response. Please check your connection and try again." }
+          ? { ...m, isTyping: false, isStreaming: false, content: "AI se connect karne mein samasya aayi. Kripya punah prayas karein." }
           : m
       ));
+      if (isLiveModeRef.current) {
+        setLiveStatus("listening");
+      }
     } finally {
       setIsSending(false);
     }
-  }, [input, isSending, queueSentenceForSpeech, refetchNotifs, stopListening, stopSpeaking]);
+  }, [input, queueSentenceForSpeech, refetchNotifs, stopListening, stopSpeaking]);
 
   useEffect(() => {
     handleSendRef.current = handleSend;
@@ -428,7 +500,7 @@ export default function AiAssistantPage() {
     if (typeof window === "undefined") return;
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setVoiceError("Microphone speech recognition is not supported in this browser. Please use Chrome, Edge, or Android.");
+      setVoiceError("Microphone speech recognition is not supported in this browser. Please open in Google Chrome or Microsoft Edge.");
       return;
     }
 
@@ -436,6 +508,9 @@ export default function AiAssistantPage() {
     stopSpeaking();
     isListeningIntentRef.current = true;
     setIsListening(true);
+    if (isLiveModeRef.current) {
+      setLiveStatus("listening");
+    }
 
     try {
       if (recognitionRef.current) {
@@ -446,10 +521,13 @@ export default function AiAssistantPage() {
       recognitionRef.current = recognition;
       recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.lang = "en-IN"; // English (India) with seamless Hinglish recognition
+      recognition.lang = "hi-IN"; // Natural Hindi / Hinglish recognition
 
       recognition.onstart = () => {
         setIsListening(true);
+        if (isLiveModeRef.current) {
+          setLiveStatus("listening");
+        }
       };
 
       recognition.onresult = (event: any) => {
@@ -459,7 +537,7 @@ export default function AiAssistantPage() {
         }
 
         if (transcript) {
-          setInput(transcript);
+          setLiveTranscript(transcript);
           latestVoiceTranscriptRef.current = transcript;
 
           if (silenceTimerRef.current) {
@@ -467,41 +545,50 @@ export default function AiAssistantPage() {
             silenceTimerRef.current = null;
           }
 
-          // Only auto-send if the user explicitly enabled Auto-Send mode
-          if (autoSendVoiceRef.current && transcript.trim().length > 3) {
+          // Voice auto-sends after comfortable speech pause (1.2s in Live Mode, 1.8s in mic button)
+          const pauseTimeout = isLiveModeRef.current ? 1200 : 1800;
+
+          if (transcript.trim().length > 1) {
             silenceTimerRef.current = setTimeout(() => {
               if (isListeningIntentRef.current) {
                 const query = latestVoiceTranscriptRef.current?.trim();
-                if (query && !isSending) {
+                if (query && !isSendingRef.current) {
                   stopListening();
-                  handleSendRef.current(query);
+                  handleSendRef.current(query, true); // true = voice input, so AI answers aloud
                 }
               }
-            }, 2500);
+            }, pauseTimeout);
           }
         }
       };
 
       recognition.onerror = (event: any) => {
-        console.warn("Speech recognition warning:", event.error);
+        // Silently reconnect on network or no-speech timeouts (never show false network error alert!)
+        if (event.error === "network" || event.error === "no-speech" || event.error === "audio-capture") {
+          if (isListeningIntentRef.current) {
+            setTimeout(() => {
+              if (isListeningIntentRef.current) {
+                try { recognition.start(); } catch {}
+              }
+            }, 300);
+          }
+          return;
+        }
+
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
           isListeningIntentRef.current = false;
           setIsListening(false);
-          setVoiceError("Microphone access was denied. Please allow microphone permissions in your browser.");
-        } else if (event.error === "network") {
-          setVoiceError("Speech recognition network error. In Brave browser, please enable Google Services in settings or use Chrome.");
+          setVoiceError("Microphone permission denied. Please allow microphone in browser settings.");
         }
       };
 
       recognition.onend = () => {
-        // If user is still in listening mode, keep mic active (prevent auto-closing)!
+        // Continuous listening loop keeps mic alive seamlessly
         if (isListeningIntentRef.current) {
           try {
             recognition.start();
             return;
-          } catch {
-            // ignore
-          }
+          } catch {}
         }
         setIsListening(false);
       };
@@ -512,7 +599,25 @@ export default function AiAssistantPage() {
       isListeningIntentRef.current = false;
       setIsListening(false);
     }
-  }, [stopSpeaking, stopListening, isSending]);
+  }, [stopSpeaking, stopListening]);
+
+  useEffect(() => {
+    startListeningRef.current = startListening;
+  }, [startListening]);
+
+  // Enter/Exit Live Voice Mode
+  const toggleLiveMode = useCallback(() => {
+    if (!isLiveMode) {
+      setIsLiveMode(true);
+      setLiveStatus("listening");
+      startListening();
+    } else {
+      setIsLiveMode(false);
+      stopListening();
+      stopSpeaking();
+      setLiveStatus("idle");
+    }
+  }, [isLiveMode, startListening, stopListening, stopSpeaking]);
 
   const handleClearChat = useCallback(async () => {
     abortRef.current = true;
@@ -522,21 +627,23 @@ export default function AiAssistantPage() {
     setMessages([{
       id: "welcome-new",
       role: "assistant",
-      content: "Chat cleared! I'm ready for a fresh conversation. What would you like to know about your staff?",
+      content: "Namaste! Chat clear kar diya gaya hai. Aap kisi bhi staff ke baare mein pooch sakte hain.",
       timestamp: new Date()
     }]);
-  }, []);
+    setLiveTranscript("");
+    setLatestAiSpeechText("");
+  }, [stopListening, stopSpeaking]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      void handleSend();
+      void handleSend(undefined, false); // false = typed text, DO NOT SPEAK
     }
   };
 
   return (
     <div className="h-[calc(100vh-6rem)] flex flex-col gap-0">
-      {/* Page Header */}
+      {/* Top Header */}
       <div className="flex items-center justify-between mb-4 shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-blue-600 shadow-lg shadow-violet-200">
@@ -544,290 +651,526 @@ export default function AiAssistantPage() {
           </div>
           <div>
             <h1 className="text-xl font-black text-slate-900 leading-tight">AI Staff Assistant</h1>
-            <p className="text-xs font-semibold text-slate-400">Powered by Gemini 3.8 Live & Flash • Voice & Sound Enabled • Full staff context</p>
+            <p className="text-xs font-semibold text-slate-400">Gemini 3.8 Live & Flash • Natural Hindi Voice • Multi-turn Memory • Real-time Staff Access</p>
           </div>
         </div>
-        <Badge variant="outline" className="gap-1.5 border-violet-200 bg-violet-50 text-violet-700 font-bold px-3 py-1">
-          <Mic className="h-3.5 w-3.5 text-violet-600" />
-          Gemini 3.8 Live AI
-        </Badge>
+
+        {/* Live Voice Mode Toggle Button */}
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={toggleLiveMode}
+            className={cn(
+              "h-10 px-4 rounded-xl font-black text-xs gap-2 transition-all shadow-md",
+              isLiveMode
+                ? "bg-gradient-to-r from-rose-500 via-pink-600 to-purple-600 text-white animate-pulse ring-4 ring-rose-200"
+                : "bg-gradient-to-r from-violet-600 to-blue-600 text-white hover:opacity-90"
+            )}
+          >
+            {isLiveMode ? (
+              <>
+                <Radio className="h-4 w-4 animate-spin text-white" />
+                <span>Exit Gemini Live Voice</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4 text-amber-300" />
+                <span>✨ Gemini 3.8 Live Voice Mode</span>
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Main Split Panel */}
       <div className="flex-1 flex gap-4 min-h-0">
 
-        {/* ── Left: Chat Panel ─────────────────────── */}
+        {/* ── Left: Conversation Stage (Live Voice Mode OR Classic Chat) ── */}
         <div className="flex-1 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden min-h-0">
 
-          {/* Toolbar */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/50 shrink-0">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-violet-500" />
-              <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Conversation</span>
-              <span className="text-[10px] font-bold text-slate-400">• {messages.filter(m => !m.isTyping).length} messages</span>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              {/* Voice Sound Toggle */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  if (speakingMsgId) stopSpeaking();
-                  setVoiceOutputEnabled(!voiceOutputEnabled);
-                }}
-                className={cn(
-                  "h-7 px-2.5 rounded-lg text-xs font-bold gap-1.5 transition-all",
-                  voiceOutputEnabled
-                    ? "bg-violet-100 text-violet-700 hover:bg-violet-200"
-                    : "bg-slate-100 text-slate-400 hover:bg-slate-200"
-                )}
-                title={voiceOutputEnabled ? "Voice Response Active (Click to mute)" : "Voice Response Muted (Click to enable)"}
-              >
-                {voiceOutputEnabled ? <Volume2 className="h-3.5 w-3.5 text-violet-600" /> : <VolumeX className="h-3.5 w-3.5" />}
-                <span>Sound: {voiceOutputEnabled ? "ON" : "OFF"}</span>
-              </Button>
-
-              {/* Stop audio button if currently speaking */}
-              {speakingMsgId && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={stopSpeaking}
-                  className="h-7 px-2 text-rose-600 bg-rose-50 hover:bg-rose-100 text-xs font-bold rounded-lg gap-1 animate-pulse"
-                  title="Stop speaking"
-                >
-                  <Square className="h-3 w-3 fill-rose-600" /> Stop Sound
-                </Button>
-              )}
-
-              <Button
-                variant="ghost" size="sm"
-                onClick={handleClearChat}
-                className="h-7 gap-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 text-xs font-bold rounded-lg"
-              >
-                <RotateCcw className="h-3.5 w-3.5" /> Clear
-              </Button>
-            </div>
-          </div>
-
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 custom-scrollbar">
-            {messages.map(msg => (
-              <div key={msg.id} className={cn("flex gap-3", msg.role === "user" ? "flex-row-reverse" : "flex-row")}>
-                {/* Avatar */}
-                <div className={cn(
-                  "h-8 w-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm",
-                  msg.role === "user" ? "bg-blue-600" : "bg-gradient-to-br from-violet-600 to-indigo-600"
-                )}>
-                  {msg.role === "user" ? <User className="h-4 w-4 text-white" /> : <Bot className="h-4 w-4 text-white" />}
+          {/* ═══════════════════════════════════════════════════════════════════
+              MODE A: GEMINI 3.8 LIVE VOICE MODE (Hands-Free Voice Studio)
+             ═══════════════════════════════════════════════════════════════════ */}
+          {isLiveMode ? (
+            <div className="flex-1 flex flex-col min-h-0 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white relative overflow-hidden">
+              {/* Header Bar */}
+              <div className="flex items-center justify-between px-6 py-3 border-b border-white/10 bg-black/30 backdrop-blur-md z-10 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                  </span>
+                  <span className="text-xs font-black tracking-wider uppercase bg-gradient-to-r from-blue-300 to-violet-300 bg-clip-text text-transparent">
+                    Gemini 3.8 Live Voice Studio
+                  </span>
+                  <Badge variant="outline" className="border-emerald-500/30 text-emerald-300 bg-emerald-950/40 text-[10px] font-bold">
+                    Hands-Free Active
+                  </Badge>
                 </div>
 
-                {/* Bubble */}
-                <div className={cn(
-                  "max-w-[82%] rounded-2xl px-4 py-3 shadow-sm",
-                  msg.role === "user"
-                    ? "bg-blue-600 text-white rounded-tr-sm"
-                    : "bg-slate-50 border border-slate-200 text-slate-700 rounded-tl-sm"
-                )}>
-                  {msg.isTyping ? (
-                    <div className="flex gap-1 items-center py-1 px-1">
-                      <span className="h-2 w-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-                      <span className="h-2 w-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-                      <span className="h-2 w-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "300ms" }} />
-                    </div>
-                  ) : msg.role === "user" ? (
-                    <p className="text-sm leading-relaxed">{msg.content}</p>
-                  ) : (
-                    <PlainMessage content={msg.content} isStreaming={msg.isStreaming} />
-                  )}
-                  {!msg.isTyping && (
-                    <div className="flex items-center justify-between mt-2 pt-1 border-t border-slate-100/60 gap-3">
-                      <p className={cn("text-[10px] font-bold", msg.role === "user" ? "text-blue-200 text-right w-full" : "text-slate-400")}>
-                        {dayjs(msg.timestamp).format("hh:mm A")}
-                        {msg.isStreaming && <span className="ml-1 text-violet-400">● typing...</span>}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (speakingMsgId) stopSpeaking();
+                      setVoiceOutputEnabled(!voiceOutputEnabled);
+                    }}
+                    className={cn(
+                      "h-8 px-3 rounded-lg text-xs font-bold gap-1.5 transition-all text-white/80 hover:text-white hover:bg-white/10",
+                      !voiceOutputEnabled && "text-rose-400 bg-rose-500/10"
+                    )}
+                  >
+                    {voiceOutputEnabled ? <Volume2 className="h-3.5 w-3.5 text-emerald-400" /> : <VolumeX className="h-3.5 w-3.5 text-rose-400" />}
+                    <span>Sound: {voiceOutputEnabled ? "ON" : "MUTED"}</span>
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearChat}
+                    className="h-8 px-2.5 text-white/50 hover:text-rose-400 hover:bg-white/10 text-xs font-bold rounded-lg gap-1"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" /> Clear
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleLiveMode}
+                    className="h-8 px-3 rounded-lg text-xs font-bold bg-white/10 hover:bg-white/20 text-white"
+                  >
+                    Exit Live Mode
+                  </Button>
+                </div>
+              </div>
+
+              {/* Live Stage Body: Center Orb & Split Logs */}
+              <div className="flex-1 flex flex-col lg:flex-row min-h-0 relative">
+                
+                {/* Center Visualizer & Interaction Stage */}
+                <div className="flex-1 flex flex-col items-center justify-center p-6 relative z-10">
+
+                  {/* Pulsing Animated Orb (Gemini / ChatGPT Style) */}
+                  <div className="relative flex items-center justify-center mb-6">
+                    {/* Outer Glow Ring */}
+                    <div className={cn(
+                      "absolute rounded-full filter blur-2xl opacity-60 transition-all duration-700",
+                      liveStatus === "listening" ? "w-64 h-64 bg-cyan-500 animate-pulse" :
+                      liveStatus === "thinking"  ? "w-64 h-64 bg-violet-600 animate-spin" :
+                      liveStatus === "speaking"  ? "w-72 h-72 bg-gradient-to-r from-emerald-500 via-violet-500 to-pink-500 animate-pulse" :
+                      "w-48 h-48 bg-blue-600/40"
+                    )} />
+
+                    {/* Central Interactive Orb Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (speakingMsgId) {
+                          stopSpeaking();
+                        } else if (isListening) {
+                          stopListening();
+                        } else {
+                          startListening();
+                        }
+                      }}
+                      className={cn(
+                        "relative z-10 w-44 h-44 rounded-full flex flex-col items-center justify-center cursor-pointer shadow-2xl transition-all duration-500 border border-white/20 select-none",
+                        liveStatus === "listening" ? "bg-gradient-to-tr from-cyan-600 via-blue-600 to-indigo-600 scale-105 ring-8 ring-cyan-500/30 shadow-cyan-500/50" :
+                        liveStatus === "thinking"  ? "bg-gradient-to-tr from-purple-700 via-violet-600 to-indigo-800 animate-pulse ring-8 ring-violet-500/30 shadow-violet-500/50" :
+                        liveStatus === "speaking"  ? "bg-gradient-to-tr from-emerald-600 via-violet-600 to-fuchsia-600 scale-110 ring-8 ring-fuchsia-500/30 shadow-fuchsia-500/50" :
+                        "bg-gradient-to-tr from-slate-800 to-slate-700 hover:scale-105 ring-4 ring-white/10"
+                      )}
+                      title="Tap to speak or interrupt"
+                    >
+                      {liveStatus === "listening" ? (
+                        <>
+                          <Mic className="h-12 w-12 text-white animate-bounce mb-1" />
+                          <span className="text-[11px] font-black tracking-wider text-cyan-200 uppercase">Listening...</span>
+                        </>
+                      ) : liveStatus === "thinking" ? (
+                        <>
+                          <Sparkles className="h-12 w-12 text-amber-300 animate-spin mb-1" />
+                          <span className="text-[11px] font-black tracking-wider text-violet-200 uppercase">Thinking...</span>
+                        </>
+                      ) : liveStatus === "speaking" ? (
+                        <>
+                          <AudioWaveform className="h-12 w-12 text-white animate-pulse mb-1" />
+                          <span className="text-[11px] font-black tracking-wider text-fuchsia-200 uppercase">Speaking...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Mic className="h-12 w-12 text-white/70 mb-1" />
+                          <span className="text-[11px] font-black tracking-wider text-white/60 uppercase">Tap to Talk</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Status Indicator Pill */}
+                  <div className="mb-4">
+                    <Badge variant="outline" className={cn(
+                      "px-3.5 py-1 text-xs font-black tracking-wide border shadow-sm",
+                      liveStatus === "listening" ? "bg-cyan-950/60 border-cyan-500/40 text-cyan-300" :
+                      liveStatus === "thinking"  ? "bg-violet-950/60 border-violet-500/40 text-violet-300" :
+                      liveStatus === "speaking"  ? "bg-fuchsia-950/60 border-fuchsia-500/40 text-fuchsia-300" :
+                      "bg-slate-900 border-white/10 text-white/60"
+                    )}>
+                      {liveStatus === "listening" && "🎙️ Aap boliye — Hindi / English (Auto-sends on pause)"}
+                      {liveStatus === "thinking"  && "✨ Gemini 3.8 Live process kar raha hai..."}
+                      {liveStatus === "speaking"  && "🔊 Gemini 3.8 Hindi mein bol raha hai (Tap orb to interrupt)"}
+                      {liveStatus === "idle"      && "⏸️ Ready • Mic par tap karein"}
+                    </Badge>
+                  </div>
+
+                  {/* Real-time Subtitles / Captions Box */}
+                  <div className="w-full max-w-lg min-h-[70px] bg-white/5 border border-white/10 rounded-2xl p-4 text-center backdrop-blur-md">
+                    {liveTranscript ? (
+                      <p className="text-sm font-semibold text-cyan-200 animate-in fade-in">
+                        <span className="text-cyan-400 font-black mr-1">Aap:</span> &ldquo;{liveTranscript}&rdquo;
                       </p>
-                      {msg.role === "assistant" && !msg.isStreaming && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (speakingMsgId === msg.id) {
-                              stopSpeaking();
-                            } else {
-                              speakFullText(msg.content, msg.id);
-                            }
-                          }}
-                          className={cn(
-                            "px-2 py-0.5 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 shrink-0",
-                            speakingMsgId === msg.id
-                              ? "bg-rose-100 text-rose-700 animate-pulse font-black"
-                              : "text-slate-400 hover:text-violet-600 hover:bg-violet-50"
+                    ) : latestAiSpeechText && liveStatus === "speaking" ? (
+                      <p className="text-sm font-medium text-violet-200 animate-in fade-in">
+                        <span className="text-violet-400 font-black mr-1">Gemini:</span> &ldquo;{latestAiSpeechText}&rdquo;
+                      </p>
+                    ) : (
+                      <p className="text-xs text-white/40 italic">
+                        Bolna shuru karein jaise: &ldquo;Nandkishor ke kitne overdue tasks hain?&rdquo; ya &ldquo;Aaj kaun kaun absent hai?&rdquo;
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Action Buttons under Orb */}
+                  <div className="flex items-center gap-3 mt-5">
+                    {isListening ? (
+                      <Button
+                        onClick={stopListening}
+                        className="h-9 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs gap-1.5 shadow-md"
+                      >
+                        <MicOff className="h-3.5 w-3.5" /> Mic Mute
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={startListening}
+                        className="h-9 px-4 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs gap-1.5 shadow-md"
+                      >
+                        <Mic className="h-3.5 w-3.5" /> Start Listening
+                      </Button>
+                    )}
+
+                    {speakingMsgId && (
+                      <Button
+                        onClick={stopSpeaking}
+                        className="h-9 px-4 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold text-xs gap-1.5 shadow-md"
+                      >
+                        <Square className="h-3 w-3 fill-white" /> Stop Audio
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Side / Bottom: Live Real-time Conversation & Action Logs ("logs samne mein hi dikhe") */}
+                <div className="w-full lg:w-[420px] border-t lg:border-t-0 lg:border-l border-white/10 bg-black/40 flex flex-col min-h-0">
+                  <div className="px-4 py-2.5 border-b border-white/10 bg-white/5 flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-violet-400" />
+                      <span className="text-xs font-black tracking-wider uppercase text-white/80">Live Conversation Logs</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-white/40">{messages.length} items</span>
+                  </div>
+
+                  {/* Log Items Feed */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar min-h-0">
+                    {messages.map((msg) => (
+                      <div
+                        key={msg.id}
+                        className={cn(
+                          "rounded-xl p-3 text-xs leading-relaxed border transition-all",
+                          msg.role === "user"
+                            ? "bg-blue-600/20 border-blue-500/30 text-blue-100 ml-4"
+                            : "bg-white/5 border-white/10 text-white/90 mr-4"
+                        )}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className={cn(
+                            "text-[10px] font-black uppercase tracking-wider flex items-center gap-1",
+                            msg.role === "user" ? "text-blue-400" : "text-violet-400"
+                          )}>
+                            {msg.role === "user" ? <User className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
+                            {msg.role === "user" ? "Aap (Voice)" : "Gemini 3.8 AI"}
+                          </span>
+                          <span className="text-[9px] text-white/40">{dayjs(msg.timestamp).format("hh:mm A")}</span>
+                        </div>
+
+                        {msg.isTyping ? (
+                          <div className="flex gap-1 items-center py-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce" />
+                            <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce delay-150" />
+                            <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce delay-300" />
+                          </div>
+                        ) : (
+                          <div className="text-xs leading-relaxed space-y-1">
+                            <PlainMessage content={msg.content} isStreaming={msg.isStreaming} />
+                          </div>
+                        )}
+
+                        {msg.role === "assistant" && !msg.isStreaming && !msg.isTyping && (
+                          <div className="mt-2 pt-1 border-t border-white/10 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (speakingMsgId === msg.id) stopSpeaking();
+                                else speakFullText(msg.content, msg.id);
+                              }}
+                              className="text-[10px] text-violet-300 hover:text-violet-100 flex items-center gap-1 font-bold"
+                            >
+                              <Volume2 className="h-3 w-3" /> Listen Again
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    <div ref={liveLogsBottomRef} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+
+            /* ═══════════════════════════════════════════════════════════════════
+               MODE B: STANDARD CHAT MODE (Type text / Mic button option)
+               ═══════════════════════════════════════════════════════════════════ */
+            <>
+              {/* Toolbar */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/50 shrink-0">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4 text-violet-500" />
+                  <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Conversation</span>
+                  <span className="text-[10px] font-bold text-slate-400">• {messages.filter(m => !m.isTyping).length} messages</span>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleLiveMode}
+                    className="h-7 px-2.5 rounded-lg text-xs font-bold gap-1.5 bg-violet-50 text-violet-700 hover:bg-violet-100"
+                  >
+                    <Sparkles className="h-3 w-3 text-violet-600" />
+                    <span>Open Live Voice</span>
+                  </Button>
+
+                  {/* Stop audio button if currently speaking */}
+                  {speakingMsgId && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={stopSpeaking}
+                      className="h-7 px-2 text-rose-600 bg-rose-50 hover:bg-rose-100 text-xs font-bold rounded-lg gap-1 animate-pulse"
+                      title="Stop speaking"
+                    >
+                      <Square className="h-3 w-3 fill-rose-600" /> Stop Sound
+                    </Button>
+                  )}
+
+                  <Button
+                    variant="ghost" size="sm"
+                    onClick={handleClearChat}
+                    className="h-7 gap-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 text-xs font-bold rounded-lg"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" /> Clear
+                  </Button>
+                </div>
+              </div>
+
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 custom-scrollbar">
+                {messages.map(msg => (
+                  <div key={msg.id} className={cn("flex gap-3", msg.role === "user" ? "flex-row-reverse" : "flex-row")}>
+                    {/* Avatar */}
+                    <div className={cn(
+                      "h-8 w-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm",
+                      msg.role === "user" ? "bg-blue-600" : "bg-gradient-to-br from-violet-600 to-indigo-600"
+                    )}>
+                      {msg.role === "user" ? <User className="h-4 w-4 text-white" /> : <Bot className="h-4 w-4 text-white" />}
+                    </div>
+
+                    {/* Bubble */}
+                    <div className={cn(
+                      "max-w-[82%] rounded-2xl px-4 py-3 shadow-sm",
+                      msg.role === "user"
+                        ? "bg-blue-600 text-white rounded-tr-sm"
+                        : "bg-slate-50 border border-slate-200 text-slate-700 rounded-tl-sm"
+                    )}>
+                      {msg.isTyping ? (
+                        <div className="flex gap-1 items-center py-1 px-1">
+                          <span className="h-2 w-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                          <span className="h-2 w-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                          <span className="h-2 w-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                        </div>
+                      ) : msg.role === "user" ? (
+                        <p className="text-sm leading-relaxed">{msg.content}</p>
+                      ) : (
+                        <PlainMessage content={msg.content} isStreaming={msg.isStreaming} />
+                      )}
+                      {!msg.isTyping && (
+                        <div className="flex items-center justify-between mt-2 pt-1 border-t border-slate-100/60 gap-3">
+                          <p className={cn("text-[10px] font-bold", msg.role === "user" ? "text-blue-200 text-right w-full" : "text-slate-400")}>
+                            {dayjs(msg.timestamp).format("hh:mm A")}
+                            {msg.isStreaming && <span className="ml-1 text-violet-400">● typing...</span>}
+                          </p>
+                          {msg.role === "assistant" && !msg.isStreaming && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (speakingMsgId === msg.id) {
+                                  stopSpeaking();
+                                } else {
+                                  speakFullText(msg.content, msg.id);
+                                }
+                              }}
+                              className={cn(
+                                "px-2 py-0.5 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 shrink-0",
+                                speakingMsgId === msg.id
+                                  ? "bg-rose-100 text-rose-700 animate-pulse font-black"
+                                  : "text-slate-400 hover:text-violet-600 hover:bg-violet-50"
+                              )}
+                              title={speakingMsgId === msg.id ? "Stop voice" : "Listen to audio response"}
+                            >
+                              {speakingMsgId === msg.id ? (
+                                <>
+                                  <Square className="h-3 w-3 fill-rose-600 text-rose-600" />
+                                  <span>Stop Sound</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Volume2 className="h-3 w-3" />
+                                  <span>Listen 🔊</span>
+                                </>
+                              )}
+                            </button>
                           )}
-                          title={speakingMsgId === msg.id ? "Stop voice" : "Listen to audio response"}
-                        >
-                          {speakingMsgId === msg.id ? (
-                            <>
-                              <Square className="h-3 w-3 fill-rose-600 text-rose-600" />
-                              <span>Stop Sound</span>
-                            </>
-                          ) : (
-                            <>
-                              <Volume2 className="h-3 w-3" />
-                              <span>Listen 🔊</span>
-                            </>
-                          )}
-                        </button>
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
-              </div>
-            ))}
-            <div ref={chatBottomRef} />
-          </div>
-
-          {/* Quick suggestions */}
-          <div className="px-4 py-2 border-t border-slate-100 shrink-0">
-            <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
-              {QUICK_QUESTIONS.map(q => (
-                <button
-                  key={q.label}
-                  disabled={isSending}
-                  onClick={() => handleSend(q.label)}
-                  className="flex items-center gap-1.5 shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 transition-all disabled:opacity-50"
-                >
-                  <q.icon className={cn("h-3.5 w-3.5", q.color)} />
-                  {q.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Input & Voice Bar */}
-          <div className="px-4 py-3 border-t border-slate-100 bg-white shrink-0">
-            {/* Speech error alert */}
-            {voiceError && (
-              <div className="mb-2 flex items-center justify-between px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold animate-in fade-in shadow-2xs">
-                <span className="flex items-center gap-1.5">
-                  <span>⚠️</span>
-                  <span>{voiceError}</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setVoiceError(null)}
-                  className="text-amber-700 hover:text-amber-900 font-bold ml-2 text-base px-1 leading-none"
-                >
-                  ×
-                </button>
-              </div>
-            )}
-
-            {/* Google Assistant Listening Wave Banner */}
-            {isListening && (
-              <div className="mb-2.5 flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 border border-blue-200 text-slate-800 text-xs font-bold animate-in fade-in shadow-xs">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex items-center gap-1">
-                    <span className="h-2.5 w-2.5 rounded-full bg-[#4285F4] animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="h-2.5 w-2.5 rounded-full bg-[#EA4335] animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="h-2.5 w-2.5 rounded-full bg-[#FBBC05] animate-bounce" style={{ animationDelay: "300ms" }} />
-                    <span className="h-2.5 w-2.5 rounded-full bg-[#34A853] animate-bounce" style={{ animationDelay: "450ms" }} />
                   </div>
-                  <span className="text-slate-700 font-extrabold">Mic Active: Listening... Speak naturally!</span>
+                ))}
+                <div ref={chatBottomRef} />
+              </div>
+
+              {/* Quick suggestions */}
+              <div className="px-4 py-2 border-t border-slate-100 shrink-0">
+                <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                  {QUICK_QUESTIONS.map(q => (
+                    <button
+                      key={q.label}
+                      disabled={isSending}
+                      onClick={() => handleSend(q.label, false)}
+                      className="flex items-center gap-1.5 shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 transition-all disabled:opacity-50"
+                    >
+                      <q.icon className={cn("h-3.5 w-3.5", q.color)} />
+                      {q.label}
+                    </button>
+                  ))}
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setAutoSendVoice(prev => !prev)}
+              </div>
+
+              {/* Standard Mode Input & Voice Bar */}
+              <div className="px-4 py-3 border-t border-slate-100 bg-white shrink-0">
+                {/* Speech error alert (only if actual error like permission denied) */}
+                {voiceError && (
+                  <div className="mb-2 flex items-center justify-between px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold animate-in fade-in shadow-2xs">
+                    <span className="flex items-center gap-1.5">
+                      <span>⚠️</span>
+                      <span>{voiceError}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setVoiceError(null)}
+                      className="text-amber-700 hover:text-amber-900 font-bold ml-2 text-base px-1 leading-none"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+
+                {/* Google Assistant Listening Wave Banner */}
+                {isListening && (
+                  <div className="mb-2.5 flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 border border-blue-200 text-slate-800 text-xs font-bold animate-in fade-in shadow-xs">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-1">
+                        <span className="h-2.5 w-2.5 rounded-full bg-[#4285F4] animate-bounce" style={{ animationDelay: "0ms" }} />
+                        <span className="h-2.5 w-2.5 rounded-full bg-[#EA4335] animate-bounce" style={{ animationDelay: "150ms" }} />
+                        <span className="h-2.5 w-2.5 rounded-full bg-[#FBBC05] animate-bounce" style={{ animationDelay: "300ms" }} />
+                        <span className="h-2.5 w-2.5 rounded-full bg-[#34A853] animate-bounce" style={{ animationDelay: "450ms" }} />
+                      </div>
+                      <span className="text-slate-700 font-extrabold">Mic Active: Speak naturally in Hindi/English...</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const query = latestVoiceTranscriptRef.current?.trim() || input.trim();
+                          stopListening();
+                          if (query) handleSendRef.current(query, true);
+                        }}
+                        className="text-[10px] font-black uppercase text-violet-700 bg-violet-100 hover:bg-violet-200 px-2.5 py-1 rounded-lg border border-violet-200 shadow-2xs"
+                      >
+                        Send Now
+                      </button>
+                      <button
+                        type="button"
+                        onClick={stopListening}
+                        className="text-[10px] font-black uppercase text-rose-600 hover:text-rose-800 bg-white px-2.5 py-1 rounded-lg border border-rose-200 shadow-2xs"
+                      >
+                        Stop Mic
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-2 items-end">
+                  <Textarea
+                    ref={textareaRef}
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Ask anything about your staff… (Type quietly or click 🎙️ Mic to talk aloud)"
                     className={cn(
-                      "text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border transition-all shadow-2xs",
-                      autoSendVoice
-                        ? "bg-violet-600 text-white border-violet-600"
-                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                      "min-h-[44px] max-h-[120px] resize-none rounded-xl text-sm font-medium focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all",
+                      isListening ? "border-rose-400 bg-rose-50/20 ring-2 ring-rose-200" : "border-slate-200"
                     )}
-                    title="Toggle hands-free auto-send after you pause"
-                  >
-                    Auto-Send: {autoSendVoice ? "ON" : "OFF"}
-                  </button>
-                  <button
+                    rows={1}
+                    disabled={isSending}
+                  />
+                  
+                  {/* Mic Option */}
+                  <Button
                     type="button"
-                    onClick={() => {
-                      const query = latestVoiceTranscriptRef.current?.trim() || input.trim();
-                      stopListening();
-                      if (query) handleSendRef.current(query);
-                    }}
-                    className="text-[10px] font-black uppercase text-violet-700 bg-violet-100 hover:bg-violet-200 px-2.5 py-1 rounded-lg border border-violet-200 shadow-2xs"
+                    onClick={isListening ? stopListening : startListening}
+                    className={cn(
+                      "h-11 w-11 p-0 rounded-xl shrink-0 transition-all shadow-sm border",
+                      isListening
+                        ? "bg-rose-600 hover:bg-rose-700 text-white border-rose-500 animate-pulse ring-4 ring-rose-200 shadow-rose-200"
+                        : "bg-slate-100 hover:bg-violet-100 hover:text-violet-700 text-slate-700 border-slate-200"
+                    )}
+                    title={isListening ? "Listening... Click to stop" : "Speak to AI (Microphone)"}
                   >
-                    Send Now
-                  </button>
-                  <button
-                    type="button"
-                    onClick={stopListening}
-                    className="text-[10px] font-black uppercase text-rose-600 hover:text-rose-800 bg-white px-2.5 py-1 rounded-lg border border-rose-200 shadow-2xs"
+                    {isListening ? <MicOff className="h-5 w-5 text-white" /> : <Mic className="h-5 w-5" />}
+                  </Button>
+
+                  {/* Send Button */}
+                  <Button
+                    onClick={() => handleSend(undefined, false)}
+                    disabled={!input.trim() || isSending}
+                    className="h-11 w-11 p-0 rounded-xl bg-gradient-to-br from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 shadow-lg shadow-violet-200 shrink-0"
+                    title="Send Message"
                   >
-                    Stop Mic
-                  </button>
+                    {isSending ? <Loader2 className="h-4 w-4 animate-spin text-white" /> : <Send className="h-4 w-4 text-white" />}
+                  </Button>
                 </div>
               </div>
-            )}
-
-            {/* Speaking Live Audio Status Bar */}
-            {speakingMsgId && !isListening && (
-              <div className="mb-2 flex items-center justify-between px-3 py-1.5 rounded-xl bg-violet-50 border border-violet-200 text-violet-800 text-xs font-bold animate-in fade-in">
-                <div className="flex items-center gap-2">
-                  <Volume2 className="h-3.5 w-3.5 text-violet-600 animate-pulse" />
-                  <span className="text-[11px] font-bold text-violet-700">AI Assistant Speaking... (Tap 🎙️ Mic or Stop to interrupt)</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={stopSpeaking}
-                  className="text-[10px] font-black uppercase text-rose-600 hover:text-rose-800 bg-white px-2 py-0.5 rounded-md border border-rose-200"
-                >
-                  Stop
-                </button>
-              </div>
-            )}
-
-            <div className="flex gap-2 items-end">
-              <Textarea
-                ref={textareaRef}
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={isListening ? "Listening to your voice..." : "Ask anything about your staff… (Type or click 🎙️ Mic to speak)"}
-                className={cn(
-                  "min-h-[44px] max-h-[120px] resize-none rounded-xl text-sm font-medium focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all",
-                  isListening ? "border-rose-400 bg-rose-50/20 ring-2 ring-rose-200" : "border-slate-200"
-                )}
-                rows={1}
-                disabled={isSending}
-              />
-              
-              {/* Mic Option */}
-              <Button
-                type="button"
-                onClick={isListening ? stopListening : startListening}
-                className={cn(
-                  "h-11 w-11 p-0 rounded-xl shrink-0 transition-all shadow-sm border",
-                  isListening
-                    ? "bg-rose-600 hover:bg-rose-700 text-white border-rose-500 animate-pulse ring-4 ring-rose-200 shadow-rose-200"
-                    : "bg-slate-100 hover:bg-violet-100 hover:text-violet-700 text-slate-700 border-slate-200"
-                )}
-                title={isListening ? "Listening... Click to stop" : "Speak to AI (Microphone)"}
-              >
-                {isListening ? <MicOff className="h-5 w-5 text-white" /> : <Mic className="h-5 w-5" />}
-              </Button>
-
-              {/* Send Button */}
-              <Button
-                onClick={() => handleSend()}
-                disabled={!input.trim() || isSending}
-                className="h-11 w-11 p-0 rounded-xl bg-gradient-to-br from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 shadow-lg shadow-violet-200 shrink-0"
-                title="Send Message"
-              >
-                {isSending ? <Loader2 className="h-4 w-4 animate-spin text-white" /> : <Send className="h-4 w-4 text-white" />}
-              </Button>
-            </div>
-          </div>
+            </>
+          )}
         </div>
 
         {/* ── Right: Smart Notifications Panel ─── */}
