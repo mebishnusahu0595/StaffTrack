@@ -658,6 +658,12 @@ export default function AiAssistantPage() {
                             }
                           }}
                           className={cn(
+                            "px-2 py-0.5 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 shrink-0",
+                            speakingMsgId === msg.id
+                              ? "bg-rose-100 text-rose-700 animate-pulse font-black"
+                              : "text-slate-400 hover:text-violet-600 hover:bg-violet-50"
+                          )}
+                          title={speakingMsgId === msg.id ? "Stop voice" : "Listen to audio response"}
                         >
                           {speakingMsgId === msg.id ? (
                             <>
