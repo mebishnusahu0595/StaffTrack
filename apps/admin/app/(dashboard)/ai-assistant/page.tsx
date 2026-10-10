@@ -143,16 +143,29 @@ export default function AiAssistantPage() {
   const [sentIds, setSentIds] = useState<Set<string>>(new Set());
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
-  // Voice & Audio Speech State
+  // Voice & Audio Speech State (Google Assistant Ultra-Low Latency Mode)
   const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(true);
   const voiceOutputEnabledRef = useRef(true);
   const [isListening, setIsListening] = useState(false);
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
+  const silenceTimerRef = useRef<any>(null);
+  const latestVoiceTranscriptRef = useRef<string>("");
+  const activeUtterancesRef = useRef<number>(0);
 
   useEffect(() => {
     voiceOutputEnabledRef.current = voiceOutputEnabled;
   }, [voiceOutputEnabled]);
+
+  const getPreferredVoice = useCallback(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
+    const voices = window.speechSynthesis.getVoices();
+    return voices.find(v => (v.name.includes("Google") || v.name.includes("Natural")) && (v.lang.includes("en-IN") || v.lang.includes("hi")))
+      || voices.find(v => v.lang.includes("en-IN") || v.lang.includes("hi-IN"))
+      || voices.find(v => v.name.includes("Google") && v.lang.startsWith("en"))
+      || voices.find(v => v.lang.startsWith("en-"))
+      || voices[0] || null;
+  }, []);
 
   useEffect(() => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
@@ -165,6 +178,7 @@ export default function AiAssistantPage() {
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
       }
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch {}
       }
@@ -176,107 +190,85 @@ export default function AiAssistantPage() {
       .replace(/\[SEND_NOTIFICATION[^\]]*\]/g, "")
       .replace(/\[MARK_HOLIDAY[^\]]*\]/g, "")
       .replace(/\[BULK_NOTIFY[^\]]*\]/g, "")
-      .replace(/[•\-\*]/g, "")
+      .replace(/[•\-\*\_#]/g, " ")
       .replace(/https?:\/\/\S+/g, "")
       .replace(/\n+/g, ". ")
       .trim();
   };
 
-  const stopSpeaking = () => {
+  const stopSpeaking = useCallback(() => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
+      activeUtterancesRef.current = 0;
       setSpeakingMsgId(null);
     }
-  };
+  }, []);
 
-  const speakText = (text: string, msgId?: string) => {
+  const queueSentenceForSpeech = useCallback((sentence: string, msgId: string) => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
+    if (!voiceOutputEnabledRef.current) return;
+
+    const cleaned = cleanTextForSpeech(sentence);
+    // Ignore trivial punctuation fragments
+    if (!cleaned || cleaned.replace(/[^a-zA-Z0-9]/g, "").length < 2) return;
+
+    try {
+      const utterance = new SpeechSynthesisUtterance(cleaned);
+      const voice = getPreferredVoice();
+      if (voice) utterance.voice = voice;
+      utterance.rate = 1.08; // crisp, responsive speed
+      utterance.pitch = 1.0;
+
+      utterance.onstart = () => {
+        activeUtterancesRef.current += 1;
+        setSpeakingMsgId(msgId);
+      };
+
+      utterance.onend = () => {
+        activeUtterancesRef.current = Math.max(0, activeUtterancesRef.current - 1);
+        if (activeUtterancesRef.current === 0) {
+          setSpeakingMsgId(null);
+        }
+      };
+
+      utterance.onerror = () => {
+        activeUtterancesRef.current = Math.max(0, activeUtterancesRef.current - 1);
+        if (activeUtterancesRef.current === 0) {
+          setSpeakingMsgId(null);
+        }
+      };
+
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.warn("TTS error:", e);
+    }
+  }, [getPreferredVoice]);
+
+  const speakFullText = useCallback((text: string, msgId?: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    stopSpeaking();
 
     const cleaned = cleanTextForSpeech(text);
     if (!cleaned) return;
 
-    // Speak up to first 8 sentences for natural concise audio responses
     const sentences = cleaned.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [cleaned];
-    const speechContent = sentences.slice(0, 8).join(" ");
-
-    const utterance = new SpeechSynthesisUtterance(speechContent);
-    const voices = window.speechSynthesis.getVoices();
-    const preferredVoice = voices.find(v => v.lang.includes("hi-IN") || v.lang.includes("en-IN")) 
-      || voices.find(v => v.lang.startsWith("en-")) 
-      || voices[0];
-    if (preferredVoice) utterance.voice = preferredVoice;
-    utterance.rate = 1.05;
-    utterance.pitch = 1.0;
-
-    utterance.onstart = () => {
-      setSpeakingMsgId(msgId || "active");
-    };
-    utterance.onend = () => {
-      setSpeakingMsgId(null);
-    };
-    utterance.onerror = () => {
-      setSpeakingMsgId(null);
-    };
-
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const startListening = () => {
-    if (typeof window === "undefined") return;
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Microphone speech recognition is supported in Chrome, Edge, and Android browsers. Please ensure microphone access is allowed.");
-      return;
+    for (const s of sentences.slice(0, 6)) {
+      queueSentenceForSpeech(s, msgId || "active");
     }
+  }, [stopSpeaking, queueSentenceForSpeech]);
 
-    stopSpeaking();
-
-    try {
-      const recognition = new SpeechRecognition();
-      recognitionRef.current = recognition;
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.lang = "en-IN";
-
-      recognition.onstart = () => {
-        setIsListening(true);
-      };
-
-      recognition.onresult = (event: any) => {
-        let transcript = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
-        }
-        if (transcript) {
-          setInput(transcript);
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        console.warn("Speech recognition error:", event.error);
-        setIsListening(false);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      recognition.start();
-    } catch (err) {
-      console.warn("Speech recognition start failed:", err);
-      setIsListening(false);
+  const stopListening = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
     }
-  };
-
-  const stopListening = () => {
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
       } catch { /* noop */ }
       setIsListening(false);
     }
-  };
+  }, []);
 
   const { data: smartNotifications = [], isFetching: isLoadingNotifs, refetch: refetchNotifs } = useQuery({
     queryKey: ["smart-notifications"],
@@ -306,6 +298,8 @@ export default function AiAssistantPage() {
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const handleSendRef = useRef<(text?: string) => Promise<void>>(async () => {});
 
   const handleSend = useCallback(async (messageText?: string) => {
     const text = (messageText ?? input).trim();
@@ -338,6 +332,8 @@ export default function AiAssistantPage() {
       const stream = streamAiChat(text);
       let first = true;
       let actionResult: any = null;
+      let speechStreamBuffer = "";
+      let sentencesSpokenCount = 0;
 
       for await (const chunk of stream) {
         if (abortRef.current) break;
@@ -361,10 +357,27 @@ export default function AiAssistantPage() {
             m.id === aiId ? { ...m, content: m.content + chunk } : m
           ));
         }
+
+        // ULTRA-LOW LATENCY: Sentence-by-sentence TTS streaming (Google Assistant Experience)
+        // Speak sentence 1 immediately while sentence 2 is still streaming!
+        if (voiceOutputEnabledRef.current && sentencesSpokenCount < 5) {
+          speechStreamBuffer += chunk;
+          const match = speechStreamBuffer.match(/^(.*?[.!?\n]+)\s*(.*)$/s);
+          if (match) {
+            const completedSentence = match[1];
+            speechStreamBuffer = match[2] || "";
+            queueSentenceForSpeech(completedSentence, aiId);
+            sentencesSpokenCount++;
+          }
+        }
+      }
+
+      // Finish speaking remaining buffer
+      if (voiceOutputEnabledRef.current && speechStreamBuffer.trim() && sentencesSpokenCount < 5) {
+        queueSentenceForSpeech(speechStreamBuffer.trim(), aiId);
       }
 
       // Mark streaming done and append action results status description if any
-      let finalSpeechText = "";
       setMessages(prev => prev.map(m => {
         if (m.id === aiId) {
           let updatedContent = m.content;
@@ -378,16 +391,10 @@ export default function AiAssistantPage() {
               updatedContent += `\n\n⚡ Action Successful: Sent push notification alert to ${actionResult.actions?.length || actionResult.sent} staff member(s).`;
             }
           }
-          finalSpeechText = updatedContent;
           return { ...m, isStreaming: false, content: updatedContent };
         }
         return m;
       }));
-
-      // Speak response in voice/sound if enabled
-      if (voiceOutputEnabledRef.current && finalSpeechText) {
-        speakText(finalSpeechText, aiId);
-      }
 
       // Force notification panel refetch if any action was taken
       if (actionResult) {
@@ -402,7 +409,82 @@ export default function AiAssistantPage() {
     } finally {
       setIsSending(false);
     }
-  }, [input, isSending]);
+  }, [input, isSending, queueSentenceForSpeech, refetchNotifs, stopListening, stopSpeaking]);
+
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  }, [handleSend]);
+
+  const startListening = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Microphone speech recognition is supported in Google Chrome, Microsoft Edge, and Android browsers. Please ensure microphone permissions are allowed.");
+      return;
+    }
+
+    // Google Assistant Barge-In: immediately interrupt any currently playing audio
+    stopSpeaking();
+    stopListening();
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-IN"; // English (India) with seamless Hinglish recognition
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let transcript = "";
+        let hasFinal = false;
+        for (let i = 0; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            hasFinal = true;
+          }
+        }
+
+        if (transcript) {
+          setInput(transcript);
+          latestVoiceTranscriptRef.current = transcript;
+
+          if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current);
+          }
+
+          // Hands-free auto-send on silence pause like Google Assistant
+          const delay = hasFinal ? 750 : 1300;
+          silenceTimerRef.current = setTimeout(() => {
+            const query = latestVoiceTranscriptRef.current?.trim();
+            if (query && !isSending) {
+              stopListening();
+              handleSendRef.current(query);
+            }
+          }, delay);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn("Speech recognition warning:", event.error);
+        if (event.error !== "no-speech") {
+          setIsListening(false);
+        }
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.start();
+    } catch (err) {
+      console.warn("Speech recognition start failed:", err);
+      setIsListening(false);
+    }
+  }, [stopSpeaking, stopListening, isSending]);
 
   const handleClearChat = useCallback(async () => {
     abortRef.current = true;
@@ -544,7 +626,7 @@ export default function AiAssistantPage() {
                             if (speakingMsgId === msg.id) {
                               stopSpeaking();
                             } else {
-                              speakText(msg.content, msg.id);
+                              speakFullText(msg.content, msg.id);
                             }
                           }}
                           className={cn(
@@ -593,23 +675,56 @@ export default function AiAssistantPage() {
             </div>
           </div>
 
-          {/* Input */}
+          {/* Input & Voice Bar */}
           <div className="px-4 py-3 border-t border-slate-100 bg-white shrink-0">
+            {/* Google Assistant Listening Wave Banner */}
             {isListening && (
-              <div className="mb-2 flex items-center justify-between px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-50 to-pink-50 border border-rose-200 text-rose-700 text-xs font-bold animate-in fade-in shadow-xs">
+              <div className="mb-2.5 flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 border border-blue-200 text-slate-800 text-xs font-bold animate-in fade-in shadow-xs">
                 <div className="flex items-center gap-2.5">
-                  <span className="relative flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-600"></span>
-                  </span>
-                  <span>🎙️ Mic Active: Listening to your voice... Speak now!</span>
+                  <div className="flex items-center gap-1">
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#4285F4] animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#EA4335] animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#FBBC05] animate-bounce" style={{ animationDelay: "300ms" }} />
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#34A853] animate-bounce" style={{ animationDelay: "450ms" }} />
+                  </div>
+                  <span className="text-slate-700 font-extrabold">Google Assistant Voice: Listening... <span className="text-slate-400 font-medium">(Auto-sends on pause)</span></span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const query = latestVoiceTranscriptRef.current?.trim();
+                      stopListening();
+                      if (query) handleSendRef.current(query);
+                    }}
+                    className="text-[10px] font-black uppercase text-violet-700 bg-violet-100 hover:bg-violet-200 px-2.5 py-1 rounded-lg border border-violet-200 shadow-2xs"
+                  >
+                    Send Now
+                  </button>
+                  <button
+                    type="button"
+                    onClick={stopListening}
+                    className="text-[10px] font-black uppercase text-rose-600 hover:text-rose-800 bg-white px-2 py-1 rounded-lg border border-rose-200 shadow-2xs"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Speaking Live Audio Status Bar */}
+            {speakingMsgId && !isListening && (
+              <div className="mb-2 flex items-center justify-between px-3 py-1.5 rounded-xl bg-violet-50 border border-violet-200 text-violet-800 text-xs font-bold animate-in fade-in">
+                <div className="flex items-center gap-2">
+                  <Volume2 className="h-3.5 w-3.5 text-violet-600 animate-pulse" />
+                  <span className="text-[11px] font-bold text-violet-700">AI Assistant Speaking... (Tap 🎙️ Mic or Stop to interrupt)</span>
                 </div>
                 <button
                   type="button"
-                  onClick={stopListening}
-                  className="text-[10px] font-black uppercase text-rose-600 hover:text-rose-800 bg-white px-2.5 py-1 rounded-lg border border-rose-200 shadow-2xs"
+                  onClick={stopSpeaking}
+                  className="text-[10px] font-black uppercase text-rose-600 hover:text-rose-800 bg-white px-2 py-0.5 rounded-md border border-rose-200"
                 >
-                  Done Speaking
+                  Stop
                 </button>
               </div>
             )}
