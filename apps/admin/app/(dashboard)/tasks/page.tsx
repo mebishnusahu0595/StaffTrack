@@ -2193,7 +2193,7 @@ function DealerSelector({
     try {
       const created = await createDealer(newDealer);
       queryClient.invalidateQueries({ queryKey: ["dealers"] });
-      onChange([...selectedDealerIds, created.id]);
+      onChange([created.id]);
       setNewDealer({ name: "", phone: "", city: "", gstin: "" });
       setShowAddModal(false);
     } catch (err: any) {
@@ -2205,9 +2205,9 @@ function DealerSelector({
 
   const toggleDealer = (dealerId: string) => {
     if (selectedDealerIds.includes(dealerId)) {
-      onChange(selectedDealerIds.filter(id => id !== dealerId));
+      onChange([]);
     } else {
-      onChange([...selectedDealerIds, dealerId]);
+      onChange([dealerId]);
     }
   };
 
@@ -2215,7 +2215,7 @@ function DealerSelector({
     <div className="space-y-2 border border-blue-100 bg-blue-50/40 p-4 rounded-2xl">
       <div className="flex items-center justify-between">
         <Label className="text-[10px] font-black uppercase tracking-wider text-blue-800 flex items-center gap-1.5">
-          <Store className="h-4 w-4 text-blue-600" /> Select Dealers (Multi-select)
+          <Store className="h-4 w-4 text-blue-600" /> Select Dealer (Single-select)
         </Label>
         <button
           type="button"
@@ -2827,13 +2827,13 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
                )}
             </div>
 
-            {/* Dealer Selector (Multi-Select & Add Dealer) */}
+            {/* Dealer Selector (Single-Select & Add Dealer) */}
             {data.taskType === "DEALER" && (
               <DealerSelector
-                selectedDealerIds={data.dealerIds || []}
+                selectedDealerIds={data.dealerIds.slice(-1)}
                 onChange={(ids) => setData(prev => ({
                   ...prev,
-                  dealerIds: ids,
+                  dealerIds: ids.slice(-1),
                   taskType: ids.length > 0 && (prev.taskType === "NORMAL" || !prev.taskType) ? "DEALER" : prev.taskType
                 }))}
               />
@@ -3656,7 +3656,7 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
     attachmentUrl: task.attachmentUrl || null as string | null,
     attachmentName: task.attachmentName || null as string | null,
     taskType: task.taskType || "NORMAL",
-    dealerIds: (task.dealers || []).map((d: any) => d.id) as string[],
+    dealerIds: (task.dealers || []).slice(0, 1).map((d: any) => d.id) as string[],
     farmerIds: (task.farmers || []).map((f: any) => f.id) as string[],
     repeatFrequency: task.repeatFrequency || "NONE",
 
@@ -3723,7 +3723,7 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
       attachmentUrl: task.attachmentUrl || null,
       attachmentName: task.attachmentName || null,
       taskType: task.taskType || "NORMAL",
-      dealerIds: (task.dealers || []).map((d: any) => d.id),
+      dealerIds: (task.dealers || []).slice(0, 1).map((d: any) => d.id),
       farmerIds: (task.farmers || []).map((f: any) => f.id),
       repeatFrequency: task.repeatFrequency || "NONE",
       repeatDays: task.repeatDays ? task.repeatDays.split(',').map((x: string) => parseInt(x)).filter((x: number) => !isNaN(x)) : [],
@@ -3997,13 +3997,13 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
                )}
             </div>
 
-            {/* Dealer Selector (Multi-Select & Add Dealer) */}
+            {/* Dealer Selector (Single-Select & Add Dealer) */}
             {data.taskType === "DEALER" && (
               <DealerSelector
-                selectedDealerIds={data.dealerIds || []}
+                selectedDealerIds={data.dealerIds.slice(-1)}
                 onChange={(ids) => setData(prev => ({
                   ...prev,
-                  dealerIds: ids,
+                  dealerIds: ids.slice(-1),
                   taskType: ids.length > 0 && (prev.taskType === "NORMAL" || !prev.taskType) ? "DEALER" : prev.taskType
                 }))}
               />
