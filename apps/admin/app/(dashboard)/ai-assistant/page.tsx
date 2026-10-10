@@ -6,7 +6,7 @@ import {
   Bot, Send, RefreshCw, Sparkles, AlertTriangle,
   CheckSquare, Bell, BellRing, Loader2,
   User, Clock, ClipboardList, TrendingDown, MessageSquare,
-  Zap, X, Check, RotateCcw
+  Zap, X, Check, RotateCcw, Mic, MicOff, Volume2, VolumeX, Square
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -143,6 +143,141 @@ export default function AiAssistantPage() {
   const [sentIds, setSentIds] = useState<Set<string>>(new Set());
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
+  // Voice & Audio Speech State
+  const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(true);
+  const voiceOutputEnabledRef = useRef(true);
+  const [isListening, setIsListening] = useState(false);
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    voiceOutputEnabledRef.current = voiceOutputEnabled;
+  }, [voiceOutputEnabled]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+      };
+    }
+    return () => {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+      }
+    };
+  }, []);
+
+  const cleanTextForSpeech = (raw: string) => {
+    return raw
+      .replace(/\[SEND_NOTIFICATION[^\]]*\]/g, "")
+      .replace(/\[MARK_HOLIDAY[^\]]*\]/g, "")
+      .replace(/\[BULK_NOTIFY[^\]]*\]/g, "")
+      .replace(/[•\-\*]/g, "")
+      .replace(/https?:\/\/\S+/g, "")
+      .replace(/\n+/g, ". ")
+      .trim();
+  };
+
+  const stopSpeaking = () => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setSpeakingMsgId(null);
+    }
+  };
+
+  const speakText = (text: string, msgId?: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+
+    const cleaned = cleanTextForSpeech(text);
+    if (!cleaned) return;
+
+    // Speak up to first 8 sentences for natural concise audio responses
+    const sentences = cleaned.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [cleaned];
+    const speechContent = sentences.slice(0, 8).join(" ");
+
+    const utterance = new SpeechSynthesisUtterance(speechContent);
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(v => v.lang.includes("hi-IN") || v.lang.includes("en-IN")) 
+      || voices.find(v => v.lang.startsWith("en-")) 
+      || voices[0];
+    if (preferredVoice) utterance.voice = preferredVoice;
+    utterance.rate = 1.05;
+    utterance.pitch = 1.0;
+
+    utterance.onstart = () => {
+      setSpeakingMsgId(msgId || "active");
+    };
+    utterance.onend = () => {
+      setSpeakingMsgId(null);
+    };
+    utterance.onerror = () => {
+      setSpeakingMsgId(null);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const startListening = () => {
+    if (typeof window === "undefined") return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Microphone speech recognition is supported in Chrome, Edge, and Android browsers. Please ensure microphone access is allowed.");
+      return;
+    }
+
+    stopSpeaking();
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = "en-IN";
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript) {
+          setInput(transcript);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn("Speech recognition error:", event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.start();
+    } catch (err) {
+      console.warn("Speech recognition start failed:", err);
+      setIsListening(false);
+    }
+  };
+
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch { /* noop */ }
+      setIsListening(false);
+    }
+  };
+
   const { data: smartNotifications = [], isFetching: isLoadingNotifs, refetch: refetchNotifs } = useQuery({
     queryKey: ["smart-notifications"],
     queryFn: fetchSmartNotifications,
@@ -178,6 +313,8 @@ export default function AiAssistantPage() {
     setInput("");
     setIsSending(true);
     abortRef.current = false;
+    stopSpeaking();
+    stopListening();
 
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -227,6 +364,7 @@ export default function AiAssistantPage() {
       }
 
       // Mark streaming done and append action results status description if any
+      let finalSpeechText = "";
       setMessages(prev => prev.map(m => {
         if (m.id === aiId) {
           let updatedContent = m.content;
@@ -240,10 +378,16 @@ export default function AiAssistantPage() {
               updatedContent += `\n\n⚡ Action Successful: Sent push notification alert to ${actionResult.actions?.length || actionResult.sent} staff member(s).`;
             }
           }
+          finalSpeechText = updatedContent;
           return { ...m, isStreaming: false, content: updatedContent };
         }
         return m;
       }));
+
+      // Speak response in voice/sound if enabled
+      if (voiceOutputEnabledRef.current && finalSpeechText) {
+        speakText(finalSpeechText, aiId);
+      }
 
       // Force notification panel refetch if any action was taken
       if (actionResult) {
@@ -262,6 +406,8 @@ export default function AiAssistantPage() {
 
   const handleClearChat = useCallback(async () => {
     abortRef.current = true;
+    stopSpeaking();
+    stopListening();
     await aiClearSession().catch(() => {});
     setMessages([{
       id: "welcome-new",
@@ -288,12 +434,12 @@ export default function AiAssistantPage() {
           </div>
           <div>
             <h1 className="text-xl font-black text-slate-900 leading-tight">AI Staff Assistant</h1>
-            <p className="text-xs font-semibold text-slate-400">Powered by Gemini 3.5 Flash • Full staff context</p>
+            <p className="text-xs font-semibold text-slate-400">Powered by Gemini 3.8 Live & Flash • Voice & Sound Enabled • Full staff context</p>
           </div>
         </div>
         <Badge variant="outline" className="gap-1.5 border-violet-200 bg-violet-50 text-violet-700 font-bold px-3 py-1">
-          <Sparkles className="h-3.5 w-3.5" />
-          Gemini AI
+          <Mic className="h-3.5 w-3.5 text-violet-600" />
+          Gemini 3.8 Live AI
         </Badge>
       </div>
 
@@ -310,13 +456,49 @@ export default function AiAssistantPage() {
               <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Conversation</span>
               <span className="text-[10px] font-bold text-slate-400">• {messages.filter(m => !m.isTyping).length} messages</span>
             </div>
-            <Button
-              variant="ghost" size="sm"
-              onClick={handleClearChat}
-              className="h-7 gap-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 text-xs font-bold rounded-lg"
-            >
-              <RotateCcw className="h-3.5 w-3.5" /> Clear
-            </Button>
+            
+            <div className="flex items-center gap-2">
+              {/* Voice Sound Toggle */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  if (speakingMsgId) stopSpeaking();
+                  setVoiceOutputEnabled(!voiceOutputEnabled);
+                }}
+                className={cn(
+                  "h-7 px-2.5 rounded-lg text-xs font-bold gap-1.5 transition-all",
+                  voiceOutputEnabled
+                    ? "bg-violet-100 text-violet-700 hover:bg-violet-200"
+                    : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                )}
+                title={voiceOutputEnabled ? "Voice Response Active (Click to mute)" : "Voice Response Muted (Click to enable)"}
+              >
+                {voiceOutputEnabled ? <Volume2 className="h-3.5 w-3.5 text-violet-600" /> : <VolumeX className="h-3.5 w-3.5" />}
+                <span>Sound: {voiceOutputEnabled ? "ON" : "OFF"}</span>
+              </Button>
+
+              {/* Stop audio button if currently speaking */}
+              {speakingMsgId && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={stopSpeaking}
+                  className="h-7 px-2 text-rose-600 bg-rose-50 hover:bg-rose-100 text-xs font-bold rounded-lg gap-1 animate-pulse"
+                  title="Stop speaking"
+                >
+                  <Square className="h-3 w-3 fill-rose-600" /> Stop Sound
+                </Button>
+              )}
+
+              <Button
+                variant="ghost" size="sm"
+                onClick={handleClearChat}
+                className="h-7 gap-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 text-xs font-bold rounded-lg"
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> Clear
+              </Button>
+            </div>
           </div>
 
           {/* Messages */}
@@ -350,10 +532,43 @@ export default function AiAssistantPage() {
                     <PlainMessage content={msg.content} isStreaming={msg.isStreaming} />
                   )}
                   {!msg.isTyping && (
-                    <p className={cn("text-[10px] mt-2 font-bold", msg.role === "user" ? "text-blue-200 text-right" : "text-slate-400")}>
-                      {dayjs(msg.timestamp).format("hh:mm A")}
-                      {msg.isStreaming && <span className="ml-1 text-violet-400">● typing...</span>}
-                    </p>
+                    <div className="flex items-center justify-between mt-2 pt-1 border-t border-slate-100/60 gap-3">
+                      <p className={cn("text-[10px] font-bold", msg.role === "user" ? "text-blue-200 text-right w-full" : "text-slate-400")}>
+                        {dayjs(msg.timestamp).format("hh:mm A")}
+                        {msg.isStreaming && <span className="ml-1 text-violet-400">● typing...</span>}
+                      </p>
+                      {msg.role === "assistant" && !msg.isStreaming && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (speakingMsgId === msg.id) {
+                              stopSpeaking();
+                            } else {
+                              speakText(msg.content, msg.id);
+                            }
+                          }}
+                          className={cn(
+                            "px-2 py-0.5 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 shrink-0",
+                            speakingMsgId === msg.id
+                              ? "bg-rose-100 text-rose-700 animate-pulse font-black"
+                              : "text-slate-400 hover:text-violet-600 hover:bg-violet-50"
+                          )}
+                          title={speakingMsgId === msg.id ? "Stop voice" : "Listen to audio response"}
+                        >
+                          {speakingMsgId === msg.id ? (
+                            <>
+                              <Square className="h-3 w-3 fill-rose-600 text-rose-600" />
+                              <span>Stop Sound</span>
+                            </>
+                          ) : (
+                            <>
+                              <Volume2 className="h-3 w-3" />
+                              <span>Listen 🔊</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -380,21 +595,61 @@ export default function AiAssistantPage() {
 
           {/* Input */}
           <div className="px-4 py-3 border-t border-slate-100 bg-white shrink-0">
+            {isListening && (
+              <div className="mb-2 flex items-center justify-between px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-50 to-pink-50 border border-rose-200 text-rose-700 text-xs font-bold animate-in fade-in shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-600"></span>
+                  </span>
+                  <span>🎙️ Mic Active: Listening to your voice... Speak now!</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={stopListening}
+                  className="text-[10px] font-black uppercase text-rose-600 hover:text-rose-800 bg-white px-2.5 py-1 rounded-lg border border-rose-200 shadow-2xs"
+                >
+                  Done Speaking
+                </button>
+              </div>
+            )}
+
             <div className="flex gap-2 items-end">
               <Textarea
                 ref={textareaRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask anything about your staff… (Enter to send, Shift+Enter for new line)"
-                className="min-h-[44px] max-h-[120px] resize-none rounded-xl border-slate-200 text-sm font-medium focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400"
+                placeholder={isListening ? "Listening to your voice..." : "Ask anything about your staff… (Type or click 🎙️ Mic to speak)"}
+                className={cn(
+                  "min-h-[44px] max-h-[120px] resize-none rounded-xl text-sm font-medium focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all",
+                  isListening ? "border-rose-400 bg-rose-50/20 ring-2 ring-rose-200" : "border-slate-200"
+                )}
                 rows={1}
                 disabled={isSending}
               />
+              
+              {/* Mic Option */}
+              <Button
+                type="button"
+                onClick={isListening ? stopListening : startListening}
+                className={cn(
+                  "h-11 w-11 p-0 rounded-xl shrink-0 transition-all shadow-sm border",
+                  isListening
+                    ? "bg-rose-600 hover:bg-rose-700 text-white border-rose-500 animate-pulse ring-4 ring-rose-200 shadow-rose-200"
+                    : "bg-slate-100 hover:bg-violet-100 hover:text-violet-700 text-slate-700 border-slate-200"
+                )}
+                title={isListening ? "Listening... Click to stop" : "Speak to AI (Microphone)"}
+              >
+                {isListening ? <MicOff className="h-5 w-5 text-white" /> : <Mic className="h-5 w-5" />}
+              </Button>
+
+              {/* Send Button */}
               <Button
                 onClick={() => handleSend()}
                 disabled={!input.trim() || isSending}
                 className="h-11 w-11 p-0 rounded-xl bg-gradient-to-br from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 shadow-lg shadow-violet-200 shrink-0"
+                title="Send Message"
               >
                 {isSending ? <Loader2 className="h-4 w-4 animate-spin text-white" /> : <Send className="h-4 w-4 text-white" />}
               </Button>
