@@ -2,7 +2,7 @@
  
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download, Battery, CheckCircle2, XCircle, AlertCircle, CalendarX, Search, Pencil, Upload, ImageIcon, Loader2, Trash2, ClipboardEdit, Printer, Gauge, Sparkles, Bot, ArrowUpDown } from "lucide-react";
+import { Calendar, CalendarPlus, MapPin, ChevronLeft, ChevronRight, Filter, Clock, User as UserIcon, Download, Battery, CheckCircle2, XCircle, AlertCircle, CalendarX, Search, Pencil, Upload, ImageIcon, Loader2, Trash2, ClipboardEdit, Printer, Gauge, Sparkles, Bot, ArrowUpDown, X, Maximize2, Minimize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -27,16 +27,16 @@ function PhotoViewer({ url, title, children }: { url: string; title: string; chi
       <DialogTrigger asChild>
         {children}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px] p-0 overflow-hidden border-none bg-transparent shadow-none">
-        <div className="relative group animate-in zoom-in-95 duration-200">
+      <DialogContent className="sm:max-w-[850px] max-h-[90vh] p-0 overflow-hidden border-none bg-transparent shadow-none">
+        <div className="relative group animate-in zoom-in-95 duration-200 flex flex-col items-center">
           <div className="absolute top-4 left-4 z-10">
-            <Badge className="bg-black/60 text-white border-none backdrop-blur-md px-3 py-1 font-black uppercase tracking-widest text-[10px]">
+            <Badge className="bg-black/70 text-white border-none backdrop-blur-md px-3 py-1 font-black uppercase tracking-widest text-[10px]">
               {title}
             </Badge>
           </div>
           <img 
             src={url} 
-            className="w-full h-auto rounded-3xl shadow-2xl ring-1 ring-white/20" 
+            className="w-full max-h-[85vh] object-contain rounded-3xl shadow-2xl ring-1 ring-white/20 bg-black/80" 
             alt={title} 
           />
         </div>
@@ -1076,6 +1076,8 @@ function AttendanceDetailDialog({
   } | null>(null);
   const [photoUploading, setPhotoUploading] = useState<string | null>(null);
 
+  const [isFullScreen, setIsFullScreen] = useState(false);
+
   useEffect(() => {
     if (propRecord) {
       setStartOdoVal(propRecord.startOdometer?.toString() ?? "");
@@ -1083,6 +1085,7 @@ function AttendanceDetailDialog({
       setIsEditingOdo(false);
       setIsEditingFull(false);
       setEditData(null);
+      setIsFullScreen(false);
     }
   }, [propRecord]);
 
@@ -1273,9 +1276,16 @@ function AttendanceDetailDialog({
 
   return (
     <Dialog open={!!propRecord} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[1360px] w-[96vw] max-h-[94vh] overflow-y-auto p-0 border-none shadow-2xl bg-white rounded-2xl flex flex-col">
+      <DialogContent 
+        className={cn(
+          "p-0 border-none shadow-2xl bg-white flex flex-col hide-close duration-200 transition-all",
+          isFullScreen 
+            ? "!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-screen !max-w-none !max-h-none !rounded-none z-50" 
+            : "w-[96vw] max-w-[1550px] h-[92vh] max-h-[94vh] rounded-2xl"
+        )}
+      >
         {/* COMPACT TOP HEADER */}
-        <div className="bg-slate-900 px-6 py-3.5 text-white shrink-0">
+        <div className={cn("bg-slate-900 px-6 py-3.5 text-white shrink-0", isFullScreen ? "rounded-none" : "rounded-t-2xl")}>
            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                  <Avatar className="h-10 w-10 border border-slate-700 shadow-md">
@@ -1297,7 +1307,7 @@ function AttendanceDetailDialog({
                  </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                  {/* Compact Durations */}
                  <div className="flex items-center gap-3.5 bg-slate-800/80 px-3.5 py-1.5 rounded-xl border border-slate-700/60 text-xs">
                     <div className="flex items-center gap-1.5">
@@ -1331,6 +1341,24 @@ function AttendanceDetailDialog({
                        onClick={handleOpenFullEdit}
                      >
                        <Pencil className="w-3 h-3" /> Edit Attendance
+                     </Button>
+                     <Button
+                       variant="ghost"
+                       size="icon"
+                       className="h-8 w-8 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg ml-0.5 border border-slate-700"
+                       onClick={() => setIsFullScreen((prev) => !prev)}
+                       title={isFullScreen ? "Exit Fullscreen" : "Full Screen"}
+                     >
+                       {isFullScreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                     </Button>
+                     <Button
+                       variant="ghost"
+                       size="icon"
+                       className="h-8 w-8 bg-slate-800 hover:bg-rose-600 hover:text-white text-slate-300 rounded-lg border border-slate-700 transition-colors ml-0.5"
+                       onClick={() => onOpenChange(false)}
+                       title="Close Modal"
+                     >
+                       <X className="h-4 w-4" />
                      </Button>
                  </div>
               </div>
@@ -1431,8 +1459,8 @@ function AttendanceDetailDialog({
         )}
 
         {/* MAIN BODY: 3-COLUMN SIDE-BY-SIDE LAYOUT */}
-        <div className="p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-10 gap-4 flex-1">
-          {/* LEFT COLUMN: ODOMETER + AI VERIFICATION AUDIT (40% width) */}
+        <div className="p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 min-h-0 overflow-y-auto">
+          {/* LEFT COLUMN: ODOMETER + AI VERIFICATION AUDIT */}
           <div className="lg:col-span-4 flex flex-col gap-3">
             {/* Odometer Card */}
             {record.punchType === "FIELD" && (
@@ -1564,41 +1592,41 @@ function AttendanceDetailDialog({
             )}
 
             {/* AI & OCR Verification Audit Report */}
-            <div className="p-3 rounded-xl border border-purple-100 bg-purple-50/30 space-y-2 flex-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-purple-600 animate-pulse" />
-                  <h4 className="text-[11px] font-black uppercase tracking-wider text-purple-900">
+            <div className="p-3.5 sm:p-4 rounded-2xl border border-purple-200/80 bg-purple-50/40 space-y-3 flex-1 flex flex-col">
+              <div className="flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-purple-600 animate-pulse" />
+                  <h4 className="text-xs font-black uppercase tracking-wider text-purple-900">
                     AI & OCR Verification Audit Report
                   </h4>
                 </div>
-                <span className="text-[9px] font-bold text-purple-700 bg-purple-100/90 px-1.5 py-0.5 rounded border border-purple-200">
+                <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200">
                   Gemini Flash Vision AI
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+              <div className="flex flex-col gap-3 flex-1">
                 {/* Check-in AI Audit */}
-                <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-xs space-y-1.5">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                    <span className="text-[9px] font-black uppercase tracking-wider text-emerald-700">
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs space-y-2 flex-1">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">
                       Check-in AI Verification
                     </span>
                     {(record as any).checkInAiAnalysis?.faceAi?.isHumanFace ? (
-                      <span className="text-[8px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1 py-0.2 rounded">
+                      <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">
                         ✓ Human Verified
                       </span>
                     ) : (
-                      <span className="text-[8px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1 py-0.2 rounded">
+                      <span className="text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">
                         {(record as any).checkInAiAnalysis ? "⚠️ Warnings" : "Standard"}
                       </span>
                     )}
                   </div>
-                  <div className="space-y-1 text-[10px]">
+                  <div className="space-y-1.5 text-xs">
                     <div className="flex justify-between items-center">
                       <span className="text-slate-500 font-medium">Face Type:</span>
                       <span className="font-bold text-slate-800">
-                        {(record as any).checkInAiAnalysis?.faceAi?.isScreenOrPrintout ? "⚠️ Screen" : (record as any).checkInAiAnalysis?.faceAi?.isHumanFace ? "Live Living Human" : "Standard Photo"}
+                        {(record as any).checkInAiAnalysis?.faceAi?.isScreenOrPrintout ? "⚠️ Screen / Spoof" : (record as any).checkInAiAnalysis?.faceAi?.isHumanFace ? "Live Living Human" : "Standard Photo"}
                       </span>
                     </div>
                     {record.punchType === "FIELD" && record.startOdometerPhotoUrl && (
@@ -1624,7 +1652,7 @@ function AttendanceDetailDialog({
                       </span>
                     </div>
                     {(record as any).checkInAiAnalysis?.faceAi?.warningMessage && (
-                      <p className="text-[8px] text-amber-700 bg-amber-50 p-1 rounded border border-amber-100 font-medium leading-tight">
+                      <p className="text-[10px] text-amber-700 bg-amber-50 p-1.5 rounded-lg border border-amber-100 font-medium leading-tight">
                         Note: {(record as any).checkInAiAnalysis.faceAi.warningMessage}
                       </p>
                     )}
@@ -1632,31 +1660,31 @@ function AttendanceDetailDialog({
                 </div>
 
                 {/* Check-out AI Audit */}
-                <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-xs space-y-1.5">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                    <span className="text-[9px] font-black uppercase tracking-wider text-rose-700">
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs space-y-2 flex-1">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-rose-700">
                       Check-out AI Verification
                     </span>
                     {record.checkOutTime ? (
                       (record as any).checkOutAiAnalysis?.faceAi?.isHumanFace ? (
-                        <span className="text-[8px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1 py-0.2 rounded">
+                        <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">
                           ✓ Human Verified
                         </span>
                       ) : (
-                        <span className="text-[8px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1 py-0.2 rounded">
+                        <span className="text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">
                           {(record as any).checkOutAiAnalysis ? "⚠️ Warnings" : "Standard"}
                         </span>
                       )
                     ) : (
-                      <span className="text-[8px] font-medium text-slate-400">In Progress</span>
+                      <span className="text-[9px] font-medium text-slate-400">In Progress</span>
                     )}
                   </div>
                   {record.checkOutTime ? (
-                    <div className="space-y-1 text-[10px]">
+                    <div className="space-y-1.5 text-xs">
                       <div className="flex justify-between items-center">
                         <span className="text-slate-500 font-medium">Face Type:</span>
                         <span className="font-bold text-slate-800">
-                          {(record as any).checkOutAiAnalysis?.faceAi?.isScreenOrPrintout ? "⚠️ Screen" : (record as any).checkOutAiAnalysis?.faceAi?.isHumanFace ? "Live Living Human" : "Standard Photo"}
+                          {(record as any).checkOutAiAnalysis?.faceAi?.isScreenOrPrintout ? "⚠️ Screen / Spoof" : (record as any).checkOutAiAnalysis?.faceAi?.isHumanFace ? "Live Living Human" : "Standard Photo"}
                         </span>
                       </div>
                       {record.punchType === "FIELD" && record.endOdometerPhotoUrl && (
@@ -1682,30 +1710,30 @@ function AttendanceDetailDialog({
                         </span>
                       </div>
                       {(record as any).checkOutAiAnalysis?.faceAi?.warningMessage && (
-                        <p className="text-[8px] text-amber-700 bg-amber-50 p-1 rounded border border-amber-100 font-medium leading-tight">
+                        <p className="text-[10px] text-amber-700 bg-amber-50 p-1.5 rounded-lg border border-amber-100 font-medium leading-tight">
                           Note: {(record as any).checkOutAiAnalysis.faceAi.warningMessage}
                         </p>
                       )}
                     </div>
                   ) : (
-                    <p className="text-[10px] text-slate-400 italic pt-1.5">Check-out not completed yet</p>
+                    <p className="text-xs text-slate-400 italic pt-2">Check-out not completed yet</p>
                   )}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* MIDDLE COLUMN: CHECK IN (30% width) */}
-          <div className="lg:col-span-3 rounded-xl border border-slate-200/80 bg-slate-50/40 p-3 flex flex-col gap-2">
+          {/* MIDDLE COLUMN: CHECK IN */}
+          <div className="lg:col-span-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4 flex flex-col gap-3 shadow-xs">
             {/* Check In Header */}
-            <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
-              <div className="flex items-center gap-2">
-                <div className="h-7 w-7 rounded-lg bg-emerald-50 flex items-center justify-center border border-emerald-100 shrink-0">
-                  <Clock className="h-3.5 w-3.5 text-emerald-600" />
+            <div className="flex items-center justify-between border-b border-slate-200/70 pb-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-xl bg-emerald-50 flex items-center justify-center border border-emerald-100 shrink-0">
+                  <Clock className="h-4 w-4 text-emerald-600" />
                 </div>
                 <div>
-                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 leading-none">Check In</p>
-                  <p className="text-xs sm:text-sm font-bold text-slate-900 leading-tight mt-0.5">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 leading-none">Check In</p>
+                  <p className="text-sm sm:text-base font-bold text-slate-900 leading-tight mt-0.5">
                     {record.checkInTime ? formatTime(record.checkInTime) : "--"}
                   </p>
                 </div>
@@ -1715,60 +1743,70 @@ function AttendanceDetailDialog({
                   href={`https://www.google.com/maps/search/?api=1&query=${record.checkInLat},${record.checkInLng}`} 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="h-6 px-2 rounded-md bg-white border border-slate-200 flex items-center gap-1 hover:bg-blue-50 hover:border-blue-200 transition-all shadow-2xs"
+                  className="h-7 px-2.5 rounded-lg bg-white border border-slate-200 flex items-center gap-1.5 hover:bg-blue-50 hover:border-blue-200 transition-all shadow-2xs"
                 >
-                  <MapPin className="h-3 w-3 text-blue-600" />
-                  <span className="text-[9px] font-bold text-slate-600 uppercase">View Map</span>
+                  <MapPin className="h-3.5 w-3.5 text-blue-600" />
+                  <span className="text-[10px] font-bold text-slate-700 uppercase">View Map</span>
                 </a>
               ) : null}
             </div>
 
             {/* Live Photo Check-In */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Live Photo Check-in</span>
+            <div className="space-y-1.5 flex-1 flex flex-col min-h-0">
+              <div className="flex items-center justify-between shrink-0">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Live Photo Check-in</span>
                 {record.checkInPhotoUrl && (
-                  <span className="text-[8px] font-semibold text-blue-600">Tap to expand</span>
+                  <span className="text-[9px] font-bold text-blue-600">Tap to expand</span>
                 )}
               </div>
               {record.checkInPhotoUrl ? (
                 <PhotoViewer url={record.checkInPhotoUrl} title={`${record.user.name} - Check In Photo`}>
-                  <div className="h-28 sm:h-32 w-full rounded-xl border border-slate-200/80 bg-slate-950 overflow-hidden relative group cursor-zoom-in shadow-xs flex items-center justify-center">
+                  <div className={cn(
+                    "w-full rounded-2xl border border-slate-200 bg-slate-950 overflow-hidden relative group cursor-zoom-in shadow-xs flex items-center justify-center",
+                    record.punchType === "FIELD" && record.startOdometerPhotoUrl 
+                      ? "h-56 sm:h-64" 
+                      : "h-72 sm:h-80 md:h-[380px] flex-1 min-h-[260px]"
+                  )}>
                     <img 
                       src={record.checkInPhotoUrl} 
-                      className="h-full w-full object-contain transition-transform group-hover:scale-105" 
+                      className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-105" 
                       alt={`${record.user.name} check-in`} 
                     />
-                    <div className="absolute top-1.5 left-1.5 bg-black/60 backdrop-blur-xs text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider">
+                    <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-xs text-white px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider">
                       Check-in
                     </div>
                   </div>
                 </PhotoViewer>
               ) : (
-                <div className="h-28 sm:h-32 w-full rounded-xl border border-slate-200/60 bg-white flex flex-col items-center justify-center text-slate-300">
-                  <UserIcon className="h-7 w-7 opacity-30" />
-                  <p className="text-[9px] font-bold uppercase mt-1">No photo</p>
+                <div className={cn(
+                  "w-full rounded-2xl border border-dashed border-slate-300 bg-white flex flex-col items-center justify-center text-slate-400",
+                  record.punchType === "FIELD" && record.startOdometerPhotoUrl 
+                    ? "h-56 sm:h-64" 
+                    : "h-72 sm:h-80 md:h-[380px] flex-1 min-h-[260px]"
+                )}>
+                  <UserIcon className="h-10 w-10 opacity-30" />
+                  <p className="text-[10px] font-bold uppercase mt-1.5 tracking-wider">No Photo Available</p>
                 </div>
               )}
             </div>
 
             {/* Start Odometer Photo */}
             {record.punchType === "FIELD" && record.startOdometerPhotoUrl && (
-              <div className="space-y-1">
+              <div className="space-y-1.5 shrink-0">
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-black uppercase tracking-wider text-amber-600">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-600">
                     Start Odometer {record.startOdometer ? `(${record.startOdometer} KM)` : ""}
                   </span>
-                  <span className="text-[8px] font-semibold text-amber-600">Tap to expand</span>
+                  <span className="text-[9px] font-semibold text-amber-600">Tap to expand</span>
                 </div>
                 <PhotoViewer url={record.startOdometerPhotoUrl} title={`Start Odometer ${record.startOdometer ? `(${record.startOdometer} KM)` : ""}`}>
-                  <div className="h-20 sm:h-24 w-full rounded-xl border border-amber-200/80 bg-slate-950 overflow-hidden relative group cursor-zoom-in shadow-xs flex items-center justify-center">
+                  <div className="h-36 sm:h-44 w-full rounded-2xl border border-amber-200 bg-slate-950 overflow-hidden relative group cursor-zoom-in shadow-xs flex items-center justify-center">
                     <img 
                       src={record.startOdometerPhotoUrl} 
-                      className="h-full w-full object-contain transition-transform group-hover:scale-105" 
+                      className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-105" 
                       alt="Start Odometer" 
                     />
-                    <div className="absolute top-1.5 left-1.5 bg-amber-600/90 text-white px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-wider">
+                    <div className="absolute top-2 left-2 bg-amber-600/90 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider">
                       Odo: {record.startOdometer ? `${record.startOdometer} KM` : ""}
                     </div>
                   </div>
@@ -1777,22 +1815,22 @@ function AttendanceDetailDialog({
             )}
 
             {/* Coordinates */}
-            <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-tighter mt-auto pt-1">
+            <p className="text-[10px] font-bold text-slate-400 text-center uppercase tracking-tight mt-auto pt-1 shrink-0">
               Coords: {formatCoords(record.checkInLat, record.checkInLng, 5)}
             </p>
           </div>
 
-          {/* RIGHT COLUMN: CHECK OUT (30% width) */}
-          <div className="lg:col-span-3 rounded-xl border border-slate-200/80 bg-slate-50/40 p-3 flex flex-col gap-2">
+          {/* RIGHT COLUMN: CHECK OUT */}
+          <div className="lg:col-span-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4 flex flex-col gap-3 shadow-xs">
             {/* Check Out Header */}
-            <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
-              <div className="flex items-center gap-2">
-                <div className="h-7 w-7 rounded-lg bg-rose-50 flex items-center justify-center border border-rose-100 shrink-0">
-                  <Clock className="h-3.5 w-3.5 text-rose-600" />
+            <div className="flex items-center justify-between border-b border-slate-200/70 pb-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-xl bg-rose-50 flex items-center justify-center border border-rose-100 shrink-0">
+                  <Clock className="h-4 w-4 text-rose-600" />
                 </div>
                 <div>
-                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 leading-none">Check Out</p>
-                  <p className="text-xs sm:text-sm font-bold text-slate-900 leading-tight mt-0.5">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 leading-none">Check Out</p>
+                  <p className="text-sm sm:text-base font-bold text-slate-900 leading-tight mt-0.5">
                     {record.checkOutTime ? formatTime(record.checkOutTime) : "Active"}
                   </p>
                 </div>
@@ -1802,62 +1840,75 @@ function AttendanceDetailDialog({
                   href={`https://www.google.com/maps/search/?api=1&query=${record.checkOutLat},${record.checkOutLng}`} 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="h-6 px-2 rounded-md bg-white border border-slate-200 flex items-center gap-1 hover:bg-blue-50 hover:border-blue-200 transition-all shadow-2xs"
+                  className="h-7 px-2.5 rounded-lg bg-white border border-slate-200 flex items-center gap-1.5 hover:bg-blue-50 hover:border-blue-200 transition-all shadow-2xs"
                 >
-                  <MapPin className="h-3 w-3 text-blue-600" />
-                  <span className="text-[9px] font-bold text-slate-600 uppercase">View Map</span>
+                  <MapPin className="h-3.5 w-3.5 text-blue-600" />
+                  <span className="text-[10px] font-bold text-slate-700 uppercase">View Map</span>
                 </a>
               ) : null}
             </div>
 
             {/* Live Photo Check-Out */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Live Photo Check-out</span>
+            <div className="space-y-1.5 flex-1 flex flex-col min-h-0">
+              <div className="flex items-center justify-between shrink-0">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Live Photo Check-out</span>
                 {record.checkOutPhotoUrl && (
-                  <span className="text-[8px] font-semibold text-blue-600">Tap to expand</span>
+                  <span className="text-[9px] font-bold text-blue-600">Tap to expand</span>
                 )}
               </div>
               {record.checkOutPhotoUrl ? (
                 <PhotoViewer url={record.checkOutPhotoUrl} title={`${record.user.name} - Check Out Photo`}>
-                  <div className="h-28 sm:h-32 w-full rounded-xl border border-slate-200/80 bg-slate-950 overflow-hidden relative group cursor-zoom-in shadow-xs flex items-center justify-center">
+                  <div className={cn(
+                    "w-full rounded-2xl border border-slate-200 bg-slate-950 overflow-hidden relative group cursor-zoom-in shadow-xs flex items-center justify-center",
+                    record.punchType === "FIELD" && record.endOdometerPhotoUrl 
+                      ? "h-56 sm:h-64" 
+                      : "h-72 sm:h-80 md:h-[380px] flex-1 min-h-[260px]"
+                  )}>
                     <img 
                       src={record.checkOutPhotoUrl} 
-                      className="h-full w-full object-contain transition-transform group-hover:scale-105" 
+                      className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-105" 
                       alt={`${record.user.name} check-out`} 
                     />
-                    <div className="absolute top-1.5 left-1.5 bg-black/60 backdrop-blur-xs text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider">
+                    <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-xs text-white px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider">
                       Check-out
                     </div>
                   </div>
                 </PhotoViewer>
               ) : (
-                <div className="h-28 sm:h-32 w-full rounded-xl border border-slate-200/60 bg-white flex flex-col items-center justify-center text-slate-300">
-                  <UserIcon className="h-7 w-7 opacity-30" />
-                  <p className="text-[9px] font-bold uppercase mt-1">
-                    {record.checkOutTime ? "No photo" : "Employee still on site"}
+                <div className={cn(
+                  "w-full rounded-2xl border border-dashed border-slate-300 bg-white flex flex-col items-center justify-center text-slate-400",
+                  record.punchType === "FIELD" && record.endOdometerPhotoUrl 
+                    ? "h-56 sm:h-64" 
+                    : "h-72 sm:h-80 md:h-[380px] flex-1 min-h-[260px]"
+                )}>
+                  <UserIcon className="h-10 w-10 opacity-30" />
+                  <p className="text-[10px] font-bold uppercase mt-1.5 tracking-wider">
+                    {record.checkOutTime ? "No Photo Uploaded" : "Employee Still On Site"}
                   </p>
+                  {!record.checkOutTime && (
+                    <p className="text-[9px] text-slate-400 mt-0.5">Session is active</p>
+                  )}
                 </div>
               )}
             </div>
 
             {/* End Odometer Photo */}
             {record.punchType === "FIELD" && record.endOdometerPhotoUrl && (
-              <div className="space-y-1">
+              <div className="space-y-1.5 shrink-0">
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-black uppercase tracking-wider text-amber-600">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-600">
                     End Odometer {record.endOdometer ? `(${record.endOdometer} KM)` : ""}
                   </span>
-                  <span className="text-[8px] font-semibold text-amber-600">Tap to expand</span>
+                  <span className="text-[9px] font-semibold text-amber-600">Tap to expand</span>
                 </div>
                 <PhotoViewer url={record.endOdometerPhotoUrl} title={`End Odometer ${record.endOdometer ? `(${record.endOdometer} KM)` : ""}`}>
-                  <div className="h-20 sm:h-24 w-full rounded-xl border border-amber-200/80 bg-slate-950 overflow-hidden relative group cursor-zoom-in shadow-xs flex items-center justify-center">
+                  <div className="h-36 sm:h-44 w-full rounded-2xl border border-amber-200 bg-slate-950 overflow-hidden relative group cursor-zoom-in shadow-xs flex items-center justify-center">
                     <img 
                       src={record.endOdometerPhotoUrl} 
-                      className="h-full w-full object-contain transition-transform group-hover:scale-105" 
+                      className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-105" 
                       alt="End Odometer" 
                     />
-                    <div className="absolute top-1.5 left-1.5 bg-amber-600/90 text-white px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-wider">
+                    <div className="absolute top-2 left-2 bg-amber-600/90 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider">
                       Odo: {record.endOdometer ? `${record.endOdometer} KM` : ""}
                     </div>
                   </div>
@@ -1866,15 +1917,15 @@ function AttendanceDetailDialog({
             )}
 
             {/* Coordinates */}
-            <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-tighter mt-auto pt-1">
+            <p className="text-[10px] font-bold text-slate-400 text-center uppercase tracking-tight mt-auto pt-1 shrink-0">
               {record.checkOutTime ? `Coords: ${formatCoords(record.checkOutLat, record.checkOutLng, 5)}` : "Ongoing activity..."}
             </p>
           </div>
         </div>
 
         {/* COMPACT FOOTER */}
-        <div className="px-6 py-2.5 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
-           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} className="h-8 rounded-lg font-bold text-xs text-slate-500 hover:text-slate-700 border-slate-200">
+        <div className="px-6 py-2.5 bg-slate-50 border-t border-slate-200 flex justify-end shrink-0">
+           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} className="h-8 px-4 rounded-lg font-bold text-xs text-slate-600 hover:text-slate-900 border-slate-300">
               Close Verification
            </Button>
         </div>
