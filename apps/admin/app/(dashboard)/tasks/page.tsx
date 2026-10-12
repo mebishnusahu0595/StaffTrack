@@ -200,6 +200,23 @@ export default function TasksPage() {
   }, [viewingTask, tasks]);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isDeleteAllOpen, setIsDeleteAllOpen] = useState(false);
+  const [deleteAllCountdown, setDeleteAllCountdown] = useState(5);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (isDeleteAllOpen && deleteAllCountdown > 0) {
+      timer = setInterval(() => {
+        setDeleteAllCountdown((prev) => Math.max(0, prev - 1));
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [isDeleteAllOpen, deleteAllCountdown]);
+
+  const handleOpenDeleteAllModal = () => {
+    setDeleteAllCountdown(5);
+    setIsDeleteAllOpen(true);
+  };
 
   const { data: users = { items: [], total: 0 } as any } = useQuery({
     queryKey: ["users-for-tasks"],
@@ -262,7 +279,17 @@ export default function TasksPage() {
     if (!confirm(msg)) return;
     deleteMutation.mutate({ id: task.id, deleteAllSeries: true });
   };
-
+  const deleteAllMutation = useMutation({
+    mutationFn: deleteAllTasks,
+    onSuccess: (result: { count: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      setIsDeleteAllOpen(false);
+      alert(`Deleted ${result?.count ?? 0} task(s).`);
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message || err?.message || "Failed to delete all tasks");
+    }
+  });
 
   const deleteUserTasksMutation = useMutation({
     mutationFn: (userId: string) => deleteUserTasks(userId, "all"),
@@ -887,6 +914,13 @@ export default function TasksPage() {
                      <Trash2 className="h-4 w-4" /> {deleteUserTasksMutation.isPending ? "Deleting..." : `Delete All Tasks of ${users.items?.find((u: any) => u.id === selectedAssignee)?.name?.split(" ")[0] || "User"}`}
                    </Button>
                  )}
+               <Button
+                 variant="outline"
+                 className="h-10 rounded-lg px-4 font-bold text-xs gap-2 border-rose-200 text-rose-600 hover:bg-rose-50"
+                 onClick={handleOpenDeleteAllModal}
+               >
+                 <Trash2 className="h-4 w-4" /> Delete All
+               </Button>
                <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                   <DialogTrigger asChild>
                      <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 h-10 font-bold flex items-center gap-2 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]">
@@ -899,6 +933,64 @@ export default function TasksPage() {
                     isSubmitting={createMutation.isPending}
                     initialDate={initialCreateDate}
                   />
+               </Dialog>
+               {/* 5-Second Countdown Safety Modal for Delete All */}
+               <Dialog open={isDeleteAllOpen} onOpenChange={setIsDeleteAllOpen}>
+                 <DialogContent className="max-w-md p-6 rounded-2xl bg-white border border-rose-100 shadow-2xl">
+                   <div className="flex flex-col items-center text-center space-y-4">
+                     <div className="w-14 h-14 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 ring-8 ring-rose-50">
+                       <AlertCircle className="w-8 h-8 stroke-[2.5]" />
+                     </div>
+                     <div>
+                       <h3 className="text-xl font-black text-slate-900 tracking-tight">Delete ALL Company Tasks?</h3>
+                       <p className="text-sm text-slate-500 mt-2 font-medium">
+                         This will permanently delete <span className="font-bold text-rose-600">ALL tasks across all employees</span> in the company.
+                         This action cannot be undone.
+                       </p>
+                     </div>
+
+                     <div className="w-full bg-rose-50/70 border border-rose-200/60 rounded-xl p-3 text-xs text-rose-700 font-semibold flex items-center justify-center gap-2">
+                       <Clock className="w-4 h-4 text-rose-600 animate-pulse" />
+                       {deleteAllCountdown > 0 ? (
+                         <span>Safety lock active: wait <strong className="text-rose-900 text-sm font-black underline">{deleteAllCountdown}s</strong> before confirming</span>
+                       ) : (
+                         <span className="text-emerald-700 font-bold">Lock released. You may now confirm.</span>
+                       )}
+                     </div>
+
+                     <div className="flex items-center gap-3 w-full pt-2">
+                       <Button
+                         type="button"
+                         variant="outline"
+                         className="flex-1 h-11 rounded-xl border-slate-200 font-bold text-slate-600 hover:bg-slate-50"
+                         onClick={() => setIsDeleteAllOpen(false)}
+                         disabled={deleteAllMutation.isPending}
+                       >
+                         Cancel
+                       </Button>
+                       <Button
+                         type="button"
+                         className={`flex-1 h-11 rounded-xl font-bold transition-all shadow-md ${
+                           deleteAllCountdown > 0
+                             ? "bg-slate-200 text-slate-400 cursor-not-allowed hover:bg-slate-200"
+                             : "bg-rose-600 hover:bg-rose-700 text-white hover:scale-[1.02] active:scale-[0.98]"
+                         }`}
+                         disabled={deleteAllCountdown > 0 || deleteAllMutation.isPending}
+                         onClick={() => deleteAllMutation.mutate()}
+                       >
+                         {deleteAllMutation.isPending ? (
+                           <span className="flex items-center gap-2 justify-center">
+                             <Loader2 className="w-4 h-4 animate-spin" /> Deleting...
+                           </span>
+                         ) : deleteAllCountdown > 0 ? (
+                           `Wait (${deleteAllCountdown}s)`
+                         ) : (
+                           "Yes, Delete All"
+                         )}
+                       </Button>
+                     </div>
+                   </div>
+                 </DialogContent>
                </Dialog>
            </div>
         </div>
