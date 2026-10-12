@@ -421,9 +421,33 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
         priority: updatedTask.priority,
         points: updatedTask.points,
         lat: updatedTask.lat,
-        lng: updatedTask.lng
+        lng: updatedTask.lng,
+        taskType: updatedTask.taskType,
+        checklist: updatedTask.checklist ?? undefined,
+        validations: updatedTask.validations ?? undefined
       }
     });
+
+    if (input.dealerIds !== undefined || input.farmerIds !== undefined) {
+      const futureTasks = await prisma.task.findMany({
+        where: {
+          parentTaskId: parentId,
+          isSubtask: false,
+          status: TaskStatus.PENDING,
+          dueDate: { gte: todayStart }
+        },
+        select: { id: true }
+      });
+      for (const ft of futureTasks) {
+        await prisma.task.update({
+          where: { id: ft.id },
+          data: {
+            dealers: input.dealerIds !== undefined ? { set: input.dealerIds.map((id) => ({ id })) } : undefined,
+            farmers: input.farmerIds !== undefined ? { set: input.farmerIds.map((id) => ({ id })) } : undefined
+          }
+        });
+      }
+    }
 
     const repeatChanged =
       input.repeatFrequency !== undefined ||

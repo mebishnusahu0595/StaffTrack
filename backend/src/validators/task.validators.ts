@@ -34,7 +34,8 @@ export const createTaskBodySchema = z
     attachmentName: z.string().optional().nullable(),
     projectId: z.string().optional().nullable(),
     taskType: z.string().optional(),
-    dealerIds: z.array(z.string()).optional()
+    dealerIds: z.array(z.string()).optional(),
+    farmerIds: z.array(z.string()).optional()
   })
   .refine((value) => value.location || (value.lat === undefined && value.lng === undefined) || (value.lat !== undefined && value.lng !== undefined), {
     message: "Both lat and lng are required when setting task coordinates"
@@ -85,7 +86,8 @@ export const updateTaskBodySchema = z.object({
   attachmentName: z.string().optional().nullable(),
   projectId: z.string().optional().nullable(),
   taskType: z.string().optional(),
-  dealerIds: z.array(z.string()).optional()
+  dealerIds: z.array(z.string()).optional(),
+  farmerIds: z.array(z.string()).optional()
 });
 
 

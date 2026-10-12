@@ -3574,6 +3574,9 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
              geofenceRadius: data.geofenceRadius ? parseFloat(data.geofenceRadius) : null,
              reminder: data.reminder ? parseInt(data.reminder) : null,
              projectId: data.projectId || null,
+             taskType: data.taskType,
+             dealerIds: data.taskType === "FARMER" ? [] : (data.dealerIds || []),
+             farmerIds: data.taskType === "DEALER" ? [] : (data.farmerIds || []),
              subtasks: data.subtasks.map(s => ({
                ...s,
                startDate: s.startDate ? new Date(s.startDate) : null,
@@ -3655,7 +3658,7 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
     status: task.status || "PENDING",
     attachmentUrl: task.attachmentUrl || null as string | null,
     attachmentName: task.attachmentName || null as string | null,
-    taskType: task.taskType || "NORMAL",
+    taskType: task.taskType === "FARMER" || (task.farmers && task.farmers.length > 0 && (!task.dealers || task.dealers.length === 0)) ? "FARMER" : (task.taskType || "NORMAL"),
     dealerIds: (task.dealers || []).slice(0, 1).map((d: any) => d.id) as string[],
     farmerIds: (task.farmers || []).map((f: any) => f.id) as string[],
     repeatFrequency: task.repeatFrequency || "NONE",
@@ -3722,7 +3725,7 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
       status: task.status || "PENDING",
       attachmentUrl: task.attachmentUrl || null,
       attachmentName: task.attachmentName || null,
-      taskType: task.taskType || "NORMAL",
+      taskType: task.taskType === "FARMER" || (task.farmers && task.farmers.length > 0 && (!task.dealers || task.dealers.length === 0)) ? "FARMER" : (task.taskType || "NORMAL"),
       dealerIds: (task.dealers || []).slice(0, 1).map((d: any) => d.id),
       farmerIds: (task.farmers || []).map((f: any) => f.id),
       repeatFrequency: task.repeatFrequency || "NONE",
@@ -4650,6 +4653,9 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
              geofenceLng: data.geofenceLng ? parseFloat(data.geofenceLng) : null,
              geofenceRadius: data.geofenceRadius ? parseFloat(data.geofenceRadius) : null,
              reminder: data.reminder ? parseInt(data.reminder) : null,
+             taskType: data.taskType,
+             dealerIds: data.taskType === "FARMER" ? [] : (data.dealerIds || []),
+             farmerIds: data.taskType === "DEALER" ? [] : (data.farmerIds || []),
              subtasks: data.subtasks.map(s => ({
                ...s,
                startDate: s.startDate ? new Date(s.startDate) : null,
@@ -4757,51 +4763,104 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                   </div>
                </div>
 
-               <div className="space-y-1.5 pt-1 border-t border-slate-200/60">
-                  <div className="flex items-center justify-between">
-                     <Label className="text-xs font-black uppercase text-blue-600 flex items-center gap-1.5">
-                        <Store className="h-3.5 w-3.5" /> Assigned Dealers ({task.dealers?.length || 0})
-                     </Label>
-                     <span className="text-[10px] font-bold text-slate-400 uppercase">
-                        Category: {task.taskType || "NORMAL"}
-                     </span>
-                  </div>
+               {/* Farmer Details (for FARMER category or when farmers are present) */}
+               {(task.taskType === "FARMER" || (task.farmers && task.farmers.length > 0)) && (
+                  <div className="space-y-1.5 pt-1 border-t border-slate-200/60">
+                     <div className="flex items-center justify-between">
+                        <Label className="text-xs font-black uppercase text-emerald-600 flex items-center gap-1.5">
+                           <Sprout className="h-3.5 w-3.5 text-emerald-600" /> Assigned Farmers ({task.farmers?.length || 0})
+                        </Label>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">
+                           Category: {task.taskType || "FARMER"}
+                        </span>
+                     </div>
 
-                  {task.dealers && task.dealers.length > 0 ? (
-                     <div className="flex flex-wrap gap-2">
-                        {task.dealers.map((d: any) => (
-                           <div key={d.id} className="bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl flex flex-col gap-0.5 text-xs font-bold text-blue-900 shadow-xs">
-                              <div className="flex items-center gap-1.5">
-                                 <Store className="h-3.5 w-3.5 text-blue-600" />
-                                 <span>{d.name}</span>
-                                 {d.city && <span className="text-[10px] text-blue-600 font-semibold">({d.city})</span>}
-                              </div>
-                              {(d.phone || d.gstin) && (
-                                 <div className="text-[10px] text-slate-500 font-normal pl-5 flex items-center gap-2">
-                                    {d.phone && <span>📞 {d.phone}</span>}
-                                    {d.gstin && <span>📄 GST: {d.gstin}</span>}
+                     {task.farmers && task.farmers.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                           {task.farmers.map((f: any) => (
+                              <div key={f.id} className="bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl flex flex-col gap-0.5 text-xs font-bold text-emerald-950 shadow-xs">
+                                 <div className="flex items-center gap-1.5">
+                                    <Sprout className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                    <span>{f.name}</span>
+                                    {(f.village || f.city) && <span className="text-[10px] text-emerald-700 font-semibold">({f.village || f.city})</span>}
                                  </div>
-                              )}
-                           </div>
-                        ))}
+                                 {(f.phone || f.crop || f.landSize) && (
+                                    <div className="text-[10px] text-slate-600 font-normal pl-5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                                       {f.phone && <span>📞 {f.phone}</span>}
+                                       {f.crop && <span>🌾 {f.crop}</span>}
+                                       {f.landSize && <span>🌱 {f.landSize} Acres</span>}
+                                    </div>
+                                 )}
+                              </div>
+                           ))}
+                        </div>
+                     ) : (
+                        <div className="p-3 bg-white border border-slate-200/70 rounded-xl text-xs text-slate-500 font-medium flex items-center justify-between gap-2 shadow-xs">
+                           <span>No farmers linked to this task.</span>
+                           {onEdit && (
+                             <Button
+                               type="button"
+                               size="sm"
+                               variant="outline"
+                               onClick={onEdit}
+                               className="h-7 text-[11px] font-bold text-emerald-600 border-emerald-200 bg-white hover:bg-emerald-50 rounded-lg gap-1 shrink-0 px-2"
+                             >
+                               <Pencil className="h-3 w-3" /> Add Farmers
+                             </Button>
+                           )}
+                        </div>
+                     )}
+                  </div>
+               )}
+
+               {/* Dealer Details (for DEALER category or non-FARMER tasks) */}
+               {task.taskType !== "FARMER" && (
+                  <div className="space-y-1.5 pt-1 border-t border-slate-200/60">
+                     <div className="flex items-center justify-between">
+                        <Label className="text-xs font-black uppercase text-blue-600 flex items-center gap-1.5">
+                           <Store className="h-3.5 w-3.5" /> Assigned Dealers ({task.dealers?.length || 0})
+                        </Label>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">
+                           Category: {task.taskType || "NORMAL"}
+                        </span>
                      </div>
-                  ) : (
-                     <div className="p-3 bg-white border border-slate-200/70 rounded-xl text-xs text-slate-500 font-medium flex items-center justify-between gap-2 shadow-xs">
-                        <span>No dealers linked to this task.</span>
-                        {onEdit && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={onEdit}
-                            className="h-7 text-[11px] font-bold text-blue-600 border-blue-200 bg-white hover:bg-blue-50 rounded-lg gap-1 shrink-0 px-2"
-                          >
-                            <Pencil className="h-3 w-3" /> Add Dealers
-                          </Button>
-                        )}
-                     </div>
-                  )}
-               </div>
+
+                     {task.dealers && task.dealers.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                           {task.dealers.map((d: any) => (
+                              <div key={d.id} className="bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl flex flex-col gap-0.5 text-xs font-bold text-blue-900 shadow-xs">
+                                 <div className="flex items-center gap-1.5">
+                                    <Store className="h-3.5 w-3.5 text-blue-600" />
+                                    <span>{d.name}</span>
+                                    {d.city && <span className="text-[10px] text-blue-600 font-semibold">({d.city})</span>}
+                                 </div>
+                                 {(d.phone || d.gstin) && (
+                                    <div className="text-[10px] text-slate-500 font-normal pl-5 flex items-center gap-2">
+                                       {d.phone && <span>📞 {d.phone}</span>}
+                                       {d.gstin && <span>📄 GST: {d.gstin}</span>}
+                                    </div>
+                                 )}
+                              </div>
+                           ))}
+                        </div>
+                     ) : (
+                        <div className="p-3 bg-white border border-slate-200/70 rounded-xl text-xs text-slate-500 font-medium flex items-center justify-between gap-2 shadow-xs">
+                           <span>No dealers linked to this task.</span>
+                           {onEdit && (
+                             <Button
+                               type="button"
+                               size="sm"
+                               variant="outline"
+                               onClick={onEdit}
+                               className="h-7 text-[11px] font-bold text-blue-600 border-blue-200 bg-white hover:bg-blue-50 rounded-lg gap-1 shrink-0 px-2"
+                             >
+                               <Pencil className="h-3 w-3" /> Add Dealers
+                             </Button>
+                           )}
+                        </div>
+                     )}
+                  </div>
+               )}
 
                {/* Task Timeline & Completion Details */}
                {(actualStartTime || task.completedAt || task.completionRemarks || (task.completionLat != null && task.completionLng != null)) && (
