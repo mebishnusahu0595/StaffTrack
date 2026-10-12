@@ -408,6 +408,13 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
     const todayStart = new Date();
     todayStart.setUTCHours(0, 0, 0, 0);
 
+    if (input.assignedToId && updatedTask.parentTaskId) {
+      await prisma.task.update({
+        where: { id: parentId },
+        data: { assignedToId: input.assignedToId }
+      });
+    }
+
     await prisma.task.updateMany({
       where: {
         parentTaskId: parentId,
@@ -424,7 +431,8 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
         lng: updatedTask.lng,
         taskType: updatedTask.taskType,
         checklist: updatedTask.checklist ?? undefined,
-        validations: updatedTask.validations ?? undefined
+        validations: updatedTask.validations ?? undefined,
+        ...(input.assignedToId ? { assignedToId: input.assignedToId } : {})
       }
     });
 

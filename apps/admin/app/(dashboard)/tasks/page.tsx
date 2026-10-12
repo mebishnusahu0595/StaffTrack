@@ -187,7 +187,7 @@ export default function TasksPage() {
   const [initialCreateDate, setInitialCreateDate] = useState<string>("");
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
 
-  const pageSize = 10;
+  const pageSize = 50;
 
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ["tasks", activeFilter === "ALL" ? "all" : filterDate],
