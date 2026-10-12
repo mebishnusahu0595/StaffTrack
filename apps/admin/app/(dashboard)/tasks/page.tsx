@@ -263,16 +263,6 @@ export default function TasksPage() {
     deleteMutation.mutate({ id: task.id, deleteAllSeries: true });
   };
 
-  const deleteAllMutation = useMutation({
-    mutationFn: deleteAllTasks,
-    onSuccess: (result: { count: number }) => {
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      alert(`Deleted ${result?.count ?? 0} task(s).`);
-    },
-    onError: (err: any) => {
-      alert(err?.response?.data?.message || err?.message || "Failed to delete all tasks");
-    }
-  });
 
   const deleteUserTasksMutation = useMutation({
     mutationFn: (userId: string) => deleteUserTasks(userId, "all"),
@@ -291,14 +281,6 @@ export default function TasksPage() {
     const first = confirm(`Are you sure you want to delete ALL tasks assigned to ${targetUserName}? This is permanent.`);
     if (!first) return;
     deleteUserTasksMutation.mutate(selectedAssignee);
-  };
-
-  const handleDeleteAllTasks = () => {
-    const first = confirm("Delete ALL tasks for the company? This is permanent and cannot be undone.");
-    if (!first) return;
-    const second = confirm("Are you absolutely sure? Every task will be permanently removed.");
-    if (!second) return;
-    deleteAllMutation.mutate();
   };
 
   // Apply inline status transitions
@@ -905,14 +887,6 @@ export default function TasksPage() {
                      <Trash2 className="h-4 w-4" /> {deleteUserTasksMutation.isPending ? "Deleting..." : `Delete All Tasks of ${users.items?.find((u: any) => u.id === selectedAssignee)?.name?.split(" ")[0] || "User"}`}
                    </Button>
                  )}
-               <Button
-                 variant="outline"
-                 className="h-10 rounded-lg px-4 font-bold text-xs gap-2 border-rose-200 text-rose-600 hover:bg-rose-50"
-                 onClick={handleDeleteAllTasks}
-                 disabled={deleteAllMutation.isPending}
-               >
-                 <Trash2 className="h-4 w-4" /> {deleteAllMutation.isPending ? "Deleting..." : "Delete All"}
-               </Button>
                <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                   <DialogTrigger asChild>
                      <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 h-10 font-bold flex items-center gap-2 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]">
