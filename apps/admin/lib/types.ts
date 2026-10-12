@@ -91,6 +91,9 @@ export interface Task {
   subtasks?: Task[];
   attachmentUrl?: string | null;
   attachmentName?: string | null;
+  taskType?: string | null;
+  dealers?: any[];
+  farmers?: any[];
 }
 
 export interface Break {

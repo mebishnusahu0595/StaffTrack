@@ -1757,9 +1757,9 @@ export default function TasksPage() {
                         {/* Title */}
                         <h5 className="font-bold text-sm text-slate-800 leading-tight">{task.title}</h5>
 
-                        {task.dealers && task.dealers.length > 0 && (
+                        {(task as any).dealers && (task as any).dealers.length > 0 && (
                           <div className="flex items-center gap-1 flex-wrap mt-0.5">
-                            {task.dealers.map((d: any) => (
+                            {(task as any).dealers.map((d: any) => (
                               <span key={d.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-800 border border-blue-100">
                                 <Store className="h-2.5 w-2.5 text-blue-600" />
                                 {d.name}
@@ -1767,9 +1767,9 @@ export default function TasksPage() {
                             ))}
                           </div>
                         )}
-                        {task.farmers && task.farmers.length > 0 && (
+                        {(task as any).farmers && (task as any).farmers.length > 0 && (
                           <div className="flex items-center gap-1 flex-wrap mt-0.5">
-                            {task.farmers.map((f: any) => (
+                            {(task as any).farmers.map((f: any) => (
                               <span key={f.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-100">
                                 <Sprout className="h-2.5 w-2.5 text-emerald-600" />
                                 {f.name}
