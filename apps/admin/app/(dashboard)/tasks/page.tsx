@@ -1351,6 +1351,16 @@ export default function TasksPage() {
                                              ))}
                                           </div>
                                        )}
+                                       {task.farmers && task.farmers.length > 0 && (
+                                          <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                             {task.farmers.map((f: any) => (
+                                                <span key={f.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-100">
+                                                   <Sprout className="h-3 w-3 text-emerald-600" />
+                                                   {f.name}{f.village ? ` (${f.village})` : (f.city ? ` (${f.city})` : "")}
+                                                </span>
+                                             ))}
+                                          </div>
+                                       )}
                                     </div>
                                 </div>
                               </td>
@@ -1746,6 +1756,27 @@ export default function TasksPage() {
 
                         {/* Title */}
                         <h5 className="font-bold text-sm text-slate-800 leading-tight">{task.title}</h5>
+
+                        {task.dealers && task.dealers.length > 0 && (
+                          <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                            {task.dealers.map((d: any) => (
+                              <span key={d.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-800 border border-blue-100">
+                                <Store className="h-2.5 w-2.5 text-blue-600" />
+                                {d.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {task.farmers && task.farmers.length > 0 && (
+                          <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                            {task.farmers.map((f: any) => (
+                              <span key={f.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-100">
+                                <Sprout className="h-2.5 w-2.5 text-emerald-600" />
+                                {f.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
 
                         {task.subtasks && task.subtasks.length > 0 && (
                           <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400">
@@ -2341,7 +2372,7 @@ function FarmerSelector({
     try {
       const created = await createFarmer(newFarmer);
       queryClient.invalidateQueries({ queryKey: ["farmers"] });
-      onChange([...selectedFarmerIds, created.id]);
+      onChange([created.id]);
       setNewFarmer({ name: "", phone: "", village: "", crop: "" });
       setShowAddModal(false);
     } catch (err: any) {
@@ -2353,9 +2384,9 @@ function FarmerSelector({
 
   const toggleFarmer = (farmerId: string) => {
     if (selectedFarmerIds.includes(farmerId)) {
-      onChange(selectedFarmerIds.filter(id => id !== farmerId));
+      onChange([]);
     } else {
-      onChange([...selectedFarmerIds, farmerId]);
+      onChange([farmerId]);
     }
   };
 
@@ -2363,7 +2394,7 @@ function FarmerSelector({
     <div className="space-y-2 border border-emerald-100 bg-emerald-50/40 p-4 rounded-2xl">
       <div className="flex items-center justify-between">
         <Label className="text-[10px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
-          <Sprout className="h-4 w-4 text-emerald-600" /> Select Farmers (Multi-select)
+          <Sprout className="h-4 w-4 text-emerald-600" /> Select Farmer (Single-select)
         </Label>
         <button
           type="button"
@@ -2839,13 +2870,13 @@ function CreateTaskDialog({ users, onSubmit, isSubmitting, initialDate }: any) {
               />
             )}
 
-            {/* Farmer Selector (Multi-Select & Add Farmer) */}
+            {/* Farmer Selector (Single-Select & Add Farmer) */}
             {data.taskType === "FARMER" && (
               <FarmerSelector
-                selectedFarmerIds={data.farmerIds || []}
+                selectedFarmerIds={(data.farmerIds || []).slice(-1)}
                 onChange={(ids) => setData(prev => ({
                   ...prev,
-                  farmerIds: ids,
+                  farmerIds: ids.slice(-1),
                   taskType: ids.length > 0 && (prev.taskType === "NORMAL" || !prev.taskType) ? "FARMER" : prev.taskType
                 }))}
               />
@@ -3660,7 +3691,7 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
     attachmentName: task.attachmentName || null as string | null,
     taskType: task.taskType === "FARMER" || (task.farmers && task.farmers.length > 0 && (!task.dealers || task.dealers.length === 0)) ? "FARMER" : (task.taskType || "NORMAL"),
     dealerIds: (task.dealers || []).slice(0, 1).map((d: any) => d.id) as string[],
-    farmerIds: (task.farmers || []).map((f: any) => f.id) as string[],
+    farmerIds: (task.farmers || []).slice(0, 1).map((f: any) => f.id) as string[],
     repeatFrequency: task.repeatFrequency || "NONE",
 
     repeatDays: task.repeatDays ? task.repeatDays.split(',').map((x: string) => parseInt(x)).filter((x: number) => !isNaN(x)) : [] as number[],
@@ -3727,7 +3758,7 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
       attachmentName: task.attachmentName || null,
       taskType: task.taskType === "FARMER" || (task.farmers && task.farmers.length > 0 && (!task.dealers || task.dealers.length === 0)) ? "FARMER" : (task.taskType || "NORMAL"),
       dealerIds: (task.dealers || []).slice(0, 1).map((d: any) => d.id),
-      farmerIds: (task.farmers || []).map((f: any) => f.id),
+      farmerIds: (task.farmers || []).slice(0, 1).map((f: any) => f.id),
       repeatFrequency: task.repeatFrequency || "NONE",
       repeatDays: task.repeatDays ? task.repeatDays.split(',').map((x: string) => parseInt(x)).filter((x: number) => !isNaN(x)) : [],
       repeatDates: task.repeatDates ? task.repeatDates.split(',').map((x: string) => parseInt(x)).filter((x: number) => !isNaN(x)) : [],
@@ -4012,13 +4043,13 @@ function EditTaskDialog({ task, users, onSubmit, isSubmitting }: any) {
               />
             )}
 
-            {/* Farmer Selector (Multi-Select & Add Farmer) */}
+            {/* Farmer Selector (Single-Select & Add Farmer) */}
             {data.taskType === "FARMER" && (
               <FarmerSelector
-                selectedFarmerIds={data.farmerIds || []}
+                selectedFarmerIds={(data.farmerIds || []).slice(-1)}
                 onChange={(ids) => setData(prev => ({
                   ...prev,
-                  farmerIds: ids,
+                  farmerIds: ids.slice(-1),
                   taskType: ids.length > 0 && (prev.taskType === "NORMAL" || !prev.taskType) ? "FARMER" : prev.taskType
                 }))}
               />
@@ -4768,7 +4799,7 @@ function ViewTaskDetailsDialog({ task, onEdit }: { task: any; onEdit?: () => voi
                   <div className="space-y-1.5 pt-1 border-t border-slate-200/60">
                      <div className="flex items-center justify-between">
                         <Label className="text-xs font-black uppercase text-emerald-600 flex items-center gap-1.5">
-                           <Sprout className="h-3.5 w-3.5 text-emerald-600" /> Assigned Farmers ({task.farmers?.length || 0})
+                           <Sprout className="h-3.5 w-3.5 text-emerald-600" /> Assigned Farmer ({task.farmers?.length || 0})
                         </Label>
                         <span className="text-[10px] font-bold text-slate-400 uppercase">
                            Category: {task.taskType || "FARMER"}
