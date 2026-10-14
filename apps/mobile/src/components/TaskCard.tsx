@@ -174,25 +174,61 @@ export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
           )}
         </View>
 
-        {task.dealers && task.dealers.length > 0 && (
-          <View style={styles.dealersContainer}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-              <Icon source="storefront-outline" size={14} color="#0284C7" />
-              <Text style={styles.dealersHeaderTitle}>
-                ASSIGNED DEALER{task.dealers.length > 1 ? "S" : ""} ({task.dealers.length})
-              </Text>
-            </View>
-            <View style={styles.dealersList}>
-              {task.dealers.map((d) => (
-                <View key={d.id} style={styles.dealerChip}>
-                  <Text style={styles.dealerChipText}>
-                    🤝 {d.name}{d.city ? ` (${d.city})` : ""}{d.phone ? ` • ${d.phone}` : ""}
-                  </Text>
+        {(() => {
+          const dealersList = (task.dealers || []).filter((d: any) => !d.isFarmer && !(typeof d.name === "string" && d.name.startsWith("🌾")));
+          const farmersList = (task.farmers && task.farmers.length > 0)
+            ? task.farmers
+            : (task.dealers || []).filter((d: any) => d.isFarmer || (typeof d.name === "string" && d.name.startsWith("🌾"))).map((d: any) => ({
+                id: d.id,
+                name: typeof d.name === "string" ? d.name.replace(/^🌾\s*/, "").replace(/\s*\(Farmer\)$/, "") : d.name,
+                village: d.city,
+                phone: d.phone
+              }));
+
+          return (
+            <>
+              {dealersList.length > 0 && (
+                <View style={styles.dealersContainer}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                    <Icon source="storefront-outline" size={14} color="#0284C7" />
+                    <Text style={styles.dealersHeaderTitle}>
+                      ASSIGNED DEALER{dealersList.length > 1 ? "S" : ""} ({dealersList.length})
+                    </Text>
+                  </View>
+                  <View style={styles.dealersList}>
+                    {dealersList.map((d: any) => (
+                      <View key={d.id} style={styles.dealerChip}>
+                        <Text style={styles.dealerChipText}>
+                          🤝 {d.name}{d.city ? ` (${d.city})` : ""}{d.phone ? ` • ${d.phone}` : ""}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
                 </View>
-              ))}
-            </View>
-          </View>
-        )}
+              )}
+
+              {farmersList.length > 0 && (
+                <View style={styles.farmersContainer}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                    <Icon source="sprout-outline" size={14} color="#16A34A" />
+                    <Text style={styles.farmersHeaderTitle}>
+                      ASSIGNED FARMER{farmersList.length > 1 ? "S" : ""} ({farmersList.length})
+                    </Text>
+                  </View>
+                  <View style={styles.dealersList}>
+                    {farmersList.map((f: any) => (
+                      <View key={f.id} style={styles.farmerChip}>
+                        <Text style={styles.farmerChipText}>
+                          🌾 {f.name}{f.village ? ` (${f.village})` : ""}{f.phone ? ` • ${f.phone}` : ""}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </>
+          );
+        })()}
 
         {task.description ? (
           <Text numberOfLines={3} style={styles.description}>
@@ -568,6 +604,33 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     color: "#1E40AF",
+  },
+  farmersContainer: {
+    marginTop: 10,
+    backgroundColor: "#F0FDF4",
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
+  farmersHeaderTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#166534",
+    letterSpacing: 0.5,
+  },
+  farmerChip: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#86EFAC",
+  },
+  farmerChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#14532D",
   },
   typeBadge: {
     paddingHorizontal: 8,

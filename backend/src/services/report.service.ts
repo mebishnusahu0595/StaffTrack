@@ -491,7 +491,9 @@ export async function getDaySummary(actor: AuthUser, userId: string, date: Date)
         checklist: true,
         checklistResponses: true,
         updatedAt: true,
-        createdAt: true
+        createdAt: true,
+        dealers: true,
+        farmers: true
       },
       orderBy: [{ completedAt: "asc" }, { updatedAt: "asc" }]
     }),
@@ -830,6 +832,10 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
           { dueDate: { gte: reportDate, lt: nextDate } }
         ]
       },
+      include: {
+        dealers: true,
+        farmers: true
+      },
       orderBy: [{ completedAt: "asc" }, { updatedAt: "asc" }, { startDate: "asc" }, { dueDate: "asc" }]
     })
   ]);
@@ -936,6 +942,30 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
     }
   };
 
+  const formatDateTimeIST = (dateObj: Date | string | null | undefined): string => {
+    if (!dateObj) return "--";
+    try {
+      const d = new Date(dateObj);
+      if (isNaN(d.getTime())) return "--";
+      return new Intl.DateTimeFormat("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+        timeZone: "Asia/Kolkata"
+      }).format(d);
+    } catch {
+      return "--";
+    }
+  };
+
+  const checkInFormatted = attendance?.checkInTime ? formatDateTimeIST(attendance.checkInTime) : "--";
+  const checkOutFormatted = attendance?.checkOutTime
+    ? formatDateTimeIST(attendance.checkOutTime)
+    : (attendance?.checkInTime ? "⏳ Still Active / In Progress" : "--");
+
   const parseTaskDetails = (t: any, idx: number, allTasks: any[]) => {
     let locationCoords = "";
     if (t.completionLat != null && t.completionLng != null) {
@@ -975,6 +1005,49 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
         } else if (!title.includes("remark")) {
           extraParts.push(val);
         }
+      }
+    }
+
+    // Extract from attached farmers
+    if (t.farmers && Array.isArray(t.farmers) && t.farmers.length > 0) {
+      if (!personName) {
+        personName = t.farmers.map((f: any) => f.name).filter(Boolean).join(", ");
+      }
+      if (!contact) {
+        contact = t.farmers.map((f: any) => f.phone).filter(Boolean).join(", ");
+      }
+      if (!village) {
+        village = t.farmers.map((f: any) => f.village).filter(Boolean).join(", ");
+      }
+      if (!crop) {
+        crop = t.farmers.map((f: any) => f.crop).filter(Boolean).join(", ");
+      }
+      if (!land) {
+        land = t.farmers.map((f: any) => f.landAcres ? `${f.landAcres}` : '').filter(Boolean).join(", ");
+      }
+    }
+
+    // Extract from attached dealers
+    if (t.dealers && Array.isArray(t.dealers) && t.dealers.length > 0) {
+      if (!personName) {
+        personName = t.dealers.map((d: any) => d.name).filter(Boolean).join(", ");
+      }
+      if (!contact) {
+        contact = t.dealers.map((d: any) => d.phone).filter(Boolean).join(", ");
+      }
+      if (!village) {
+        village = t.dealers.map((d: any) => d.city || d.address).filter(Boolean).join(", ");
+      }
+    }
+
+    // Additional fallbacks for village / place / location
+    if (!village) {
+      if (t.completionAddress) {
+        village = t.completionAddress;
+      } else if (t.address) {
+        village = t.address;
+      } else if (t.locationName) {
+        village = t.locationName;
       }
     }
 
@@ -1208,6 +1281,32 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
           <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 6px; text-align: center; box-sizing: border-box;">
             <p style="font-size: 7.5px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 2px 0;">Submitted At</p>
             <p style="font-size: 10px; font-weight: 800; color: #1e293b; margin: 0;">${formattedSubmittedAt}</p>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Shift Check-In & Check-Out Row -->
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
+      <tr>
+        <td style="width: 50%; padding-right: 4px;">
+          <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 6px; padding: 6px 10px; box-sizing: border-box;">
+            <p style="font-size: 7.5px; font-weight: 800; color: #166534; text-transform: uppercase; margin: 0 0 2px 0; letter-spacing: 0.5px;">
+              🟢 Check-In Date & Time
+            </p>
+            <p style="font-size: 11px; font-weight: 800; color: #14532d; margin: 0;">
+              ${checkInFormatted}
+            </p>
+          </div>
+        </td>
+        <td style="width: 50%; padding-left: 4px;">
+          <div style="background: ${attendance?.checkOutTime ? '#eff6ff' : '#fffbeb'}; border: 1.5px solid ${attendance?.checkOutTime ? '#93c5fd' : '#fde68a'}; border-radius: 6px; padding: 6px 10px; box-sizing: border-box;">
+            <p style="font-size: 7.5px; font-weight: 800; color: ${attendance?.checkOutTime ? '#1e40af' : '#b45309'}; text-transform: uppercase; margin: 0 0 2px 0; letter-spacing: 0.5px;">
+              ${attendance?.checkOutTime ? '🔴 Check-Out Date & Time' : '⏳ Check-Out Status'}
+            </p>
+            <p style="font-size: 11px; font-weight: 800; color: ${attendance?.checkOutTime ? '#1e3a8a' : '#92400e'}; margin: 0;">
+              ${checkOutFormatted}
+            </p>
           </div>
         </td>
       </tr>

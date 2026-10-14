@@ -161,7 +161,34 @@ export async function createTask(actor: AuthUser, input: CreateTaskInput) {
     }
   }
 
-  return task;
+  return enrichTaskWithFarmers(task);
+}
+
+export function enrichTaskWithFarmers(t: any): any {
+  if (!t) return t;
+  const farmers = t.farmers || [];
+  if (farmers.length > 0) {
+    const existingDealers = Array.isArray(t.dealers) ? t.dealers : [];
+    const synthesizedDealers = farmers.map((f: any) => ({
+      id: f.id,
+      name: `🌾 ${f.name} (Farmer)`,
+      city: f.village || "",
+      phone: f.phone || "",
+      isFarmer: true,
+      crop: f.crop || "",
+      landAcres: f.landAcres || ""
+    }));
+
+    if (existingDealers.length === 0) {
+      t.dealers = synthesizedDealers;
+    } else {
+      const hasFarmerInDealers = existingDealers.some((d: any) => d.isFarmer || (typeof d.name === "string" && d.name.startsWith("🌾")));
+      if (!hasFarmerInDealers) {
+        t.dealers = [...existingDealers, ...synthesizedDealers];
+      }
+    }
+  }
+  return t;
 }
 
 export interface ListTasksFilter {
@@ -169,7 +196,8 @@ export interface ListTasksFilter {
   assignedToId?: string;
   status?: string;
   limit?: number;
-}export async function listTasks(actor: AuthUser, filter?: ListTasksFilter | string) {
+}
+export async function listTasks(actor: AuthUser, filter?: ListTasksFilter | string) {
   const options: ListTasksFilter = typeof filter === "string" ? { dateStr: filter } : (filter || {});
   const where = await taskAccessWhere(actor, options);
 
@@ -283,6 +311,7 @@ export interface ListTasksFilter {
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
+  tasks.forEach(enrichTaskWithFarmers);
   return tasks;
 }
 
@@ -526,7 +555,7 @@ export async function updateTask(actor: AuthUser, taskId: string, input: Partial
     }
   }
 
-  return updatedTask;
+  return enrichTaskWithFarmers(updatedTask);
 }
 
 export async function deleteTask(actor: AuthUser, taskId: string, deleteAllSeries: boolean = true) {
@@ -941,7 +970,7 @@ export async function updateTaskStatus(
     }
   }
 
-  return updatedTask;
+  return enrichTaskWithFarmers(updatedTask);
 }
 
 async function taskAccessWhere(actor: AuthUser, filter: ListTasksFilter = {}): Promise<Prisma.TaskWhereInput> {

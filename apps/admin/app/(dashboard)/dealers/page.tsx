@@ -303,6 +303,15 @@ export default function DealersPage() {
     );
   }, [staffList, staffSearchText]);
 
+  // Unique metrics for KPI stats
+  const uniqueCities = useMemo(() => {
+    return new Set(dealers.map((d: any) => d.city?.trim() || d.address?.trim()).filter(Boolean)).size;
+  }, [dealers]);
+
+  const assignedDealersCount = useMemo(() => {
+    return dealers.filter((d: any) => Boolean(d.assignedUserId || d.assignedUserName)).length;
+  }, [dealers]);
+
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Top Header */}
@@ -341,6 +350,49 @@ export default function DealersPage() {
           >
             <Plus className="h-4 w-4" /> Add Dealer
           </Button>
+        </div>
+      </div>
+
+      {/* KPI Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-2xl p-4 border border-slate-150 shadow-sm flex items-center gap-3">
+          <div className="h-12 w-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black">
+            <Store className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Dealers</p>
+            <p className="text-2xl font-black text-slate-900">{dealers.length}</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 border border-slate-150 shadow-sm flex items-center gap-3">
+          <div className="h-12 w-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black">
+            <MapPin className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Cities Covered</p>
+            <p className="text-2xl font-black text-slate-900">{uniqueCities}</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 border border-slate-150 shadow-sm flex items-center gap-3">
+          <div className="h-12 w-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-black">
+            <Building2 className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Assigned Dealers</p>
+            <p className="text-2xl font-black text-slate-900">{assignedDealersCount}</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 border border-slate-150 shadow-sm flex items-center gap-3">
+          <div className="h-12 w-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-black">
+            <Users className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Available Staff</p>
+            <p className="text-2xl font-black text-slate-900">{staffList.length}</p>
+          </div>
         </div>
       </div>
 
