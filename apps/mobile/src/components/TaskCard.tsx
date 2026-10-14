@@ -1,5 +1,6 @@
 import dayjs from "dayjs";
-import { StyleSheet, View, Image } from "react-native";
+import { useState } from "react";
+import { StyleSheet, View, Image, TouchableOpacity, Modal, ScrollView } from "react-native";
 import { Button, Card, Text, Icon } from "react-native-paper";
 
 import type { Task, TaskStatus } from "../api";
@@ -19,12 +20,36 @@ const statusMeta: Record<TaskStatus, { label: string; color: string; textColor: 
 };
 
 export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const meta = statusMeta[task.status];
   const location = getTaskLocation(task);
   const actionLabel = task.status === "PENDING" ? "Start Task" : "Complete Task";
 
+  // Separate real dealers and farmers
+  const dealersList = (task.dealers || []).filter((d: any) => !d.isFarmer && !(typeof d.name === "string" && d.name.startsWith("🌾")));
+  const farmersList = (task.farmers && task.farmers.length > 0)
+    ? task.farmers
+    : (task.dealers || []).filter((d: any) => d.isFarmer || (typeof d.name === "string" && d.name.startsWith("🌾"))).map((d: any) => ({
+        id: d.id,
+        name: typeof d.name === "string" ? d.name.replace(/^🌾\s*/, "").replace(/\s*\(Farmer\)$/, "") : d.name,
+        village: d.city,
+        phone: d.phone,
+        crop: (d as any).crop,
+        landAcres: (d as any).landAcres
+      }));
+
+  const startTime = getTaskStartTime(task);
+  let timingLabel = "";
+  if (task.status === "COMPLETED") {
+    const end = task.completedAt || null;
+    timingLabel = `${startTime ? dayjs(startTime).format("hh:mm A") : "—"} – ${end ? dayjs(end).format("hh:mm A") : "Completed"}`;
+  } else if (startTime) {
+    timingLabel = `${task.status === "IN_PROGRESS" ? "Started at" : "Scheduled:"} ${dayjs(startTime).format("hh:mm A")}`;
+  }
+
   return (
-    <Card mode="elevated" onPress={disabled ? undefined : () => onPress?.(task)} style={styles.card}>
+    <>
+      <Card mode="elevated" onPress={() => setIsDetailsModalOpen(true)} style={styles.card}>
       <Card.Content>
         <View style={styles.headerWrapper}>
           {task.isSubtask && task.parentTask && (
@@ -174,66 +199,56 @@ export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
           )}
         </View>
 
-        {(() => {
-          const dealersList = (task.dealers || []).filter((d: any) => !d.isFarmer && !(typeof d.name === "string" && d.name.startsWith("🌾")));
-          const farmersList = (task.farmers && task.farmers.length > 0)
-            ? task.farmers
-            : (task.dealers || []).filter((d: any) => d.isFarmer || (typeof d.name === "string" && d.name.startsWith("🌾"))).map((d: any) => ({
-                id: d.id,
-                name: typeof d.name === "string" ? d.name.replace(/^🌾\s*/, "").replace(/\s*\(Farmer\)$/, "") : d.name,
-                village: d.city,
-                phone: d.phone
-              }));
-
-          return (
-            <>
-              {dealersList.length > 0 && (
-                <View style={styles.dealersContainer}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                    <Icon source="storefront-outline" size={14} color="#0284C7" />
-                    <Text style={styles.dealersHeaderTitle}>
-                      ASSIGNED DEALER{dealersList.length > 1 ? "S" : ""} ({dealersList.length})
-                    </Text>
-                  </View>
-                  <View style={styles.dealersList}>
-                    {dealersList.map((d: any) => (
-                      <View key={d.id} style={styles.dealerChip}>
-                        <Text style={styles.dealerChipText}>
-                          🤝 {d.name}{d.city ? ` (${d.city})` : ""}{d.phone ? ` • ${d.phone}` : ""}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
+        {dealersList.length > 0 && (
+          <View style={styles.dealersContainer}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+              <Icon source="storefront-outline" size={14} color="#0284C7" />
+              <Text style={styles.dealersHeaderTitle}>
+                ASSIGNED DEALER{dealersList.length > 1 ? "S" : ""} ({dealersList.length})
+              </Text>
+            </View>
+            <View style={styles.dealersList}>
+              {dealersList.map((d: any) => (
+                <View key={d.id} style={styles.dealerChip}>
+                  <Text style={styles.dealerChipText}>
+                    🤝 {d.name}{d.city ? ` (${d.city})` : ""}{d.phone ? ` • ${d.phone}` : ""}
+                  </Text>
                 </View>
-              )}
+              ))}
+            </View>
+          </View>
+        )}
 
-              {farmersList.length > 0 && (
-                <View style={styles.farmersContainer}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                    <Icon source="sprout-outline" size={14} color="#16A34A" />
-                    <Text style={styles.farmersHeaderTitle}>
-                      ASSIGNED FARMER{farmersList.length > 1 ? "S" : ""} ({farmersList.length})
-                    </Text>
-                  </View>
-                  <View style={styles.dealersList}>
-                    {farmersList.map((f: any) => (
-                      <View key={f.id} style={styles.farmerChip}>
-                        <Text style={styles.farmerChipText}>
-                          🌾 {f.name}{f.village ? ` (${f.village})` : ""}{f.phone ? ` • ${f.phone}` : ""}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
+        {farmersList.length > 0 && (
+          <View style={styles.farmersContainer}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+              <Icon source="sprout-outline" size={14} color="#16A34A" />
+              <Text style={styles.farmersHeaderTitle}>
+                ASSIGNED FARMER{farmersList.length > 1 ? "S" : ""} ({farmersList.length})
+              </Text>
+            </View>
+            <View style={styles.dealersList}>
+              {farmersList.map((f: any) => (
+                <View key={f.id} style={styles.farmerChip}>
+                  <Text style={styles.farmerChipText}>
+                    🌾 {f.name}{f.village ? ` (${f.village})` : ""}{f.phone ? ` • ${f.phone}` : ""}
+                  </Text>
                 </View>
-              )}
-            </>
-          );
-        })()}
+              ))}
+            </View>
+          </View>
+        )}
 
         {task.description ? (
-          <Text numberOfLines={3} style={styles.description}>
-            {task.description}
-          </Text>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => setIsDetailsModalOpen(true)} style={{ marginTop: 6 }}>
+            <Text numberOfLines={3} style={styles.description}>
+              {task.description}
+            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 3, marginTop: 4 }}>
+              <Icon source="arrow-top-right" size={13} color="#2563EB" />
+              <Text style={styles.readMoreText}>Tap to view full description</Text>
+            </View>
+          </TouchableOpacity>
         ) : null}
 
         {task.status === "COMPLETED" && (
@@ -318,6 +333,213 @@ export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
         </Card.Actions>
       ) : null}
     </Card>
+
+    {/* Full Task Details & Scrollable Description Popup Modal */}
+    <Modal
+      visible={isDetailsModalOpen}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={() => setIsDetailsModalOpen(false)}
+    >
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalCard}>
+          {/* Modal Header */}
+          <View style={styles.modalHeader}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <View style={[styles.statusBadge, { backgroundColor: meta.color }]}>
+                  <Text style={[styles.statusBadgeText, { color: meta.textColor }]}>
+                    {meta.label.toUpperCase()}
+                  </Text>
+                </View>
+                {typeof task.points === 'number' && (
+                  <View style={styles.pointsBadge}>
+                    <Text style={styles.pointsText}>{task.points} PTS</Text>
+                  </View>
+                )}
+                {task.priority && (
+                  <View style={[styles.priorityBadge, { backgroundColor: task.priority === 'High' ? '#FEE2E2' : '#F1F5F9' }]}>
+                    <Text style={{ fontSize: 10, fontWeight: '800', color: task.priority === 'High' ? '#DC2626' : '#475569' }}>
+                      {task.priority.toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.modalTitle} numberOfLines={2}>
+                {task.title}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setIsDetailsModalOpen(false)}
+              style={styles.modalCloseButton}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Icon source="close" size={20} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Scrollable Content */}
+          <ScrollView
+            style={styles.modalScroll}
+            contentContainerStyle={styles.modalScrollContent}
+            showsVerticalScrollIndicator={true}
+          >
+            {/* Due Date & Timings */}
+            <View style={styles.modalMetaSection}>
+              <View style={styles.modalMetaRow}>
+                <Icon source="calendar-clock" size={15} color="#0284C7" />
+                <Text style={styles.modalMetaLabel}>Due Date:</Text>
+                <Text style={styles.modalMetaValue}>
+                  {dayjs(task.dueDate).format("DD MMM YYYY")}
+                </Text>
+              </View>
+              {timingLabel ? (
+                <View style={styles.modalMetaRow}>
+                  <Icon source="clock-outline" size={15} color="#16A34A" />
+                  <Text style={styles.modalMetaLabel}>Schedule:</Text>
+                  <Text style={styles.modalMetaValue}>{timingLabel}</Text>
+                </View>
+              ) : null}
+              {location ? (
+                <View style={styles.modalMetaRow}>
+                  <Icon source="map-marker-outline" size={15} color="#D97706" />
+                  <Text style={styles.modalMetaLabel}>Location:</Text>
+                  <Text style={styles.modalMetaValue}>
+                    {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            {/* Full Description Section */}
+            <View style={styles.modalSection}>
+              <View style={styles.modalSectionHeader}>
+                <Icon source="text-box-outline" size={16} color="#0F172A" />
+                <Text style={styles.modalSectionTitle}>FULL TASK DESCRIPTION</Text>
+              </View>
+              <View style={styles.modalDescriptionBox}>
+                {task.description ? (
+                  <Text style={styles.modalDescriptionText} selectable={true}>
+                    {task.description}
+                  </Text>
+                ) : (
+                  <Text style={styles.modalEmptyText}>No description provided for this task.</Text>
+                )}
+              </View>
+            </View>
+
+            {/* Assigned Farmers */}
+            {farmersList.length > 0 && (
+              <View style={styles.modalSection}>
+                <View style={styles.modalSectionHeader}>
+                  <Icon source="sprout" size={16} color="#16A34A" />
+                  <Text style={[styles.modalSectionTitle, { color: "#166534" }]}>
+                    ASSIGNED FARMER{farmersList.length > 1 ? "S" : ""} ({farmersList.length})
+                  </Text>
+                </View>
+                <View style={{ gap: 8, marginTop: 4 }}>
+                  {farmersList.map((f: any) => (
+                    <View key={f.id} style={styles.modalEntityCard}>
+                      <Text style={styles.modalEntityName}>🌾 {f.name}</Text>
+                      {f.village ? <Text style={styles.modalEntityDetail}>📍 Village: {f.village}</Text> : null}
+                      {f.phone ? <Text style={styles.modalEntityDetail}>📞 Phone: {f.phone}</Text> : null}
+                      {f.crop ? <Text style={styles.modalEntityDetail}>🌱 Crop: {f.crop}{f.landAcres ? ` (${f.landAcres} Acr)` : ''}</Text> : null}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Assigned Dealers */}
+            {dealersList.length > 0 && (
+              <View style={styles.modalSection}>
+                <View style={styles.modalSectionHeader}>
+                  <Icon source="storefront" size={16} color="#0284C7" />
+                  <Text style={[styles.modalSectionTitle, { color: "#0369A1" }]}>
+                    ASSIGNED DEALER{dealersList.length > 1 ? "S" : ""} ({dealersList.length})
+                  </Text>
+                </View>
+                <View style={{ gap: 8, marginTop: 4 }}>
+                  {dealersList.map((d: any) => (
+                    <View key={d.id} style={styles.modalEntityCard}>
+                      <Text style={styles.modalEntityName}>🤝 {d.name}</Text>
+                      {d.city ? <Text style={styles.modalEntityDetail}>📍 City: {d.city}</Text> : null}
+                      {d.phone ? <Text style={styles.modalEntityDetail}>📞 Phone: {d.phone}</Text> : null}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Completion Evidence if completed */}
+            {task.status === "COMPLETED" && (
+              <View style={styles.modalSection}>
+                <View style={styles.modalSectionHeader}>
+                  <Icon source="check-decagram" size={16} color="#16A34A" />
+                  <Text style={[styles.modalSectionTitle, { color: "#15803D" }]}>COMPLETION DETAILS</Text>
+                </View>
+                <View style={styles.modalDescriptionBox}>
+                  {task.completionRemarks ? (
+                    <Text style={{ fontSize: 13, color: "#1E293B", fontWeight: "600", marginBottom: 6 }}>
+                      "{task.completionRemarks}"
+                    </Text>
+                  ) : null}
+                  {task.completedAt ? (
+                    <Text style={{ fontSize: 11, color: "#64748B", fontWeight: "700" }}>
+                      Completed on: {dayjs(task.completedAt).format("DD MMM YYYY, hh:mm A")}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Modal Footer Actions */}
+          <View style={styles.modalFooter}>
+            <Button
+              mode="outlined"
+              onPress={() => setIsDetailsModalOpen(false)}
+              style={styles.modalSecondaryButton}
+              textColor="#475569"
+            >
+              Close
+            </Button>
+            {task.status === "COMPLETED" && !disabled && (
+              <Button
+                mode="contained"
+                onPress={() => {
+                  setIsDetailsModalOpen(false);
+                  onPress?.(task);
+                }}
+                style={styles.modalPrimaryButton}
+                buttonColor="#16A34A"
+                textColor="#FFFFFF"
+              >
+                View / Edit Proof
+              </Button>
+            )}
+            {task.status !== "COMPLETED" && task.status !== "CANCELLED" && (
+              <Button
+                mode="contained"
+                disabled={disabled}
+                onPress={() => {
+                  setIsDetailsModalOpen(false);
+                  onPress?.(task);
+                }}
+                style={[
+                  styles.modalPrimaryButton,
+                  task.status === "PENDING" ? { backgroundColor: "#10B981" } : { backgroundColor: "#2196F3" }
+                ]}
+                textColor="#FFFFFF"
+              >
+                {actionLabel}
+              </Button>
+            )}
+          </View>
+        </View>
+      </View>
+    </Modal>
+  </>
   );
 }
 
@@ -678,5 +900,154 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#92400E",
+  },
+  readMoreText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#2563EB",
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.65)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  modalCard: {
+    width: "100%",
+    maxHeight: "84%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+    display: "flex",
+    flexDirection: "column",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0F172A",
+    lineHeight: 22,
+  },
+  modalCloseButton: {
+    padding: 6,
+    borderRadius: 12,
+    backgroundColor: "#F1F5F9",
+  },
+  modalScroll: {
+    flexGrow: 1,
+  },
+  modalScrollContent: {
+    padding: 20,
+    gap: 16,
+  },
+  modalMetaSection: {
+    backgroundColor: "#F8FAFC",
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    gap: 8,
+  },
+  modalMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  modalMetaLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748B",
+    minWidth: 70,
+  },
+  modalMetaValue: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#0F172A",
+    flex: 1,
+  },
+  modalSection: {
+    gap: 6,
+  },
+  modalSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  modalSectionTitle: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#475569",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  modalDescriptionBox: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  modalDescriptionText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#1E293B",
+    fontWeight: "500",
+  },
+  modalEmptyText: {
+    fontSize: 12,
+    color: "#94A3B8",
+    fontStyle: "italic",
+  },
+  modalEntityCard: {
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    borderRadius: 12,
+    padding: 10,
+    gap: 2,
+  },
+  modalEntityName: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#14532D",
+    marginBottom: 2,
+  },
+  modalEntityDetail: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#166534",
+  },
+  modalFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+    backgroundColor: "#FAFAFA",
+  },
+  modalSecondaryButton: {
+    borderRadius: 12,
+    borderColor: "#CBD5E1",
+  },
+  modalPrimaryButton: {
+    borderRadius: 12,
   },
 });
