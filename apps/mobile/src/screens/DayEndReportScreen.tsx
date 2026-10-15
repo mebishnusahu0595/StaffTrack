@@ -748,13 +748,19 @@ export function DayEndReportScreen() {
       }
 
       const { uri } = await Print.printToFileAsync({ html });
-      await Sharing.shareAsync(uri, {
-        mimeType: "application/pdf",
-        dialogTitle: `Day End Report - ${dayjs(reportDateStr).format("DD MMM YYYY")}`,
-        UTI: "com.adobe.pdf"
-      });
-    } catch (error) {
-      Alert.alert("Export failed", "Could not generate the report PDF.");
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "application/pdf",
+          dialogTitle: `Day End Report - ${dayjs(reportDateStr).format("DD MMM YYYY")}`,
+          UTI: "com.adobe.pdf"
+        });
+      } else {
+        Alert.alert("PDF Generated", `Report PDF created: ${uri}`);
+      }
+    } catch (error: any) {
+      console.error("[DER Export Error]:", error);
+      Alert.alert("Export failed", `Could not generate the report PDF: ${error?.message || String(error)}`);
     } finally {
       setIsExporting(false);
     }
@@ -964,13 +970,19 @@ export function DayEndReportScreen() {
       }
 
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      await Sharing.shareAsync(uri, {
-        mimeType: "application/pdf",
-        dialogTitle: `Day End Report - ${dayjs(report.date).format("DD MMM YYYY")}`,
-        UTI: "com.adobe.pdf"
-      });
-    } catch (error) {
-      Alert.alert("Sharing failed", "Could not share the report as PDF.");
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "application/pdf",
+          dialogTitle: `Day End Report - ${dayjs(report.date).format("DD MMM YYYY")}`,
+          UTI: "com.adobe.pdf"
+        });
+      } else {
+        Alert.alert("PDF Generated", `Report PDF created: ${uri}`);
+      }
+    } catch (error: any) {
+      console.error("[DER Share Error]:", error);
+      Alert.alert("Sharing failed", `Could not share the report as PDF: ${error?.message || String(error)}`);
     } finally {
       setIsSharing(null);
     }
