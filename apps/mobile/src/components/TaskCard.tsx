@@ -50,7 +50,7 @@ export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
   return (
     <>
       <Card mode="elevated" onPress={() => setIsDetailsModalOpen(true)} style={styles.card}>
-      <Card.Content>
+      <Card.Content style={task.status === "COMPLETED" ? styles.completedCardContent : undefined}>
         <View style={styles.headerWrapper}>
           {task.isSubtask && task.parentTask && (
             <View style={styles.subtaskBadge}>
@@ -255,19 +255,12 @@ export function TaskCard({ disabled, onPress, task }: TaskCardProps) {
           <View style={styles.completionEvidence}>
             <View style={styles.evidenceHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Icon source="check-decagram-outline" size={14} color="#1A202C" />
+                <Icon source="check-decagram-outline" size={14} color="#166534" />
                 <Text style={styles.evidenceLabel}>COMPLETION PROOF</Text>
               </View>
-              {!disabled && (
-                <Button 
-                  mode="text" 
-                  compact 
-                  onPress={() => onPress?.(task)} 
-                  labelStyle={styles.editButtonLabel}
-                >
-                  Edit
-                </Button>
-              )}
+              <View style={styles.completedBadgePill}>
+                <Text style={styles.completedBadgePillText}>LOCKED</Text>
+              </View>
             </View>
             
             <View style={styles.evidenceContent}>
@@ -702,13 +695,31 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#005FB8',
   },
+  completedCardContent: {
+    paddingBottom: 20,
+  },
   completionEvidence: {
     marginTop: 16,
+    marginBottom: 6,
     backgroundColor: '#F0F7F4',
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#D7EBE1',
+  },
+  completedBadgePill: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  completedBadgePillText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#166534',
+    letterSpacing: 0.5,
   },
   evidenceHeader: {
     flexDirection: 'row',

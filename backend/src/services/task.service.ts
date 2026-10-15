@@ -839,11 +839,49 @@ export async function updateTaskStatus(
     forbidden("Task is outside your company");
   }
 
-  // Prevent employee from starting task if on leave or not checked in
-  if (status === TaskStatus.IN_PROGRESS && actor.role === UserRole.EMPLOYEE) {
+  // Prevent re-editing or resubmitting an already completed task
+  if (task.status === TaskStatus.COMPLETED && actor.role === UserRole.EMPLOYEE) {
+    forbidden("Task is already completed and cannot be edited or resubmitted.");
+  }
+
+  // Prevent employee from starting or completing tasks if on leave, holiday, not checked in, or checked out
+  if ((status === TaskStatus.IN_PROGRESS || status === TaskStatus.COMPLETED) && actor.role === UserRole.EMPLOYEE) {
     const todayStart = getStartOfDayIST(new Date());
     const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
 
+    // 1. Holiday Check
+    const holiday = await prisma.holiday.findFirst({
+      where: {
+        companyId: actor.companyId,
+        date: {
+          gte: todayStart,
+          lt: tomorrowStart
+        },
+        OR: [
+          { userId: actor.id },
+          { groupId: task.assignedTo.groupId },
+          { userId: null, groupId: null }
+        ]
+      }
+    });
+    if (holiday) {
+      forbidden(`Today is a company holiday (${holiday.name}). Tasks cannot be started or completed.`);
+    }
+
+    // 2. Approved Leave Check
+    const activeLeave = await prisma.leaveRequest.findFirst({
+      where: {
+        userId: actor.id,
+        status: "APPROVED",
+        startDate: { lte: tomorrowStart },
+        endDate: { gte: todayStart }
+      }
+    });
+    if (activeLeave) {
+      forbidden("You are on approved leave today. Tasks cannot be started or completed while on leave.");
+    }
+
+    // 3. Attendance Check
     const todayAttendance = await prisma.attendance.findFirst({
       where: {
         userId: actor.id,
@@ -855,11 +893,15 @@ export async function updateTaskStatus(
     });
 
     if (todayAttendance?.status === "ON_LEAVE") {
-      forbidden("You are on leave today. Tasks cannot be started while on leave.");
+      forbidden("You are on leave today. Tasks cannot be started or completed while on leave.");
     }
 
     if (!todayAttendance || !todayAttendance.checkInTime) {
-      forbidden("You have not checked in today. Please check in first before starting any tasks.");
+      forbidden("You have not checked in today. Please check in first before working on tasks.");
+    }
+
+    if (todayAttendance.checkOutTime) {
+      forbidden("You have already checked out for today. Tasks cannot be started or completed after check-out.");
     }
   }
 

@@ -36,7 +36,7 @@ export function HomeScreen() {
   const [showNotifications, setShowNotifications] = useState(false);
 
   // Time tracking & attendance states
-  const { todaySessions, activeAttendance, todayAttendance, activeBreak, isOnLeave } = useAttendance();
+  const { todaySessions, activeAttendance, todayAttendance, activeBreak, isOnLeave, holidays } = useAttendance();
   const { officeTime, fieldTime, breakTime, friendlyBreakTime } = useTimeTracker(todaySessions, currentTime);
   const isCheckedIn = Boolean(activeAttendance);
   const isCheckedOut = !isCheckedIn && todaySessions.length > 0;
@@ -279,6 +279,38 @@ export function HomeScreen() {
 
   async function submitCompletion() {
     if (!selectedTask) return;
+    if (selectedTask.status === "COMPLETED") {
+      Alert.alert("Task Completed", "This task is already completed and locked.");
+      setCompletionModalVisible(false);
+      return;
+    }
+
+    const isTodayHoliday = (holidays || []).some((h: any) => dayjs(h.date).isSame(dayjs(), "day"));
+    if (isTodayHoliday) {
+      Alert.alert("Holiday", "Today is a holiday. Tasks cannot be started or completed on holidays.");
+      setCompletionModalVisible(false);
+      return;
+    }
+
+    if (isOnLeave) {
+      Alert.alert("On Leave", "You are on leave today. Tasks cannot be started or completed while on leave.");
+      setCompletionModalVisible(false);
+      return;
+    }
+
+    if (!activeAttendance && todaySessions.length === 0) {
+      Alert.alert("Check-in Required", "You have not checked in today. Please check in first before working on tasks.");
+      setCompletionModalVisible(false);
+      return;
+    }
+
+    const hasCheckedOut = !activeAttendance && todaySessions.length > 0 && todaySessions.every((s: any) => Boolean(s.checkOutTime));
+    if (hasCheckedOut) {
+      Alert.alert("Already Checked Out", "You have already checked out for today. Tasks cannot be started or completed after check-out.");
+      setCompletionModalVisible(false);
+      return;
+    }
+
     if (!isChecklistComplete) {
       Alert.alert("Incomplete Checklist", "Please complete all required checklist items first.");
       return;
@@ -391,7 +423,51 @@ export function HomeScreen() {
 
   async function handleTaskPress(task: Task) {
     if (task.status === "CANCELLED") return;
-    if (task.status === "IN_PROGRESS" || task.status === "COMPLETED") {
+
+    if (task.status === "COMPLETED") {
+      Alert.alert("Task Completed", "This task is already completed and locked.");
+      return;
+    }
+
+    const isTodayHoliday = (holidays || []).some((h: any) => dayjs(h.date).isSame(dayjs(), "day"));
+    if (isTodayHoliday) {
+      Alert.alert(
+        "Holiday",
+        "Today is a company holiday. Tasks cannot be started or completed on holidays."
+      );
+      return;
+    }
+
+    if (isOnLeave) {
+      Alert.alert(
+        "Cannot Start Task",
+        "You are on leave today. Tasks cannot be started while on leave."
+      );
+      return;
+    }
+
+    if (!activeAttendance && todaySessions.length === 0) {
+      Alert.alert(
+        "Check-in Required",
+        "You have not checked in today. Please check in first before starting any tasks.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Go to Attendance", onPress: () => navigation.navigate("Attendance") }
+        ]
+      );
+      return;
+    }
+
+    const hasCheckedOut = !activeAttendance && todaySessions.length > 0 && todaySessions.every((s: any) => Boolean(s.checkOutTime));
+    if (hasCheckedOut) {
+      Alert.alert(
+        "Already Checked Out",
+        "You have already checked out for today. Tasks cannot be started or completed after check-out."
+      );
+      return;
+    }
+
+    if (task.status === "IN_PROGRESS") {
       setSelectedTask(task);
       setTaskStartTime(task.startedAt || new Date().toISOString());
       setCompletionRemarks(task.completionRemarks || "");
@@ -431,26 +507,6 @@ export function HomeScreen() {
       setChecklistResponses(initialResponses);
 
       setCompletionModalVisible(true);
-      return;
-    }
-
-    if (isOnLeave) {
-      Alert.alert(
-        "Cannot Start Task",
-        "You are on leave today. Tasks cannot be started while on leave."
-      );
-      return;
-    }
-
-    if (!activeAttendance && todaySessions.length === 0) {
-      Alert.alert(
-        "Check-in Required",
-        "You have not checked in today. Please check in first before starting any tasks.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Go to Attendance", onPress: () => navigation.navigate("Attendance") }
-        ]
-      );
       return;
     }
 

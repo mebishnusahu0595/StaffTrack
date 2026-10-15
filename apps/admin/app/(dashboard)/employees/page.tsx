@@ -393,8 +393,21 @@ export default function EmployeesPage() {
 
     // Calculate durations
     const dayAttendanceSessions = (attendanceQuery.data ?? []).filter((session: any) => {
-      return dayjs(session.checkInTime).format("YYYY-MM-DD") === reportDateStr;
+      return (session.userId === employee.id || !session.userId) && dayjs(session.checkInTime || session.date).format("YYYY-MM-DD") === reportDateStr;
     });
+    const firstAttendance = dayAttendanceSessions[0];
+    const checkInFormatted = firstAttendance?.checkInTime ? dayjs(firstAttendance.checkInTime).format("DD MMM YYYY, hh:mm a") : "--";
+    const checkOutFormatted = firstAttendance?.checkOutTime
+      ? dayjs(firstAttendance.checkOutTime).format("DD MMM YYYY, hh:mm a")
+      : (firstAttendance?.checkInTime ? "⏳ Still Active / In Progress" : "--");
+
+    const checkInCoords = (firstAttendance?.checkInLat != null && firstAttendance?.checkInLng != null)
+      ? `${Number(firstAttendance.checkInLat).toFixed(4)}, ${Number(firstAttendance.checkInLng).toFixed(4)}`
+      : "";
+    const checkOutCoords = (firstAttendance?.checkOutLat != null && firstAttendance?.checkOutLng != null)
+      ? `${Number(firstAttendance.checkOutLat).toFixed(4)}, ${Number(firstAttendance.checkOutLng).toFixed(4)}`
+      : "";
+
     const { officeTimeMs, fieldTimeMs, breakTimeMs } = calculateDurations(dayAttendanceSessions);
     const workTimeMs = officeTimeMs + fieldTimeMs;
     const workTimeLabel = workTimeMs > 0 ? formatDurationLabel(workTimeMs) : "0h 0m";
@@ -415,6 +428,7 @@ export default function EmployeesPage() {
       let crop = "";
       let land = "";
       let product = "";
+      let completionRemarks = t.completionRemarks || "";
       const extraParts: string[] = [];
 
       if (t.checklistResponses && Array.isArray(t.checklistResponses) && t.checklistResponses.length > 0) {
@@ -437,7 +451,13 @@ export default function EmployeesPage() {
             land = val;
           } else if (title.includes("product") || title.includes("item")) {
             product = val;
-          } else if (!title.includes("remark")) {
+          } else if (title.includes("remark") || title.includes("comment") || title.includes("feedback") || title.includes("note")) {
+            if (!completionRemarks) {
+              completionRemarks = val;
+            } else if (!completionRemarks.includes(val)) {
+              completionRemarks += ` • ${val}`;
+            }
+          } else {
             extraParts.push(val);
           }
         }
@@ -483,7 +503,7 @@ export default function EmployeesPage() {
         coords: locationCoords,
         startTime: startTimeFormatted,
         completedTime: completedTimeFormatted,
-        remarks: t.completionRemarks || ""
+        remarks: completionRemarks || t.completionRemarks || ""
       };
     };
 
@@ -540,6 +560,9 @@ export default function EmployeesPage() {
             <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #0284c7; font-size: 7.5px; font-weight: 700; white-space: nowrap;">
               ${row.coords ? `<a href="https://maps.google.com/?q=${row.coords}" target="_blank" style="color: #0284c7; text-decoration: underline;">🌐 ${row.coords}</a>` : '<span style="color: #cbd5e1;">--</span>'}
             </td>
+            <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #475569; font-size: 7.5px;">
+              ${row.remarks ? row.remarks : '<span style="color: #cbd5e1;">--</span>'}
+            </td>
             <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; text-align: center; white-space: nowrap;">
               ${percentHtml}
             </td>
@@ -558,6 +581,7 @@ export default function EmployeesPage() {
               <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Task Checkin</th>
               <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Task Checkout</th>
               <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Coordinates</th>
+              <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Remarks</th>
               <th style="padding: 4px 6px; text-align: center; border: 1px solid #e2e8f0;">Percentage</th>
             </tr>
           </thead>
@@ -624,6 +648,46 @@ export default function EmployeesPage() {
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 6px; text-align: center; box-sizing: border-box;">
           <p style="font-size: 7.5px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 1px 0;">Submitted At</p>
           <p style="font-size: 9.5px; font-weight: 800; color: #1e293b; margin: 0;">${formattedSubmittedAt}</p>
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Shift Check-In & Check-Out Row -->
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 7px;">
+    <tr>
+      <td style="width: 50%; padding-right: 3px;">
+        <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 6px; padding: 5px 8px; box-sizing: border-box;">
+          <p style="font-size: 7.5px; font-weight: 800; color: #166534; text-transform: uppercase; margin: 0 0 2px 0; letter-spacing: 0.5px;">
+            🟢 Check-In Date & Time
+          </p>
+          <p style="font-size: 10.5px; font-weight: 800; color: #14532d; margin: 0;">
+            ${checkInFormatted}
+          </p>
+          ${checkInCoords ? `
+            <p style="font-size: 8px; margin: 2px 0 0 0;">
+              <a href="https://maps.google.com/?q=${checkInCoords}" target="_blank" style="color: #15803d; text-decoration: none; font-weight: 700; display: inline-flex; align-items: center; gap: 2px;">
+                <span>🌐</span> <span>${checkInCoords}</span>
+              </a>
+            </p>
+          ` : ''}
+        </div>
+      </td>
+      <td style="width: 50%; padding-left: 3px;">
+        <div style="background: ${firstAttendance?.checkOutTime ? '#eff6ff' : '#fffbeb'}; border: 1.5px solid ${firstAttendance?.checkOutTime ? '#93c5fd' : '#fde68a'}; border-radius: 6px; padding: 5px 8px; box-sizing: border-box;">
+          <p style="font-size: 7.5px; font-weight: 800; color: ${firstAttendance?.checkOutTime ? '#1e40af' : '#b45309'}; text-transform: uppercase; margin: 0 0 2px 0; letter-spacing: 0.5px;">
+            ${firstAttendance?.checkOutTime ? '🔴 Check-Out Date & Time' : '⏳ Check-Out Status'}
+          </p>
+          <p style="font-size: 10.5px; font-weight: 800; color: ${firstAttendance?.checkOutTime ? '#1e3a8a' : '#92400e'}; margin: 0;">
+            ${checkOutFormatted}
+          </p>
+          ${checkOutCoords ? `
+            <p style="font-size: 8px; margin: 2px 0 0 0;">
+              <a href="https://maps.google.com/?q=${checkOutCoords}" target="_blank" style="color: #1d4ed8; text-decoration: none; font-weight: 700; display: inline-flex; align-items: center; gap: 2px;">
+                <span>🌐</span> <span>${checkOutCoords}</span>
+              </a>
+            </p>
+          ` : ''}
         </div>
       </td>
     </tr>

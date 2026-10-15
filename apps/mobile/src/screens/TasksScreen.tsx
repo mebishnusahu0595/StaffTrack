@@ -20,7 +20,7 @@ type TabValue = "ALL" | "PENDING" | "COMPLETED";
 
 export function TasksScreen() {
   const { tasks, isFetching, isUpdatingStatus, refetch, updateStatus } = useTasks();
-  const { isOnLeave, activeAttendance, todaySessions } = useAttendance();
+  const { isOnLeave, activeAttendance, todaySessions, holidays } = useAttendance();
   const [activeTab, setActiveTab] = useState<TabValue>("ALL");
   const [menuVisible, setMenuVisible] = useState(false);
 
@@ -203,6 +203,38 @@ export function TasksScreen() {
 
   async function submitCompletion() {
     if (!selectedTask) return;
+    if (selectedTask.status === "COMPLETED") {
+      Alert.alert("Task Completed", "This task is already completed and locked.");
+      setCompletionModalVisible(false);
+      return;
+    }
+
+    const isTodayHoliday = (holidays || []).some((h: any) => dayjs(h.date).isSame(dayjs(), "day"));
+    if (isTodayHoliday) {
+      Alert.alert("Holiday", "Today is a holiday. Tasks cannot be started or completed on holidays.");
+      setCompletionModalVisible(false);
+      return;
+    }
+
+    if (isOnLeave) {
+      Alert.alert("On Leave", "You are on leave today. Tasks cannot be started or completed while on leave.");
+      setCompletionModalVisible(false);
+      return;
+    }
+
+    if (!activeAttendance && todaySessions.length === 0) {
+      Alert.alert("Check-in Required", "You have not checked in today. Please check in first before working on tasks.");
+      setCompletionModalVisible(false);
+      return;
+    }
+
+    const hasCheckedOut = !activeAttendance && todaySessions.length > 0 && todaySessions.every((s: any) => Boolean(s.checkOutTime));
+    if (hasCheckedOut) {
+      Alert.alert("Already Checked Out", "You have already checked out for today. Tasks cannot be started or completed after check-out.");
+      setCompletionModalVisible(false);
+      return;
+    }
+
     if (!isChecklistComplete) {
       Alert.alert("Incomplete Checklist", "Please complete all required checklist items first.");
       return;
@@ -315,7 +347,47 @@ export function TasksScreen() {
 
   async function handleTaskPress(task: Task) {
     if (task.status === "CANCELLED") return;
-    if (task.status === "IN_PROGRESS" || task.status === "COMPLETED") {
+
+    if (task.status === "COMPLETED") {
+      Alert.alert("Task Completed", "This task is already completed and locked.");
+      return;
+    }
+
+    const isTodayHoliday = (holidays || []).some((h: any) => dayjs(h.date).isSame(dayjs(), "day"));
+    if (isTodayHoliday) {
+      Alert.alert(
+        "Holiday",
+        "Today is a company holiday. Tasks cannot be started or completed on holidays."
+      );
+      return;
+    }
+
+    if (isOnLeave) {
+      Alert.alert(
+        "Cannot Start Task",
+        "You are on leave today. Tasks cannot be started while on leave."
+      );
+      return;
+    }
+
+    if (!activeAttendance && todaySessions.length === 0) {
+      Alert.alert(
+        "Check-in Required",
+        "You have not checked in today. Please check in first before starting any tasks."
+      );
+      return;
+    }
+
+    const hasCheckedOut = !activeAttendance && todaySessions.length > 0 && todaySessions.every((s: any) => Boolean(s.checkOutTime));
+    if (hasCheckedOut) {
+      Alert.alert(
+        "Already Checked Out",
+        "You have already checked out for today. Tasks cannot be started or completed after check-out."
+      );
+      return;
+    }
+
+    if (task.status === "IN_PROGRESS") {
       setSelectedTask(task);
       setTaskStartTime(task.startedAt || new Date().toISOString());
       setCompletionRemarks(task.completionRemarks || "");
@@ -355,22 +427,6 @@ export function TasksScreen() {
       setChecklistResponses(initialResponses);
 
       setCompletionModalVisible(true);
-      return;
-    }
-
-    if (isOnLeave) {
-      Alert.alert(
-        "Cannot Start Task",
-        "You are on leave today. Tasks cannot be started while on leave."
-      );
-      return;
-    }
-
-    if (!activeAttendance && todaySessions.length === 0) {
-      Alert.alert(
-        "Check-in Required",
-        "You have not checked in today. Please check in first before starting any tasks."
-      );
       return;
     }
 
@@ -1014,7 +1070,7 @@ const styles = StyleSheet.create({
   dateDisplay: { flex: 1, paddingVertical: 8 },
   dateTitle: { fontSize: 14, fontWeight: "800", color: "#24312D" },
   dateSubtitle: { fontSize: 10, color: "#66736F", fontWeight: "700", textTransform: "uppercase" },
-  list: { padding: 16 },
+  list: { padding: 16, paddingBottom: 120 },
   emptyList: { flexGrow: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   emptyText: { color: "#66736F", textAlign: "center" },
   attachmentChip: {

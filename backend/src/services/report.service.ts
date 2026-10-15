@@ -969,6 +969,13 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
     ? formatDateTimeIST(attendance.checkOutTime)
     : (attendance?.checkInTime ? "⏳ Still Active / In Progress" : "--");
 
+  const checkInCoords = (attendance?.checkInLat != null && attendance?.checkInLng != null)
+    ? `${Number(attendance.checkInLat).toFixed(4)}, ${Number(attendance.checkInLng).toFixed(4)}`
+    : "";
+  const checkOutCoords = (attendance?.checkOutLat != null && attendance?.checkOutLng != null)
+    ? `${Number(attendance.checkOutLat).toFixed(4)}, ${Number(attendance.checkOutLng).toFixed(4)}`
+    : "";
+
   const parseTaskDetails = (t: any, idx: number, allTasks: any[]) => {
     let locationCoords = "";
     if (t.completionLat != null && t.completionLng != null) {
@@ -983,6 +990,7 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
     let crop = "";
     let land = "";
     let product = "";
+    let completionRemarks = t.completionRemarks ? String(t.completionRemarks).trim() : "";
     const extraParts: string[] = [];
 
     if (t.checklistResponses && Array.isArray(t.checklistResponses) && t.checklistResponses.length > 0) {
@@ -1005,7 +1013,13 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
           land = val;
         } else if (title.includes("product") || title.includes("item")) {
           product = val;
-        } else if (!title.includes("remark")) {
+        } else if (title.includes("remark") || title.includes("comment") || title.includes("feedback") || title.includes("note")) {
+          if (!completionRemarks) {
+            completionRemarks = val;
+          } else if (!completionRemarks.includes(val)) {
+            completionRemarks += ` • ${val}`;
+          }
+        } else {
           extraParts.push(val);
         }
       }
@@ -1129,7 +1143,7 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
       coords: locationCoords,
       startTime: startTimeFormatted,
       completedTime: completedTimeFormatted,
-      remarks: t.completionRemarks || ""
+      remarks: completionRemarks || ""
     };
   };
 
@@ -1186,6 +1200,9 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
           <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #0284c7; font-size: 7.5px; font-weight: 700; white-space: nowrap;">
             ${row.coords ? `<a href="https://maps.google.com/?q=${row.coords}" target="_blank" style="color: #0284c7; text-decoration: underline;">🌐 ${row.coords}</a>` : '<span style="color: #cbd5e1;">--</span>'}
           </td>
+          <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #475569; font-size: 7.5px; font-weight: 600;">
+            ${row.remarks ? row.remarks : '<span style="color: #cbd5e1;">--</span>'}
+          </td>
           <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; text-align: center; white-space: nowrap;">
             ${percentHtml}
           </td>
@@ -1204,6 +1221,7 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
             <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Task Checkin</th>
             <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Task Checkout</th>
             <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Coordinates</th>
+            <th style="padding: 4px 6px; text-align: left; border: 1px solid #e2e8f0;">Remarks</th>
             <th style="padding: 4px 6px; text-align: center; border: 1px solid #e2e8f0;">Percentage</th>
           </tr>
         </thead>
@@ -1300,6 +1318,13 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
             <p style="font-size: 11px; font-weight: 800; color: #14532d; margin: 0;">
               ${checkInFormatted}
             </p>
+            ${checkInCoords ? `
+              <p style="font-size: 8px; margin: 2px 0 0 0;">
+                <a href="https://maps.google.com/?q=${checkInCoords}" target="_blank" style="color: #15803d; text-decoration: none; font-weight: 700; display: inline-flex; align-items: center; gap: 2px;">
+                  <span>🌐</span> <span>${checkInCoords}</span>
+                </a>
+              </p>
+            ` : ''}
           </div>
         </td>
         <td style="width: 50%; padding-left: 4px;">
@@ -1310,6 +1335,13 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
             <p style="font-size: 11px; font-weight: 800; color: ${attendance?.checkOutTime ? '#1e3a8a' : '#92400e'}; margin: 0;">
               ${checkOutFormatted}
             </p>
+            ${checkOutCoords ? `
+              <p style="font-size: 8px; margin: 2px 0 0 0;">
+                <a href="https://maps.google.com/?q=${checkOutCoords}" target="_blank" style="color: #1d4ed8; text-decoration: none; font-weight: 700; display: inline-flex; align-items: center; gap: 2px;">
+                  <span>🌐</span> <span>${checkOutCoords}</span>
+                </a>
+              </p>
+            ` : ''}
           </div>
         </td>
       </tr>
