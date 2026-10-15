@@ -277,8 +277,8 @@ function buildAdminEquivalentDerHtml({
       }
     }
     
-    if (startTimeFormatted === "--" && idx > 0 && completedTasks[idx - 1]) {
-      const prev = completedTasks[idx - 1];
+    if (startTimeFormatted === "--" && idx > 0 && allOrderedTasks[idx - 1]) {
+      const prev = allOrderedTasks[idx - 1];
       const prevDone = prev.completedAt || prev.updatedAt;
       startTimeFormatted = prevDone ? dayjs(prevDone).format("hh:mm A") : "--";
     }

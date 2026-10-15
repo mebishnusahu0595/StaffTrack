@@ -1198,7 +1198,7 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
             ${checkoutHtml}
           </td>
           <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #0284c7; font-size: 7.5px; font-weight: 700; white-space: nowrap;">
-            ${row.coords ? `<a href="https://maps.google.com/?q=${row.coords}" target="_blank" style="color: #0284c7; text-decoration: underline;">🌐 ${row.coords}</a>` : '<span style="color: #cbd5e1;">--</span>'}
+            ${row.coords ? `<a href="https://maps.google.com/?q=${encodeURIComponent(row.coords.replace(/\s+/g, ''))}" target="_blank" style="color: #0284c7; text-decoration: underline;">🌐 ${row.coords}</a>` : '<span style="color: #cbd5e1;">--</span>'}
           </td>
           <td style="padding: 4px 6px; border: 1px solid #e2e8f0; vertical-align: middle; color: #475569; font-size: 7.5px; font-weight: 600;">
             ${row.remarks ? row.remarks : '<span style="color: #cbd5e1;">--</span>'}
@@ -1248,10 +1248,11 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
 <html>
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Day End Report - ${formattedDate}</title>
   <style>
-    body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155; padding: 12px 16px; background: #ffffff; margin: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155; padding: 12px 16px; background: #ffffff; margin: 0; }
     @media print {
       body { padding: 8px 12px; }
       @page { margin: 10mm; }
@@ -1320,7 +1321,7 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
             </p>
             ${checkInCoords ? `
               <p style="font-size: 8px; margin: 2px 0 0 0;">
-                <a href="https://maps.google.com/?q=${checkInCoords}" target="_blank" style="color: #15803d; text-decoration: none; font-weight: 700; display: inline-flex; align-items: center; gap: 2px;">
+                <a href="https://maps.google.com/?q=${encodeURIComponent(checkInCoords.replace(/\s+/g, ''))}" target="_blank" style="color: #15803d; text-decoration: none; font-weight: 700; display: inline-flex; align-items: center; gap: 2px;">
                   <span>🌐</span> <span>${checkInCoords}</span>
                 </a>
               </p>
@@ -1337,7 +1338,7 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
             </p>
             ${checkOutCoords ? `
               <p style="font-size: 8px; margin: 2px 0 0 0;">
-                <a href="https://maps.google.com/?q=${checkOutCoords}" target="_blank" style="color: #1d4ed8; text-decoration: none; font-weight: 700; display: inline-flex; align-items: center; gap: 2px;">
+                <a href="https://maps.google.com/?q=${encodeURIComponent(checkOutCoords.replace(/\s+/g, ''))}" target="_blank" style="color: #1d4ed8; text-decoration: none; font-weight: 700; display: inline-flex; align-items: center; gap: 2px;">
                   <span>🌐</span> <span>${checkOutCoords}</span>
                 </a>
               </p>

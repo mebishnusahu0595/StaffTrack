@@ -43,6 +43,13 @@ export async function getDayEndReportHtml(req: Request, res: Response): Promise<
   const userId = (req.query.userId as string) || req.params.userId || req.user!.id;
   const dateStr = req.query.date as string;
   const date = dateStr ? new Date(dateStr) : new Date();
+
+  // Ensure fresh HTML is always delivered with status 200 (avoid 304 empty responses on mobile clients)
+  delete req.headers["if-none-match"];
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+
   const html = await reportService.renderDayEndReportHtml(req.user!, userId, date);
   sendSuccess(res, { html }, "Day end report HTML rendered");
 }

@@ -39,6 +39,7 @@ import { startScheduler } from "./lib/scheduler";
 dotenv.config();
 
 const app = express();
+app.set("etag", false);
 const httpServer = createServer(app);
 const port = Number(process.env.PORT ?? 4000);
 
