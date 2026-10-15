@@ -326,9 +326,9 @@ export default function EmployeesPage() {
   }, [reportsQuery.data, derDateFilter]);
 
   const handleDownloadDER = async (report: any, employee: any) => {
-    if (!employee || !report) return;
     const formattedDate = dayjs(report.date).format("DD MMM YYYY");
-    const formattedSubmittedAt = dayjs(report.submittedAt).format("DD MMM YYYY hh:mm A");
+    const submittedTime = report.submittedAt || report.createdAt;
+    const formattedSubmittedAt = submittedTime ? dayjs(submittedTime).format("DD MMM YYYY, hh:mm a") : "--";
     const reportDateStr = dayjs(report.date).format("YYYY-MM-DD");
 
     // Fetch exact tasks for this date from the API so past and present dates are never empty

@@ -28,9 +28,9 @@ function buildAdminEquivalentDerHtml({
   workTimeLabel?: string;
   breakTimeLabel?: string;
   monthToDateKm?: number;
-}) {
   const formattedDate = dayjs(report.date).format("DD MMM YYYY");
-  const formattedSubmittedAt = dayjs(report.submittedAt || report.createdAt || new Date()).format("DD MMM YYYY hh:mm A");
+  const submittedTime = report.submittedAt || report.createdAt || attendance?.checkOutTime;
+  const formattedSubmittedAt = submittedTime ? dayjs(submittedTime).format("DD MMM YYYY, hh:mm a") : "--";
   const reportDateStr = dayjs(report.date).format("YYYY-MM-DD");
 
   const checkInFormatted = attendance?.checkInTime ? dayjs(attendance.checkInTime).format("DD MMM YYYY, hh:mm A") : "--";

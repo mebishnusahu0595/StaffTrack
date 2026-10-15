@@ -96,7 +96,8 @@ export async function createDayEndReport(actor: AuthUser, input: DayEndReportInp
       startOdometer: input.startOdometer,
       endOdometer: input.endOdometer,
       startOdometerPhotoUrl: input.startOdometerPhotoUrl,
-      remarks: input.remarks
+      remarks: input.remarks,
+      submittedAt: new Date()
     }
   });
 
@@ -882,15 +883,50 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
     submittedAt: attendance?.checkOutTime || new Date()
   };
 
-  const formattedDate = reportDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-  const formattedSubmittedAt = new Date(currentReport.submittedAt || new Date()).toLocaleString("en-GB", {
+  const formatTimeIST = (dateObj: Date | string | null | undefined): string => {
+    if (!dateObj) return "--";
+    try {
+      const d = new Date(dateObj);
+      if (isNaN(d.getTime())) return "--";
+      return new Intl.DateTimeFormat("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h12",
+        timeZone: "Asia/Kolkata"
+      }).format(d);
+    } catch {
+      return "--";
+    }
+  };
+
+  const formatDateTimeIST = (dateObj: Date | string | null | undefined): string => {
+    if (!dateObj) return "--";
+    try {
+      const d = new Date(dateObj);
+      if (isNaN(d.getTime())) return "--";
+      return new Intl.DateTimeFormat("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h12",
+        timeZone: "Asia/Kolkata"
+      }).format(d);
+    } catch {
+      return "--";
+    }
+  };
+
+  const formattedDate = reportDate.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true
+    timeZone: "Asia/Kolkata"
   });
+
+  const submittedDateValue = currentReport.submittedAt || currentReport.createdAt || attendance?.checkOutTime;
+  const formattedSubmittedAt = submittedDateValue ? formatDateTimeIST(submittedDateValue) : "--";
 
   // Deduplicate tasks by id
   const uniqueTasksMap = new Map<string, any>();
@@ -927,39 +963,6 @@ export async function renderDayEndReportHtml(actor: AuthUser, targetUserId: stri
   const countBannerText = totalTasksCount > 0 
     ? `${completedCount} / ${totalTasksCount} Completed (${totalPercentage}%)`
     : `${completedCount} Completed`;
-
-  const formatTimeIST = (dateObj: Date | string | null | undefined): string => {
-    if (!dateObj) return "--";
-    try {
-      return new Intl.DateTimeFormat("en-IN", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-        timeZone: "Asia/Kolkata"
-      }).format(new Date(dateObj));
-    } catch {
-      return "--";
-    }
-  };
-
-  const formatDateTimeIST = (dateObj: Date | string | null | undefined): string => {
-    if (!dateObj) return "--";
-    try {
-      const d = new Date(dateObj);
-      if (isNaN(d.getTime())) return "--";
-      return new Intl.DateTimeFormat("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-        timeZone: "Asia/Kolkata"
-      }).format(d);
-    } catch {
-      return "--";
-    }
-  };
 
   const checkInFormatted = attendance?.checkInTime ? formatDateTimeIST(attendance.checkInTime) : "--";
   const checkOutFormatted = attendance?.checkOutTime
