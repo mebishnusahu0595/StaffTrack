@@ -1,10 +1,9 @@
+import { Prisma, TaskStatus, UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { sendBroadcastNotification } from "./notification.service";
-import { streamGeminiWithFallback, callGeminiWithFallback, getGeminiApiKey } from "../lib/gemini";
+import { streamGeminiWithFallback } from "../lib/gemini";
 import { startOfDay } from "../lib/date";
-
-/** In-memory session history per admin (keyed by userId) */
-const chatSessions = new Map<string, Array<{ role: "user" | "model"; parts: { text: string }[] }>>();
+import { getStartOfDayIST } from "./task.service";
 
 export interface SmartNotification {
   id: string;
@@ -17,406 +16,602 @@ export interface SmartNotification {
   data: Record<string, any>;
 }
 
-/** Build comprehensive company staff context for Gemini prompt */
-async function buildStaffContext(companyId: string): Promise<string> {
-  const today = new Date();
-  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+// ─── AI chat: Gemini function calling over live DB queries ─────────────────────
 
-  // Fetch all staff members (Employees, Managers, and Admins)
-  const users = await prisma.user.findMany({
-    where: { companyId, role: { in: ["EMPLOYEE", "MANAGER", "ADMIN"] } },
-    select: {
-      id: true, name: true, email: true, phone: true, role: true, designation: true,
-      workMode: true, shiftStart: true, shiftEnd: true, employeeCode: true
-    }
-  });
+const DAY_MS = 24 * 60 * 60 * 1000;
+const HISTORY_LIMIT = 20;
+const MAX_TOOL_ROUNDS = 6;
+// Strongest model first; the global list starts with flash-lite for low-latency nudges.
+const CHAT_MODELS = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash", "gemini-flash-latest"];
+const OPEN: TaskStatus[] = ["PENDING", "IN_PROGRESS"];
+const STAFF_ROLES: UserRole[] = ["EMPLOYEE", "MANAGER"];
+const TASK_STATUSES = ["PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED", "OPEN", "OVERDUE"];
 
-  // Fetch this month's attendance
-  const attendance = await prisma.attendance.findMany({
-    where: {
-      date: { gte: monthStart, lte: today },
-      user: { companyId }
-    },
-    select: {
-      userId: true, date: true, status: true, checkInTime: true,
-      checkOutTime: true, punchType: true, startOdometer: true, endOdometer: true
-    },
-    orderBy: { date: "desc" }
-  });
+type Args = Record<string, any>;
+type Ctx = { adminId: string; companyId: string; action?: Record<string, any> };
+type Staff = { id: string; name: string; role: UserRole; designation: string | null };
 
-  // Fetch recent tasks with titles and due dates
-  const tasks = await prisma.task.findMany({
-    where: {
-      assignedToId: { in: users.map(u => u.id) },
-      status: { in: ["PENDING", "IN_PROGRESS"] }
-    },
-    select: {
-      id: true, title: true, status: true, dueDate: true,
-      assignedToId: true, priority: true
-    },
-    orderBy: { dueDate: "asc" }
-  });
+const fmtTime = (d?: Date | null) =>
+  d ? d.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }) : null;
+const fmtDate = (d?: Date | null) => (d ? d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) : null); // YYYY-MM-DD
 
-  // Fetch pending leaves
-  const leaves = await prisma.leaveRequest.findMany({
-    where: {
-      userId: { in: users.map(u => u.id) },
-      status: "PENDING"
-    },
-    select: { userId: true, startDate: true, endDate: true, reason: true }
-  });
-
-  // Fetch salary slips (latest per user)
-  const salarySlips = await prisma.salarySlip.findMany({
-    where: { userId: { in: users.map(u => u.id) } },
-    orderBy: { createdAt: "desc" },
-    take: users.length * 2,
-    select: {
-      userId: true, month: true, year: true, netPay: true, deductions: true, status: true
-    }
-  });
-
-  // Fetch today's attendance
-  const todayStr = today.toISOString().slice(0, 10);
-  const todayAttendance = attendance.filter(a => a.date.toISOString().slice(0, 10) === todayStr);
-
-  // Build per-user summary
-  const userSummaries = users.map(u => {
-    const userAttendance = attendance.filter(a => a.userId === u.id);
-    const absences = userAttendance.filter(a => a.status === "ABSENT").length;
-    const presents = userAttendance.filter(a => a.status === "PRESENT").length;
-    const workingDays = userAttendance.length;
-    const attendancePct = workingDays > 0 ? Math.round((presents / workingDays) * 100) : 100;
-
-    const userTasks = tasks.filter(t => t.assignedToId === u.id);
-    const overdueTasks = userTasks.filter(t => t.dueDate && new Date(t.dueDate) < today);
-    const pendingTasks = userTasks.filter(t => t.status === "PENDING");
-
-    const overdueTitles = overdueTasks.slice(0, 3).map(t => `"${t.title}" (Due: ${t.dueDate ? t.dueDate.toISOString().slice(0, 10) : "N/A"})`).join(", ");
-    const pendingTitles = pendingTasks.slice(0, 3).map(t => `"${t.title}"`).join(", ");
-
-    const userLeaves = leaves.filter((l: { userId: string }) => l.userId === u.id).length;
-    const todayPunch = todayAttendance.find(a => a.userId === u.id);
-
-    let todayStatusStr = "Not Checked In Today";
-    if (todayPunch) {
-      const inTime = todayPunch.checkInTime ? new Date(todayPunch.checkInTime).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "N/A";
-      const outTime = todayPunch.checkOutTime ? new Date(todayPunch.checkOutTime).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "Currently Working";
-      todayStatusStr = `Checked In at ${inTime} (${todayPunch.punchType || "GEO"}), Check-out: ${outTime}`;
-    } else {
-      // Find most recent past punch
-      const lastPunch = userAttendance.find(a => a.checkInTime);
-      if (lastPunch) {
-        todayStatusStr = `Not Checked In Today (Last Punch: ${new Date(lastPunch.date).toLocaleDateString("en-IN")})`;
-      }
-    }
-
-    const latestSalary = salarySlips.find(s => s.userId === u.id);
-
-    return {
-      id: u.id,
-      employeeCode: u.employeeCode || "N/A",
-      name: u.name,
-      role: u.role,
-      phone: u.phone || "N/A",
-      designation: u.designation || (u.role === "ADMIN" ? "Administrator" : "Staff"),
-      workMode: u.workMode || "FIELD",
-      attendance: {
-        thisMonthPresents: presents,
-        thisMonthAbsences: absences,
-        attendancePct: `${attendancePct}%`,
-        todayStatus: todayStatusStr
-      },
-      tasks: {
-        total: userTasks.length,
-        overdueCount: overdueTasks.length,
-        overdueSamples: overdueTitles || "None",
-        pendingCount: pendingTasks.length,
-        pendingSamples: pendingTitles || "None"
-      },
-      pendingLeaves: userLeaves,
-      salary: latestSalary ? {
-        period: `${latestSalary.month}/${latestSalary.year}`,
-        netPay: latestSalary.netPay,
-        deductions: latestSalary.deductions,
-        status: latestSalary.status
-      } : null
-    };
-  });
-
-  const presentToday = todayAttendance.filter(a => a.checkInTime).length;
-  const absentToday = users.length - presentToday;
-
-  return `
-=== STAFFTRACK COMPANY DATA CONTEXT (as of ${today.toDateString()}) ===
-
-OVERVIEW:
-- Total Staff: ${users.length}
-- Today: ${presentToday} checked in, ${absentToday} not checked in
-- Month: ${new Date().toLocaleString("default", { month: "long", year: "numeric" })}
-
-STAFF DETAILS:
-${userSummaries.map(u => `
-• Name: ${u.name} | Phone: ${u.phone} | Emp Code: ${u.employeeCode} | Database ID: ${u.id} (${u.designation} / ${u.role})
-  Attendance: ${u.attendance.thisMonthPresents} present, ${u.attendance.thisMonthAbsences} absent (${u.attendance.attendancePct} this month)
-  Today Punch: ${u.attendance.todayStatus}
-  Tasks: Total: ${u.tasks.total} | Overdue: ${u.tasks.overdueCount} [Titles: ${u.tasks.overdueSamples}] | Pending: ${u.tasks.pendingCount} [Titles: ${u.tasks.pendingSamples}]
-  Pending Leaves: ${u.pendingLeaves}
-  Salary (latest): ${u.salary ? `Net: ₹${u.salary.netPay} | Deductions: ${JSON.stringify(u.salary.deductions || {})} | Period: ${u.salary.period} | ${u.salary.status}` : "Not set"}
-`).join("")}
-
-=== END OF CONTEXT ===`;
+function istDay(s?: string): Date {
+  if (!s || s === "today") return getStartOfDayIST();
+  const d = new Date(`${s}T00:00:00+05:30`);
+  if (isNaN(d.getTime())) throw new Error(`Invalid date "${s}", use YYYY-MM-DD`);
+  return d;
 }
 
-const COMMON_SYSTEM_INSTRUCTIONS = (context: string) => `Aap StaffTrack workforce management platform ke intelligent HR and Staff Voice Assistant hain.
-Aapka naam StaffTrack AI hai (powered by Gemini 3.8 Live).
+/** IST day range from {date} or {from,to}; defaults to today. `end` is exclusive. */
+function dayRange(a: Args) {
+  const start = istDay(a.date ?? a.from);
+  const end = new Date(istDay(a.date ?? a.to ?? a.from).getTime() + DAY_MS);
+  return { start, end };
+}
+const hasRange = (a: Args) => Boolean(a.date || a.from || a.to);
 
-Aapke paas company ka real-time staff data (attendance, tasks, salary, leaves, holidays, punch timings, phone numbers) context mein diya gaya hai.
+// Same "task belongs to a day" rule as the mobile app's task list
+const taskInRange = (start: Date, end: Date): Prisma.TaskWhereInput => ({
+  OR: [
+    { dueDate: { gte: start, lt: end } },
+    { startDate: { gte: start, lt: end } },
+    { completedAt: { gte: start, lt: end } }
+  ]
+});
 
-BHASHA AUR BOLNE KA TARIQA (CRITICAL):
-1. Aapko hamesha natural, polite aur clear HINDI / conversational HINGLISH mein baat karni hai (jaise real voice assistant baat karta hai).
-   Udaharan: "Namaste! Aaj company mein 12 log present hain aur 3 absent hain."
-2. Response ko conversational, seedha aur crisp rakhein taaki voice audio mein sunne mein pleasant lage.
-3. CONVERSATIONAL MEMORY: Pichli baaton aur questions ko yaad rakhein. Agar user kahe "usko reminder bhej do", toh pichle context se samjhein ki kis staff ki baat ho rahi hai.
+async function findStaff(companyId: string, staff?: string): Promise<Staff[]> {
+  const select = { id: true, name: true, role: true, designation: true };
+  const base: Prisma.UserWhereInput = { companyId, role: { in: STAFF_ROLES } };
+  const q = staff?.trim();
+  if (!q) return prisma.user.findMany({ where: base, select, orderBy: { name: "asc" } });
 
-KISI BHI SPECIFIC PERSON YA EMPLOYEE KE BAARE MEIN POOCHNE PAR (HIGH PRIORITY):
-Jab user kisi specific person ka naam (ya partial naam jaise 'Nandkishor', 'Ashish', 'Mohanish', 'Damini', 'Sitesh', etc.) poochta hai:
-1. Unka poora naam, role/designation aur phone number batayein.
-2. Aaj ka live attendance status: Aaj kitne baje check-in kiya, check-out hua ya nahi. Agar aaj check-in nahi kiya, toh unki aakhiri attendance date batayein.
-3. Is mahine ki attendance summary: Kitne din present rahe, kitne absent, aur attendance percentage.
-4. Tasks ka exact status: Unke overdue tasks ke exact titles aur pending tasks batayein. Agar overdue tasks hain toh batayein kitne overdue hain.
-5. Proactive Help: Poochhein ki kya unhe push reminder ya notification bhejna hai? Agar user kahe 'bhej do', toh Turant unhe notification bhej dein!
-
-NOTIFICATIONS & HOLIDAYS ACTION RULES:
-- Jab bhi user kisi staff ko notification bhejne ya holiday lagane ko kahe, normal baat-cheet mein confirm karein (jaise: "Ji, maine Nandkishor ko task complete karne ka reminder bhej diya hai.").
-- KABHI BHI visible sentences mein [SEND_NOTIFICATION] ya database ID mat boliye ya likhiye!
-- Action tags ko response ke bilkul aakhiri line mein alag se hidden metadata ki tarah add karein:
-  [SEND_NOTIFICATION userId="{database_id}" title="{title}" message="{message}"]
-  [MARK_HOLIDAY date="{YYYY-MM-DD}" name="{holiday name}" scope="ALL"]
-  [BULK_NOTIFY title="{title}" message="{message}" scope="ALL"]
-
-${context}`;
-
-/** AI Chat — sends message with full staff context, returns response text */
-export async function chatWithAssistant(adminId: string, companyId: string, userMessage: string): Promise<string> {
-  const fallback = "Sorry, AI assistant is currently unavailable. Please check your internet connection and try again.";
-
-  try {
-    const context = await buildStaffContext(companyId);
-
-    if (!chatSessions.has(adminId)) {
-      chatSessions.set(adminId, []);
+  let users = await prisma.user.findMany({
+    where: {
+      ...base,
+      OR: [
+        { id: q },
+        { employeeCode: { equals: q, mode: "insensitive" } },
+        { phone: { contains: q } },
+        { name: { contains: q, mode: "insensitive" } }
+      ]
+    },
+    select
+  });
+  if (users.length === 0) {
+    // "Nand Kishor" vs "Nandkishor": retry on individual name parts
+    const parts = q.split(/\s+/).filter(p => p.length >= 3);
+    if (parts.length > 1) {
+      users = await prisma.user.findMany({
+        where: { ...base, OR: parts.map(p => ({ name: { contains: p, mode: "insensitive" as const } })) },
+        select
+      });
     }
-    const history = chatSessions.get(adminId)!;
+  }
+  if (users.length === 0) throw new Error(`No staff found matching "${q}"`);
+  return users;
+}
 
-    const systemPrompt = COMMON_SYSTEM_INSTRUCTIONS(context);
+/** Resolve to exactly one staff member, or throw so the model asks the admin which one. */
+async function findOne(companyId: string, staff: string): Promise<Staff> {
+  const users = await findStaff(companyId, staff);
+  const exact = users.filter(u => u.name.toLowerCase() === staff.trim().toLowerCase());
+  if (exact.length === 1) return exact[0];
+  if (users.length === 1) return users[0];
+  throw new Error(`"${staff}" matches multiple staff: ${users.map(u => u.name).join(", ")}. Ask the admin which one.`);
+}
 
-    const contents: Array<{ role: "user" | "model"; parts: { text: string }[] }> = [];
-    const recentHistory = history.slice(-10);
-    if (recentHistory.length > 0) {
-      contents.push(...recentHistory);
+export const TOOLS: Record<string, (a: Args, ctx: Ctx) => Promise<unknown>> = {
+  async get_day_overview(a, { companyId }) {
+    const { start, end } = dayRange({ date: a.date });
+    const users = await findStaff(companyId);
+    const ids = users.map(u => u.id);
+    const name = new Map(users.map(u => [u.id, u.name]));
+    const [att, tasks, overdueTotal, leaves, holidays, ders, pendingLeaveRequests] = await Promise.all([
+      prisma.attendance.findMany({
+        where: { userId: { in: ids }, date: { gte: start, lt: end } },
+        select: { userId: true, checkInTime: true, checkOutTime: true }
+      }),
+      prisma.task.groupBy({ by: ["status"], where: { assignedToId: { in: ids }, ...taskInRange(start, end) }, _count: true }),
+      prisma.task.count({ where: { assignedToId: { in: ids }, status: { in: OPEN }, dueDate: { lt: new Date() } } }),
+      prisma.leaveRequest.findMany({
+        where: { userId: { in: ids }, status: "APPROVED", startDate: { lt: end }, endDate: { gte: start } },
+        select: { userId: true }
+      }),
+      prisma.holiday.findMany({ where: { companyId, date: { gte: start, lt: end } }, select: { name: true }, distinct: ["name"] }),
+      prisma.dayEndReport.findMany({ where: { userId: { in: ids }, date: { gte: start, lt: end } }, select: { userId: true } }),
+      prisma.leaveRequest.count({ where: { companyId, status: "PENDING" } })
+    ]);
+    const checkedIn = att.filter(r => r.checkInTime);
+    const inIds = new Set(checkedIn.map(r => r.userId));
+    const leaveIds = new Set(leaves.map(l => l.userId));
+    const derIds = new Set(ders.map(d => d.userId));
+    return {
+      date: fmtDate(start),
+      totalStaff: users.length,
+      holidays: holidays.map(h => h.name),
+      checkedInCount: checkedIn.length,
+      checkedIn: checkedIn.map(r => ({
+        name: name.get(r.userId),
+        checkIn: fmtTime(r.checkInTime),
+        checkOut: fmtTime(r.checkOutTime) ?? "still working"
+      })),
+      notCheckedIn: users.filter(u => !inIds.has(u.id) && !leaveIds.has(u.id)).map(u => u.name),
+      onLeave: [...leaveIds].map(id => name.get(id)),
+      tasksForThisDay: {
+        total: tasks.reduce((n, t) => n + t._count, 0),
+        ...Object.fromEntries(tasks.map(t => [t.status, t._count]))
+      },
+      overdueOpenTasksAllDays: overdueTotal,
+      pendingLeaveRequests,
+      dayEndReports: {
+        submitted: derIds.size,
+        missingFromCheckedIn: checkedIn.filter(r => !derIds.has(r.userId)).map(r => name.get(r.userId))
+      }
+    };
+  },
+
+  async get_tasks(a, { companyId }) {
+    const users = await findStaff(companyId, a.staff);
+    const name = new Map(users.map(u => [u.id, u.name]));
+    const now = new Date();
+    const where: Prisma.TaskWhereInput = { assignedToId: { in: users.map(u => u.id) } };
+    if (hasRange(a)) {
+      const { start, end } = dayRange(a);
+      Object.assign(where, taskInRange(start, end));
     }
-    contents.push({ role: "user", parts: [{ text: userMessage }] });
+    const status = String(a.status || "").toUpperCase();
+    if (status && !TASK_STATUSES.includes(status)) throw new Error(`Unknown status ${status}`);
+    if (status === "OVERDUE") Object.assign(where, { status: { in: OPEN }, dueDate: { lt: now } });
+    else if (status === "OPEN") where.status = { in: OPEN };
+    else if (status) where.status = status as TaskStatus;
 
-    const data = await callGeminiWithFallback({
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents,
-      generationConfig: { temperature: 0.3, maxOutputTokens: 2048 }
+    const [byStatus, overdue, list] = await Promise.all([
+      prisma.task.groupBy({ by: ["status"], where, _count: true }),
+      prisma.task.count({ where: { AND: [where, { status: { in: OPEN }, dueDate: { lt: now } }] } }),
+      prisma.task.findMany({
+        where,
+        select: { title: true, status: true, priority: true, dueDate: true, completedAt: true, completionRemarks: true, assignedToId: true },
+        orderBy: { dueDate: "asc" },
+        take: 60
+      })
+    ]);
+    return {
+      total: byStatus.reduce((n, s) => n + s._count, 0),
+      byStatus: Object.fromEntries(byStatus.map(s => [s.status, s._count])),
+      overdue,
+      showing: list.length,
+      tasks: list.map(t => ({
+        title: t.title,
+        staff: name.get(t.assignedToId),
+        status: OPEN.includes(t.status) && t.dueDate < now ? `${t.status} (OVERDUE)` : t.status,
+        priority: t.priority,
+        due: `${fmtDate(t.dueDate)} ${fmtTime(t.dueDate)}`,
+        completedAt: t.completedAt ? `${fmtDate(t.completedAt)} ${fmtTime(t.completedAt)}` : undefined,
+        remarks: t.completionRemarks || undefined
+      }))
+    };
+  },
+
+  async get_attendance(a, { companyId }) {
+    const users = await findStaff(companyId, a.staff);
+    const name = new Map(users.map(u => [u.id, u.name]));
+    const { start, end } = dayRange(a);
+    const records = await prisma.attendance.findMany({
+      where: { userId: { in: users.map(u => u.id) }, date: { gte: start, lt: end } },
+      select: { userId: true, date: true, status: true, checkInTime: true, checkOutTime: true, punchType: true, isCheckInPending: true },
+      orderBy: { date: "asc" }
     });
+    const row = (r: (typeof records)[number]) => ({
+      date: fmtDate(r.date),
+      name: name.get(r.userId),
+      status: r.status,
+      checkIn: fmtTime(r.checkInTime),
+      checkOut: fmtTime(r.checkOutTime) ?? (r.checkInTime ? "still working" : null),
+      punchType: r.punchType,
+      checkInPendingApproval: r.isCheckInPending || undefined
+    });
+    const elapsedEnd = Math.min(end.getTime(), getStartOfDayIST().getTime() + DAY_MS);
+    const days = Math.max(1, Math.round((elapsedEnd - start.getTime()) / DAY_MS));
 
-    if (!data) return fallback;
+    if (days === 1) {
+      const byUser = new Map(records.map(r => [r.userId, r]));
+      return {
+        date: fmtDate(start),
+        checkedIn: records.filter(r => r.checkInTime).length,
+        totalStaff: users.length,
+        staff: users.map(u => (byUser.has(u.id) ? row(byUser.get(u.id)!) : { name: u.name, status: "NOT CHECKED IN" }))
+      };
+    }
+    return {
+      from: fmtDate(start),
+      to: fmtDate(new Date(elapsedEnd - DAY_MS)),
+      daysElapsed: days,
+      note: "daysWithoutRecord = no check-in that day (absent, weekly off or holiday)",
+      summary: users.map(u => {
+        const rs = records.filter(r => r.userId === u.id);
+        const count = (s: string) => rs.filter(r => r.status === s).length;
+        return {
+          name: u.name,
+          daysCheckedIn: rs.filter(r => r.checkInTime).length,
+          present: count("PRESENT"),
+          halfDay: count("HALF_DAY"),
+          onLeave: count("ON_LEAVE"),
+          markedAbsent: count("ABSENT"),
+          daysWithoutRecord: days - rs.length
+        };
+      }),
+      daily: users.length === 1 ? records.map(row) : undefined
+    };
+  },
 
-    const aiText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!aiText) return fallback;
+  async get_staff_profile(a, { companyId }) {
+    const matches = await findStaff(companyId, a.staff);
+    const exact = matches.filter(m => m.name.toLowerCase() === String(a.staff).trim().toLowerCase());
+    const target = exact.length === 1 ? exact[0] : matches.length === 1 ? matches[0] : null;
+    if (!target) return { multipleMatches: matches.map(m => `${m.name} (${m.designation || m.role})`) };
 
-    // Save to session history
-    history.push({ role: "user", parts: [{ text: userMessage }] });
-    history.push({ role: "model", parts: [{ text: aiText }] });
-    if (history.length > 20) history.splice(0, history.length - 20);
+    const id = target.id;
+    const now = new Date();
+    const today = getStartOfDayIST();
+    const tomorrow = new Date(today.getTime() + DAY_MS);
+    const monthStart = istDay(`${fmtDate(today)!.slice(0, 8)}01`);
+    const [u, todayAtt, monthAtt, todayTasks, overdueTasks, overdueCount, openCount, doneThisMonth, leaves, slip, lastPing, derToday] =
+      await Promise.all([
+        prisma.user.findUnique({
+          where: { id },
+          select: {
+            name: true, email: true, phone: true, role: true, designation: true, employeeCode: true, workMode: true,
+            shiftStart: true, shiftEnd: true, joiningDate: true, batteryLevel: true, isLocationOn: true, locationOffAt: true,
+            manager: { select: { name: true } }, group: { select: { name: true } }
+          }
+        }),
+        prisma.attendance.findFirst({
+          where: { userId: id, date: { gte: today, lt: tomorrow } },
+          select: { status: true, checkInTime: true, checkOutTime: true, punchType: true }
+        }),
+        prisma.attendance.findMany({ where: { userId: id, date: { gte: monthStart, lt: tomorrow } }, select: { status: true, checkInTime: true } }),
+        prisma.task.findMany({ where: { assignedToId: id, ...taskInRange(today, tomorrow) }, select: { title: true, status: true }, take: 30 }),
+        prisma.task.findMany({
+          where: { assignedToId: id, status: { in: OPEN }, dueDate: { lt: now } },
+          select: { title: true, dueDate: true },
+          orderBy: { dueDate: "asc" },
+          take: 10
+        }),
+        prisma.task.count({ where: { assignedToId: id, status: { in: OPEN }, dueDate: { lt: now } } }),
+        prisma.task.count({ where: { assignedToId: id, status: { in: OPEN } } }),
+        prisma.task.count({ where: { assignedToId: id, status: "COMPLETED", completedAt: { gte: monthStart } } }),
+        prisma.leaveRequest.findMany({
+          where: { userId: id, OR: [{ status: "PENDING" }, { endDate: { gte: today } }] },
+          select: { startDate: true, endDate: true, status: true, reason: true },
+          take: 10
+        }),
+        prisma.salarySlip.findFirst({
+          where: { userId: id },
+          orderBy: [{ year: "desc" }, { month: "desc" }],
+          select: { month: true, year: true, netPay: true, deductions: true, payableDays: true, status: true }
+        }),
+        prisma.locationLog.findFirst({ where: { userId: id }, orderBy: { timestamp: "desc" }, select: { timestamp: true } }),
+        prisma.dayEndReport.findFirst({ where: { userId: id, date: { gte: today, lt: tomorrow } }, select: { submittedAt: true } })
+      ]);
+    if (!u) throw new Error("Staff not found");
+    return {
+      name: u.name, role: u.role, designation: u.designation, phone: u.phone, email: u.email, employeeCode: u.employeeCode,
+      workMode: u.workMode, shift: `${u.shiftStart}-${u.shiftEnd}`, joiningDate: fmtDate(u.joiningDate),
+      manager: u.manager?.name ?? null, group: u.group?.name ?? null,
+      device: {
+        batteryLevel: u.batteryLevel, locationOn: u.isLocationOn,
+        locationOffSince: u.isLocationOn ? undefined : fmtTime(u.locationOffAt),
+        lastLocationPing: lastPing ? `${fmtDate(lastPing.timestamp)} ${fmtTime(lastPing.timestamp)}` : null
+      },
+      today: {
+        attendance: todayAtt
+          ? { status: todayAtt.status, checkIn: fmtTime(todayAtt.checkInTime), checkOut: fmtTime(todayAtt.checkOutTime) ?? "still working", punchType: todayAtt.punchType }
+          : "NOT CHECKED IN",
+        tasks: todayTasks,
+        dayEndReportSubmitted: derToday ? fmtTime(derToday.submittedAt) : false
+      },
+      thisMonthAttendance: {
+        daysCheckedIn: monthAtt.filter(r => r.checkInTime).length,
+        halfDay: monthAtt.filter(r => r.status === "HALF_DAY").length,
+        onLeave: monthAtt.filter(r => r.status === "ON_LEAVE").length,
+        markedAbsent: monthAtt.filter(r => r.status === "ABSENT").length
+      },
+      tasks: {
+        openTotal: openCount,
+        overdueCount,
+        overdue: overdueTasks.map(t => ({ title: t.title, due: fmtDate(t.dueDate) })),
+        completedThisMonth: doneThisMonth
+      },
+      leaves: leaves.map(l => ({ from: fmtDate(l.startDate), to: fmtDate(l.endDate), status: l.status, reason: l.reason })),
+      latestSalarySlip: slip
+    };
+  },
 
-    return aiText;
+  async get_leaves(a, { companyId }) {
+    const users = await findStaff(companyId, a.staff);
+    const name = new Map(users.map(u => [u.id, u.name]));
+    const where: Prisma.LeaveRequestWhereInput = { userId: { in: users.map(u => u.id) } };
+    if (a.status) where.status = String(a.status).toUpperCase() as Prisma.LeaveRequestWhereInput["status"];
+    if (hasRange(a)) {
+      const { start, end } = dayRange(a);
+      Object.assign(where, { startDate: { lt: end }, endDate: { gte: start } });
+    }
+    const list = await prisma.leaveRequest.findMany({
+      where,
+      select: { userId: true, startDate: true, endDate: true, status: true, reason: true },
+      orderBy: { startDate: "desc" },
+      take: 50
+    });
+    return {
+      count: list.length,
+      leaves: list.map(l => ({ name: name.get(l.userId), from: fmtDate(l.startDate), to: fmtDate(l.endDate), status: l.status, reason: l.reason }))
+    };
+  },
+
+  async get_day_end_reports(a, { companyId }) {
+    const users = await findStaff(companyId, a.staff);
+    const name = new Map(users.map(u => [u.id, u.name]));
+    const { start, end } = dayRange(a);
+    const list = await prisma.dayEndReport.findMany({
+      where: { userId: { in: users.map(u => u.id) }, date: { gte: start, lt: end } },
+      select: { userId: true, date: true, visitsSummary: true, ordersTaken: true, ordersCancelled: true, kmTravelled: true, remarks: true, submittedAt: true },
+      orderBy: { date: "desc" },
+      take: 60
+    });
+    const submitted = new Set(list.map(r => r.userId));
+    return {
+      submittedCount: list.length,
+      notSubmitted: end.getTime() - start.getTime() === DAY_MS ? users.filter(u => !submitted.has(u.id)).map(u => u.name) : undefined,
+      reports: list.map(r => ({
+        name: name.get(r.userId), date: fmtDate(r.date), visits: r.visitsSummary, ordersTaken: r.ordersTaken,
+        ordersCancelled: r.ordersCancelled, km: r.kmTravelled, remarks: r.remarks, submittedAt: fmtTime(r.submittedAt)
+      }))
+    };
+  },
+
+  async get_expenses(a, { companyId }) {
+    const users = await findStaff(companyId, a.staff);
+    const name = new Map(users.map(u => [u.id, u.name]));
+    const monthStart = `${fmtDate(new Date())!.slice(0, 8)}01`;
+    const { start, end } = dayRange(hasRange(a) ? a : { from: monthStart, to: fmtDate(new Date()) });
+    const where: Prisma.ExpenseWhereInput = { userId: { in: users.map(u => u.id) }, date: { gte: start, lt: end } };
+    if (typeof a.approved === "boolean") where.approved = a.approved;
+    const [agg, list] = await Promise.all([
+      prisma.expense.aggregate({ where, _sum: { amount: true }, _count: true }),
+      prisma.expense.findMany({
+        where,
+        select: { userId: true, category: true, amount: true, description: true, date: true, approved: true },
+        orderBy: { date: "desc" },
+        take: 40
+      })
+    ]);
+    return {
+      from: fmtDate(start), to: fmtDate(new Date(end.getTime() - DAY_MS)),
+      count: agg._count, totalAmount: agg._sum.amount ?? 0,
+      expenses: list.map(e => ({ name: name.get(e.userId), date: fmtDate(e.date), category: e.category, amount: e.amount, description: e.description, approved: e.approved }))
+    };
+  },
+
+  async send_notification(a, ctx) {
+    const names: string[] = Array.isArray(a.staff) ? a.staff : [a.staff];
+    const targets = await Promise.all(names.map(s => findOne(ctx.companyId, String(s))));
+    const res: any = await sendBroadcastNotification(ctx.adminId, { userIds: targets.map(t => t.id), title: a.title, message: a.message });
+    ctx.action = { type: "notification", sent: res?.count ?? 0, actions: targets.map(t => ({ userId: t.id, title: a.title, message: a.message })) };
+    return { sentTo: targets.map(t => t.name), delivered: res?.count ?? 0, skippedAsDuplicateIn30Min: res?.skipped ?? 0 };
+  },
+
+  async notify_all_staff(a, ctx) {
+    const users = await findStaff(ctx.companyId);
+    const res: any = await sendBroadcastNotification(ctx.adminId, { userIds: users.map(u => u.id), title: a.title, message: a.message });
+    ctx.action = { type: "bulk_notify", notified: res?.count ?? 0 };
+    return { notified: res?.count ?? 0, skippedAsDuplicateIn30Min: res?.skipped ?? 0 };
+  },
+
+  async mark_holiday(a, ctx) {
+    const date = startOfDay(new Date(a.date));
+    if (isNaN(date.getTime())) throw new Error(`Invalid date "${a.date}", use YYYY-MM-DD`);
+    const targets = a.staff ? [await findOne(ctx.companyId, a.staff)] : await findStaff(ctx.companyId);
+    const existing = await prisma.holiday.findMany({
+      where: { companyId: ctx.companyId, date, name: a.name, userId: { in: targets.map(t => t.id) } },
+      select: { userId: true }
+    });
+    const done = new Set(existing.map(h => h.userId));
+    const data = targets
+      .filter(t => !done.has(t.id))
+      .map(t => ({ date, name: a.name, type: "HOLIDAY", companyId: ctx.companyId, userId: t.id }));
+    if (data.length) await prisma.holiday.createMany({ data });
+    ctx.action = { type: "holiday", holidaysCreated: data.length, holidays: [{ date: a.date, name: a.name }] };
+    return { holidaysCreated: data.length, alreadyExisted: done.size };
+  }
+};
+
+const str = (description: string) => ({ type: "STRING", description });
+const DATE = str("Single day YYYY-MM-DD (IST). Omit for today.");
+const FROM = str("Range start YYYY-MM-DD (IST)");
+const TO = str("Range end YYYY-MM-DD, inclusive");
+const STAFF = str("Staff name (partial ok), employee code or phone. Omit for all staff.");
+const decl = (name: string, description: string, properties: Record<string, unknown> = {}, required: string[] = []) => ({
+  name,
+  description,
+  parameters: { type: "OBJECT", properties, ...(required.length ? { required } : {}) }
+});
+
+const FUNCTIONS = [
+  decl("get_day_overview",
+    "Company snapshot for ONE day: who checked in/out with times, who has not checked in, on leave, holidays, task counts by status for that day, total overdue tasks, pending leave requests, day-end reports. Best first call for general questions about a day.",
+    { date: DATE }),
+  decl("get_tasks",
+    "Tasks with exact counts by status plus a list (max 60). A task belongs to a day if its due, start or completion time falls on that day. Without date/from/to it searches all dates.",
+    { date: DATE, from: FROM, to: TO, staff: STAFF, status: { type: "STRING", enum: TASK_STATUSES, description: "OPEN = PENDING + IN_PROGRESS. OVERDUE = open and past due." } }),
+  decl("get_attendance",
+    "Attendance. For one day: every staff member's status and check-in/out time. For a range: per-staff summary (days checked in, half days, leave, absent), plus daily rows if one staff is given.",
+    { date: DATE, from: FROM, to: TO, staff: STAFF }),
+  decl("get_staff_profile",
+    "Everything about ONE staff member: contact, manager, group, shift, device battery/location, today's attendance, tasks and day-end report, overdue tasks, this month's attendance, leaves, latest salary slip.",
+    { staff: str("Staff name (partial ok), employee code or phone") }, ["staff"]),
+  decl("get_leaves", "Leave requests, optionally overlapping a date range.",
+    { status: { type: "STRING", enum: ["PENDING", "APPROVED", "REJECTED"] }, date: DATE, from: FROM, to: TO, staff: STAFF }),
+  decl("get_day_end_reports", "Day-end reports (visits, orders, km, remarks). For a single day also lists who has not submitted. Defaults to today.",
+    { date: DATE, from: FROM, to: TO, staff: STAFF }),
+  decl("get_expenses", "Expense claims with total amount. Defaults to the current month.",
+    { from: FROM, to: TO, staff: STAFF, approved: { type: "BOOLEAN", description: "true = approved only, false = unapproved only" } }),
+  decl("send_notification", "Send a push notification to specific staff. Only when the admin asks to send/remind.",
+    { staff: { type: "ARRAY", items: { type: "STRING" }, description: "Staff names" }, title: str("Short title"), message: str("Message text") },
+    ["staff", "title", "message"]),
+  decl("notify_all_staff", "Send a push notification to every staff member. Only when the admin explicitly asks.",
+    { title: str("Short title"), message: str("Message text") }, ["title", "message"]),
+  decl("mark_holiday", "Create a holiday for all staff, or for one staff member. Only when the admin explicitly asks.",
+    { date: str("YYYY-MM-DD"), name: str("Holiday name"), staff: str("Optional single staff member; omit for everyone") }, ["date", "name"])
+];
+
+async function runTool(name: string, args: Args | undefined, ctx: Ctx) {
+  const fn = TOOLS[name];
+  if (!fn) return { error: `Unknown tool ${name}` };
+  try {
+    return { result: await fn(args ?? {}, ctx) };
   } catch (err: any) {
-    console.warn("[AI Assistant] Error:", err?.message);
-    return fallback;
+    console.warn(`[AI Tool] ${name} failed:`, err?.message);
+    return { error: err?.message || String(err) };
   }
 }
 
-/** Streaming chat — yields text chunks as they arrive from Gemini */
-export async function* chatWithAssistantStream(
-  adminId: string,
-  companyId: string,
-  userMessage: string
-): AsyncGenerator<string> {
+async function buildSystemPrompt(companyId: string): Promise<string> {
+  const staff = await findStaff(companyId);
+  const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "full", timeStyle: "short" });
+  return `Aap "StaffTrack AI" hain: company admin ke liye smart HR aur operations assistant. Company database ka LIVE access aapke tools ke through hai.
+
+Abhi ka samay (IST): ${now}. Aaj ki date: ${fmtDate(getStartOfDayIST())}.
+
+DATA RULES (sabse zaroori):
+1. Har data wale sawaal (tasks, attendance, leaves, reports, expenses, salary, kisi staff ke baare mein) ke liye PEHLE tool call karo. Number kabhi andaze se ya purani chat se mat batao, data har baar fresh lo.
+2. Tool jo number deta hai wahi exact batao. Tool mein data nahi hai toh saaf bolo ki data nahi mila. Kuch bhi invent mat karo.
+3. "aaj", "kal", "parso", "is hafte", "pichle mahine" jaise shabdon ko upar ki date se YYYY-MM-DD mein badal kar tool ko do. "Kal" ka matlab context se samjho (beeta hua ya aane wala).
+4. Zarurat ho toh ek se zyada tools call karo aur data ko analyze karke insight do: kaun peeche hai, kya urgent hai, admin ko kya action lena chahiye.
+5. Naam ke multiple matches aayen toh admin se poochho kaun sa.
+6. send_notification / notify_all_staff / mark_holiday tabhi chalao jab admin saaf bole. "Usko bhej do" jaise reference chat history se samjho.
+
+JAWAB KA STYLE:
+- Natural Hinglish (Roman script), polite aur seedha. Pehli line mein direct jawab (exact number), phir zarurat ho toh short details.
+- Plain text only: koi markdown (**, #, tables) nahi. List ke liye har line "• " se shuru karo. Lambi list ho toh top 10 dikhao aur baaki ki ginti batao.
+- Database IDs kabhi mat dikhao.
+
+STAFF LIST (${staff.length}): ${staff.map(s => `${s.name} (${s.designation || s.role})`).join(", ")}`;
+}
+
+type Content = { role: "user" | "model"; parts: any[] };
+
+/** Persistent per-admin chat memory (survives restarts). */
+async function loadHistory(userId: string): Promise<Content[]> {
+  const rows = await prisma.aiChatMessage.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: HISTORY_LIMIT,
+    select: { role: true, text: true }
+  });
+  rows.reverse();
+  while (rows[0]?.role === "model") rows.shift(); // Gemini wants the first turn to be the user's
+  return rows.map(r => ({ role: r.role as Content["role"], parts: [{ text: r.text }] }));
+}
+
+async function saveTurn(userId: string, question: string, answer: string) {
+  const now = Date.now();
+  await prisma.aiChatMessage.createMany({
+    data: [
+      { userId, role: "user", text: question, createdAt: new Date(now) },
+      { userId, role: "model", text: answer, createdAt: new Date(now + 1) }
+    ]
+  });
+}
+
+/** Yields every content part from a Gemini SSE stream, as received (keeps thought signatures intact). */
+async function* geminiParts(response: Response): AsyncGenerator<any> {
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      try {
+        const parts = JSON.parse(line.slice(6))?.candidates?.[0]?.content?.parts;
+        if (Array.isArray(parts)) yield* parts;
+      } catch { /* skip malformed chunks */ }
+    }
+  }
+}
+
+/** Streaming chat — the model queries the DB through tools, then streams its answer. */
+export async function* chatWithAssistantStream(adminId: string, companyId: string, userMessage: string): AsyncGenerator<string> {
   try {
-    const context = await buildStaffContext(companyId);
+    const [systemPrompt, history] = await Promise.all([buildSystemPrompt(companyId), loadHistory(adminId)]);
+    const contents: Content[] = [...history, { role: "user", parts: [{ text: userMessage }] }];
+    const ctx: Ctx = { adminId, companyId };
+    let answer = "";
 
-    if (!chatSessions.has(adminId)) chatSessions.set(adminId, []);
-    const history = chatSessions.get(adminId)!;
-
-    const systemPrompt = COMMON_SYSTEM_INSTRUCTIONS(context);
-
-    const contents: Array<{ role: "user" | "model"; parts: { text: string }[] }> = [];
-    const recentHistory = history.slice(-10);
-    if (recentHistory.length > 0) {
-      contents.push(...recentHistory);
-    }
-    contents.push({ role: "user", parts: [{ text: userMessage }] });
-
-    const streamResult = await streamGeminiWithFallback({
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents,
-      generationConfig: { temperature: 0.3, maxOutputTokens: 2048 }
-    });
-
-    if (!streamResult || !streamResult.response || !streamResult.response.body) {
-      console.warn("[AI Stream] Gemini models exhausted or stream unavailable");
-      yield "Sorry, AI assistant is currently unavailable. Please try again.";
-      return;
-    }
-
-    const response = streamResult.response;
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let fullText = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const json = line.slice(6).trim();
-        if (!json || json === "[DONE]") continue;
-        try {
-          const parsed = JSON.parse(json);
-          const chunk = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (chunk) {
-            fullText += chunk;
-            yield chunk;
-          }
-        } catch { /* skip malformed chunks */ }
-      }
-    }
-
-    // Parse [SEND_NOTIFICATION ...] actions from full text
-    const actionRegex = /\[SEND_NOTIFICATION userId="([^"]+)" title="([^"]+)" message="([^"]+)"\]/g;
-    const actions: Array<{ userId: string; title: string; message: string }> = [];
-    let match;
-    while ((match = actionRegex.exec(fullText)) !== null) {
-      actions.push({ userId: match[1], title: match[2], message: match[3] });
-    }
-
-    // Parse [MARK_HOLIDAY ...] actions
-    const holidayRegex = /\[MARK_HOLIDAY date="([^"]+)" name="([^"]+)" scope="([^"]+)"\]/g;
-    const holidayActions: Array<{ date: string; name: string; scope: string }> = [];
-    let hMatch;
-    while ((hMatch = holidayRegex.exec(fullText)) !== null) {
-      holidayActions.push({ date: hMatch[1], name: hMatch[2], scope: hMatch[3] });
-    }
-
-    // Parse [BULK_NOTIFY ...] actions
-    const bulkNotifyRegex = /\[BULK_NOTIFY title="([^"]+)" message="([^"]+)" scope="([^"]+)"\]/g;
-    const bulkNotifyActions: Array<{ title: string; message: string; scope: string }> = [];
-    let bMatch;
-    while ((bMatch = bulkNotifyRegex.exec(fullText)) !== null) {
-      bulkNotifyActions.push({ title: bMatch[1], message: bMatch[2], scope: bMatch[3] });
-    }
-
-    // Execute notification actions
-    let actionResultPayload: any = null;
-
-    if (actions.length > 0) {
-      const results = await Promise.allSettled(
-        actions.map(a => sendBroadcastNotification(adminId, { userIds: [a.userId], title: a.title, message: a.message }))
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const stream = await streamGeminiWithFallback(
+        {
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents,
+          tools: [{ functionDeclarations: FUNCTIONS }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 4096 }
+        },
+        { models: CHAT_MODELS, timeoutMs: 30_000 }
       );
-      const sent = results.filter(r => r.status === "fulfilled").length;
-      actionResultPayload = { type: "notification", sent, actions };
-    }
+      if (!stream) {
+        yield "Sorry, AI assistant abhi available nahi hai. Thodi der baad try karein.";
+        return;
+      }
 
-    // Execute holiday actions (only create DB records — notifications sent on the day by scheduler)
-    if (holidayActions.length > 0) {
-      let totalHolidaysCreated = 0;
-      for (const ha of holidayActions) {
-        const holidayDate = startOfDay(new Date(ha.date));
-        if (ha.scope === "ALL") {
-          const allStaff = await prisma.user.findMany({
-            where: { companyId, role: { in: ["EMPLOYEE", "MANAGER"] } },
-            select: { id: true }
-          });
-          const userIds = allStaff.map(u => u.id);
-          for (const uid of userIds) {
-            const existing = await prisma.holiday.findFirst({
-              where: { date: holidayDate, name: ha.name, companyId, userId: uid }
-            });
-            if (!existing) {
-              await prisma.holiday.create({
-                data: { date: holidayDate, name: ha.name, type: "HOLIDAY", companyId, userId: uid }
-              });
-              totalHolidaysCreated++;
-            }
-          }
-        } else {
-          const existing = await prisma.holiday.findFirst({
-            where: { date: holidayDate, name: ha.name, companyId, userId: ha.scope }
-          });
-          if (!existing) {
-            await prisma.holiday.create({
-              data: { date: holidayDate, name: ha.name, type: "HOLIDAY", companyId, userId: ha.scope }
-            });
-            totalHolidaysCreated++;
-          }
+      const modelParts: any[] = [];
+      for await (const part of geminiParts(stream.response)) {
+        modelParts.push(part);
+        if (part.text && !part.thought) {
+          answer += part.text;
+          yield part.text;
         }
       }
-      actionResultPayload = { type: "holiday", holidaysCreated: totalHolidaysCreated, holidays: holidayActions };
+
+      const calls = modelParts.filter(p => p.functionCall).map(p => p.functionCall);
+      if (calls.length === 0) break;
+
+      contents.push({ role: "model", parts: modelParts });
+      const responses = await Promise.all(
+        calls.map(async c => ({ functionResponse: { id: c.id, name: c.name, response: await runTool(c.name, c.args, ctx) } }))
+      );
+      contents.push({ role: "user", parts: responses });
     }
 
-    // Execute bulk notify actions
-    if (bulkNotifyActions.length > 0) {
-      let totalNotified = 0;
-      for (const bn of bulkNotifyActions) {
-        if (bn.scope === "ALL") {
-          const result = await sendBroadcastNotification(adminId, {
-            allSelected: true,
-            title: bn.title,
-            message: bn.message
-          });
-          totalNotified += result.count || 0;
-        }
-      }
-      actionResultPayload = { type: "bulk_notify", notified: totalNotified, actions: bulkNotifyActions };
+    if (!answer.trim()) {
+      answer = "Maaf kijiye, is sawaal ka data nikal nahi paya. Thoda specific karke dobara poochiye.";
+      yield answer;
     }
-
-    // Yield special action-result event if any action was executed
-    if (actionResultPayload) {
-      yield `__ACTION_RESULT__${JSON.stringify(actionResultPayload)}`;
-    }
-
-    // Save cleaned response (strip all action markers) to session history
-    const cleanedText = fullText
-      .replace(actionRegex, "")
-      .replace(holidayRegex, "")
-      .replace(bulkNotifyRegex, "")
-      .trim();
-    if (cleanedText) {
-      history.push({ role: "user", parts: [{ text: userMessage }] });
-      history.push({ role: "model", parts: [{ text: cleanedText }] });
-      if (history.length > 20) history.splice(0, history.length - 20);
-    }
+    if (ctx.action) yield `__ACTION_RESULT__${JSON.stringify(ctx.action)}`;
+    await saveTurn(adminId, userMessage, answer.trim());
   } catch (err: any) {
     console.warn("[AI Stream] Error:", err?.message);
     yield "Sorry, AI assistant is currently unavailable. Please check your connection.";
   }
 }
 
-/** Clear chat session for an admin */
-export function clearChatSession(adminId: string) {
-  chatSessions.delete(adminId);
+/** Non-streaming chat — same pipeline, collected into one reply. */
+export async function chatWithAssistant(adminId: string, companyId: string, userMessage: string): Promise<string> {
+  let reply = "";
+  for await (const chunk of chatWithAssistantStream(adminId, companyId, userMessage)) {
+    if (!chunk.startsWith("__ACTION_RESULT__")) reply += chunk;
+  }
+  return reply;
 }
+
+/** Clear chat memory for an admin */
+export async function clearChatSession(adminId: string) {
+  await prisma.aiChatMessage.deleteMany({ where: { userId: adminId } });
+}
+
 
 
 /** Smart Notification Algorithm — analyzes staff data and generates suggested notifications */

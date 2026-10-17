@@ -87,6 +87,7 @@ model User {
   salarySlips         SalarySlip[]         @relation("UserSalarySlips")
   createdTasks        Task[]               @relation("CreatedTasks")
   assignedTasks       Task[]               @relation("AssignedTasks")
+  aiChatMessages      AiChatMessage[]
   createdTemplates    Template[]           @relation("CreatedTemplates")
   company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   group               Group?               @relation(fields: [groupId], references: [id])
@@ -425,6 +426,17 @@ model Template {
   createdAt   DateTime @default(now())
   tasks       Task[]
   createdBy   User?    @relation("CreatedTemplates", fields: [createdById], references: [id])
+}
+
+model AiChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  role      String
+  text      String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model Notification {

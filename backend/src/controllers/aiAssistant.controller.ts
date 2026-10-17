@@ -59,7 +59,7 @@ export async function chatStream(req: AuthRequest, res: Response) {
 
 export async function clearSession(req: AuthRequest, res: Response) {
   try {
-    aiAssistantService.clearChatSession(req.user!.id);
+    await aiAssistantService.clearChatSession(req.user!.id);
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ success: false, error: "Failed to clear session" });
