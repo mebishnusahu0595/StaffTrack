@@ -22,7 +22,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const HISTORY_LIMIT = 20;
 const MAX_TOOL_ROUNDS = 6;
 // Strongest model first; the global list starts with flash-lite for low-latency nudges.
-const CHAT_MODELS = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash", "gemini-flash-latest"];
+const CHAT_MODELS = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"];
 const OPEN: TaskStatus[] = ["PENDING", "IN_PROGRESS"];
 const STAFF_ROLES: UserRole[] = ["EMPLOYEE", "MANAGER"];
 const TASK_STATUSES = ["PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED", "OPEN", "OVERDUE"];

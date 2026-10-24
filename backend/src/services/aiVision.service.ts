@@ -5,7 +5,12 @@ import { callGeminiWithFallback, getGeminiApiKey } from "../lib/gemini";
 
 // Timeout for Gemini API calls (strict 3.5s to prevent attendance punch delays and 504 network errors)
 const GEMINI_TIMEOUT_MS = 3_500;
-const FAST_VISION_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+const FAST_VISION_MODELS = [
+  "gemini-3.5-flash",
+  "gemini-3.8-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-flash-latest"
+];
 
 export interface FaceAiResult {
   isHumanFace: boolean;
