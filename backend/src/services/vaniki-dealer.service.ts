@@ -437,13 +437,157 @@ export async function lookupDealer(codeOrMobile: string, actor?: AuthUser) {
   return result;
 }
 
+// Known corrections if any label or unit is still uncorrected in upstream API
+const LABEL_CORRECTIONS: Record<string, Record<string, string>> = {
+  MATIX: { "266.4 piece": "266.4 gm", "133.2 piece": "133.2 gm", "666 piece": "666 gm" },
+  TORANTO: { "100 piece": "100 gm", "250 piece": "250 gm" },
+  VIGEN: { "300 piece": "300 ml", "150 piece": "150 ml", "60 piece": "60 ml", "30 piece": "30 ml" },
+  VEER: { "50 piece": "50 gm", "100 piece": "100 gm", "250 piece": "250 gm" },
+  CURVE: { "160 Packet": "160 gm" },
+  "V-MET": { "8 piece": "8 gm" },
+  "VIGEN GR": { "1 Packet": "4 KG" },
+};
+
+const PRODUCT_UNIT_CORRECTIONS: Record<string, { petiUnit?: string; petiSize?: number }> = {
+  PROTECT: { petiUnit: "Liter" },
+  "VIDA-70": { petiUnit: "KG" },
+  MATIX: { petiUnit: "KG" },
+  TORANTO: { petiUnit: "KG" },
+  VIGEN: { petiUnit: "Liter" },
+  VEER: { petiUnit: "KG" },
+  CURVE: { petiUnit: "KG" },
+  "VIGEN GR": { petiUnit: "KG" },
+};
+
+/**
+ * Computes standard unit rate (per Liter or per Kg) for agrochemical wholesale display
+ */
+export function computeUnitRate(
+  cleanLabel: string,
+  dealerPrice: number,
+  productName: string,
+  petiUnit?: string
+): { rate: number; unit: "Ltr" | "Kg" | "Unit" } | null {
+  if (!dealerPrice || dealerPrice <= 0) return null;
+  if (cleanLabel.includes("/Box") || cleanLabel.includes("/Peti")) return null;
+
+  if (productName === "HIGH POWER") {
+    return { rate: Math.round(dealerPrice), unit: "Kg" };
+  }
+  if (productName === "VIGEN GR") {
+    return { rate: Math.round(dealerPrice / 4), unit: "Kg" };
+  }
+
+  const lMatch = cleanLabel.match(/^(\d+(?:\.\d+)?)\s*(l|ltr|liter|litres|litre)\b/i);
+  if (lMatch) {
+    const liters = parseFloat(lMatch[1]);
+    if (liters > 0) return { rate: Math.round(dealerPrice / liters), unit: "Ltr" };
+  }
+
+  const mlMatch = cleanLabel.match(/^(\d+(?:\.\d+)?)\s*(ml|m\.l\.)\b/i);
+  if (mlMatch) {
+    const ml = parseFloat(mlMatch[1]);
+    if (ml > 0) {
+      return { rate: Math.round(dealerPrice / (ml / 1000)), unit: "Ltr" };
+    }
+  }
+
+  const kgMatch = cleanLabel.match(/^(\d+(?:\.\d+)?)\s*(kg|k\.g\.|kilogram)\b/i);
+  if (kgMatch) {
+    const kg = parseFloat(kgMatch[1]);
+    if (kg > 0) return { rate: Math.round(dealerPrice / kg), unit: "Kg" };
+  }
+
+  const gmMatch = cleanLabel.match(/^(\d+(?:\.\d+)?)\s*(gm|g|grams|gram)\b/i);
+  if (gmMatch) {
+    const gm = parseFloat(gmMatch[1]);
+    if (gm > 0) {
+      return { rate: Math.round(dealerPrice / (gm / 1000)), unit: "Kg" };
+    }
+  }
+
+  const pcMatch = cleanLabel.match(/^(\d+(?:\.\d+)?)\s*(piece|packet|pkt)\b/i);
+  if (pcMatch) {
+    if (petiUnit === "Liter") {
+      return { rate: Math.round(dealerPrice), unit: "Ltr" };
+    }
+    if (petiUnit === "KG") {
+      return { rate: Math.round(dealerPrice), unit: "Kg" };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Enriches products catalog with per-liter and per-kg wholesale rates and unit fixes
+ */
+export function enrichWholesaleCatalog(catalog: any[]): any[] {
+  if (!Array.isArray(catalog)) return catalog;
+
+  return catalog.map((p) => {
+    const prodName = String(p.name || "").trim();
+    const unitFix = PRODUCT_UNIT_CORRECTIONS[prodName] || {};
+    const finalPetiUnit = unitFix.petiUnit || p.petiUnit || "Liter";
+    const finalProductPetiSize = unitFix.petiSize || Math.round(Number(p.petiSize || 10));
+
+    const variants = (p.variants || []).map((v: any) => {
+      let rawLabel = String(v.label || v.name || v.packSize || "").trim();
+      const fixesForProd = LABEL_CORRECTIONS[prodName] || {};
+      let cleanLabel = fixesForProd[rawLabel] || rawLabel;
+
+      const vDealerPrice = Number(v.dealerPrice || p.dealerPrice || 0);
+      let vPetiSize = Math.round(Number(v.petiSize || finalProductPetiSize || 10));
+      if (vPetiSize <= 0) vPetiSize = 10;
+
+      const unitRateInfo = computeUnitRate(cleanLabel, vDealerPrice, prodName, finalPetiUnit);
+      let enrichedLabel = cleanLabel;
+      if (unitRateInfo && !cleanLabel.includes("₹") && !cleanLabel.includes("/Ltr") && !cleanLabel.includes("/Kg")) {
+        enrichedLabel = `${cleanLabel} • ₹${unitRateInfo.rate.toLocaleString("en-IN")}/${unitRateInfo.unit}`;
+      }
+
+      return {
+        ...v,
+        label: enrichedLabel,
+        name: enrichedLabel,
+        packSize: cleanLabel,
+        petiSize: vPetiSize,
+        unitRate: unitRateInfo?.rate,
+        unitRateUnit: unitRateInfo?.unit,
+        ratePerLiter: unitRateInfo?.unit === "Ltr" ? unitRateInfo.rate : undefined,
+        ratePerKg: unitRateInfo?.unit === "Kg" ? unitRateInfo.rate : undefined,
+      };
+    });
+
+    let mainPack = String(p.packSize || "").trim();
+    if (LABEL_CORRECTIONS[prodName]?.[mainPack]) {
+      mainPack = LABEL_CORRECTIONS[prodName][mainPack];
+    }
+    const mainDP = Number(p.dealerPrice || 0);
+    const mainRateInfo = computeUnitRate(mainPack, mainDP, prodName, finalPetiUnit);
+    let enrichedPack = mainPack;
+    if (mainRateInfo && !mainPack.includes("₹") && !mainPack.includes("/Ltr") && !mainPack.includes("/Kg")) {
+      enrichedPack = `${mainPack} • ₹${mainRateInfo.rate.toLocaleString("en-IN")}/${mainRateInfo.unit}`;
+    }
+
+    return {
+      ...p,
+      petiSize: finalProductPetiSize,
+      petiUnit: finalPetiUnit,
+      packSize: enrichedPack,
+      variants,
+    };
+  });
+}
+
 /**
  * Fetch wholesale products catalog
  */
 export async function getWholesaleProducts() {
-  return vanikiFetch("/products", {
+  const data = await vanikiFetch("/products", {
     method: "GET",
   });
+  return enrichWholesaleCatalog(data);
 }
 
 /**
