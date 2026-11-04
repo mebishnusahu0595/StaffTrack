@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import sharp from "sharp";
 import * as vanikiDealerController from "../controllers/vaniki-dealer.controller";
 
 const router = Router();
@@ -50,10 +51,25 @@ router.post("/orders/:dealerCode", vanikiDealerController.placeDealerOrder);
 router.post("/credit-adjustment", vanikiDealerController.recordCreditAdjustment);
 
 // 6. Upload Payment Proof / Slip
-router.post("/upload", upload.single("file"), (req, res) => {
-
+router.post("/upload", upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ success: false, message: "No file uploaded" });
+  }
+
+  try {
+    const isImage = (req.file.mimetype || "").toLowerCase().startsWith("image/");
+    if (isImage) {
+      const fullPath = path.join(uploadDir, req.file.filename);
+      const buffer = await fs.promises.readFile(fullPath);
+      await sharp(buffer)
+        .rotate()
+        .resize({ width: 1280, height: 1280, fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality: 75, progressive: true })
+        .toFile(fullPath + ".tmp");
+      await fs.promises.rename(fullPath + ".tmp", fullPath);
+    }
+  } catch (err) {
+    console.warn("[VanikiUpload] Compression fallback to raw:", err);
   }
 
   const fileUrl = `/uploads/${req.file.filename}`;

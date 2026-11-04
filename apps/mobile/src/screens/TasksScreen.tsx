@@ -34,8 +34,10 @@ export function TasksScreen() {
   const [selectedDate, setSelectedDate] = useState(dayjs().startOf("day"));
 
   const [checklistResponses, setChecklistResponses] = useState<Record<string, { text?: string; dropdown?: string; image?: string; video?: string; audio?: string; file?: { url: string; name: string }; geotag?: { lat: number; lng: number } }>>({});
+  const [uploadingItemId, setUploadingItemId] = useState<string | null>(null);
 
   const isChecklistComplete = useMemo(() => {
+    if (uploadingItemId) return false;
     if (!selectedTask?.checklist) return true;
     const checklist = selectedTask.checklist as any[];
     for (const item of checklist) {
@@ -62,14 +64,13 @@ export function TasksScreen() {
       return;
     }
     const result = await ImagePicker.launchCameraAsync({ 
-      allowsEditing: true, 
-      aspect: [4, 3], 
-      quality: 0.5 
+      allowsEditing: false, 
+      quality: 0.35 
     });
     if (!result.canceled && result.assets?.[0]) {
       const asset = result.assets[0];
       try {
-        Alert.alert("Uploading", "Please wait while your image is uploading...");
+        setUploadingItemId(itemId);
         const url = await uploadPhoto(asset);
         setChecklistResponses(prev => ({
           ...prev,
@@ -78,9 +79,10 @@ export function TasksScreen() {
             image: url
           }
         }));
-        Alert.alert("Success", "Image uploaded successfully.");
       } catch (err) {
-        Alert.alert("Upload failed", err instanceof Error ? err.message : "Error uploading file");
+        Alert.alert("Upload failed", err instanceof Error ? err.message : "Error uploading file. Please check your internet connection.");
+      } finally {
+        setUploadingItemId(null);
       }
     }
   }
@@ -93,13 +95,13 @@ export function TasksScreen() {
     }
     const result = await ImagePicker.launchCameraAsync({ 
       mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-      allowsEditing: true, 
+      allowsEditing: false, 
       quality: 0.5 
     });
     if (!result.canceled && result.assets?.[0]) {
       const asset = result.assets[0];
       try {
-        Alert.alert("Uploading", "Please wait while your video is uploading...");
+        setUploadingItemId(itemId);
         const url = await uploadFile(asset.uri, `video-${Date.now()}.mp4`, "video/mp4");
         setChecklistResponses(prev => ({
           ...prev,
@@ -108,9 +110,10 @@ export function TasksScreen() {
             video: url
           }
         }));
-        Alert.alert("Success", "Video uploaded successfully.");
       } catch (err) {
-        Alert.alert("Upload failed", err instanceof Error ? err.message : "Error uploading file");
+        Alert.alert("Upload failed", err instanceof Error ? err.message : "Error uploading file. Please check your internet connection.");
+      } finally {
+        setUploadingItemId(null);
       }
     }
   }
@@ -195,7 +198,7 @@ export function TasksScreen() {
       Alert.alert("Permission required", "Camera access is needed to complete the task.");
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [4, 3], quality: 0.5 });
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: false, quality: 0.35 });
     if (!result.canceled) {
       setCompletionPhoto(result.assets[0]);
     }
@@ -844,13 +847,14 @@ export function TasksScreen() {
                             );
                           }
                           if (valType === "IMAGE") {
+                            const isItemUploading = uploadingItemId === item.id;
                             return (
                               <View key="IMAGE" style={styles.checklistFieldRow}>
                                 {resp.image ? (
                                   <View style={styles.mediaPreviewContainer}>
                                     <Image source={{ uri: resp.image }} style={styles.mediaPreview} />
-                                    <Button compact mode="text" onPress={() => captureChecklistImage(item.id)}>
-                                      Change Image
+                                    <Button compact mode="text" disabled={isItemUploading} loading={isItemUploading} onPress={() => captureChecklistImage(item.id)}>
+                                      {isItemUploading ? "Uploading..." : "Change Image"}
                                     </Button>
                                   </View>
                                 ) : (
@@ -858,22 +862,25 @@ export function TasksScreen() {
                                     mode="outlined"
                                     compact
                                     icon="camera"
+                                    loading={isItemUploading}
+                                    disabled={isItemUploading}
                                     onPress={() => captureChecklistImage(item.id)}
                                   >
-                                    Capture Image
+                                    {isItemUploading ? "Uploading..." : "Capture Image"}
                                   </Button>
                                 )}
                               </View>
                             );
                           }
                           if (valType === "VIDEO") {
+                            const isItemUploading = uploadingItemId === item.id;
                             return (
                               <View key="VIDEO" style={styles.checklistFieldRow}>
                                 {resp.video ? (
                                   <View style={styles.mediaPreviewContainer}>
                                     <Text style={styles.uploadedFileName}>🎥 Video Uploaded</Text>
-                                    <Button compact mode="text" onPress={() => captureChecklistVideo(item.id)}>
-                                      Re-capture Video
+                                    <Button compact mode="text" disabled={isItemUploading} loading={isItemUploading} onPress={() => captureChecklistVideo(item.id)}>
+                                      {isItemUploading ? "Uploading..." : "Re-capture Video"}
                                     </Button>
                                   </View>
                                 ) : (
@@ -881,9 +888,11 @@ export function TasksScreen() {
                                     mode="outlined"
                                     compact
                                     icon="video"
+                                    loading={isItemUploading}
+                                    disabled={isItemUploading}
                                     onPress={() => captureChecklistVideo(item.id)}
                                   >
-                                    Record Video
+                                    {isItemUploading ? "Uploading..." : "Record Video"}
                                   </Button>
                                 )}
                               </View>
