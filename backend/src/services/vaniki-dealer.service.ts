@@ -438,25 +438,70 @@ export async function lookupDealer(codeOrMobile: string, actor?: AuthUser) {
 }
 
 // Known corrections if any label or unit is still uncorrected in upstream API
+export const KNOWN_KG_PRODUCTS = new Set([
+  "CURVE",
+  "FIGHTER - 50",
+  "HIGH POWER",
+  "HYDRA-50",
+  "MATIX",
+  "TORANTO",
+  "V-MET",
+  "V-MIX",
+  "V-PRIT",
+  "VEER",
+  "VETO GOLD",
+  "VIDA-70",
+  "VIGEN GR",
+  "VIRUSH",
+]);
+
+export function isKgProduct(productName: string, packSize?: string): boolean {
+  const normName = (productName || "").trim().toUpperCase();
+  if (KNOWN_KG_PRODUCTS.has(normName)) return true;
+  for (const kgName of KNOWN_KG_PRODUCTS) {
+    if (normName === kgName || normName.startsWith(kgName + " ") || normName.endsWith(" " + kgName)) {
+      return true;
+    }
+  }
+  const pUpper = (packSize || "").toUpperCase();
+  if (/\b(GM|GMS|GRAM|GRAMS|KG|KGS|KILOGRAM)\b/.test(pUpper)) return true;
+  return false;
+}
+
 const LABEL_CORRECTIONS: Record<string, Record<string, string>> = {
   MATIX: { "266.4 piece": "266.4 gm", "133.2 piece": "133.2 gm", "666 piece": "666 gm" },
   TORANTO: { "100 piece": "100 gm", "250 piece": "250 gm" },
   VIGEN: { "300 piece": "300 ml", "150 piece": "150 ml", "60 piece": "60 ml", "30 piece": "30 ml" },
   VEER: { "50 piece": "50 gm", "100 piece": "100 gm", "250 piece": "250 gm" },
   CURVE: { "160 Packet": "160 gm" },
-  "V-MET": { "8 piece": "8 gm" },
-  "VIGEN GR": { "1 Packet": "4 KG" },
+  "V-MET": { "8 piece": "8 gm", "8 Packet": "8 gm", "8 pkt": "8 gm" },
+  "V-MIX": { "8 piece": "8 gm", "8 Packet": "8 gm", "8 pkt": "8 gm" },
+  "VIGEN GR": { "1 Packet": "4 KG", "4 Packet": "4 KG" },
+  "HIGH POWER": { "5 Packet": "5 KG", "5 piece": "5 KG" },
+  "FIGHTER - 50": { "250 piece": "250 gm", "250 Packet": "250 gm" },
+  "HYDRA-50": { "100 piece": "100 gm", "250 piece": "250 gm" },
+  "V-PRIT": { "100 piece": "100 gm", "250 piece": "250 gm" },
+  "VETO GOLD": { "20 piece": "20 gm" },
+  VIRUSH: { "500 piece": "500 gm", "1 piece": "1 KG" },
 };
 
 const PRODUCT_UNIT_CORRECTIONS: Record<string, { petiUnit?: string; petiSize?: number }> = {
   PROTECT: { petiUnit: "Liter" },
-  "VIDA-70": { petiUnit: "KG" },
+  VIGEN: { petiUnit: "Liter" },
+  CURVE: { petiUnit: "KG" },
+  "FIGHTER - 50": { petiUnit: "KG" },
+  "HIGH POWER": { petiUnit: "KG" },
+  "HYDRA-50": { petiUnit: "KG" },
   MATIX: { petiUnit: "KG" },
   TORANTO: { petiUnit: "KG" },
-  VIGEN: { petiUnit: "Liter" },
+  "V-MET": { petiUnit: "KG" },
+  "V-MIX": { petiUnit: "KG" },
+  "V-PRIT": { petiUnit: "KG" },
   VEER: { petiUnit: "KG" },
-  CURVE: { petiUnit: "KG" },
+  "VETO GOLD": { petiUnit: "KG" },
+  "VIDA-70": { petiUnit: "KG" },
   "VIGEN GR": { petiUnit: "KG" },
+  VIRUSH: { petiUnit: "KG" },
 };
 
 /**
@@ -471,6 +516,8 @@ export function computeUnitRate(
   if (!dealerPrice || dealerPrice <= 0) return null;
   if (cleanLabel.includes("/Box") || cleanLabel.includes("/Peti")) return null;
 
+  const isKg = isKgProduct(productName, cleanLabel);
+
   if (productName === "HIGH POWER") {
     return { rate: Math.round(dealerPrice), unit: "Kg" };
   }
@@ -481,14 +528,14 @@ export function computeUnitRate(
   const lMatch = cleanLabel.match(/^(\d+(?:\.\d+)?)\s*(l|ltr|liter|litres|litre)\b/i);
   if (lMatch) {
     const liters = parseFloat(lMatch[1]);
-    if (liters > 0) return { rate: Math.round(dealerPrice / liters), unit: "Ltr" };
+    if (liters > 0) return { rate: Math.round(dealerPrice / liters), unit: isKg ? "Kg" : "Ltr" };
   }
 
   const mlMatch = cleanLabel.match(/^(\d+(?:\.\d+)?)\s*(ml|m\.l\.)\b/i);
   if (mlMatch) {
     const ml = parseFloat(mlMatch[1]);
     if (ml > 0) {
-      return { rate: Math.round(dealerPrice / (ml / 1000)), unit: "Ltr" };
+      return { rate: Math.round(dealerPrice / (ml / 1000)), unit: isKg ? "Kg" : "Ltr" };
     }
   }
 
@@ -508,11 +555,11 @@ export function computeUnitRate(
 
   const pcMatch = cleanLabel.match(/^(\d+(?:\.\d+)?)\s*(piece|packet|pkt)\b/i);
   if (pcMatch) {
+    if (isKg || petiUnit === "KG") {
+      return { rate: Math.round(dealerPrice), unit: "Kg" };
+    }
     if (petiUnit === "Liter") {
       return { rate: Math.round(dealerPrice), unit: "Ltr" };
-    }
-    if (petiUnit === "KG") {
-      return { rate: Math.round(dealerPrice), unit: "Kg" };
     }
   }
 
@@ -527,8 +574,20 @@ export function enrichWholesaleCatalog(catalog: any[]): any[] {
 
   return catalog.map((p) => {
     const prodName = String(p.name || "").trim();
+    const isKg = isKgProduct(prodName, p.packSize);
     const unitFix = PRODUCT_UNIT_CORRECTIONS[prodName] || {};
-    const finalPetiUnit = unitFix.petiUnit || p.petiUnit || "Liter";
+    
+    // Explicitly determine correct petiUnit: for powder/solid items it must be "KG", not "Liter"
+    let finalPetiUnit = unitFix.petiUnit;
+    if (!finalPetiUnit) {
+      if (isKg) {
+        finalPetiUnit = "KG";
+      } else if (p.petiUnit && p.petiUnit !== "piece") {
+        finalPetiUnit = p.petiUnit;
+      } else {
+        finalPetiUnit = "Liter";
+      }
+    }
     const finalProductPetiSize = unitFix.petiSize || Math.round(Number(p.petiSize || 10));
 
     const variants = (p.variants || []).map((v: any) => {
@@ -548,6 +607,7 @@ export function enrichWholesaleCatalog(catalog: any[]): any[] {
 
       return {
         ...v,
+        petiUnit: finalPetiUnit,
         label: enrichedLabel,
         name: enrichedLabel,
         packSize: cleanLabel,
