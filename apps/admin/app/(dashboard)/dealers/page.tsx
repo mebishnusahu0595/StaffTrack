@@ -278,16 +278,21 @@ export default function DealersPage() {
     }
   };
 
-  // Filtered dealers
+  // Filtered dealers (alphabetical A-Z order)
   const filteredDealers = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return dealers;
-    return dealers.filter((d: any) => 
-      d.name?.toLowerCase().includes(q) ||
-      d.phone?.toLowerCase().includes(q) ||
-      d.city?.toLowerCase().includes(q) ||
-      d.gstin?.toLowerCase().includes(q) ||
-      d.assignedUserName?.toLowerCase().includes(q)
+    let result = dealers;
+    if (q) {
+      result = dealers.filter((d: any) => 
+        d.name?.toLowerCase().includes(q) ||
+        d.phone?.toLowerCase().includes(q) ||
+        d.city?.toLowerCase().includes(q) ||
+        d.gstin?.toLowerCase().includes(q) ||
+        d.assignedUserName?.toLowerCase().includes(q)
+      );
+    }
+    return [...result].sort((a: any, b: any) =>
+      (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" })
     );
   }, [dealers, searchQuery]);
 

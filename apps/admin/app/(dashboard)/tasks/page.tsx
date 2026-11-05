@@ -2277,11 +2277,34 @@ function DealerSelector({
   const [showAddModal, setShowAddModal] = useState(false);
   const [newDealer, setNewDealer] = useState({ name: "", phone: "", city: "", gstin: "" });
   const [creating, setCreating] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: dealers = [], isLoading } = useQuery({
     queryKey: ["dealers"],
     queryFn: fetchDealers
   });
+
+  const sortedDealers = useMemo(() => {
+    return [...dealers].sort((a: any, b: any) =>
+      (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" })
+    );
+  }, [dealers]);
+
+  const filteredDealers = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return sortedDealers;
+    return sortedDealers.filter((d: any) =>
+      d.name?.toLowerCase().includes(q) ||
+      d.city?.toLowerCase().includes(q) ||
+      d.phone?.toLowerCase().includes(q) ||
+      d.gstin?.toLowerCase().includes(q)
+    );
+  }, [sortedDealers, searchQuery]);
+
+  const selectedDealer = useMemo(() => {
+    if (!selectedDealerIds.length) return null;
+    return dealers.find((d: any) => d.id === selectedDealerIds[0]);
+  }, [dealers, selectedDealerIds]);
 
   const handleAddDealer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2309,7 +2332,7 @@ function DealerSelector({
   };
 
   return (
-    <div className="space-y-2 border border-blue-100 bg-blue-50/40 p-4 rounded-2xl">
+    <div className="space-y-2.5 border border-blue-100 bg-blue-50/40 p-4 rounded-2xl">
       <div className="flex items-center justify-between">
         <Label className="text-[10px] font-black uppercase tracking-wider text-blue-800 flex items-center gap-1.5">
           <Store className="h-4 w-4 text-blue-600" /> Select Dealer (Single-select)
@@ -2323,13 +2346,63 @@ function DealerSelector({
         </button>
       </div>
 
+      {/* Selected Dealer indicator pill */}
+      {selectedDealer && (
+        <div className="flex items-center justify-between bg-blue-100/90 border border-blue-300 text-blue-900 px-3 py-1.5 rounded-xl text-xs font-bold">
+          <span className="flex items-center gap-1.5 truncate">
+            <Check className="h-3.5 w-3.5 text-blue-700 shrink-0" />
+            <span className="truncate">Selected: <strong>{selectedDealer.name}</strong> {selectedDealer.city && `(${selectedDealer.city})`}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            className="text-blue-700 hover:text-blue-900 text-xs font-extrabold px-1.5 py-0.5 rounded hover:bg-blue-200 transition-all shrink-0 ml-2"
+            title="Deselect dealer"
+          >
+            ✕ Clear
+          </button>
+        </div>
+      )}
+
+      {/* Search Input for filtering dealers */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+        <input
+          type="text"
+          placeholder="Search dealer by name, city, phone..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full h-8 pl-8 pr-7 rounded-xl bg-white border border-blue-200 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery("")}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
       {isLoading ? (
         <p className="text-xs text-slate-400 font-medium">Loading dealers...</p>
       ) : dealers.length === 0 ? (
         <p className="text-xs text-slate-500 font-medium italic">No dealers registered yet. Click &quot;+ Add New Dealer&quot; to add one.</p>
+      ) : filteredDealers.length === 0 ? (
+        <div className="py-2 text-center text-xs text-slate-500">
+          No dealers match &quot;{searchQuery}&quot;.{" "}
+          <button
+            type="button"
+            onClick={() => setSearchQuery("")}
+            className="text-blue-600 underline font-bold"
+          >
+            Clear search
+          </button>
+        </div>
       ) : (
-        <div className="flex flex-wrap gap-2 pt-1 max-h-36 overflow-y-auto pr-1">
-          {dealers.map((d: any) => {
+        <div className="flex flex-wrap gap-2 pt-1 max-h-44 overflow-y-auto pr-1">
+          {filteredDealers.map((d: any) => {
             const isSelected = selectedDealerIds.includes(d.id);
             return (
               <button
@@ -2425,11 +2498,35 @@ function FarmerSelector({
   const [showAddModal, setShowAddModal] = useState(false);
   const [newFarmer, setNewFarmer] = useState({ name: "", phone: "", village: "", crop: "" });
   const [creating, setCreating] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: farmers = [], isLoading } = useQuery({
     queryKey: ["farmers"],
     queryFn: fetchFarmers
   });
+
+  const sortedFarmers = useMemo(() => {
+    return [...farmers].sort((a: any, b: any) =>
+      (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" })
+    );
+  }, [farmers]);
+
+  const filteredFarmers = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return sortedFarmers;
+    return sortedFarmers.filter((f: any) =>
+      f.name?.toLowerCase().includes(q) ||
+      f.village?.toLowerCase().includes(q) ||
+      f.city?.toLowerCase().includes(q) ||
+      f.phone?.toLowerCase().includes(q) ||
+      f.crop?.toLowerCase().includes(q)
+    );
+  }, [sortedFarmers, searchQuery]);
+
+  const selectedFarmer = useMemo(() => {
+    if (!selectedFarmerIds.length) return null;
+    return farmers.find((f: any) => f.id === selectedFarmerIds[0]);
+  }, [farmers, selectedFarmerIds]);
 
   const handleAddFarmer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2457,7 +2554,7 @@ function FarmerSelector({
   };
 
   return (
-    <div className="space-y-2 border border-emerald-100 bg-emerald-50/40 p-4 rounded-2xl">
+    <div className="space-y-2.5 border border-emerald-100 bg-emerald-50/40 p-4 rounded-2xl">
       <div className="flex items-center justify-between">
         <Label className="text-[10px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
           <Sprout className="h-4 w-4 text-emerald-600" /> Select Farmer (Single-select)
@@ -2471,13 +2568,63 @@ function FarmerSelector({
         </button>
       </div>
 
+      {/* Selected Farmer indicator pill */}
+      {selectedFarmer && (
+        <div className="flex items-center justify-between bg-emerald-100/90 border border-emerald-300 text-emerald-900 px-3 py-1.5 rounded-xl text-xs font-bold">
+          <span className="flex items-center gap-1.5 truncate">
+            <Check className="h-3.5 w-3.5 text-emerald-700 shrink-0" />
+            <span className="truncate">Selected: <strong>{selectedFarmer.name}</strong> {selectedFarmer.village && `(${selectedFarmer.village})`}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            className="text-emerald-700 hover:text-emerald-900 text-xs font-extrabold px-1.5 py-0.5 rounded hover:bg-emerald-200 transition-all shrink-0 ml-2"
+            title="Deselect farmer"
+          >
+            ✕ Clear
+          </button>
+        </div>
+      )}
+
+      {/* Search Input for filtering farmers */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+        <input
+          type="text"
+          placeholder="Search farmer by name, village, crop, phone..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full h-8 pl-8 pr-7 rounded-xl bg-white border border-emerald-200 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery("")}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
       {isLoading ? (
         <p className="text-xs text-slate-400 font-medium">Loading farmers...</p>
       ) : farmers.length === 0 ? (
         <p className="text-xs text-slate-500 font-medium italic">No farmers registered yet. Click &quot;+ Add New Farmer&quot; to add one.</p>
+      ) : filteredFarmers.length === 0 ? (
+        <div className="py-2 text-center text-xs text-slate-500">
+          No farmers match &quot;{searchQuery}&quot;.{" "}
+          <button
+            type="button"
+            onClick={() => setSearchQuery("")}
+            className="text-emerald-600 underline font-bold"
+          >
+            Clear search
+          </button>
+        </div>
       ) : (
-        <div className="flex flex-wrap gap-2 pt-1 max-h-36 overflow-y-auto pr-1">
-          {farmers.map((f: any) => {
+        <div className="flex flex-wrap gap-2 pt-1 max-h-44 overflow-y-auto pr-1">
+          {filteredFarmers.map((f: any) => {
             const isSelected = selectedFarmerIds.includes(f.id);
             return (
               <button

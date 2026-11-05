@@ -250,19 +250,25 @@ export default function FarmersPage() {
     }
   };
 
+  // Filtered farmers (alphabetical A-Z order)
   const filteredFarmers = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return farmers;
-    return farmers.filter((f) => {
-      return (
-        f.name.toLowerCase().includes(q) ||
-        (f.phone && f.phone.toLowerCase().includes(q)) ||
-        (f.village && f.village.toLowerCase().includes(q)) ||
-        (f.city && f.city.toLowerCase().includes(q)) ||
-        (f.crop && f.crop.toLowerCase().includes(q)) ||
-        (f.assignedUserName && f.assignedUserName.toLowerCase().includes(q))
-      );
-    });
+    let result = farmers;
+    if (q) {
+      result = farmers.filter((f) => {
+        return (
+          f.name.toLowerCase().includes(q) ||
+          (f.phone && f.phone.toLowerCase().includes(q)) ||
+          (f.village && f.village.toLowerCase().includes(q)) ||
+          (f.city && f.city.toLowerCase().includes(q)) ||
+          (f.crop && f.crop.toLowerCase().includes(q)) ||
+          (f.assignedUserName && f.assignedUserName.toLowerCase().includes(q))
+        );
+      });
+    }
+    return [...result].sort((a: any, b: any) =>
+      (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" })
+    );
   }, [farmers, searchQuery]);
 
   const filteredStaffList = useMemo(() => {

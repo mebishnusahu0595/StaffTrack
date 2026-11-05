@@ -54,7 +54,7 @@ export interface FarmerInput {
 export async function listFarmers(companyId: string) {
   await initFarmersTable();
   const rows = await prisma.$queryRawUnsafe<any[]>(
-    `SELECT * FROM farmers WHERE company_id = $1 ORDER BY created_at DESC`,
+    `SELECT * FROM farmers WHERE company_id = $1 ORDER BY LOWER(name) ASC, created_at DESC`,
     companyId
   );
   return rows.map(mapFarmerRow);
