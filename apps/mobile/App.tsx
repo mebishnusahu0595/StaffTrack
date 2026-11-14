@@ -81,13 +81,13 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <PaperProvider
-          settings={{
-            icon: (props) => <MaterialCommunityIcons {...props} />
-          }}
-          theme={theme}
-        >
-          <QueryClientProvider client={queryClient}>
+        <QueryClientProvider client={queryClient}>
+          <PaperProvider
+            settings={{
+              icon: (props) => <MaterialCommunityIcons {...props} />
+            }}
+            theme={theme}
+          >
             <AuthProvider>
               <AppErrorBoundary>
                 <AppNavigator />
@@ -95,8 +95,8 @@ export default function App() {
                 <StatusBar style="dark" />
               </AppErrorBoundary>
             </AuthProvider>
-          </QueryClientProvider>
-        </PaperProvider>
+          </PaperProvider>
+        </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
