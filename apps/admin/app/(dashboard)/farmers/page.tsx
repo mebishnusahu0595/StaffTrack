@@ -408,21 +408,21 @@ export default function FarmersPage() {
           {filteredFarmers.map((farmer) => (
             <div
               key={farmer.id}
-              className="bg-white rounded-2xl border border-slate-150 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4 group"
+              onClick={() => handleOpenDetail(farmer)}
+              className="bg-white rounded-2xl border border-slate-150 p-5 shadow-sm hover:shadow-md hover:border-emerald-400 hover:ring-2 hover:ring-emerald-50 transition-all flex flex-col justify-between space-y-4 group cursor-pointer"
             >
               <div>
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-3">
-                    <div className="h-11 w-11 rounded-xl bg-emerald-50 text-emerald-600 font-black text-lg flex items-center justify-center border border-emerald-100 shrink-0">
+                    <div className="h-11 w-11 rounded-xl bg-emerald-50 text-emerald-600 font-black text-lg flex items-center justify-center border border-emerald-100 shrink-0 group-hover:scale-105 transition-transform">
                       {farmer.name.charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <button
-                        onClick={() => handleOpenDetail(farmer)}
-                        className="text-left font-extrabold text-slate-800 text-base leading-tight group-hover:text-emerald-600 transition-colors hover:underline truncate block"
+                      <span
+                        className="text-left font-extrabold text-slate-800 text-base leading-tight group-hover:text-emerald-600 transition-colors truncate block"
                       >
                         {farmer.name}
-                      </button>
+                      </span>
                       {(farmer.village || farmer.city) && (
                         <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1 mt-0.5">
                           <MapPin className="h-3 w-3 text-emerald-500 shrink-0" />
@@ -434,11 +434,14 @@ export default function FarmersPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => handleOpenEdit(farmer)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenEdit(farmer);
+                      }}
                       className="h-8 w-8 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
                       title="Edit Farmer"
                     >
@@ -447,7 +450,10 @@ export default function FarmersPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => handleDelete(farmer)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(farmer);
+                      }}
                       className="h-8 w-8 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
                       title="Delete Farmer"
                     >
@@ -460,7 +466,11 @@ export default function FarmersPage() {
                   {farmer.phone && (
                     <div className="flex items-center gap-2">
                       <Phone className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                      <a href={`tel:${farmer.phone}`} className="hover:text-emerald-600 font-mono">
+                      <a
+                        href={`tel:${farmer.phone}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="hover:text-emerald-600 font-mono"
+                      >
                         {farmer.phone}
                       </a>
                     </div>
@@ -512,19 +522,20 @@ export default function FarmersPage() {
               {/* Action Buttons */}
               <div className="pt-3 border-t border-slate-100 flex items-center gap-2">
                 <Button
-                  onClick={() => handleOpenAssignTask(farmer)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenAssignTask(farmer);
+                  }}
                   className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold h-9 rounded-xl flex items-center justify-center gap-1.5 shadow-none transition-all"
                 >
                   <ClipboardList className="h-4 w-4 text-emerald-600" />
                   Assign Visit Task
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => handleOpenDetail(farmer)}
-                  className="text-xs font-bold h-9 px-3 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50"
+                <span
+                  className="text-xs font-bold h-9 px-3 rounded-xl border border-slate-200 text-slate-700 group-hover:bg-emerald-50 group-hover:text-emerald-700 group-hover:border-emerald-200 flex items-center transition-colors"
                 >
-                  Details
-                </Button>
+                  Report →
+                </span>
               </div>
             </div>
           ))}
@@ -533,7 +544,7 @@ export default function FarmersPage() {
 
       {/* ─── Add Farmer Dialog (Wider max-w-3xl, 2 Columns) ─── */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl hide-close">
           <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
             <DialogTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
               <Sprout className="h-6 w-6 text-emerald-600" /> Add New Farmer
@@ -708,7 +719,7 @@ export default function FarmersPage() {
 
       {/* ─── Edit Farmer Dialog (Wider max-w-3xl, 2 Columns) ─── */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl hide-close">
           <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
             <DialogTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
               <Pencil className="h-5 w-5 text-emerald-600" /> Edit Farmer Profile
@@ -872,7 +883,7 @@ export default function FarmersPage() {
 
       {/* ─── Farmer Detail Profile Dialog (Wider max-w-4xl with Visit Logs & Q/A) ─── */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl hide-close">
           <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
             <DialogTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
               <Sprout className="h-6 w-6 text-emerald-600" /> Farmer Profile & Field Visits
@@ -972,7 +983,13 @@ export default function FarmersPage() {
 
               {/* ─── Staff visit report (who went, when, how often, questions & answers) ─── */}
               <div className="pt-4 border-t border-slate-200/80">
-                <VisitReport data={visitsData} isLoading={isLoadingVisits} />
+                <VisitReport
+                  data={visitsData}
+                  isLoading={isLoadingVisits}
+                  title={selectedFarmer?.name}
+                  subtitle={[selectedFarmer?.village, selectedFarmer?.city, selectedFarmer?.crop, selectedFarmer?.phone].filter(Boolean).join(" • ")}
+                  type="Farmer"
+                />
               </div>
             </div>
           )}
@@ -982,7 +999,7 @@ export default function FarmersPage() {
 
       {/* ─── Assign Visit Task Dialog (Wider max-w-2xl with Searchable Staff Picker) ─── */}
       <Dialog open={isAssignTaskOpen} onOpenChange={setIsAssignTaskOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl hide-close">
           <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
             <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
               <ClipboardList className="h-5 w-5 text-emerald-600" /> Assign Farmer Visit Task to Staff

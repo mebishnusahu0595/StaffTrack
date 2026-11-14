@@ -428,25 +428,25 @@ export default function DealersPage() {
           {filteredDealers.map((dealer: any) => (
             <div 
               key={dealer.id}
-              className="bg-white rounded-2xl border border-slate-150 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4 group"
+              onClick={() => {
+                setSelectedDealerForHistory(dealer);
+                setIsHistoryOpen(true);
+              }}
+              className="bg-white rounded-2xl border border-slate-150 p-5 shadow-sm hover:shadow-md hover:border-blue-400 hover:ring-2 hover:ring-blue-50 transition-all flex flex-col justify-between space-y-4 group cursor-pointer"
             >
               <div>
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-3">
-                    <div className="h-11 w-11 rounded-xl bg-blue-50 text-blue-600 font-black text-lg flex items-center justify-center border border-blue-100 shrink-0">
+                    <div className="h-11 w-11 rounded-xl bg-blue-50 text-blue-600 font-black text-lg flex items-center justify-center border border-blue-100 shrink-0 group-hover:scale-105 transition-transform">
                       {dealer.name.charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <button
-                        onClick={() => {
-                          setSelectedDealerForHistory(dealer);
-                          setIsHistoryOpen(true);
-                        }}
-                        className="text-left font-extrabold text-slate-800 text-base leading-tight group-hover:text-blue-600 transition-colors hover:underline truncate block"
+                      <span
+                        className="text-left font-extrabold text-slate-800 text-base leading-tight group-hover:text-blue-600 transition-colors truncate block"
                         title="Click to view staff visit history"
                       >
                         {dealer.name}
-                      </button>
+                      </span>
                       {dealer.city && (
                         <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1 mt-0.5">
                           <MapPin className="h-3 w-3 text-slate-400 shrink-0" /> {dealer.city}{dealer.state ? `, ${dealer.state}` : ""}
@@ -455,11 +455,14 @@ export default function DealersPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                     <Button 
                       variant="ghost" 
                       size="icon"
-                      onClick={() => handleOpenEdit(dealer)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenEdit(dealer);
+                      }}
                       className="h-8 w-8 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50"
                       title="Edit Dealer"
                     >
@@ -468,7 +471,10 @@ export default function DealersPage() {
                     <Button 
                       variant="ghost" 
                       size="icon"
-                      onClick={() => handleDelete(dealer)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(dealer);
+                      }}
                       className="h-8 w-8 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
                       title="Delete Dealer"
                     >
@@ -482,7 +488,13 @@ export default function DealersPage() {
                   {dealer.phone && (
                     <div className="flex items-center gap-2">
                       <Phone className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                      <span>{dealer.phone}</span>
+                      <a
+                        href={`tel:${dealer.phone}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="hover:text-blue-600 font-mono"
+                      >
+                        {dealer.phone}
+                      </a>
                     </div>
                   )}
 
@@ -526,7 +538,10 @@ export default function DealersPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleOpenAssignStaff(dealer)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenAssignStaff(dealer);
+                    }}
                     className="h-7 text-[11px] font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50 rounded-lg px-2 flex items-center gap-1 shrink-0"
                   >
                     <ClipboardList className="h-3 w-3" /> Assign Staff
@@ -535,17 +550,10 @@ export default function DealersPage() {
 
                 {/* Visit History Action */}
                 <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between">
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      setSelectedDealerForHistory(dealer);
-                      setIsHistoryOpen(true);
-                    }}
-                    className="h-8 text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg px-2.5 flex items-center gap-1.5"
-                  >
-                    <Clock className="h-3.5 w-3.5" /> Staff Visit History
-                  </Button>
-                  <span className="text-[10px] font-semibold text-slate-400">Click name for logs</span>
+                  <span className="h-8 text-[11px] font-bold text-blue-600 group-hover:text-blue-700 bg-blue-50 group-hover:bg-blue-100 rounded-lg px-2.5 flex items-center gap-1.5 transition-colors">
+                    <Clock className="h-3.5 w-3.5" /> Staff Visit History & Report
+                  </span>
+                  <span className="text-[10px] font-semibold text-slate-400 group-hover:text-blue-600 transition-colors">Click card to view →</span>
                 </div>
               </div>
             </div>
@@ -555,7 +563,7 @@ export default function DealersPage() {
 
       {/* ─── Add Dealer Dialog (Wider max-w-3xl, 2 Columns) ─── */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl hide-close">
           <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
             <DialogTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
               <Store className="h-6 w-6 text-blue-600" /> Add New Dealer
@@ -708,7 +716,7 @@ export default function DealersPage() {
 
       {/* ─── Edit Dealer Dialog (Wider max-w-3xl, 2 Columns) ─── */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl hide-close">
           <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
             <DialogTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
               <Pencil className="h-5 w-5 text-blue-600" /> Edit Dealer
@@ -864,7 +872,7 @@ export default function DealersPage() {
 
       {/* ─── Assign Staff & Visit Task Dialog (max-w-2xl) ─── */}
       <Dialog open={isAssignStaffOpen} onOpenChange={setIsAssignStaffOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl hide-close">
           <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
             <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
               <ClipboardList className="h-5 w-5 text-indigo-600" /> Assign Staff to Dealer
@@ -1052,7 +1060,7 @@ export default function DealersPage() {
 
       {/* ─── Staff Visit History Dialog (Wider max-w-4xl) ─── */}
       <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-6 md:p-8 rounded-3xl bg-white border-none shadow-2xl hide-close">
           <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-3">
               <div className="h-11 w-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-lg">
@@ -1131,7 +1139,13 @@ export default function DealersPage() {
                 </div>
 
                 {/* ─── Part 1: Staff visit report (who went, when, how often, questions & answers) ─── */}
-                <VisitReport data={historyData} />
+                <VisitReport
+                  data={historyData}
+                  isLoading={isLoadingHistory}
+                  title={selectedDealerForHistory?.name}
+                  subtitle={[selectedDealerForHistory?.city, selectedDealerForHistory?.state, selectedDealerForHistory?.phone].filter(Boolean).join(" • ")}
+                  type="Dealer"
+                />
 
                 {/* ─── Part 2: Credit Transactions, Limit Adjustments & Wholesale Orders ─── */}
                 <div className="space-y-3 pt-2">
