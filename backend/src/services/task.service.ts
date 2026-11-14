@@ -44,8 +44,38 @@ interface CreateTaskInput {
   farmerIds?: string[];
 }
 
+// Visit forms staff fill for dealer/farmer tasks. Kept on the server so every caller
+// (admin tasks page, dealer/farmer pages, mobile manager) gets the same form.
+const VISIT_PRESET_CHECKLISTS: Record<string, any[]> = {
+  DEALER: [
+    { id: "dl_name", title: "Dealer Name", required: true, validations: ["TEXT"] },
+    { id: "dl_contact", title: "Contact No.", required: true, validations: ["TEXT"] },
+    { id: "dl_location", title: "Location", required: true, validations: ["GEOTAG"] },
+    { id: "dl_product", title: "Product Discussed", required: true, validations: ["TEXT"] },
+    { id: "dl_photo", title: "Dealer/Store Photo", required: true, validations: ["IMAGE"] },
+    { id: "dl_remarks", title: "User Remarks", required: true, validations: ["TEXT"] }
+  ],
+  FARMER: [
+    { id: "fm_name", title: "Farmer Name", required: true, validations: ["TEXT"] },
+    { id: "fm_contact", title: "Contact No.", required: true, validations: ["TEXT"] },
+    { id: "fm_village", title: "Village", required: true, validations: ["TEXT"] },
+    { id: "fm_farmland", title: "Farm Land", required: true, validations: ["TEXT"] },
+    { id: "fm_crop", title: "Crop Name", required: true, validations: ["TEXT"] },
+    { id: "fm_photo", title: "Farmer/Farm Photo", required: true, validations: ["IMAGE"] },
+    { id: "fm_remarks", title: "User Remarks", required: true, validations: ["TEXT"] }
+  ]
+};
+
 export async function createTask(actor: AuthUser, input: CreateTaskInput) {
   await ensureManagerCanUseEmployee(actor, input.assignedToId);
+
+  // Old dealer/farmer pages sent "DEALER_VISIT"/"FARMER_VISIT" with no checklist, so
+  // staff never saw the visit form and nothing showed up in the visit report.
+  if (input.taskType) input.taskType = input.taskType.replace(/_VISIT$/, "");
+  const preset = input.taskType ? VISIT_PRESET_CHECKLISTS[input.taskType] : undefined;
+  if (preset && !(Array.isArray(input.checklist) && input.checklist.length > 0)) {
+    input.checklist = preset;
+  }
 
   // A manager assigning subtasks to a different person must still stay within
   // their own team — validate every distinct subtask assignee.

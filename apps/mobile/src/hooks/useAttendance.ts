@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import dayjs from "dayjs";
 
 import {
@@ -37,16 +39,83 @@ export function useAttendance(month = dayjs().month() + 1, year = dayjs().year()
     queryFn: () => fetchHolidays(month, year)
   });
 
+  const attendanceStorageKey = `@stafftrack:attendance:${user?.id || "guest"}:${month}:${year}`;
+  const holidayStorageKey = `@stafftrack:holidays:${month}:${year}`;
+
+  const [cachedAttendance, setCachedAttendance] = useState<Attendance[]>([]);
+  const [cachedHolidays, setCachedHolidays] = useState<Holiday[]>([]);
+
+  // Load from local AsyncStorage cache on mount/user change
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const [rawAtt, rawHol] = await Promise.all([
+          AsyncStorage.getItem(attendanceStorageKey),
+          AsyncStorage.getItem(holidayStorageKey)
+        ]);
+        if (active) {
+          if (rawAtt) {
+            const parsed = JSON.parse(rawAtt);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setCachedAttendance(parsed);
+            }
+          }
+          if (rawHol) {
+            const parsed = JSON.parse(rawHol);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setCachedHolidays(parsed);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[useAttendance] Error loading cached attendance:", err);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [attendanceStorageKey, holidayStorageKey]);
+
+  // Persist fresh attendance whenever network query succeeds
+  useEffect(() => {
+    if (Array.isArray(attendanceQuery.data) && attendanceQuery.data.length > 0) {
+      setCachedAttendance(attendanceQuery.data);
+      void AsyncStorage.setItem(attendanceStorageKey, JSON.stringify(attendanceQuery.data));
+    }
+  }, [attendanceQuery.data, attendanceStorageKey]);
+
+  useEffect(() => {
+    if (Array.isArray(holidayQuery.data) && holidayQuery.data.length > 0) {
+      setCachedHolidays(holidayQuery.data);
+      void AsyncStorage.setItem(holidayStorageKey, JSON.stringify(holidayQuery.data));
+    }
+  }, [holidayQuery.data, holidayStorageKey]);
+
   const checkInMutation = useMutation({
     mutationFn: (payload: CheckInPayload) => checkInRequest(payload),
-    onSuccess: () => {
+    onSuccess: (newRecord) => {
+      if (newRecord) {
+        setCachedAttendance((prev) => {
+          const next = [newRecord, ...prev.filter((r) => r.id !== newRecord.id)];
+          void AsyncStorage.setItem(attendanceStorageKey, JSON.stringify(next));
+          return next;
+        });
+      }
       void queryClient.invalidateQueries({ queryKey: attendanceQueryKey });
     }
   });
 
   const checkOutMutation = useMutation({
     mutationFn: (payload: CheckOutPayload) => checkOutRequest(payload),
-    onSuccess: () => {
+    onSuccess: (updatedRecord) => {
+      if (updatedRecord) {
+        setCachedAttendance((prev) => {
+          const next = prev.map((r) => (r.id === updatedRecord.id ? updatedRecord : r));
+          void AsyncStorage.setItem(attendanceStorageKey, JSON.stringify(next));
+          return next;
+        });
+      }
       void queryClient.invalidateQueries({ queryKey: attendanceQueryKey });
     }
   });
@@ -65,7 +134,15 @@ export function useAttendance(month = dayjs().month() + 1, year = dayjs().year()
     }
   });
 
-  const attendanceRows = attendanceQuery.data ?? [];
+  const attendanceRows =
+    Array.isArray(attendanceQuery.data) && attendanceQuery.data.length > 0
+      ? attendanceQuery.data
+      : cachedAttendance;
+
+  const holidaysList =
+    Array.isArray(holidayQuery.data) && holidayQuery.data.length > 0
+      ? holidayQuery.data
+      : cachedHolidays;
   const activeAttendance = attendanceRows.find(
     (record) =>
       Boolean(record.checkInTime) &&
@@ -93,8 +170,8 @@ export function useAttendance(month = dayjs().month() + 1, year = dayjs().year()
 
   return {
     ...attendanceQuery,
-    attendance: attendanceQuery.data ?? [],
-    holidays: holidayQuery.data ?? [],
+    attendance: attendanceRows,
+    holidays: holidaysList,
     isFetchingHolidays: holidayQuery.isFetching,
     checkIn: checkInMutation.mutateAsync,
     checkOut: checkOutMutation.mutateAsync,

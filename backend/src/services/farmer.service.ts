@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma";
+import { buildVisitReport } from "./visitReport.service";
 
 let farmerTableInitialized = false;
 
@@ -158,34 +159,8 @@ export async function deleteFarmer(companyId: string, id: string) {
 
 export async function getFarmerVisits(companyId: string, id: string) {
   const farmer = await getFarmer(companyId, id);
-
-  const tasks = await prisma.task.findMany({
-    where: {
-      OR: [
-        { farmers: { some: { id: farmer.id } } },
-        { title: { contains: farmer.name, mode: "insensitive" } },
-        { description: { contains: farmer.name, mode: "insensitive" } }
-      ]
-    },
-    include: {
-      assignedTo: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phone: true,
-          role: true
-        }
-      }
-    },
-    orderBy: { dueDate: "desc" },
-    take: 50
-  });
-
-  return {
-    farmer,
-    tasks
-  };
+  const report = await buildVisitReport(companyId, { farmers: { some: { id: farmer.id } } }, farmer.name);
+  return { farmer, ...report };
 }
 
 function mapFarmerRow(r: any) {

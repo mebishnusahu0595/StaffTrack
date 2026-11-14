@@ -13,6 +13,7 @@ import * as DocumentPicker from "expo-document-picker";
 dayjs.extend(relativeTime);
 
 import { fetchExpenses, fetchNotifications, markNotificationAsRead, markAllNotificationsAsRead, fetchMonthlyPerformanceReport, uploadPhoto, uploadFile, type Task, fetchTodayLocationLogs, fetchDayEndReports } from "../api";
+import { PreviousVisitAnswer } from "../components/PreviousVisitAnswer";
 import { useAuth } from "../auth/AuthContext";
 import { useTasks } from "../hooks/useTasks";
 import { useForms } from "../hooks/useForms";
@@ -962,6 +963,16 @@ export function HomeScreen() {
                       <Text style={styles.checklistItemTitle}>
                         {item.title} {item.required ? <Text style={{ color: "#EF4444" }}>*</Text> : ""}
                       </Text>
+                      <PreviousVisitAnswer
+                        task={selectedTask}
+                        question={item.title || ""}
+                        onUse={(value) =>
+                          setChecklistResponses((prev) => ({
+                            ...prev,
+                            [item.id]: { ...prev[item.id], ...((item.validations || []).includes("TEXT") ? { text: value } : { dropdown: value }) }
+                          }))
+                        }
+                      />
                       <View style={styles.checklistFields}>
                         {(item.validations || []).map((valType: string) => {
                           if (valType === "TEXT") {

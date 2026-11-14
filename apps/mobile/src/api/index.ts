@@ -926,3 +926,30 @@ export async function fetchDailyAllowanceSubmissions(params?: { date?: string; s
 }
 
 
+
+// ─── My Farmers & Dealers (visit history shared across staff) ───
+export type MyContact = {
+  id: string;
+  name: string;
+  phone?: string | null;
+  city?: string | null;
+  state?: string | null;
+  address?: string | null;
+  village?: string | null;
+  district?: string | null;
+  crop?: string | null;
+  landSize?: string | null;
+  isCurrentlyAssigned: boolean;
+  myVisitCount: number;
+  myVisitDates: string[];
+  myLastVisitAt?: string | null;
+  totalVisitCount: number;
+};
+
+export async function fetchMyContacts(): Promise<{ dealers: MyContact[]; farmers: MyContact[] }> {
+  return unwrap(await api.get<ApiEnvelope<{ dealers: MyContact[]; farmers: MyContact[] }>>("/tasks/my-contacts"));
+}
+
+export async function fetchContactVisits(kind: "dealer" | "farmer", id: string): Promise<any> {
+  return unwrap(await api.get<ApiEnvelope<any>>(`/${kind}s/${id}/visits`));
+}

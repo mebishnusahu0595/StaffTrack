@@ -2,6 +2,7 @@ import { UserRole } from "@prisma/client";
 import type { AuthUser } from "../types/auth";
 import { forbidden, notFound } from "../lib/errors";
 import { prisma } from "../lib/prisma";
+import { buildVisitReport } from "./visitReport.service";
 
 export interface CreateDealerInput {
   name: string;
@@ -28,14 +29,19 @@ export async function listDealers(actor: AuthUser) {
        FROM vaniki_dealer_ledgers`
     );
 
+    // index ledgers once instead of scanning all ledgers for every dealer
+    const byCode = new Map<string, any>();
+    const byFour = new Map<string, any>();
+    for (const l of ledgers) {
+      if (l.dealer_code && !byCode.has(l.dealer_code)) byCode.set(l.dealer_code, l);
+      if (l.four_digit_id && !byFour.has(l.four_digit_id)) byFour.set(l.four_digit_id, l);
+    }
+
     return dealers
       .map((d) => {
         const fourDigit = (d.name.match(/\d{4}/) || [""])[0];
-        const match = ledgers.find(
-          (l) =>
-            (l.dealer_code && (l.dealer_code === d.phone || l.dealer_code === d.name)) ||
-            (fourDigit && l.four_digit_id === fourDigit)
-        );
+        const match =
+          (d.phone && byCode.get(d.phone)) || byCode.get(d.name) || (fourDigit && byFour.get(fourDigit)) || null;
 
         return {
           ...d,
@@ -136,63 +142,33 @@ export async function deleteDealer(actor: AuthUser, dealerId: string) {
 
 export async function getDealerVisits(actor: AuthUser, dealerId: string) {
   const dealer = await getDealer(actor, dealerId);
-
-  // 1. Fetch completed or assigned tasks for this dealer
-  const tasks = await prisma.task.findMany({
-    where: {
-      OR: [
-        { dealers: { some: { id: dealer.id } } },
-        { title: { contains: dealer.name, mode: "insensitive" } },
-        { description: { contains: dealer.name, mode: "insensitive" } }
-      ]
-    },
-    include: {
-      assignedTo: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phone: true,
-          role: true
-        }
-      }
-    },
-    orderBy: { dueDate: "desc" },
-    take: 50
-  });
-
-  // 2. Fetch dealer activities from vaniki_dealer_activities
-  let activities: any[] = [];
   const fourDigit = (dealer.name.match(/\d{4}/) || [""])[0];
-  try {
-    activities = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT * FROM vaniki_dealer_activities 
-       WHERE LOWER(TRIM(dealer_name)) = LOWER(TRIM($1)) 
-          OR dealer_code = $2 
-          OR (four_digit_id IS NOT NULL AND four_digit_id != '' AND four_digit_id = $3)
-       ORDER BY created_at DESC LIMIT 50`,
-      dealer.name,
-      dealer.phone || dealer.name,
-      fourDigit
-    );
-  } catch (err) {
-    console.error("Error fetching activities in dealer visits:", err);
-  }
 
-  // 3. Fetch persistent local ledger
-  let ledger = null;
-  try {
-    const { getOrCreateDealerLedger } = await import("./vaniki-dealer.service");
-    ledger = await getOrCreateDealerLedger(dealer.phone || dealer.name, fourDigit, dealer.name);
-  } catch (err) {
-    console.error("Error fetching ledger in dealer visits:", err);
-  }
+  // Visit report, order/credit activities and ledger are independent — fetch in parallel.
+  const [report, activities, ledger] = await Promise.all([
+    buildVisitReport(dealer.companyId, { dealers: { some: { id: dealer.id } } }, dealer.name),
+    prisma
+      .$queryRawUnsafe<any[]>(
+        `SELECT * FROM vaniki_dealer_activities
+         WHERE LOWER(TRIM(dealer_name)) = LOWER(TRIM($1))
+            OR dealer_code = $2
+            OR (four_digit_id IS NOT NULL AND four_digit_id != '' AND four_digit_id = $3)
+         ORDER BY created_at DESC LIMIT 50`,
+        dealer.name,
+        dealer.phone || dealer.name,
+        fourDigit
+      )
+      .catch((err) => {
+        console.error("Error fetching activities in dealer visits:", err);
+        return [];
+      }),
+    import("./vaniki-dealer.service")
+      .then(({ getOrCreateDealerLedger }) => getOrCreateDealerLedger(dealer.phone || dealer.name, fourDigit, dealer.name))
+      .catch((err) => {
+        console.error("Error fetching ledger in dealer visits:", err);
+        return null;
+      })
+  ]);
 
-  return {
-    dealer,
-    tasks,
-    activities,
-    ledger
-  };
+  return { dealer, ...report, activities, ledger };
 }
-

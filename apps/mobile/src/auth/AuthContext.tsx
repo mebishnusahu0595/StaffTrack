@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { login as loginRequest, logout as logoutRequest, updatePushToken, fetchUserProfile, type User } from "../api";
@@ -82,6 +83,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Logout must clear local state even when the network request fails.
     } finally {
       await clearAuthStorage();
+      try {
+        const keys = await AsyncStorage.getAllKeys();
+        const stafftrackKeys = keys.filter((k) => k.startsWith("@stafftrack:"));
+        if (stafftrackKeys.length > 0) {
+          await AsyncStorage.multiRemove(stafftrackKeys);
+        }
+      } catch (err) {
+        console.warn("[AuthContext] Error clearing AsyncStorage cache:", err);
+      }
       setState(initialState);
       // Wipe all cached queries so the next user never sees the previous
       // user's tasks / leaves / reports / salary slips.

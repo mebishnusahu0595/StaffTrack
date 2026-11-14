@@ -29,7 +29,6 @@ export const api = axios.create({
 });
 
 let unauthorizedHandler: (() => void) | undefined;
-let refreshPromise: Promise<string | null> | null = null;
 
 export function setUnauthorizedHandler(handler: (() => void) | undefined) {
   unauthorizedHandler = handler;
@@ -72,21 +71,33 @@ api.interceptors.response.use(
 
     originalRequest._retry = true;
 
-    const token = await refreshAccessToken();
+    const refreshResult = await refreshAccessToken();
 
-    if (!token) {
+    if (!refreshResult.token) {
+      if (refreshResult.isOffline) {
+        // Device is offline or network unreachable — do NOT log out or wipe credentials
+        return Promise.reject(error);
+      }
+
       await clearAuthStorage();
       unauthorizedHandler?.();
       return Promise.reject(error);
     }
 
     originalRequest.headers = AxiosHeaders.from(originalRequest.headers);
-    originalRequest.headers.set("Authorization", `Bearer ${token}`);
+    originalRequest.headers.set("Authorization", `Bearer ${refreshResult.token}`);
     return api(originalRequest);
   }
 );
 
-async function refreshAccessToken(): Promise<string | null> {
+type RefreshResult = {
+  token: string | null;
+  isOffline?: boolean;
+};
+
+let refreshPromise: Promise<RefreshResult> | null = null;
+
+async function refreshAccessToken(): Promise<RefreshResult> {
   if (!refreshPromise) {
     refreshPromise = performRefresh().finally(() => {
       refreshPromise = null;
@@ -96,11 +107,11 @@ async function refreshAccessToken(): Promise<string | null> {
   return refreshPromise;
 }
 
-async function performRefresh(): Promise<string | null> {
+async function performRefresh(): Promise<RefreshResult> {
   const refreshToken = await getRefreshToken();
 
   if (!refreshToken) {
-    return null;
+    return { token: null, isOffline: false };
   }
 
   try {
@@ -112,12 +123,25 @@ async function performRefresh(): Promise<string | null> {
     const token = response.data.data?.accessToken;
 
     if (!token) {
-      return null;
+      return { token: null, isOffline: false };
     }
 
     await setAccessToken(token);
-    return token;
-  } catch {
-    return null;
+    return { token, isOffline: false };
+  } catch (err: any) {
+    const status = err.response?.status;
+    const isNetworkError =
+      !err.response ||
+      err.code === "ERR_NETWORK" ||
+      err.code === "ECONNABORTED" ||
+      err.message?.toLowerCase().includes("network error") ||
+      err.message?.toLowerCase().includes("timeout");
+
+    if (isNetworkError && status !== 401 && status !== 403) {
+      console.warn("[API] Token refresh skipped: device is offline or network unreachable.");
+      return { token: null, isOffline: true };
+    }
+
+    return { token: null, isOffline: false };
   }
 }

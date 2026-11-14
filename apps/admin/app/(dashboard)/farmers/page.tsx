@@ -36,6 +36,7 @@ import {
   createTask,
   Farmer
 } from "@/lib/api";
+import { VisitReport } from "@/components/admin/visit-report";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -170,7 +171,8 @@ export default function FarmersPage() {
         assignedToId: payload.assignedToId,
         dueDate: payload.dueDate,
         priority: payload.priority,
-        taskType: "FARMER_VISIT"
+        taskType: "FARMER",
+        farmerIds: [payload.farmerId]
       });
     },
     onSuccess: () => {
@@ -968,166 +970,9 @@ export default function FarmersPage() {
                 </div>
               )}
 
-              {/* ─── Field Staff Visits & Question-Answers Section ─── */}
-              <div className="pt-4 border-t border-slate-200/80 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-black text-slate-800 flex items-center gap-1.5">
-                      <Clock className="h-4 w-4 text-emerald-600" /> Staff Visits & Filled Question-Answers
-                    </span>
-                    <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 font-bold text-xs">
-                      {visitsData?.tasks?.length || 0} Visits
-                    </Badge>
-                  </div>
-                </div>
-
-                {isLoadingVisits ? (
-                  <div className="flex flex-col items-center justify-center py-10 gap-2 bg-slate-50 rounded-2xl border border-slate-100">
-                    <Loader2 className="h-6 w-6 text-emerald-600 animate-spin" />
-                    <p className="text-xs font-semibold text-slate-500">Loading visit logs & submitted questions...</p>
-                  </div>
-                ) : !visitsData?.tasks || visitsData.tasks.length === 0 ? (
-                  <div className="text-center py-8 space-y-2 bg-slate-50 rounded-2xl border border-slate-100">
-                    <div className="h-10 w-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-                      <ClipboardList className="h-5 w-5" />
-                    </div>
-                    <h4 className="text-xs font-bold text-slate-700">No Staff Visits Recorded Yet</h4>
-                    <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
-                      When staff visit this farmer and complete tasks with checklist questions & photos, all details will appear here.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {visitsData.tasks.map((task: any) => {
-                      const isCompleted = task.status === "COMPLETED";
-                      const staff = task.assignedTo;
-                      const hasResponses = task.checklistResponses && (
-                        Array.isArray(task.checklistResponses) ? task.checklistResponses.length > 0 : Object.keys(task.checklistResponses).length > 0
-                      );
-
-                      let responsesList: any[] = [];
-                      if (Array.isArray(task.checklistResponses)) {
-                        responsesList = task.checklistResponses;
-                      } else if (task.checklistResponses && typeof task.checklistResponses === "object") {
-                        responsesList = Object.entries(task.checklistResponses).map(([key, val]: [string, any]) => ({
-                          id: key,
-                          title: key,
-                          value: typeof val === "object" ? (val.text || val.dropdown || val.value || JSON.stringify(val)) : String(val),
-                          type: val?.image ? "IMAGE" : "TEXT",
-                          fileUrl: val?.image || val?.file?.url
-                        }));
-                      }
-
-                      return (
-                        <div
-                          key={task.id}
-                          className={`p-4 rounded-2xl border transition-all ${
-                            isCompleted ? "bg-emerald-50/30 border-emerald-200" : "bg-slate-50 border-slate-200"
-                          }`}
-                        >
-                          {/* Visit Task Header */}
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <h4 className="font-black text-slate-800 text-sm">{task.title}</h4>
-                                <Badge className={isCompleted ? "bg-emerald-600 text-white font-bold text-[10px]" : "bg-amber-500 text-white font-bold text-[10px]"}>
-                                  {task.status}
-                                </Badge>
-                              </div>
-                              <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2">
-                                <span>Scheduled: {task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "N/A"}</span>
-                                {task.completedAt && (
-                                  <span className="text-emerald-700 font-bold">
-                                    • Completed: {new Date(task.completedAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-
-                            {/* Staff Member Info */}
-                            {staff && (
-                              <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
-                                <div className="h-7 w-7 rounded-full bg-emerald-100 text-emerald-800 font-black text-xs flex items-center justify-center">
-                                  {staff.name?.charAt(0).toUpperCase() || "S"}
-                                </div>
-                                <div className="text-left">
-                                  <span className="text-[11px] font-bold text-slate-800 block leading-tight">{staff.name}</span>
-                                  <span className="text-[9px] font-medium text-slate-400 block">{staff.phone || staff.email || staff.role || "Staff"}</span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Completion Photo & Remarks */}
-                          {(task.completionPhotoUrl || task.completionRemarks) && (
-                            <div className="mt-3 p-3 bg-white rounded-xl border border-slate-150 flex flex-col sm:flex-row gap-3 items-start">
-                              {task.completionPhotoUrl && (
-                                <a href={task.completionPhotoUrl} target="_blank" rel="noreferrer" className="shrink-0 group relative">
-                                  <img
-                                    src={task.completionPhotoUrl}
-                                    alt="Visit Proof"
-                                    className="w-24 h-24 object-cover rounded-lg border border-slate-200 group-hover:opacity-90 transition-opacity"
-                                  />
-                                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 rounded-lg transition-opacity">
-                                    <ExternalLink className="h-4 w-4 text-white" />
-                                  </div>
-                                </a>
-                              )}
-                              <div className="flex-1 space-y-1">
-                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Staff Visit Remarks:</span>
-                                <p className="text-xs font-semibold text-slate-700 whitespace-pre-wrap">{task.completionRemarks || "No written remarks."}</p>
-                                {task.completionLat && (
-                                  <a
-                                    href={`https://maps.google.com/?q=${task.completionLat},${task.completionLng}`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline pt-1"
-                                  >
-                                    <MapPin className="h-3 w-3" /> Location: {task.completionLat.toFixed(5)}, {task.completionLng.toFixed(5)} (Open Map)
-                                  </a>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Submitted Checklist Responses (Q&A) */}
-                          {hasResponses && (
-                            <div className="mt-3 space-y-2">
-                              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1">
-                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Submitted Questions & Answers:
-                              </span>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                {responsesList.map((item: any, idx: number) => {
-                                  const questionText = item.title || item.question || `Question #${idx + 1}`;
-                                  const ansValue = item.value !== undefined ? item.value : (item.text || item.dropdown || item.response || "");
-                                  const imgUrl = item.fileUrl || item.image || (item.type === "IMAGE" ? item.value : null);
-
-                                  return (
-                                    <div key={idx} className="p-2.5 bg-white rounded-xl border border-slate-200 space-y-1">
-                                      <div className="flex items-start gap-1.5">
-                                        <HelpCircle className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
-                                        <span className="text-xs font-bold text-slate-600 leading-snug">{questionText}</span>
-                                      </div>
-                                      {imgUrl ? (
-                                        <a href={imgUrl} target="_blank" rel="noreferrer" className="block mt-1">
-                                          <img src={imgUrl} alt={questionText} className="w-20 h-20 object-cover rounded-lg border border-slate-200 hover:opacity-90" />
-                                        </a>
-                                      ) : (
-                                        <p className="text-xs font-black text-slate-900 pl-5">
-                                          {ansValue ? String(ansValue) : <span className="text-slate-400 font-normal italic">No response</span>}
-                                        </p>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+              {/* ─── Staff visit report (who went, when, how often, questions & answers) ─── */}
+              <div className="pt-4 border-t border-slate-200/80">
+                <VisitReport data={visitsData} isLoading={isLoadingVisits} />
               </div>
             </div>
           )}

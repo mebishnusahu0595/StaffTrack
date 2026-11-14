@@ -44,6 +44,7 @@ import {
 } from "@/lib/api";
 
 import dayjs from "dayjs";
+import { VisitReport } from "@/components/admin/visit-report";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -203,7 +204,7 @@ export default function DealersPage() {
         assignedToId: payload.assignedUserId,
         dueDate: payload.dueDate,
         priority: payload.priority,
-        taskType: "DEALER_VISIT",
+        taskType: "DEALER",
         dealerIds: [payload.dealerId]
       });
     },
@@ -1129,152 +1130,8 @@ export default function DealersPage() {
                   </div>
                 </div>
 
-                {/* ─── Part 1: Field Staff Visit Tasks & Checklist Q/A ─── */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between pb-1 border-b border-slate-100">
-                    <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                      <Clock className="h-4 w-4 text-blue-600" /> Field Staff Visit Tasks & Question-Answers
-                    </span>
-                    <Badge variant="outline" className="text-blue-700 bg-blue-50 border-blue-200 font-bold text-xs">
-                      {historyData?.tasks?.length || 0} Visits
-                    </Badge>
-                  </div>
-
-                  {!historyData?.tasks || historyData.tasks.length === 0 ? (
-                    <div className="text-center py-6 bg-slate-50 rounded-2xl border border-slate-100">
-                      <p className="text-xs text-slate-400 font-medium">No field visit tasks recorded yet for this dealer.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {historyData.tasks.map((task: any) => {
-                        const isCompleted = task.status === "COMPLETED";
-                        const staff = task.assignedTo;
-                        const hasResponses = task.checklistResponses && (
-                          Array.isArray(task.checklistResponses) ? task.checklistResponses.length > 0 : Object.keys(task.checklistResponses).length > 0
-                        );
-
-                        let responsesList: any[] = [];
-                        if (Array.isArray(task.checklistResponses)) {
-                          responsesList = task.checklistResponses;
-                        } else if (task.checklistResponses && typeof task.checklistResponses === "object") {
-                          responsesList = Object.entries(task.checklistResponses).map(([key, val]: [string, any]) => ({
-                            id: key,
-                            title: key,
-                            value: typeof val === "object" ? (val.text || val.dropdown || val.value || JSON.stringify(val)) : String(val),
-                            type: val?.image ? "IMAGE" : "TEXT",
-                            fileUrl: val?.image || val?.file?.url
-                          }));
-                        }
-
-                        return (
-                          <div
-                            key={task.id}
-                            className={`p-4 rounded-2xl border transition-all ${
-                              isCompleted ? "bg-blue-50/30 border-blue-200" : "bg-slate-50 border-slate-200"
-                            }`}
-                          >
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <h4 className="font-black text-slate-800 text-sm">{task.title}</h4>
-                                  <Badge className={isCompleted ? "bg-emerald-600 text-white font-bold text-[10px]" : "bg-amber-500 text-white font-bold text-[10px]"}>
-                                    {task.status}
-                                  </Badge>
-                                </div>
-                                <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2">
-                                  <span>Due: {task.dueDate ? dayjs(task.dueDate).format("DD MMM YYYY") : "N/A"}</span>
-                                  {task.completedAt && (
-                                    <span className="text-emerald-700 font-bold">
-                                      • Completed: {dayjs(task.completedAt).format("DD MMM YYYY, hh:mm A")}
-                                    </span>
-                                  )}
-                                </p>
-                              </div>
-
-                              {staff && (
-                                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
-                                  <div className="h-7 w-7 rounded-full bg-blue-100 text-blue-800 font-black text-xs flex items-center justify-center">
-                                    {staff.name?.charAt(0).toUpperCase() || "S"}
-                                  </div>
-                                  <div className="text-left">
-                                    <span className="text-[11px] font-bold text-slate-800 block leading-tight">{staff.name}</span>
-                                    <span className="text-[9px] font-medium text-slate-400 block">{staff.phone || staff.email || staff.role || "Staff"}</span>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Remarks & Photo */}
-                            {(task.completionPhotoUrl || task.completionRemarks) && (
-                              <div className="mt-2.5 p-3 bg-white rounded-xl border border-slate-150 flex flex-col sm:flex-row gap-3 items-start">
-                                {task.completionPhotoUrl && (
-                                  <a href={task.completionPhotoUrl} target="_blank" rel="noreferrer" className="shrink-0 group relative">
-                                    <img
-                                      src={task.completionPhotoUrl}
-                                      alt="Visit Proof"
-                                      className="w-20 h-20 object-cover rounded-lg border border-slate-200 group-hover:opacity-90"
-                                    />
-                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 rounded-lg">
-                                      <ExternalLink className="h-4 w-4 text-white" />
-                                    </div>
-                                  </a>
-                                )}
-                                <div className="flex-1 space-y-1">
-                                  <span className="text-[10px] font-black uppercase text-slate-400">Staff Visit Remarks:</span>
-                                  <p className="text-xs font-semibold text-slate-700 whitespace-pre-wrap">{task.completionRemarks || "No written remarks."}</p>
-                                  {task.completionLat && (
-                                    <a
-                                      href={`https://maps.google.com/?q=${task.completionLat},${task.completionLng}`}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline pt-0.5"
-                                    >
-                                      <MapPin className="h-3 w-3" /> Location: {task.completionLat.toFixed(5)}, {task.completionLng.toFixed(5)} (Open Map)
-                                    </a>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Submitted Checklist Responses (Q&A) */}
-                            {hasResponses && (
-                              <div className="mt-2.5 space-y-1.5">
-                                <span className="text-[10px] font-black uppercase tracking-wider text-blue-800 flex items-center gap-1">
-                                  <CheckCircle2 className="h-3.5 w-3.5 text-blue-600" /> Submitted Questions & Answers:
-                                </span>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                  {responsesList.map((item: any, idx: number) => {
-                                    const questionText = item.title || item.question || `Question #${idx + 1}`;
-                                    const ansValue = item.value !== undefined ? item.value : (item.text || item.dropdown || item.response || "");
-                                    const imgUrl = item.fileUrl || item.image || (item.type === "IMAGE" ? item.value : null);
-
-                                    return (
-                                      <div key={idx} className="p-2.5 bg-white rounded-xl border border-slate-200 space-y-1">
-                                        <div className="flex items-start gap-1.5">
-                                          <HelpCircle className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
-                                          <span className="text-xs font-bold text-slate-600 leading-snug">{questionText}</span>
-                                        </div>
-                                        {imgUrl ? (
-                                          <a href={imgUrl} target="_blank" rel="noreferrer" className="block mt-1">
-                                            <img src={imgUrl} alt={questionText} className="w-16 h-16 object-cover rounded-lg border border-slate-200 hover:opacity-90" />
-                                          </a>
-                                        ) : (
-                                          <p className="text-xs font-black text-slate-900 pl-5">
-                                            {ansValue ? String(ansValue) : <span className="text-slate-400 font-normal italic">No response</span>}
-                                          </p>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                {/* ─── Part 1: Staff visit report (who went, when, how often, questions & answers) ─── */}
+                <VisitReport data={historyData} />
 
                 {/* ─── Part 2: Credit Transactions, Limit Adjustments & Wholesale Orders ─── */}
                 <div className="space-y-3 pt-2">

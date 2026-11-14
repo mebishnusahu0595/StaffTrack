@@ -69,7 +69,10 @@ export default function App() {
             retry: (failureCount, error) =>
               (error as { response?: { status?: number } })?.response?.status !== 401 &&
               failureCount < 2,
-            refetchOnWindowFocus: false
+            refetchOnWindowFocus: false,
+            staleTime: 5 * 60 * 1000,
+            gcTime: 24 * 60 * 60 * 1000,
+            networkMode: "offlineFirst"
           }
         }
       })

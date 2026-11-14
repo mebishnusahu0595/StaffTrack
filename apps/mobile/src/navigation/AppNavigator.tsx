@@ -29,6 +29,7 @@ import { LeaveRequestScreen } from "../screens/LeaveRequestScreen";
 import { SalarySlipScreen } from "../screens/SalarySlipScreen";
 import { ProjectsScreen } from "../screens/ProjectsScreen";
 import { FilesScreen } from "../screens/FilesScreen";
+import { MyContactsScreen } from "../screens/MyContactsScreen";
 import { VanikiDealerOrdersScreen } from "../screens/VanikiDealerOrdersScreen";
 import { VanikiOrderHistoryScreen } from "../screens/VanikiOrderHistoryScreen";
 
@@ -53,6 +54,7 @@ export type MainDrawerParamList = {
   Files: undefined;
   Projects: undefined;
   Tasks: undefined;
+  MyContacts: undefined;
   Forms: undefined;
   Issues: undefined;
   Attendance: undefined;
@@ -85,6 +87,7 @@ export type ManagerDrawerParamList = {
   ManagerForms: undefined;
   ManagerIssues: undefined;
   Tasks: undefined;
+  MyContacts: undefined;
   MonthlyReport: undefined;
   SalarySlips: undefined;
   Profile: undefined;
@@ -277,6 +280,14 @@ function MainDrawer() {
         options={{ 
           drawerIcon: ({ color, size }) => <AppIcon color={color} name="clipboard-list" size={size} /> 
         }} 
+      />
+      <Drawer.Screen
+        component={MyContactsScreen}
+        name="MyContacts"
+        options={{
+          title: "My Farmers & Dealers",
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="account-group" size={size} />
+        }}
       />
       {isSalesStaff && (
         <>
@@ -492,6 +503,14 @@ function ManagerDrawer() {
           title: "My Tasks",
           drawerIcon: ({ color, size }) => <AppIcon color={color} name="clipboard-list" size={size} /> 
         }} 
+      />
+      <ManagerDrawerNavigator.Screen
+        component={MyContactsScreen}
+        name="MyContacts"
+        options={{
+          title: "My Farmers & Dealers",
+          drawerIcon: ({ color, size }) => <AppIcon color={color} name="account-group" size={size} />
+        }}
       />
       {isSalesStaff && (
         <>

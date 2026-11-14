@@ -38,6 +38,21 @@ import { startScheduler } from "./lib/scheduler";
 
 dotenv.config();
 
+// Express 4 ignores rejected promises from async handlers: the request hangs and the
+// unhandled rejection kills the process. Many routes (leaves, issues, dealers, ...) are
+// not wrapped in asyncHandler, so forward rejections to errorHandler for every route here.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const Layer = require("express/lib/router/layer");
+Layer.prototype.handle_request = function handle(this: any, req: any, res: any, next: any) {
+  if (this.handle.length > 3) return next();
+  try {
+    const result = this.handle(req, res, next);
+    if (result && typeof result.catch === "function") result.catch(next);
+  } catch (err) {
+    next(err);
+  }
+};
+
 const app = express();
 app.set("etag", false);
 const httpServer = createServer(app);

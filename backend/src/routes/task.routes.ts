@@ -4,6 +4,8 @@ import { asyncHandler } from "../lib/asyncHandler";
 import { roleGuard } from "../middleware/roleGuard";
 import * as taskController from "../controllers/task.controller";
 import { validate } from "../validators/validate";
+import { sendSuccess } from "../lib/response";
+import { getMyContacts } from "../services/visitReport.service";
 import {
   createTaskBodySchema,
   taskIdParamSchema,
@@ -20,6 +22,13 @@ router.post(
   asyncHandler(taskController.createTask)
 );
 router.get("/", asyncHandler(taskController.listTasks));
+// Dealers & farmers the logged-in staff member is / was assigned to (mobile "My Farmers & Dealers").
+router.get(
+  "/my-contacts",
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, await getMyContacts(req.user!.companyId, req.user!.id), "Contacts fetched");
+  })
+);
 router.patch(
   "/:id",
   roleGuard(UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER),
